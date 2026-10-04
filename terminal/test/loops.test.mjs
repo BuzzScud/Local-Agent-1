@@ -66,8 +66,8 @@ test('/loop: a kind, a time and a message, each optional where it can be', () =>
 test('what a run is told, and what its last words say about the loop', () => {
   const loop = { until: false, every: 600, runs: [] };
   expect(L.loopNote(loop, 1)).toMatch(/^\(Run 1 of a loop that runs every 10m; each run is a fresh conversation\. If the whole job is finished.*LOOP DONE\)$/);
-  const again = { until: true, every: null, runs: [{ startedAt: new Date(2026, 9, 3, 14, 2).getTime(), said: 'Two of three still fail: quoting, extra column.' }] };
-  expect(L.loopNote(again, 2)).toMatch(/Run 2 of a loop that runs until its job is done.*The last run, at 14:02, ended: Two of three still fail/);
+  const again = { until: true, every: null, runs: [{ n: 1, startedAt: new Date(2026, 9, 3, 14, 2).getTime(), said: 'Two of three still fail: quoting, extra column.' }] };
+  expect(L.loopNote(again, 2)).toMatch(/Run 2 of a loop that runs until its job is done.*What the earlier runs did, oldest first:\n- Run 1 at 14:02: Two of three still fail/s);
   expect(L.loopNote({ until: false, every: null, runs: [] }, 1)).toMatch(/paces itself.*NEXT RUN IN <minutes> MIN/);
   expect(L.readEnding('All five pass.\nLOOP DONE')).toEqual({ done: true, nextSecs: null, said: 'All five pass.' });
   expect(L.readEnding('Nothing new.\n\nNEXT RUN IN 30 MIN')).toEqual({ done: false, nextSecs: 1800, said: 'Nothing new.' });
@@ -103,7 +103,7 @@ test('a loop runs when it is due, one at a time on this Mac, and each run is tol
   runs[1].emit({ t: 'end', reason: 'done', final: 'Nothing new: Bun 1.4.2.' });
   pass(300_000);
   expect(runs).toHaveLength(3);
-  expect(runs[2].spec.prompt).toMatch(/Run 2 of a loop.*The last run, at \d\d:\d\d, ended: 2 of 5 pass\. Failing: quoting\./s);
+  expect(runs[2].spec.prompt).toMatch(/Run 2 of a loop.*What the earlier runs did, oldest first:\n- Run 1 at \d\d:\d\d: 2 of 5 pass\. Failing: quoting\.\nIf the whole job/s);
   m.close();
 });
 
@@ -190,6 +190,77 @@ test('a loop ends when a run says its job is done, when a debugging loop\'s test
   m.tick();
   expect(c).toMatchObject({ state: 'done', doneWhy: 'ran for 24 hours' });
   m.close();
+});
+
+test('each run is told what the earlier runs did (the last eight), and a fixing loop not to try again what failed', () => {
+  const t0 = new Date(2026, 9, 4, 9, 0).getTime();
+  const runs = Array.from({ length: 10 }, (_, i) => ({ n: i + 1, startedAt: t0 + i * 60_000, ok: false, reason: 'done', said: `Try ${i + 1}: changed toCsv. ${'More words. '.repeat(30)}`, summary: `Try ${i + 1}`, failing: 2 }));
+  Object.assign(runs[9], { reason: 'steps', summary: 'out of steps: was reading export.mjs' });
+  const note = L.loopNote({ kind: 'debug', until: true, every: null, runs }, 11);
+  expect(note).toContain('What the earlier runs did (the last 8; 2 before them are not listed), oldest first:\n- Run 3 at 09:02, 2 tests still failing: Try 3: changed toCsv.');
+  const lines = note.split('\n').filter((l) => l.startsWith('- Run '));
+  expect(lines.map((l) => l.split(' at ')[0])).toEqual(['- Run 3', '- Run 4', '- Run 5', '- Run 6', '- Run 7', '- Run 8', '- Run 9', '- Run 10']);
+  expect(lines[0].endsWith('…')).toBe(true); // an older run in a line
+  // A run that did not finish says why, not its last words.
+  expect(lines.at(-1)).toBe('- Run 10 at 09:09, 2 tests still failing: out of steps: was reading export.mjs');
+  expect(note).toMatch(/\nDo not try again what an earlier run tried and saw fail\.\nIf the whole job is finished/);
+  // A loop that checks or reads the same thing each run is meant to repeat itself.
+  expect(L.loopNote({ kind: 'test', until: false, every: 300, runs: runs.slice(0, 1) }, 2)).not.toContain('Do not try again');
+  expect(L.loopNote({ kind: 'web', until: false, every: 300, runs: runs.slice(0, 1) }, 2)).not.toContain('Do not try again');
+});
+
+test('a fixing loop that is not getting closer waits for you; a note, r or p sends it on', () => {
+  const { m, runs, pass } = window();
+  const a = m.add(L.parseLoop('debug'));
+  pass(1000);
+  runs[0].emit({ t: 'end', reason: 'done', final: 'Fixed quoting; 2 still fail.', tests: { ok: false, count: 2 } });
+  expect(a.runs.at(-1)).toMatchObject({ failing: 2, reason: 'done' });
+  expect(a.state).toBe('waiting'); // one run that misses is no news
+  pass(15_000);
+  runs[1].emit({ t: 'end', reason: 'done', final: 'Tried the header; 2 still fail.', tests: { ok: false, count: 2 } });
+  expect(a).toMatchObject({ state: 'paused', stuck: '2 tests still fail after runs 1 and 2: it is not getting closer' });
+  expect(m.stuck).toEqual([a]);
+  expect(m.needsYou).toEqual([]); // no run is waiting on an answer
+  expect(L.describe(a, m.now())).toBe('debug · until its job is done · needs you: 2 tests still fail after runs 1 and 2: it is not getting closer');
+  expect(D.stateOf(a, m.now())).toEqual(['! needs you · stuck', 'warn b']);
+  expect(m.log.at(-1)).toMatchObject({ kind: 'stuck', id: a.id });
+  // The board says so above the chat box, and counts it as needing you.
+  const board = text(D.drawBoard(m.snapshot(), B.newUi(), { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));
+  expect(board).toContain('Fix the failing tests is stuck: 2 tests still fail after runs 1 and 2');
+  expect(board).toMatch(/needs you \[1\]/);
+  for (const r of D.drawBoard(m.snapshot(), B.newUi(), { cols: 80, rows: 24, now: m.now(), linesOf: () => [] })) expect(D.rowWidth(r)).toBe(80);
+  pass(60_000);
+  expect(runs).toHaveLength(2); // it waits
+  // A hint sends it on at once, with the hint and the runs so far.
+  expect(m.steer(a.id, 'the header row is built in csv.mjs')).toBe('Fix the failing tests runs again now, with your note');
+  pass(500);
+  expect(runs).toHaveLength(3);
+  expect(a.stuck).toBe(null);
+  expect(runs[2].spec.prompt).toContain('(A note from the user for this run: the header row is built in csv.mjs)');
+  expect(runs[2].spec.prompt).toMatch(/- Run 1 at \d\d:\d\d, 2 tests still failing: Fixed quoting; 2 still fail\.\n- Run 2 at \d\d:\d\d, 2 tests still failing: Tried the header; 2 still fail\.\nDo not try again/);
+  // Fewer fail: closer, so it goes on by itself.
+  runs[2].emit({ t: 'end', reason: 'done', final: '1 still fails.', tests: { ok: false, count: 1 } });
+  expect(a).toMatchObject({ state: 'waiting', stuck: null });
+  pass(15_000);
+  runs[3].emit({ t: 'end', reason: 'done', final: 'Still 1.', tests: { ok: false, count: 1 } });
+  expect(a.stuck).toBe('1 test still fails after runs 3 and 4: it is not getting closer');
+  expect(m.runNow(a.id)).toBe(true); // r: once more, as it is
+  expect(a.stuck).toBe(null);
+  expect(runs).toHaveLength(5);
+  runs[4].emit({ t: 'end', reason: 'done', final: 'Still 1.', tests: { ok: false, count: 1 } });
+  expect(a.state).toBe('paused');
+  expect(m.pause(a.id)).toBe(true); // p: going again
+  expect(a).toMatchObject({ state: 'waiting', stuck: null });
+  m.close();
+  // Only a fixing loop, only known counts, and a run you stopped says nothing about it.
+  const two = (x, y, more = {}) => ({ kind: 'debug', runs: [{ n: 1, failing: x }, { n: 2, failing: y, ...more }] });
+  expect(L.stuckWhy(two(3, 4))).toMatch(/^4 tests still fail after runs 1 and 2/);
+  expect(L.stuckWhy(two(3, 2))).toBe(null);
+  expect(L.stuckWhy(two(null, 2))).toBe(null);
+  expect(L.stuckWhy(two(0, 0))).toBe(null);
+  expect(L.stuckWhy(two(2, 2, { reason: 'interrupted' }))).toBe(null);
+  expect(L.stuckWhy({ kind: 'debug', runs: [{ n: 1, failing: 2, reason: 'interrupted' }, { n: 2, failing: 2 }] })).toBe(null);
+  expect(L.stuckWhy({ ...two(2, 2), kind: 'test' })).toBe(null);
 });
 
 test('a loop with no time paces itself: ten minutes, or what the run says', () => {
@@ -432,6 +503,14 @@ test('a fixing loop ends only on a passing run of the tests, not on a read of a 
   io.end({ reason: 'done', finalText: 'I changed the login check; one test still fails.' });
   expect(said.map((e) => [e.t, e.test, e.failed])).toEqual([['tool', true, true], ['tool', false, undefined], ['tool', true, true], ['tool', false, undefined], ['end', undefined, undefined]]);
   expect(said.at(-1).tests).toEqual({ ok: false });
+  // How many fail goes with it when the runner counted them.
+  const counted = [];
+  const out2 = new PassThrough();
+  out2.on('data', (d) => String(d).split('\n').filter(Boolean).forEach((l) => counted.push(JSON.parse(l))));
+  const io2 = R.loopIO({ input: new PassThrough(), output: out2, mode: 'auto' });
+  io2.event('tool', { label: 'Bash', arg: 'node --test', error: true, tests: { failed: true, count: 2 } });
+  io2.end({ reason: 'done', finalText: 'Two still fail.' });
+  expect(counted.at(-1).tests).toEqual({ ok: false, count: 2 });
   // The window's side: the loop goes on, and the board draws the piped run as failing tests.
   const w = window();
   const l = w.m.add(L.parseLoop('debug'));

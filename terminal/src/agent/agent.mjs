@@ -62,6 +62,9 @@ import { isMcpCall, MCP_TOOL, mcpPlan, mcpToolDefs, mcpBrief, requestNote, reque
 import { pictureFor } from '../tools/mcp.mjs';
 
 const MAX_STEPS = 40;
+// Its plan (TodoWrite) goes back with a step's result after this many steps without it, while steps
+// are left: in a long message the list it wrote at the start is far up the conversation by then.
+const PLAN_EVERY = 5;
 const newConversation = () => randomUUID().slice(0, 8);
 // How many times what the layout check finds goes back to the model in one
 // message: the first look, and once more when its fix left something (30 Sep:
@@ -542,6 +545,22 @@ const planLine = planSaid;
 function failsOf(text, failed) {
   const r = readResults(String(text ?? ''), failed ? 1 : 0);
   return r.failed == null ? null : { failed: r.failed, failing: r.failing };
+}
+
+// Its plan as it last wrote it with TodoWrite: the whole list goes into its notes when memory
+// fills (restartFrom), and a short line comes back every PLAN_EVERY steps (planDue).
+const stepText = (t) => String(t?.text ?? t?.content ?? '').replace(/\s+/g, ' ').trim();
+function planList(todos) {
+  return (todos ?? []).filter(stepText).map((t) => `- [${t.status === 'done' ? 'done' : t.status === 'in_progress' ? 'doing now' : 'to do'}] ${stepText(t).slice(0, 160)}`).join('\n');
+}
+export function planReminder(todos) {
+  const items = (todos ?? []).filter(stepText);
+  const left = items.filter((t) => t.status !== 'done');
+  if (!left.length) return '';
+  const now = left.find((t) => t.status === 'in_progress') ?? left[0];
+  const next = left.filter((t) => t !== now);
+  const then = next.length ? ` Then: ${next.slice(0, 3).map((t) => `"${stepText(t).slice(0, 80)}"`).join('; ')}${next.length > 3 ? `, and ${next.length - 3} more` : ''}.` : '';
+  return `(Your plan: ${items.length - left.length} of ${items.length} steps done. Now: "${stepText(now).slice(0, 120)}".${then} Keep to it, and send TodoWrite when a step is done or the plan changes.)`;
 }
 
 export class Agent extends EventEmitter {
@@ -1099,6 +1118,18 @@ export class Agent extends EventEmitter {
     const held = t.lastError && this.messages.some((m) => m.keep === 'error' && !String(m.content).startsWith('[older output removed'));
     if (t.lastError && !held) parts.push(`The last tool error, kept whole:\n${t.lastError}`);
     return parts.join('\n\n');
+  }
+
+  // The reminder of its plan (planReminder) when this step is PLAN_EVERY steps or more past the last
+  // time it saw it, and steps are left. Only a plan written in this message counts (planAt).
+  planDue(calls) {
+    const t = this.turn;
+    if (!t) return '';
+    if (calls.some((c) => c.name === 'TodoWrite')) { t.planAt = t.steps ?? 0; return ''; }
+    if (t.planAt == null || (t.steps ?? 0) - t.planAt < PLAN_EVERY) return '';
+    const line = planReminder(this.todos);
+    if (line) t.planAt = t.steps ?? 0;
+    return line;
   }
   setMode(mode) { this.mode = mode; this.emit('mode', mode); }
   // What you saved with /permissions for the folder Agentic Coder works in now:
@@ -2009,6 +2040,13 @@ export class Agent extends EventEmitter {
         }
         if (stopped) { reason = stopped; break; }
         if (signal?.aborted) { reason = 'interrupted'; break; }
+        // Its plan, with this step's result, when it has not seen it for a while (on the end, so the
+        // conversation before it is not read again).
+        const plan = this.planDue(calls);
+        if (plan && this.messages.at(-1)?.role === 'tool') {
+          this.messages.at(-1).content += `\n\n${plan}`;
+          this.emit('note', { text: `Reminded it of its plan: ${plan.match(/\d+ of \d+ steps done/)[0]}`, tone: 'dim' });
+        }
         // A page saved for this request: the turn stops here, the page opens, and you are asked
         // before anything checks it (askPage). Once a message; after that the end of it asks.
         const page = wrote.length && !this.turn.pageAsked && this.askFirst() ? this.savedPage(wrote) : null;
@@ -3203,6 +3241,10 @@ export class Agent extends EventEmitter {
     const run = call.name === 'Bash' && out.view?.kind === 'bash' ? testRunOf(args.command, { testCmd: this.testCmd, check: this.turn?.check }) : null;
     const tests = run ? { failed: testsFailed(out.view.lines?.join('\n') ?? out.text, out.error ? 1 : 0, run) } : null;
     const known = tests && tests.failed !== null;
+    // How many fail, when the runner counted them: a loop's run says it (loop-run.mjs), and a
+    // debugging loop that is not getting closer waits for you (loops.mjs stuckWhy).
+    const count = known ? failsOf(out.view?.lines?.join('\n') ?? out.text, tests.failed)?.failed : null;
+    if (Number.isFinite(count)) tests.count = count;
     if (this.keepProgress && this.turn && known && !this.turn.changed && !this.turn.failsBefore) this.turn.failsBefore = failsOf(out.view?.lines?.join('\n') ?? out.text, tests.failed);
     if (this.turn && known && this.turn.changed) {
       this.turn.testedAfterChange = true;
@@ -4072,6 +4114,10 @@ export class Agent extends EventEmitter {
       else return false; // nothing to anchor on: leave the conversation as it is
     }
     const facts = this.turn?.findings?.length ? `\n\nWhat I have already worked out (I keep these):\n${this.turn.findings.map((f) => `- ${f}`).join('\n')}` : '';
+    // Its plan of this message goes with the notes: the TodoWrite that held it is left behind.
+    const steps = this.turn?.planAt != null ? planList(this.todos) : '';
+    const plan = steps ? `\n\nMy plan, as I last wrote it with TodoWrite:\n${steps}` : '';
+    if (plan) this.turn.planAt = this.turn.steps ?? 0;
     // The notes that go with the request (the steps for its kind of bug, a
     // check the fix path made) follow the request into the new conversation.
     for (const x of [this.turn?.bug, this.turn?.skill, this.turn?.look, this.turn?.math, this.turn?.design, this.turn?.carried].filter(Boolean)) {
@@ -4081,7 +4127,7 @@ export class Agent extends EventEmitter {
     this.messages = [this.messages[0], ...opening,
       // "Nothing is saved anywhere else": after its notes the model once went
       // looking for them on disk (ls ~/.claude/sessions, chart bug, 27 Sep).
-      { role: 'assistant', content: `My memory filled up, so I wrote down where I am. My notes (all of them are here; nothing is saved anywhere else):\n${summary.trim()}${facts}${this.seenSoFar()}` },
+      { role: 'assistant', content: `My memory filled up, so I wrote down where I am. My notes (all of them are here; nothing is saved anywhere else):\n${summary.trim()}${facts}${plan}${this.seenSoFar()}` },
       { role: 'user', content: auto(held
         ? 'Those are your own notes, and they may be imperfect. Pick up from them. The output of your last step follows; read it, then take the next step with the tools. Do not start the investigation over and do not re-read what the notes already answer.'
         : 'Those are your own notes, and they may be imperfect. Pick up from them: take the single next step now with the tools. Do not start the investigation over and do not re-read what the notes already answer.') },

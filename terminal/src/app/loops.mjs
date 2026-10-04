@@ -64,16 +64,39 @@ export function parseLoop(text, { min = minSecs() } = {}) {
   return { kind, every, until: kind === 'debug' && every === null, message, name: name ?? nameOf(message), note };
 }
 
-// The lines a run's message ends with: which run this is, how the last one ended, and the two
-// words a run can end the loop or set its own pace with.
+// The lines a run's message ends with: which run this is, a line for each earlier run (the last
+// JOURNAL of them, the newest said in full), and the two words a run can end the loop or set its
+// own pace with. Before 4 Oct 2026 only the last run was told, so a later run could try again what
+// an earlier one had tried and seen fail.
+const JOURNAL = 8;
 export function loopNote(loop, n, { now = Date.now() } = {}) {
-  const last = loop.runs.at(-1);
   const at = (t) => new Date(t).toTimeString().slice(0, 5);
   const parts = [`Run ${n} of a loop that ${loop.until ? 'runs until its job is done' : loop.every ? `runs every ${everyWord(loop.every)}` : 'paces itself'}; each run is a fresh conversation.`];
-  if (last) parts.push(`The last run, at ${at(last.startedAt)}, ended: ${String(last.said || last.summary || 'with nothing said').replace(/\s+/g, ' ').slice(0, 400)}`);
+  const runs = loop.runs.slice(-JOURNAL);
+  if (runs.length) {
+    const earlier = runs[0].n - 1;
+    const line = (r, max) => {
+      const words = String((r.reason && r.reason !== 'done' ? r.summary : r.said || r.summary) || 'nothing said').replace(/\s+/g, ' ').trim();
+      const fails = r.failing > 0 ? `, ${r.failing} test${r.failing === 1 ? '' : 's'} still failing` : '';
+      return `- Run ${r.n} at ${at(r.startedAt)}${fails}: ${words.length > max ? `${words.slice(0, max - 1)}…` : words}`;
+    };
+    // A loop that checks or reads the same thing each run is meant to repeat itself; one that fixes or makes something is not.
+    const anew = ['debug', 'task'].includes(loop.kind) ? '\nDo not try again what an earlier run tried and saw fail.' : '';
+    parts.push(`What the earlier runs did${earlier > 0 ? ` (the last ${runs.length}; ${earlier} before them are not listed)` : ''}, oldest first:\n${runs.map((r, i) => line(r, i === runs.length - 1 ? 400 : 160)).join('\n')}${anew}\n`);
+  }
   parts.push('If the whole job is finished for good and no further run is needed, end your answer with the line: LOOP DONE');
   if (!loop.every && !loop.until) parts.push('You may set when the next run starts by ending with the line: NEXT RUN IN <minutes> MIN');
-  return `(${parts.join(' ')})`;
+  return `(${parts.join(' ').replace(/\n /g, '\n')})`;
+}
+// A debugging loop that is not getting closer: its last two runs ended with tests failing, the
+// second with as many as the first or more. Answers why in a line, or null. It then waits for
+// you (Loops.finish) instead of trying the same thing again: a note, r or p sends it on.
+export function stuckWhy(loop) {
+  if (loop.kind !== 'debug') return null;
+  const [b, a] = loop.runs.slice(-2);
+  if (!a || !b || [a, b].some((r) => r.reason === 'interrupted') || !(a.failing > 0) || !(b.failing > 0) || a.failing < b.failing) return null;
+  const n = a.failing;
+  return `${n} test${n === 1 ? '' : 's'} still fail${n === 1 ? 's' : ''} after runs ${b.n} and ${a.n}: it is not getting closer`;
 }
 // What a run's last words say about the loop: done for good, and when to run next.
 export function readEnding(text) {
@@ -189,6 +212,8 @@ export class Loops {
   loop(id) { return this.loops.find((l) => l.id === id) ?? null; }
   get open() { return this.loops.filter((l) => !['done', 'stopped'].includes(l.state)); }
   get needsYou() { return this.loops.filter((l) => l.current?.needs); }
+  // The debugging loops that stopped getting closer and wait for you (stuckWhy).
+  get stuck() { return this.loops.filter((l) => l.stuck && !l.current); }
   // The oldest question waiting.
   get asking() { return [...this.needsYou].sort((a, b) => a.current.needs.since - b.current.needs.since)[0] ?? null; }
   say(l, kind, text, more = {}) { this.log.push({ at: this.now(), id: l?.id ?? null, kind, text, ...more }); if (this.log.length > 300) this.log.shift(); }
@@ -198,7 +223,7 @@ export class Loops {
   // /loop <text>: a new loop in this window's folder, in the mode it is in now.
   add(parsed, { folder = this.folder, mode = 'ask' } = {}) {
     const t = this.now();
-    const l = { id: this.nextId++, kind: parsed.kind, name: parsed.name, message: parsed.message, every: parsed.every, until: parsed.until, folder, mode, state: 'waiting', nextAt: t + 1000, endsAt: t + this.maxHours * 3_600_000, created: t, runs: [], current: null, note: null, queued: false, pauseAfter: false, allowed: [], doneWhy: null, gap: null };
+    const l = { id: this.nextId++, kind: parsed.kind, name: parsed.name, message: parsed.message, every: parsed.every, until: parsed.until, folder, mode, state: 'waiting', nextAt: t + 1000, endsAt: t + this.maxHours * 3_600_000, created: t, runs: [], current: null, note: null, queued: false, pauseAfter: false, allowed: [], doneWhy: null, gap: null, stuck: null };
     this.loops.push(l);
     this.say(l, 'new', parsed.message);
     this.changed();
@@ -272,7 +297,7 @@ export class Loops {
     run.summary = run.stopped ? 'stopped by you' : summaryOf(end.said, ev.reason);
     run.said = end.said.slice(0, 600);
     run.needs = null;
-    l.runs.push({ n: run.n, startedAt: run.startedAt, endedAt: run.endedAt, ok: run.ok, summary: run.summary, said: run.said, lines: run.lines });
+    l.runs.push({ n: run.n, startedAt: run.startedAt, endedAt: run.endedAt, ok: run.ok, summary: run.summary, said: run.said, lines: run.lines, reason: ev.reason, failing: Number.isFinite(tests?.count) ? tests.count : null });
     if (l.runs.length > 60) l.runs.shift();
     l.current = null;
     this.say(l, 'end', run.summary, { ok: run.ok, n: run.n, ms: run.endedAt - run.startedAt });
@@ -281,11 +306,14 @@ export class Loops {
     if (ev.reason === 'done' && (end.done || (l.until && tests?.ok))) { this.end(l, 'done', end.done ? 'the run said its job is done' : `the tests pass after ${run.n} run${run.n === 1 ? '' : 's'}`); return; }
     l.gap = end.nextSecs;
     l.nextAt = run.endedAt + (l.every ?? (l.until ? RETRY_SECS : end.nextSecs ?? SELF_SECS)) * 1000;
-    if (l.pauseAfter) { l.pauseAfter = false; l.state = 'paused'; this.say(l, 'state', 'paused'); }
+    // Not getting closer: it waits for you rather than trying the same thing again.
+    const stuck = stuckWhy(l);
+    if (stuck) { l.pauseAfter = false; l.state = 'paused'; l.stuck = stuck; this.say(l, 'stuck', stuck); }
+    else if (l.pauseAfter) { l.pauseAfter = false; l.state = 'paused'; this.say(l, 'state', 'paused'); }
     else l.state = 'waiting';
     this.changed();
   }
-  end(l, state, why) { l.state = state; l.doneWhy = why; l.queued = false; this.say(l, 'state', state === 'done' ? `the loop ends: ${why}` : why); this.changed(); }
+  end(l, state, why) { l.state = state; l.doneWhy = why; l.queued = false; l.stuck = null; this.say(l, 'state', state === 'done' ? `the loop ends: ${why}` : why); this.changed(); }
 
   // ---- what you can do to a loop (the board's keys, /loop in the window) ----
   answer(id, choice, text = null) {
@@ -317,6 +345,8 @@ export class Loops {
       return `Sent to ${l.name}: it reads it when its turn ends`;
     }
     l.note = l.note ? `${l.note}\n${note}` : note;
+    // A loop that waits because it was stuck runs again now, with your note.
+    if (l.stuck) { l.stuck = null; l.state = 'waiting'; l.nextAt = this.now(); this.changed(); return `${l.name} runs again now, with your note`; }
     this.changed();
     return `${l.name} starts its next run with your note`;
   }
@@ -341,6 +371,7 @@ export class Loops {
     const l = this.loop(id);
     if (!l || l.current || ['done', 'stopped'].includes(l.state)) return false;
     if (l.state === 'paused') l.state = 'waiting';
+    l.stuck = null;
     l.nextAt = this.now();
     this.changed();
     this.tick();
@@ -349,7 +380,7 @@ export class Loops {
   pause(id) {
     const l = this.loop(id);
     if (!l || ['done', 'stopped'].includes(l.state)) return false;
-    if (l.state === 'paused' || l.pauseAfter) { l.pauseAfter = false; if (l.state === 'paused') { l.state = 'waiting'; l.nextAt = Math.max(l.nextAt, this.now() + 1000); } this.say(l, 'state', 'going again'); }
+    if (l.state === 'paused' || l.pauseAfter) { l.pauseAfter = false; l.stuck = null; if (l.state === 'paused') { l.state = 'waiting'; l.nextAt = Math.max(l.nextAt, this.now() + 1000); } this.say(l, 'state', 'going again'); }
     else if (!l.current) { l.state = 'paused'; this.say(l, 'state', 'paused'); }
     else { l.pauseAfter = true; this.say(l, 'state', 'pauses after this run'); }
     this.changed();
@@ -362,6 +393,7 @@ export class Loops {
     l.state = 'stopped';
     l.doneWhy = 'stopped by you';
     l.queued = false;
+    l.stuck = null;
     this.say(l, 'state', 'stopped by you');
     if (run) { run.stopped = true; this.line(l, run, 'note', 'Stopped by you.'); this.handles.get(id)?.kill(); this.finish(l, run, { reason: 'interrupted', final: '' }); }
     this.changed();
@@ -430,6 +462,6 @@ export class Loops {
 export function describe(l, now = Date.now()) {
   const pace = l.until ? 'until its job is done' : l.every ? `every ${everyWord(l.every)}` : 'at its own pace';
   const left = Math.max(0, Math.round((l.nextAt - now) / 1000));
-  const state = l.current?.needs ? 'needs you' : l.current ? `running (run ${l.current.n})` : l.state === 'paused' ? 'paused' : l.state === 'off' ? `waits: ${l.offWhy ?? 'the model is off'}` : l.state === 'done' ? `ended: ${l.doneWhy}` : l.state === 'stopped' ? 'stopped' : l.queued ? 'next in line' : `next run in ${left < 90 ? `${left}s` : `${Math.round(left / 60)}m`}`;
+  const state = l.current?.needs ? 'needs you' : l.current ? `running (run ${l.current.n})` : l.stuck ? `needs you: ${l.stuck}` : l.state === 'paused' ? 'paused' : l.state === 'off' ? `waits: ${l.offWhy ?? 'the model is off'}` : l.state === 'done' ? `ended: ${l.doneWhy}` : l.state === 'stopped' ? 'stopped' : l.queued ? 'next in line' : `next run in ${left < 90 ? `${left}s` : `${Math.round(left / 60)}m`}`;
   return `${l.kind} · ${pace} · ${state}`;
 }
