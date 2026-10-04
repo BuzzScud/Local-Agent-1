@@ -64,10 +64,11 @@ test('the prompt on Model: its own tool lines and the answer habit; back to App 
   expect(m.slice(m.indexOf('This session\n'))).toBe(app.slice(app.indexOf('This session\n')));
 });
 
-test('the tools: eight on App, thirteen on Model, Read with paths only on Model', () => {
+test('the tools: nine on App, fourteen on Model, Read with paths only on Model', () => {
   const names = (w) => toolSchemas(w).map((t) => t.function.name);
-  expect(names('app')).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask']);
-  expect(names('model')).toEqual([...names('app'), ...MODEL_TOOL_DEFS.map((d) => d.name)]);
+  expect(names('app')).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask', 'Jobs']);
+  // Jobs (background commands, 3 Oct 2026) after each way's own tools.
+  expect(names('model')).toEqual([...names('app').slice(0, -1), ...MODEL_TOOL_DEFS.map((d) => d.name), 'Jobs']);
   expect(toolSchemas('app')[0].function.parameters.properties.paths).toBeUndefined();
   expect(toolSchemas('model')[0].function.parameters.properties.paths.type).toBe('array');
 });
@@ -283,8 +284,8 @@ test('switching the way mid-conversation changes the prompt and the tools for th
   await agent.send('and checkout.mjs?');
   await fake.close();
   const [a, b] = chats(fake).slice(-2);
-  expect(a.tools.length).toBe(8);
-  expect(b.tools.length).toBe(14); // the app's eight, the model's own five, and Agent (a helper)
+  expect(a.tools.length).toBe(9);
+  expect(b.tools.length).toBe(15); // the app's eight, the model's own five, Jobs, and Agent (a helper)
   expect(b.tools.at(-1).function.name).toBe('Agent');
   agent.setWay('app');
   expect(agent.messages[0].content).toContain(ONE_AT_A_TIME);

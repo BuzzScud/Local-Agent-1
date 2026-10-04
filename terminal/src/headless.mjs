@@ -1,6 +1,7 @@
 // Runs one prompt start to finish without the terminal UI: used by the
 // practice-task runner and by `coding -p "…"`.
 import { Agent } from './agent/agent.mjs';
+import { UserHooks } from './agent/user-hooks.mjs';
 import { applyLimits, applySearch, testLimits } from './app/limits.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from './agent/prompt.mjs';
 import { wayEnv, wayOf, hooksOn, hooksEnv } from './agent/way.mjs';
@@ -24,7 +25,7 @@ import { agentDriver } from './agent/agents-driver.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -35,7 +36,11 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   const own = !mem?.embedder && !embedder && (rank || on.has('rag')) && embedderReady() ? new Embedder() : null;
   const ranker = rank && !mem?.embedder ? embedder ?? own : null;
   const system = systemPrompt({ cwd, notes: projectNotes(cwd, notesRoom(), { memory: Boolean(mem), home: mem?.home }).text, git: gitSummary(cwd) });
+  // Your own hooks (user-hooks.mjs): coding -p passes userHooks: true; the benches pass none, so their runs measure the same every time.
+  let hooksNote = () => {};
+  const ownHooks = userHooks && process.env.AGENTIC_USER_HOOKS !== 'off' ? new UserHooks({ cwd, onNote: (text, tone) => hooksNote(text, tone) }) : null;
   const agent = new Agent({
+    userHooks: ownHooks,
     // mode: the window's mode, for a loop's run (/loop); otherwise auto-approve is Accept edits, and Manual without it.
     url, model, cwd, system, thinking, effort, ctx, mode: mode ?? (autoApprove ? 'edits' : 'ask'), flows: flows !== false, slots, memory: mem, ranker, keepProgress,
     // Its time for thinking (agent.mjs): the practice runs give their time limit; else as the app.
@@ -101,6 +106,7 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
       onEvent(type, ev);
     });
   }
+  hooksNote = (text, tone) => agent.emit('note', { text, tone });
   // A step under way (a helper's progress): to onEvent only, not the log.
   agent.on('tool-running', (ev) => onEvent('tool-running', ev));
   // The turn's own counts (steps, reads, thinking): the last turn-end wins.
@@ -120,6 +126,7 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   // It can look at the screen then too (the Screen tool, offered to a model that can see).
   if (visionOn) { agent.visionOn = () => visionOn(agent); agent.mayLook = () => true; }
   let reason;
+  await agent.startSession('startup');
   if (agents) {
     // coding -p --agents: the /agents run (agents-run.mjs) with nobody to ask. The interview and the plan
     // take the first answer, a NO-GO is fixed, a task that will not pass is left open; a step on the stop
@@ -142,6 +149,10 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   } else reason = await agent.send(canSee || !images.length ? prompt : `${prompt}\n\n(Pictures were named, but this model is not looking at pictures.)`, { signal, images: canSee && images.length ? images : undefined });
   // more() → a message that arrived while it worked (a note typed to a loop's run), sent when the turn ends.
   if (more && !agents) { for (let next = more(); next != null && !signal?.aborted; next = more()) reason = await agent.send(String(next), { signal }); }
+  await agent.endSession('exit');
+  // Background jobs end with the run (nothing is left to wake for them).
+  const left = agent.jobs.running();
+  if (left.length) { agent.jobs.stopAll(); agent.emit('note', { text: `Stopped ${left.length === 1 ? 'a background job' : `${left.length} background jobs`} as the run ended: ${left.map((j) => `${j.id} (${j.command})`).join(', ')}`, tone: 'dim' }); }
   const secs = (Date.now() - t0) / 1000;
   // What the run taught goes into the memory before it ends.
   let saved = null;

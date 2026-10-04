@@ -13,7 +13,9 @@ import { loadTimes, saveTime, startLeft, typicalStart } from './start-times.mjs'
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
-import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.mjs';
+import { hooksFrom, hooksEnv, changeHooks, HOOKS } from '../agent/way.mjs';
+import { UserHooks, answerProjectHooks, writeUserHooks, eventOf } from '../agent/user-hooks.mjs';
+import { openHooksList, hookListRows, openHookForm, hookFormRows, moveHookRow, startHookEdit, commitHookEdit, hookWarning, toHook, testHookForm, checkOn } from './hooks-form.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom, isHomeFolder } from '../agent/prompt.mjs';
 import { offerFor, nextMode, modeOf } from '../agent/permissions.mjs';
 import { screenAccess, askScreenAccess, terminalApp } from '../tools/screen.mjs';
@@ -34,6 +36,7 @@ import { WEB_ROWS, openWebForm, moveWebRow, testWebForm, toWebSettings, webWarni
 import { PROVIDER_NAMES } from '../tools/web.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
+import { capLines } from '../tools/jobs.mjs';
 import { walk } from '../tools/fs.mjs';
 import { editInput, insertText, cursorLine, cursorCell, mentionAt, selectedText, withUndo, undoEdit, redoEdit, moveBy, posAt, wordAt, promptTextWidth } from './edit-input.mjs';
 import { MOUSE_ON, MOUSE_OFF, ASK_CURSOR, DOUBLE_CLICK_MS, WHEEL_PAUSE_MS, parseMouse, parseCursorReply, isMouseText } from './mouse.mjs';
@@ -222,6 +225,9 @@ export function App({ opts, win, onRestart }) {
   // and /update, which restarts this window on it.
   const [update, setUpdate] = useState(null);
   const updateRef = useRef(null);
+  const jobWakeRef = useRef(null); // wakes the model for a background job that ended (set below)
+  const userHooksRef = useRef(undefined); // your own hooks (user-hooks.mjs), made with the agent
+  const hookNoteRef = useRef(null); // a hook that failed or stopped something, said on the screen
   useEffect(() => { const w = watchUpdates(setUpdate); updateRef.current = w; return w.stop; }, []);
   const memoryNote = useRef(null);
   const measure = useRef({ width: 100, modelName: '', cwdShort: '' });
@@ -499,7 +505,10 @@ export function App({ opts, win, onRestart }) {
     const helpers = helpersFrom(settings);
     // /effort's Embedder row Off: none, and every search goes by words.
     const embedder = (remembers || helpers.has('rag')) && embedderReady() && limitsRef.current.embedder !== 'off' ? new Embedder() : null;
+    // Your own hooks (user-hooks.mjs, /hooks): yours and, once you say yes, the project's. AGENTIC_USER_HOOKS=off: none.
+    if (userHooksRef.current === undefined) userHooksRef.current = process.env.AGENTIC_USER_HOOKS === 'off' ? null : new UserHooks({ cwd, onNote: (text, tone) => hookNoteRef.current?.(text, tone) });
     agentRef.current = new Agent({
+      userHooks: userHooksRef.current,
       // "claudeNotes": false in settings.json leaves Claude's notes out; a path names another folder.
       // saveOff: "memorySave": "off" — the model's Remember saves nothing either (agent/way.mjs).
       memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false, saveOff: saveModeOf(settings) === 'off' } : null,
@@ -1195,6 +1204,7 @@ export function App({ opts, win, onRestart }) {
   const flushQueued = () => {
     const q = queuedRef.current;
     if (q) { queuedRef.current = null; setQueued(null); setTimeout(() => remoteFnRef.current.send?.(q), 50); }
+    else setTimeout(() => jobWakeRef.current?.(), 50); // a background job that ended while it loaded
   };
   // A model not loaded on the service (or loaded at another context than it is to run at) is loaded
   // now, with an empty prompt, so a switch is not first felt on the next reply: the footer says so,
@@ -1669,6 +1679,102 @@ export function App({ opts, win, onRestart }) {
     else if (ch === 'l') say(`${cfg.name}'s own messages: ${short(mcpLogFile(cfg.name))}`);
     else if (ch === 's') { if (cfg.runs === 'address' && cfg.auth === 'oauth') runMcpSignIn(cfg); else say(`${cfg.name} does not sign in in a browser${cfg.runs === 'address' ? ' (its Sign in row: e to change it)' : ''}.`); }
     else if (ch === 'o') { if (cfg.runs === 'address' && cfg.auth === 'oauth') { mcpSignOut(cfg); mcpHub.start(cfg.name); agent.mcpStale = true; say(`Signed out of ${cfg.name}: its token is gone from the Keychain. s signs in again.`); } else say(`${cfg.name} has no sign-in to take back.`); }
+  };
+  // ---- /hooks (hooks-form.mjs): your own hooks and the app's checks ----
+  const hooksList = (patch = {}) => { agent.userHooks?.reload(); return { ...openHooksList({ hooks: agent.userHooks, checks: agent.hooks, way: agent.way, ...patch }), envSet: hooksEnv(), off: !agent.userHooks }; };
+  // Your hooks written to ~/.agentic-coder/hooks.json; they work from the next step on.
+  const keepHooks = (pk, list) => {
+    if (!agent.userHooks) { setPicker({ ...pk, confirm: null, note: { text: 'Your hooks are off in this window (AGENTIC_USER_HOOKS=off).', tone: 'warn' } }); return false; }
+    try { writeUserHooks(list); agent.userHooks.reload(); return true; } catch (e) { setPicker({ ...pk, confirm: null, note: { text: `That could not be kept: ${e.message}`, tone: 'warn' } }); return false; }
+  };
+  const runHookTest = (pk) => {
+    const id = Date.now();
+    setPicker({ ...pk, test: { running: true, id } });
+    testHookForm(pk, { cwd: agent.cwd }).then((res) => setPicker((p) => (p?.kind !== 'hooks' || p.test?.id !== id ? p : { ...p, test: { ...res, id } })));
+  };
+  const saveHookForm = (pk) => {
+    const w = hookWarning(pk);
+    if (w) { setPicker({ ...pk, error: w.text }); return; }
+    const hook = toHook(pk, pk.at === null ? {} : pk.yours[pk.at]);
+    const list = pk.at === null ? [...pk.yours, hook] : pk.yours.map((h, k) => (k === pk.at ? hook : h));
+    if (!keepHooks(pk, list)) return;
+    const ev = eventOf(hook.event);
+    setPicker(hooksList({ index: pk.at ?? list.length - 1, note: { text: `Saved. ${ev.label}${ev.tool ? ` (${hook.matcher || 'every step'})` : ''}, it runs: ${hook.command}. It works from the next step on.` } }));
+  };
+  const hooksKeys = (pk, ch, key) => {
+    if (key.ctrl && ch === 'c') { setPicker(null); return; }
+    if (pk.view === 'form') {
+      if (pk.editing) {
+        if (key.return) setPicker(commitHookEdit(pk));
+        else if (key.escape) setPicker({ ...pk, editing: null });
+        else setPicker({ ...pk, editing: editField(pk.editing, ch, key) });
+        return;
+      }
+      const rows = hookFormRows(pk);
+      const n = rows.length;
+      const i = Math.min(pk.formIndex, n - 1);
+      const row = rows[i];
+      const text = row.type === 'text';
+      const typed = ch && !key.ctrl && !key.meta && !key.escape && !key.return && !key.tab && ch >= ' ';
+      if (key.upArrow) setPicker({ ...pk, formIndex: (i + n - 1) % n });
+      else if (key.downArrow || key.tab) setPicker({ ...pk, formIndex: (i + 1) % n });
+      else if ((key.leftArrow || key.rightArrow) && row.type === 'choice') { const next = moveHookRow(pk, row.id, key.rightArrow ? 1 : -1); setPicker({ ...next, formIndex: Math.max(0, hookFormRows(next).findIndex((r) => r.id === row.id)) }); }
+      else if (key.return && text) setPicker(startHookEdit(pk, row.id));
+      else if (key.return && row.id === 'test') { if (!pk.test?.running) runHookTest(pk); }
+      else if (key.return && row.id === 'save') saveHookForm(pk);
+      else if (key.return) setPicker({ ...pk, formIndex: Math.min(n - 1, i + 1) });
+      // Typing on a text row starts it over with what you type (enter keeps the old text to change it).
+      else if (typed && text) setPicker({ ...startHookEdit(pk, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, ch) });
+      else if (key.escape) setPicker(hooksList({ index: pk.back, note: { text: pk.at === null ? 'No hook was added.' : 'The hook was kept as it was.' } }));
+      return;
+    }
+    const rows = hookListRows(pk);
+    const n = rows.length;
+    const i = Math.min(pk.index, n - 1);
+    const row = rows[i];
+    const say = (text, tone) => setPicker({ ...pk, confirm: null, note: { text, tone } });
+    const add = () => (agent.userHooks ? setPicker(openHookForm(pk)) : say('Your hooks are off in this window (AGENTIC_USER_HOOKS=off).', 'warn'));
+    if (pk.confirm) {
+      if (ch === 'd' && row.hook && !row.theirs && pk.confirm === row.id) {
+        if (keepHooks(pk, pk.yours.filter((_, k) => k !== row.at))) setPicker(hooksList({ index: Math.max(0, i - 1), note: { text: `Removed: ${row.hook.command}` } }));
+      } else setPicker({ ...pk, confirm: null });
+      return;
+    }
+    if (key.upArrow) setPicker({ ...pk, index: (i + n - 1) % n, note: null });
+    else if (key.downArrow || key.tab) setPicker({ ...pk, index: (i + 1) % n, note: null });
+    else if (key.escape) setPicker(null);
+    else if (row.id === 'add') { if (key.return || ch === ' ' || ch === 'a') add(); }
+    else if (ch === 'a') add();
+    else if (row.id === 'project') { if (key.return) askHooksProject(); }
+    else if (row.theirs) { if (key.return || ch === ' ') say("This project's hooks follow its file (.agentic/hooks.json); its line above stops them all.", 'dim'); }
+    else if (row.check) {
+      if (!(key.return || ch === ' ')) return;
+      if (agent.busy) { say('Wait for Agentic Coder to finish first.', 'warn'); return; }
+      const r = changeHooks(agent.hooks, checkOn({ ...pk, way: 'model' }, row.check) ? 'off' : 'on', row.check.id);
+      if (r.changed) { agent.hooks = r.on; saveSettings({ hooks: [...r.on] }); }
+      setPicker({ ...pk, checks: new Set(agent.hooks), note: { text: `${r.text}${r.changed && agent.way === 'app' ? ' (Who decides is App in /effort, so every check runs now anyway.)' : ''}`, tone: r.tone ?? 'dim' } });
+    } else if (row.hook) {
+      if (key.return || ch === 'e') setPicker(openHookForm(pk, row.at));
+      else if (ch === ' ') { if (keepHooks(pk, pk.yours.map((h, k) => (k === row.at ? { ...h, off: !h.off } : h)))) setPicker(hooksList({ index: i, note: { text: row.hook.off ? `Switched on: ${row.hook.command}` : `Switched off: ${row.hook.command} does not run until you switch it on.` } })); }
+      else if (ch === 't') { const f = openHookForm(pk, row.at); runHookTest({ ...f, formIndex: hookFormRows(f).findIndex((r) => r.id === 'test') }); }
+      else if (ch === 'd') setPicker({ ...pk, confirm: row.id, note: null });
+    }
+  };
+  // A project's own hooks (.agentic/hooks.json): never run before a yes to that very file, asked
+  // from /hooks; again when the file changes. Running, the same line stops them.
+  const askHooksProject = () => {
+    const p = agent.userHooks?.project;
+    if (!p?.list.length || S.current.perm) return;
+    const req = { name: 'HooksProject', args: {}, changed: p.changed, running: p.answer === 'yes', hooks: p.list.map((h) => ({ when: eventOf(h.event)?.label ?? h.event, for: eventOf(h.event)?.tool ? h.matcher || 'every step' : '', command: h.command })) };
+    setPerm({ req, selected: 0, options: permissionOptions(req, null), offer: null, resolve: ({ choice }) => {
+      if (choice === 'yes') answerProjectHooks(agent.cwd, p.print, 'yes');
+      else if (choice === 'never') answerProjectHooks(agent.cwd, p.print, 'never');
+      else if (choice === 'stop') answerProjectHooks(agent.cwd, p.print, null);
+      agent.userHooks.reload();
+      const said = { yes: "This project's hooks run from the next step on. /hooks lists them.", never: "This project's hooks will not run. /hooks can change that.", stop: "This project's hooks stopped; asked again next time." }[choice];
+      if (said) push({ type: 'note', text: said, tone: 'dim' });
+      setPicker((x) => (x?.kind === 'hooks' ? hooksList({ index: x.index }) : x));
+    } });
   };
   // A project's own servers (.agentic/mcp.json): asked before they may start, in every mode, and
   // again when the file changes. Yes starts them; never is kept; "not now" asks again next time.
@@ -2273,6 +2379,22 @@ export function App({ opts, win, onRestart }) {
     agent.send(content, { signal: ac.signal, shown, images: blind ? undefined : images, fromServer });
   }, [agent, cwd, push]);
 
+  // A background job that ended after the reply (agent 'jobs-waiting', tools/jobs.mjs): the model is
+  // told and carries on by itself, as Claude Code does (the owner's pick, 3 Oct 2026). With a reply or
+  // a message on its way, the model off or loading, or /agents running, it waits: the news then goes
+  // with that message, or after /start.
+  hookNoteRef.current = (text, tone) => push({ type: 'note', text, tone: tone ?? 'dim' });
+  jobWakeRef.current = () => {
+    if (!agent.idle() || queuedRef.current || modelOffNow() || S.current.starting || S.current.remoteState === 'loading' || agentsRef.current?.running) return;
+    const w = agent.jobWake();
+    if (!w) return;
+    push({ type: 'note', text: `↻ ${w.shown}: the model carries on (esc stops it)`, tone: 'dim' });
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const plan = agent.mode === 'plan' ? '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]' : '';
+    agent.send(`${w.text}${plan}`, { signal: ac.signal, shown: w.shown, wake: true });
+  };
+
   // /rewind's first copy of this folder, and the clean-up of copies no
   // conversation has used for a week, both in the background.
   useEffect(() => {
@@ -2322,7 +2444,7 @@ export function App({ opts, win, onRestart }) {
       on('tool', (ev) => {
         push({ type: 'tool', label: ev.label, arg: ev.arg, view: ev.view, error: ev.error });
         const v = ev.view ?? {};
-        if (v.kind === 'bash') fold({ title: `Bash(${ev.arg})`, text: v.lines.join('\n') });
+        if (v.kind === 'bash' || v.kind === 'job') fold({ title: `${v.kind === 'job' && ev.label === 'Jobs' ? 'Jobs' : 'Bash'}(${ev.arg})`, text: v.lines.join('\n') });
         else if (v.content) fold({ title: `${ev.label}(${ev.arg})`, text: v.content });
         setLive((l) => ({ ...l, running: null, writing: null }));
       }),
@@ -2352,6 +2474,8 @@ export function App({ opts, win, onRestart }) {
       on('screen-setup', () => push({ type: 'note', text: `The model tried to look at the screen, but macOS has not let ${terminalApp()} take pictures of it yet: type /screen setup (once).`, tone: 'warn' })),
       on('settled', () => autoRef.current.schedule()),
       on('compacted', ({ summary, inPlace, n }) => { push({ type: 'note', text: inPlace ? `Picked up from its notes${n ? ` (${n})` : ''}` : `Summarized${n ? ` (${n})` : ''}, carrying on`, tone: 'dim' }); fold({ title: 'Summary', text: summary }); }),
+      // A background job ended with nothing running: told to the model once a queued message had its turn.
+      on('jobs-waiting', () => setTimeout(() => jobWakeRef.current?.(), 150)),
       on('turn-end', ({ reason, secs, steps, reads, thinkTokens }) => {
         const past = S.current.live?.past ?? 'Worked';
         setLive(IDLE);
@@ -2532,6 +2656,7 @@ export function App({ opts, win, onRestart }) {
     // the window's start already, when the model was off then); then (first use here) what is
     // already written is read, in the background.
     else if (first) setTimeout(() => { (askedAtOpen.current ? autoRef.current.seed() : autoRef.current.atStart()).catch(() => {}); }, 3000).unref?.();
+    if (!q) setTimeout(() => jobWakeRef.current?.(), 50); // a background job that ended while the model was off
   };
   const loadFnRef = useRef(null);
   loadFnRef.current = loadModel;
@@ -2655,7 +2780,13 @@ export function App({ opts, win, onRestart }) {
     const id = opts.resumeId ?? (opts.continueLast ? listSessions(cwd)[0]?.id : null);
     if (id) resumeSession(id);
     else if (opts.continueLast) push({ type: 'note', text: 'No earlier conversation in this folder yet.', tone: 'dim' });
-    if (opts.prompt) { if (starting) { queuedRef.current = opts.prompt; setQueued(opts.prompt); } else sendPrompt(opts.prompt); }
+    // Your SessionStart hooks (a resume runs them in resumeSession); a project's own hooks wait for your yes.
+    const started = id ? Promise.resolve() : agent.startSession('startup').catch(() => {});
+    const theirs = agent.userHooks?.project;
+    if (theirs?.list.length && theirs.answer === null) push({ type: 'note', text: `This project brings its own hooks (.agentic/hooks.json, ${theirs.list.length}): they do not run until you say yes in /hooks.`, tone: 'warn' });
+    if (agent.userHooks?.error) push({ type: 'note', text: `Your hooks: ${agent.userHooks.error}. /hooks shows them.`, tone: 'warn' });
+    const go = () => { if (starting) { queuedRef.current = opts.prompt; setQueued(opts.prompt); } else sendPrompt(opts.prompt); };
+    if (opts.prompt) { if (!id && agent.userHooks?.has('SessionStart')) started.then(go); else go(); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function resumeSession(id) {
@@ -2665,6 +2796,7 @@ export function App({ opts, win, onRestart }) {
       agent.messages[0] = { role: 'system', content: agent.messages[0].content };
       sessionRef.current = { id: s.id, title: s.title, items: s.items ?? [] };
       rewindRef.current?.setSession(s.id);
+      agent.startSession('resume').catch(() => {});
       push({ type: 'divider', text: `resumed: ${s.title}` }, ...(s.items ?? []).map(({ key, ...rest }) => rest));
       if (s.mode) setMode(s.mode);
     } catch (e) { push({ type: 'note', text: `Could not open that conversation: ${e.message}`, tone: 'error' }); }
@@ -2673,6 +2805,8 @@ export function App({ opts, win, onRestart }) {
   const quit = useCallback(async () => {
     setLeaving(true);
     loopsRef.current?.close();
+    agent.jobs?.stopAll(); // the background commands end with the window
+    await agent.endSession('quit').catch(() => {}); // your SessionEnd hooks, 5 s at most
     abortRef.current?.abort();
     btwRef.current?.ac.abort();
     saveNow();
@@ -2912,6 +3046,8 @@ export function App({ opts, win, onRestart }) {
       case 'clear':
         if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         {
+          // Your hooks: SessionEnd for the conversation that goes, SessionStart for the new one.
+          agent.endSession('clear').then(() => agent.startSession('clear')).catch(() => {});
           // Back in the folder Agentic Coder was started in, if a "Work in <project>?" moved it.
           const back = agent.startOver(copyRef.current?.work ?? opts.cwd); // a window in its own copy stays there
           sessionRef.current = { id: newSessionId(), title: null, items: [] };
@@ -2976,6 +3112,22 @@ export function App({ opts, win, onRestart }) {
       // /jumptomac [mac]: this window goes to your other Mac's sessions (the menu coding attach
       // <mac> shows) and this session keeps running; ctrl+b there comes back. The window does it
       // (door.mjs viewJumping): the app only asks its host to send the window that typed this.
+      case 'jobs': {
+        // /jobs [stop <id|all>]: the commands the model runs in the background (tools/jobs.mjs).
+        const jobs = agent.jobs;
+        const sub = /^stop\s+(\S+)$/i.exec(arg);
+        if (sub) {
+          const which = sub[1].toLowerCase() === 'all' ? jobs.running() : [jobs.get(sub[1])].filter(Boolean);
+          const did = which.filter((j) => jobs.stop(j, 'you'));
+          push({ type: 'note', text: did.length ? `Stopping ${did.map((j) => `${j.id} (${j.command})`).join(', ')}.` : `${sub[1].toLowerCase() === 'all' ? 'No background job is running.' : `No running job "${sub[1]}".`} /jobs lists them.`, tone: did.length ? 'dim' : 'warn' });
+          break;
+        }
+        if (arg) { push({ type: 'note', text: '/jobs lists the background commands; /jobs stop job1 (or all) stops them.', tone: 'warn' }); break; }
+        if (!jobs.all.length) { push({ type: 'note', text: 'No background commands. The model starts one with Bash and background: true (a dev server, a long test run); they end when this window closes.', tone: 'dim' }); break; }
+        const rows = jobs.all.map((j) => { const last = capLines(j.out, 6).slice(-3).filter((l) => l.trim()); return [`  ${jobs.line(j)}`, ...last.map((l) => `      ${l.slice(0, 160)}`)].join('\n'); });
+        push({ type: 'note', text: [`Background commands (${jobs.running().length} running; they end when this window closes) · /jobs stop <id|all>:`, ...rows].join('\n'), tone: 'dim' });
+        break;
+      }
       case 'loop':
       case 'loops': {
         // /loop [debug|test|web] [10m] [message]: a message sent again by itself (loops.mjs). /loops: its board.
@@ -3177,9 +3329,8 @@ export function App({ opts, win, onRestart }) {
           push({ type: 'note', text: `${r.text}${r.changed && agent.way === 'app' ? ' (Who decides is App in /effort, so every check runs now anyway.)' : ''}`, tone: r.tone ?? 'dim' });
           break;
         }
-        const set = hooksEnv();
-        const n = agent.way === 'app' ? 'all on: Who decides is App' : `${agent.hooks.size} of ${HOOKS.length} on while the model decides`;
-        push({ type: 'panel', title: `Hooks · ${n} · the app's checks${set !== undefined ? ` · AGENTIC_HOOKS=${set} decides` : ''}`, pad: 32, rows: hookRows(agent.hooks, agent.way) });
+        // Alone: the picker, your own hooks (user-hooks.mjs) above the app's checks (hooks-form.mjs).
+        setPicker(hooksList());
         break;
       }
       case 'init':
@@ -3570,6 +3721,14 @@ export function App({ opts, win, onRestart }) {
       else if ((row?.type === 'text' || row?.type === 'secret') && !greyed) setPicker({ ...startMcpEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
       return;
     }
+    // /hooks' form: a paste goes into the row being edited, or starts editing a text row (a command).
+    if (rp?.kind === 'hooks') {
+      if (rp.view !== 'form') return;
+      const row = hookFormRows(rp)[Math.min(rp.formIndex, hookFormRows(rp).length - 1)];
+      if (rp.editing) setPicker({ ...rp, editing: pasteField(rp.editing, text) });
+      else if (row?.type === 'text') setPicker({ ...startHookEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
+      return;
+    }
     if (rp?.kind === 'remote' || rp?.kind === 'web') {
       const row = (rp.kind === 'web' ? WEB_ROWS : remoteRows(rp))[rp.index];
       if (rp.editing) setPicker({ ...rp, editing: pasteField(rp.editing, text) });
@@ -3779,7 +3938,7 @@ export function App({ opts, win, onRestart }) {
           return;
         }
         p.resolve({ choice });
-        if (choice === 'no' && p.req.name !== 'McpProject') setPlaceholder('Tell Agentic Coder what to do instead');
+        if (choice === 'no' && p.req.name !== 'McpProject' && p.req.name !== 'HooksProject') setPlaceholder('Tell Agentic Coder what to do instead');
       };
       const always = p.options.findIndex((o) => o.choice === 'always');
       const no = p.options.findIndex((o) => o.choice === 'no');
@@ -3900,6 +4059,7 @@ export function App({ opts, win, onRestart }) {
     // keys, its own rows (web-form.mjs), Test and Save.
     // /mcp: the list of your MCP servers, one server's form, its tools (mcpKeys).
     if (cur.picker?.kind === 'mcp') { mcpKeys(cur.picker, ch, key); return; }
+    if (cur.picker?.kind === 'hooks') { hooksKeys(cur.picker, ch, key); return; }
     if (cur.picker?.kind === 'remote' || cur.picker?.kind === 'web') {
       const pk = cur.picker;
       const web = pk.kind === 'web';

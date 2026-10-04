@@ -158,7 +158,18 @@ export function ToolNode({ it }) {
           <Node g="❯" c={C.edits}><Head verb="Ran" c={C.edits} what={it.arg} /></Node>
           {shown.map((l, i) => <Pipe key={i}><Text wrap="truncate-end">{l || ' '}</Text></Pipe>)}
           {v.lines.length > 4 ? <Pipe><Text color={C.dim}>… +{v.lines.length - 4} lines <Text color={C.faint}>(ctrl+o to expand)</Text></Text></Pipe> : null}
-          {v.timedOut ? <Pipe><Text color={C.warn}>Stopped after 2 minutes</Text></Pipe> : v.code ? <Pipe><Text color={C.bad}>Exit code {v.code}</Text></Pipe> : null}
+          {v.timedOut ? <Pipe><Text color={C.warn}>Stopped after {v.after ?? '2 minutes'}</Text></Pipe> : v.code ? <Pipe><Text color={C.bad}>Exit code {v.code}</Text></Pipe> : null}
+        </Box>
+      );
+    }
+    // A background command (tools/jobs.mjs): started, looked at, or stopped, and its newest lines.
+    case 'job': {
+      const shown = v.lines.slice(-4);
+      return (
+        <Box flexDirection="column">
+          <Node g="❯" c={C.edits}><Head verb={it.label === 'Jobs' ? 'Jobs' : 'Started'} c={C.edits} what={it.arg} detail={v.what} /></Node>
+          {shown.map((l, i) => <Pipe key={i}><Text wrap="truncate-end">{l || ' '}</Text></Pipe>)}
+          {v.lines.length > shown.length ? <Pipe><Text color={C.dim}>… +{v.lines.length - shown.length} lines <Text color={C.faint}>(ctrl+o to expand)</Text></Text></Pipe> : null}
         </Box>
       );
     }

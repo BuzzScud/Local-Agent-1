@@ -11,6 +11,7 @@ import { webUrl, fetchPage, searchWeb, PROVIDER_NAMES } from '../tools/web.mjs';
 import { outlineText } from '../tools/outline.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { runCommand } from '../tools/run.mjs';
+import { took } from '../tools/jobs.mjs';
 import { listFiles, searchFiles, walk } from '../tools/fs.mjs';
 import { mathPathFor, mathDir } from './expertise.mjs';
 import { designPathFor, designDir, inDesignDir } from './design.mjs';
@@ -57,8 +58,8 @@ export const TOOL_DEFS = [
   },
   {
     name: 'Bash',
-    description: 'Run a shell command (zsh) in the project folder, for example tests, a build, or git status. Stops after 2 minutes. Long output is cut.',
-    parameters: { type: 'object', properties: { command: str('The command'), description: str('A few words on what it does') }, required: ['command'] },
+    description: 'Run a shell command (zsh) in the project folder, for example tests, a build, or git status. Stops after 2 minutes unless timeout gives it more seconds (600 at most). Long output is cut. For a dev server, a watcher, or a long run you need not wait for, set background: true: it keeps running while you work, you get its id, Jobs shows what it printed or stops it, and you are told when it ends.',
+    parameters: { type: 'object', properties: { command: str('The command'), description: str('A few words on what it does'), timeout: { type: 'integer', description: 'Optional: seconds it may run before it is stopped, up to 600' }, background: { type: 'boolean', description: 'Optional: true runs it in the background and answers at once with its id' } }, required: ['command'] },
   },
   {
     name: 'TodoWrite',
@@ -80,6 +81,14 @@ export const TOOL_DEFS = [
     }, required: ['question'] },
   },
 ];
+
+// The background commands (Bash with background: true, tools/jobs.mjs): what one printed since the
+// last look, the list, or a stop. On every way, so the list of tools never moves.
+const JOBS_TOOL_DEF = {
+  name: 'Jobs',
+  description: 'Your background commands (Bash with background: true). With id: what it printed since you last looked, and whether it still runs; add stop: true to stop it. Without id: the list.',
+  parameters: { type: 'object', properties: { id: str('The job, such as job1'), stop: { type: 'boolean', description: 'true stops it, and everything it started' } }, required: [] },
+};
 
 // The model decides (/effort's Who decides row on Model, agent/way.mjs): what the app did for the
 // model before its first step (sort the request, run a focused path, draw the map, search by
@@ -175,7 +184,7 @@ const READ_MANY = {
 // web: { search, fetch } (/web): the web tools join them.
 // agents: the Agent tool joins them (a helper's own list never has it); helpers: your own helper agents in it.
 // screen: the Screen tool joins them (a model that can look at pictures, on a Mac).
-export const toolDefs = (way = 'app', web = null, { agents = false, screen = false, helpers = [] } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [agentToolDef(helpers)] : [])];
+export const toolDefs = (way = 'app', web = null, { agents = false, screen = false, helpers = [] } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), JOBS_TOOL_DEF, ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [agentToolDef(helpers)] : [])];
 export const toolSchemas = (way = 'app', web = null, opts = {}) => toolDefs(way, web, opts).map((d) => ({ type: 'function', function: d }));
 
 // Other agents' names for a tool here that takes the same arguments (Claude Code's Glob, Grep and
@@ -208,6 +217,11 @@ const ALIASES = {
   description: ['description', 'title', 'summary', 'name'],
   find: ['find', 'search', 'look_for'],
   app: ['app', 'application', 'app_name', 'window', 'program'],
+  // Claude Code's names too: timeout (milliseconds there; see secsOf), run_in_background, shell_id.
+  timeout: ['timeout', 'timeout_secs', 'timeout_seconds', 'seconds', 'timeout_ms'],
+  background: ['background', 'run_in_background', 'in_background', 'detach', 'detached'],
+  id: ['id', 'job', 'job_id', 'shell_id', 'bash_id', 'task_id'],
+  stop: ['stop', 'kill', 'cancel'],
 };
 
 // A tool's definition, on either way (Read's own takes paths only on Model).
@@ -303,6 +317,7 @@ export function display(name, args = {}) {
     case 'Write': return { label: 'Write', arg: args.path ?? '' };
     case 'Bash': return { label: 'Bash', arg: args.command ?? '' };
     case 'TodoWrite': return { label: 'Update Todos', arg: '' };
+    case 'Jobs': return { label: 'Jobs', arg: args.id ? `${String(args.id).trim()}${args.stop === true || args.stop === 'true' ? ' (stop)' : ''}` : 'list' };
     case 'Ask': return { label: 'Ask', arg: args.question ?? '' };
     case 'Map': return { label: 'Map', arg: args?.part ? `docs/map/${String(args.part).replace(/\.md$/, '')}.md` : 'the project' };
     case 'CodeSearch': return { label: 'CodeSearch', arg: args.query ?? '' };
@@ -886,15 +901,19 @@ export async function execute(name, args, prepared, env) {
       };
     }
     case 'Bash': {
-      // Output lines and the timeout move with /effort (env.bash).
-      const timeoutMs = env.bash?.timeoutMs ?? 120_000;
+      if (onOff(args.background)) return startJob(args, env, max);
+      // Output lines and the timeout move with /effort (env.bash); a call's own timeout wins.
+      const own = secsOf(args.timeout);
+      const timeoutMs = own ? own * 1000 : env.bash?.timeoutMs ?? 120_000;
       // A model on another machine gets a test run's passing tests folded into one line (squeezeTests).
       const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal, squeeze: env.rulesSet === 'remote' });
       const body = r.lines.join('\n');
-      const took = timeoutMs >= 90_000 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
-      const status = r.timedOut ? `\n(stopped after ${took})` : r.code === 0 ? '' : `\n(exit code ${r.code})`;
-      return { text: cut(body || '(no output)', max) + status, error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut } };
+      const took = timeoutMs >= 90_000 && timeoutMs % 60_000 === 0 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
+      const longer = r.timedOut && timeoutMs < MAX_TIMEOUT_SECS * 1000 ? `; for longer, send timeout (up to ${MAX_TIMEOUT_SECS} seconds), or background: true for one that need not be waited for` : '';
+      const status = r.timedOut ? `\n(stopped after ${took}${longer})` : r.code === 0 ? '' : `\n(exit code ${r.code})`;
+      return { text: cut(body || '(no output)', max) + status, error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut, ...(r.timedOut ? { after: took } : {}) } };
     }
+    case 'Jobs': return jobsTool(args, env, max);
     case 'WebSearch': return webSearch(args, env);
     case 'WebFetch': return webFetch(args, env, max);
     case 'Screen': {
@@ -911,6 +930,60 @@ export async function execute(name, args, prepared, env) {
     default:
       return { text: `Unknown tool ${name}.`, error: true, view: { kind: 'error', message: 'Unknown tool' } };
   }
+}
+
+// ---- background commands (tools/jobs.mjs) ---------------------------------------------------------
+
+// A command's own time limit, in seconds, at most this.
+export const MAX_TIMEOUT_SECS = 600;
+const onOff = (v) => v === true || v === 'true' || v === 1;
+// The seconds a call's timeout asks for, at most MAX_TIMEOUT_SECS. From 10,000 up it is milliseconds,
+// as Claude Code's Bash takes them (a model trained on it sends 300000 for five minutes); between the
+// cap and that, seconds past the cap (1200 meant as 20 minutes gets 600, not 1.2 s). null: none given.
+export function secsOf(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const secs = n >= 10_000 ? n / 1000 : n;
+  return Math.max(1, Math.min(MAX_TIMEOUT_SECS, Math.round(secs)));
+}
+
+async function startJob(args, env, max) {
+  if (!env.jobs) return { text: 'Background jobs are not available here. Run the command without background; timeout gives it up to 600 seconds.', error: true, view: { kind: 'error', message: 'no background jobs here' } };
+  const r = await env.jobs.start(args.command, { cwd: env.cwd, description: args.description ?? '' });
+  if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: 'too many background jobs' } };
+  const { job } = r;
+  const first = env.jobs.look(job, env.bash?.maxLines ?? 80).lines;
+  // Ended within its first moment: it ran as any command does, with its exit code.
+  if (job.ended) {
+    const status = job.code === 0 ? '' : `\n(exit code ${job.code})`;
+    return { text: `${cut(first.join('\n') || '(no output)', max)}${status}\n(it ended at once, so it is not running in the background)`, error: job.code !== 0, view: { kind: 'bash', code: job.code, lines: first, ms: job.ended - job.started } };
+  }
+  return {
+    text: `Started in the background as ${job.id}. It keeps running while you work, and you will be told when it ends. Jobs with "id": "${job.id}" shows what it printed since you last looked; add "stop": true to stop it.${first.length ? `\nIts first lines:\n${cut(first.join('\n'), max)}` : ''}`,
+    view: { kind: 'job', what: `Running in the background as ${job.id}`, lines: first },
+  };
+}
+
+async function jobsTool(args, env, max) {
+  const jobs = env.jobs;
+  if (!jobs) return { text: 'Background jobs are not available here.', error: true, view: { kind: 'error', message: 'no background jobs here' } };
+  const list = () => (jobs.all.length ? jobs.all.map((j) => jobs.line(j)).join('\n') : 'No background jobs. Bash with background: true starts one.');
+  const id = String(args.id ?? '').trim();
+  if (!id) return { text: list(), view: { kind: 'job', what: `${jobs.running().length} running`, lines: jobs.all.map((j) => jobs.line(j)) } };
+  const job = jobs.get(id);
+  if (!job) return { text: `There is no background job "${id}". ${list()}`, error: true, view: { kind: 'error', message: `no job ${id}` } };
+  if (onOff(args.stop)) {
+    if (job.ended) return { text: `${jobs.line(job)}: it is not running.`, view: { kind: 'job', what: jobs.line(job), lines: [] } };
+    jobs.stop(job, 'model');
+    const t0 = Date.now();
+    while (!job.ended && Date.now() - t0 < 3000) await new Promise((r) => setTimeout(r, 50));
+    const last = jobs.tail(job, 10);
+    return { text: `Stopped ${job.id} (${job.command}) after ${took(Date.now() - job.started)}.${last.length ? ` Its last lines:\n${cut(last.join('\n'), max)}` : ''}`, view: { kind: 'job', what: `Stopped ${job.id}`, lines: last } };
+  }
+  const { lines, dropped } = jobs.look(job, env.bash?.maxLines ?? 80);
+  const head = jobs.line(job);
+  const body = lines.length ? `New output since you last looked${dropped ? ` (${dropped} older characters were not kept)` : ''}:\n${cut(lines.join('\n'), max)}` : 'No new output since you last looked.';
+  return { text: `${head}\n${body}`, view: { kind: 'job', what: head, lines } };
 }
 
 // ---- the web ------------------------------------------------------------------------------------

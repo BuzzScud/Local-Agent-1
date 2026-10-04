@@ -33,21 +33,28 @@ export function squeezeTests(lines) {
   return out;
 }
 
+// The shell a command runs in, in its own process group, so stopping it stops everything it
+// started (npm → node → test workers), not just the shell. Also the background jobs' (jobs.mjs).
+export function startShell(command, { cwd, sandbox = {} } = {}) {
+  const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', CI: '1' };
+  delete env.AGENTIC_RESTART_FILE; // where /update leaves its restart: the app's alone
+  const fenced = sandbox !== false && sandboxAvailable();
+  const child = fenced
+    ? spawn(...sandboxed(command, cwd, sandbox), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env })
+    : spawn(command, { cwd, shell: '/bin/zsh', detached: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+  return { child, fenced };
+}
+// A signal to the command's whole process group (the shell alone when there is none).
+export function signalGroup(child, sig) { try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} } }
+
 export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, signal, sandbox = {}, squeeze = false } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
-    // Its own process group, so stopping it stops everything it started
-    // (npm → node → test workers), not just the shell.
-    const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', CI: '1' };
-    delete env.AGENTIC_RESTART_FILE; // where /update leaves its restart: the app's alone
-    const fenced = sandbox !== false && sandboxAvailable();
-    const child = fenced
-      ? spawn(...sandboxed(command, cwd, sandbox), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env })
-      : spawn(command, { cwd, shell: '/bin/zsh', detached: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+    const { child, fenced } = startShell(command, { cwd, sandbox });
     let timedOut = false;
     let done = false;
     let force = null;
-    const stopAll = (sig) => { try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} } };
+    const stopAll = (sig) => signalGroup(child, sig);
     const stop = () => {
       stopAll('SIGTERM');
       // Whatever ignores SIGTERM is killed; a process that left the group and

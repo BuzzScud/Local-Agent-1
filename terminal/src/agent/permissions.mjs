@@ -334,12 +334,13 @@ export function neverRule(command, never = []) {
 // "edits" there would turn Auto-edit on for itself; started in the home
 // folder, .agentic-coder/ with the saved rules is inside the project). Yours
 // come on top. Names match whatever their case: on a Mac .ENV is .env.
-export const PROTECTED = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '.git', '.git/**', '.agentic/settings.json', '.agentic/mcp.json', '.agentic-coder/**'];
+export const PROTECTED = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '.git', '.git/**', '.agentic/settings.json', '.agentic/mcp.json', '.agentic/hooks.json', '.agentic-coder/**'];
 // The app's own settings and rules: in Bypass, where nothing asks, a change to one is
 // refused instead (a model that could write them could change its own mode or rules).
 // .agentic/mcp.json names programs that start with the next window (a project's MCP servers): a model
-// that could write it could give itself a command to run.
-export const OWN = ['.agentic/settings.json', '.agentic/mcp.json', '.agentic-coder/**'];
+// that could write it could give itself a command to run, and so could one writing .agentic/hooks.json
+// (a project's own hooks, user-hooks.mjs).
+export const OWN = ['.agentic/settings.json', '.agentic/mcp.json', '.agentic/hooks.json', '.agentic-coder/**'];
 // * is any run of characters within one name, ** any run across folders, ? one character.
 const globText = (g) => g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*').replace(/\?/g, '[^/]');
 const globRe = (g) => new RegExp(`(?:^|/)${globText(g)}$`, 'i');
@@ -441,6 +442,8 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     return { decision: 'ask', rule, ...(mcp.changed ? { changed: true } : {}), why: mcp.changed ? 'the tool changed since you allowed it' : mode === 'auto' ? 'Auto cannot tell what an MCP tool changes, so it asks' : `no rule allows ${mcp.server}'s ${mcp.tool} yet` };
   }
   if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow', why: 'it changes nothing' };
+  // A background command's output, or a stop of it: the command itself was asked about when it started.
+  if (name === 'Jobs') return { decision: 'allow', why: 'it reads or stops a command you already let run' };
   // The model's own tools when it decides (agent/way.mjs): two read, one writes to the memory,
   // and two run a focused path, whose every change asks as your mode says (so plan mode refuses them).
   if (name === 'Map' || name === 'CodeSearch') return { decision: 'allow', why: 'it only reads' };

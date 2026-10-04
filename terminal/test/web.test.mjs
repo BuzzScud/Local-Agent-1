@@ -189,7 +189,7 @@ const webSchemas = (way) => toolDefs(way, { search: 'claude', fetch: true }).map
 
 test('on the Claude API WebSearch and WebFetch go as Anthropic’s web tools (the newer ones where the model takes them); the other tools stay as they are', () => {
   const names = (model) => claudeParams({ model, messages: [{ role: 'user', content: 'hi' }], tools: webSchemas(), maxTokens: 100 }).tools.map((t) => t.type ?? t.name);
-  expect(names('claude-opus-5-5')).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask', 'web_search_20260209', 'web_fetch_20260209']);
+  expect(names('claude-opus-5-5')).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask', 'Jobs', 'web_search_20260209', 'web_fetch_20260209']);
   expect(names('claude-haiku-4-5').slice(-2)).toEqual(['web_search_20250305', 'web_fetch_20250910']);
   const p = claudeParams({ model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], tools: webSchemas(), maxTokens: 100 });
   expect(p.tools.at(-2)).toEqual({ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }); // no eager_input_streaming on a server tool

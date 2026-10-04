@@ -24,6 +24,9 @@ import { triedWord } from './tryouts.mjs';
 import { statusOf as statusOfJob, roomLine as subRoomLine, MAIN } from './subagents.mjs';
 import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
 import { listRows, serverLine, projectLine, formRows, showMcpValue, mcpRowNote, mcpRowChanged, mcpWarning, testLines, toolState, toolWindow, toolNote } from './mcp-form.mjs';
+import { hookListRows, hookLine, projectLine as hooksProjectLine, checkOn, rowWindow, hookFormRows, showHookValue, hookRowNote, hookRowChanged, hookWarning } from './hooks-form.mjs';
+import { HOOKS as APP_CHECKS } from '../agent/way.mjs';
+import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
 import { StartPage } from './start.jsx';
@@ -70,7 +73,19 @@ function ToolView({ it, width }) {
         <Box flexDirection="column">
           {shown.map((l, i) => <Text key={i} wrap="truncate-end">{l || ' '}</Text>)}
           {more > 0 ? <Text color={C.dim}>… +{more} lines (ctrl+o to expand)</Text> : null}
-          {v.timedOut ? <Text color={C.warn}>Stopped after 2 minutes</Text> : v.code ? <Text color={C.bad}>Exit code {v.code}</Text> : null}
+          {v.timedOut ? <Text color={C.warn}>Stopped after {v.after ?? '2 minutes'}</Text> : v.code ? <Text color={C.bad}>Exit code {v.code}</Text> : null}
+        </Box>
+      );
+      break;
+    }
+    // A background command (tools/jobs.mjs): started, looked at, or stopped, and its newest lines.
+    case 'job': {
+      const shown = v.lines.slice(-4);
+      body = (
+        <Box flexDirection="column">
+          <Text color={C.dim} wrap="truncate-end">{v.what}</Text>
+          {shown.map((l, i) => <Text key={i} wrap="truncate-end">{l || ' '}</Text>)}
+          {v.lines.length > shown.length ? <Text color={C.dim}>… +{v.lines.length - shown.length} lines (ctrl+o to expand)</Text> : null}
         </Box>
       );
       break;
@@ -515,7 +530,7 @@ function LiveRail({ app, maxLines }) {
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
-const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page', Screen: 'Look at the screen', Mcp: 'MCP tool', McpProject: 'A project brings its own MCP servers' };
+const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page', Screen: 'Look at the screen', Mcp: 'MCP tool', McpProject: 'A project brings its own MCP servers', HooksProject: 'A project brings its own hooks' };
 
 // prefix: the rule "don't ask again" would remember (null: none can, the
 // command's words cannot be trusted); saveRule: what "always allow" would save
@@ -547,6 +562,10 @@ export function permissionOptions(req, prefix, saveRule = null) {
   }
   // A project's own MCP servers (.agentic/mcp.json): before they may start.
   if (req.name === 'McpProject') return [{ label: `Yes, start ${req.servers.length === 1 ? req.servers[0].name : 'them'} (asked again if .agentic/mcp.json changes)`, choice: 'yes' }, { label: 'Not now (this session)', choice: 'no' }, { label: 'Never for this project', choice: 'never' }];
+  // A project's own hooks (.agentic/hooks.json, user-hooks.mjs): before they run, and to stop them.
+  if (req.name === 'HooksProject') return req.running
+    ? [{ label: 'Stop running them (asked again next time)', choice: 'stop' }, { label: 'Keep them running (esc)', choice: 'no' }]
+    : [{ label: 'Yes, run them (asked again if .agentic/hooks.json changes)', choice: 'yes' }, { label: 'Not now (this session)', choice: 'no' }, { label: 'Never for this project', choice: 'never' }];
   // The screen: once per app (the user's pick, 1 Oct 2026): this time, this session, or saved.
   if (req.name === 'Screen') return [{ label: 'This time', choice: 'yes' }, { label: 'For this session', choice: 'always' }, { label: 'Always (saved for this folder)', choice: 'save' }, { label: 'No (esc)', choice: 'no' }];
   // A protected file asks every time (permissions.mjs), so it has no "allow all edits".
@@ -597,6 +616,15 @@ function PermissionPrompt({ app }) {
           ))}
           <Text color={C.dim} wrap="truncate-end">A server is a program: it runs on this Mac with what its sandbox allows.</Text>
         </Box>
+      ) : req.name === 'HooksProject' ? (
+        <Box flexDirection="column" paddingX={2} marginY={1}>
+          <Text wrap="truncate-end">.agentic/hooks.json in {app.cwdShort}{req.changed ? <Text color={C.warn}> · changed since you said yes</Text> : null}</Text>
+          {req.hooks.slice(0, Math.max(1, room - 5)).map((h, i) => (
+            <Text key={i} wrap="truncate-end"><Text bold>{`${h.when}${h.for ? ` · ${h.for}` : ''}`.padEnd(30)}</Text>{h.command}</Text>
+          ))}
+          {req.hooks.length > Math.max(1, room - 5) ? <Text color={C.dim}>… +{req.hooks.length - Math.max(1, room - 5)} more</Text> : null}
+          <Text color={C.dim} wrap="truncate-end">A hook is a command: it runs as you, with no sandbox, at the moment it names.</Text>
+        </Box>
       ) : req.name === 'Ask' ? (
         <Box paddingX={1} marginY={1}>
           <Text bold>{req.args.question}{req.args.step ? <Text bold={false} color={C.dim}>   ({req.args.step.at} of {req.args.step.of})</Text> : null}</Text>
@@ -644,6 +672,7 @@ function PermissionPrompt({ app }) {
         : req.name === 'Screen' ? <Text>Let the model look at <Text bold>{String(req.args?.app ?? '').trim() || 'the whole screen'}</Text>?</Text>
         : req.name === 'Mcp' ? <Text>Let <Text bold>{req.mcp.server}</Text> run <Text bold>{req.mcp.tool}</Text>?</Text>
         : req.name === 'McpProject' ? <Text>Start this project’s server{req.servers.length === 1 ? '' : 's'}?</Text>
+        : req.name === 'HooksProject' ? <Text>{req.running ? 'Stop this project’s hooks?' : 'Run this project’s hooks?'}</Text>
         : req.name === 'Rename' ? <Text>Rename <Text bold>{req.args.from}</Text> to <Text bold>{req.args.to}</Text>: {req.prepared.total} use{req.prepared.total === 1 ? '' : 's'} in {req.prepared.files.length} file{req.prepared.files.length === 1 ? '' : 's'}?</Text>
         : req.name === 'Test' ? <Text>Use this test to decide when the change is done? <Text color={C.dim}>(it fails today, as it should)</Text></Text>
         : <Text>Do you want to {req.name === 'Write' && req.prepared.created ? 'create' : 'make this edit to'} <Text bold>{req.prepared.rel}</Text>?</Text>}
@@ -1328,6 +1357,113 @@ function RemotePicker({ app }) {
 // /mcp (mcp-form.mjs): your MCP servers. The list (each server: connected or not, where it runs,
 // its tools), the form for one (as /web's: a choice between ◀ ▶, a text row edited in place, Test
 // and Save), and one server's tools with your marks: on or off, and "reads".
+// /hooks (hooks-form.mjs): your own hooks above the app's checks, and the form for one of yours.
+function HooksPicker({ app }) {
+  const pk = app.picker;
+  const W = app.width - 4;
+  const cut = (s, n) => { const t = String(s ?? ''); return t.length > n ? `${t.slice(0, Math.max(0, n - 1))}…` : t; };
+  if (pk.view === 'form') {
+    const ROWS = hookFormRows(pk);
+    const lw = 14, vw = 22;
+    const warn = hookWarning(pk);
+    const at = ROWS[Math.min(pk.formIndex, ROWS.length - 1)];
+    const typing = (e) => {
+      const room = Math.max(8, app.width - lw - 12);
+      const from = Math.max(0, e.cursor - room + 1);
+      return <><Text>{from ? '…' : ''}{e.value.slice(from, e.cursor)}</Text><Text inverse>{e.value[e.cursor] ?? ' '}</Text><Text>{e.value.slice(e.cursor + 1, from + room)}</Text></>;
+    };
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+        <Text bold>{pk.at === null ? 'Add a hook' : 'Your hook'}</Text>
+        <Text color={C.dim} wrap="truncate-end">A command of yours, run at the moment you pick, as Claude Code's hooks are. Nothing is kept until Save.</Text>
+        {ROWS.map((r, i) => {
+          const on = i === Math.min(pk.formIndex, ROWS.length - 1);
+          const e = pk.editing?.id === r.id ? pk.editing : null;
+          const choice = r.type === 'choice';
+          const unsaved = r.type !== 'action' && hookRowChanged(pk, r.id);
+          const v = showHookValue(pk, r.id);
+          const wide = r.type === 'text';
+          const done = r.id === 'test' && pk.test && !pk.test.running;
+          const tone = done ? (pk.test.ok ? C.ok : C.bad) : undefined;
+          return (
+            <React.Fragment key={r.id}>
+              {r.id === 'test' ? <Text> </Text> : null}
+              <Text wrap="truncate-end">
+                <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {r.label.padEnd(lw)}</Text>
+                {e ? typing(e) : (
+                  <>
+                    <Text color={choice ? (on ? C.accent : C.faint) : undefined}>{choice ? '◀ ' : '  '}</Text>
+                    <Text color={tone ?? (unsaved ? C.accent : r.type === 'action' ? C.dim : undefined)} bold={unsaved}>{wide ? v : v.padEnd(vw)}</Text>
+                    {wide ? null : <Text color={choice ? (on ? C.accent : C.faint) : undefined}>{choice ? '▶ ' : '  '}</Text>}
+                    <Text color={unsaved ? C.accent : C.faint}>{unsaved ? ' •' : '  '}</Text>
+                    {wide ? null : <Text color={C.dim}> {hookRowNote(pk, r.id)}</Text>}
+                  </>
+                )}
+              </Text>
+              {done ? pk.test.lines.map((l, k) => <Box key={k} paddingLeft={lw + 4}><Text color={k === 0 ? tone : C.dim} wrap="truncate-end">{l}</Text></Box>) : null}
+            </React.Fragment>
+          );
+        })}
+        <Text> </Text>
+        {at?.type === 'text' ? <Text color={C.dim} wrap="wrap">{at.label}: {hookRowNote(pk, at.id)}</Text> : null}
+        {warn && (pk.error || at?.id === 'save') ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="wrap">{pk.error ?? warn.text}</Text> : null}
+        <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : '↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc back to the list'}</Text>
+      </Box>
+    );
+  }
+  const rows = hookListRows(pk);
+  const room = Math.max(6, (app.rows ?? 24) - 10);
+  const win = rowWindow(rows, Math.min(pk.index, rows.length - 1), room);
+  const at = rows[Math.min(pk.index, rows.length - 1)];
+  const n = pk.way === 'app' ? 'all on: Who decides is App' : `${pk.checks.size} of ${APP_CHECKS.length} on while the model decides`;
+  const mine = pk.yours.length;
+  const whenW = 30;
+  const hint = at?.check ? 'space on/off · ↑↓ move · esc close'
+    : at?.hook && !at.theirs ? 'enter edit · space on/off · t test · d remove · a add · esc close'
+      : at?.id === 'project' ? 'enter to look, and say yes or no · esc close' : 'enter adds a hook · ↑↓ move · esc close';
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold wrap="truncate-end">Hooks · {n}<Text color={C.dim} bold={false}> · {mine} of yours{pk.envSet !== undefined ? ` · AGENTIC_HOOKS=${pk.envSet} decides the app's checks` : ''}</Text></Text>
+      {win.above ? <Text color={C.dim}>   … {win.above} more above (↑)</Text> : null}
+      {win.shown.map((r, k) => {
+        const i = win.start + k;
+        const on = i === Math.min(pk.index, rows.length - 1);
+        const mark = <Text color={C.accent} bold>{on ? '❯ ' : '  '}</Text>;
+        const head = i === 0 ? <Text color={C.dim} wrap="truncate-end">Your hooks · ~/.agentic-coder/hooks.json, in Claude Code's layout{pk.off ? ' · off in this window (AGENTIC_USER_HOOKS=off)' : ''}</Text>
+          : r.check && r.n === 1 ? <><Text> </Text><Text color={C.dim} wrap="truncate-end">The app's checks · on Model the ones on run; on App all of them</Text></> : null;
+        let line;
+        if (r.id === 'add') line = <Text>{mark}<Text color={on ? C.accent : C.dim} bold={on}>+ Add a hook</Text></Text>;
+        else if (r.id === 'project') line = <Text wrap="truncate-end">{mark}<Text color={on ? C.accent : C.warn} bold={on}>{hooksProjectLine(pk.project)}</Text></Text>;
+        else if (r.hook) {
+          const l = hookLine(r.hook);
+          const live = !r.hook.off;
+          line = (
+            <Text wrap="truncate-end">
+              {mark}
+              <Text color={live ? C.accent : C.faint}>{live ? '● on   ' : '○ off  '}</Text>
+              <Text bold={on} color={live ? undefined : C.dim}>{cut(`${l.when}${l.for ? ` · ${l.for}` : ''}`, whenW - 1).padEnd(whenW)}</Text>
+              <Text color={C.dim}>{cut(l.command, Math.max(10, W - whenW - 20))}{r.theirs ? '  · this project’s' : ''}</Text>
+            </Text>
+          );
+        } else {
+          const c = r.check;
+          const yes = checkOn(pk, c);
+          line = <Text wrap="truncate-end">{mark}<Text color={C.dim}>{String(r.n).padStart(2)}  </Text><Text color={yes ? C.accent : C.faint}>{yes ? 'on ' : 'off'}</Text><Text>  </Text><Text bold={on}>{c.label.padEnd(30)}</Text><Text color={C.dim}>{c.what}</Text></Text>;
+        }
+        return <React.Fragment key={r.id}>{head}{line}</React.Fragment>;
+      })}
+      {win.below ? <Text color={C.dim}>   … {win.below} more (↓)</Text> : null}
+      <Text> </Text>
+      {pk.confirm ? <Text color={C.warn} wrap="truncate-end">Press d again to remove it; any other key keeps it.</Text>
+        : pk.note ? <Text color={pk.note.tone === 'warn' ? C.warn : C.dim} wrap="wrap">{pk.note.text}</Text>
+          : pk.error ? <Text color={C.warn} wrap="wrap">{pk.error}</Text>
+            : at?.hook ? <Text color={C.dim} wrap="truncate-end">{hookLine(at.hook).when}: {eventLine(at.hook)}</Text> : null}
+      <Text color={C.dim} wrap="truncate-end">{hint}</Text>
+    </Box>
+  );
+}
+const eventLine = (h) => eventOf(h.event)?.what ?? '';
+
 function McpPicker({ app }) {
   const pk = app.picker;
   const W = app.width - 4;
@@ -1988,6 +2124,8 @@ export function Screen({ app }) {
         <RemotePicker app={app} />
       ) : app.picker?.kind === 'mcp' ? (
         <McpPicker app={app} />
+      ) : app.picker?.kind === 'hooks' ? (
+        <HooksPicker app={app} />
       ) : app.picker?.kind === 'settings' ? (
         <SettingsPicker app={app} />
       ) : app.picker?.kind === 'rewind' ? (

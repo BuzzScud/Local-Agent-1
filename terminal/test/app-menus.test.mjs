@@ -199,13 +199,15 @@ test('"/" menu like Claude Code: the 18 commands of a window on this Mac (no /bt
   expect(small.snapshots.all).toMatch(/^\s{2}\/jumptomac\s+Jump this window to your other/m);
   expect(small.snapshots.all).not.toMatch(/^\s{2}\/btw\s/m); // a side question is for a remote: not listed here
   expect(small.snapshots.all).not.toMatch(/^\s{2}\/loops?\s/m); // no room for them at 80 × 24: typed, they are found
-  expect(rows(small.snapshots.j)).toHaveLength(1);
+  expect(rows(small.snapshots.j)).toHaveLength(2); // /jumptomac, then /jobs (3 Oct 2026)
   expect(small.snapshots.j).toMatch(/\/jumptomac\s+Jump this window to your other/);
-  expect(rows(r.snapshots.all)).toHaveLength(21);
+  expect(rows(r.snapshots.all)).toHaveLength(22); // with /loop, /loops, /mcp and /jobs where they fit
   expect(r.snapshots.all).toMatch(/\/remote\s+[^\n]*\n\s{2}\/jumptomac\s+Jump this window to your other Mac/);
   expect(r.snapshots.all).toMatch(/\/jumptomac\s+[^\n]*\n\s{2}\/loop\s+Send a message again by itself[^\n]*\n\s{2}\/loops\s+Open the loop board/);
   expect(r.snapshots.all).toMatch(/^\s{2}\/mcp\s+Your MCP servers: tools from programs on this Mac/m);
   expect(small.snapshots.all).not.toMatch(/^\s{2}\/mcp\s/m); // 80 × 24 has no row for it: typed in full it opens
+  expect(r.snapshots.all).toMatch(/^\s{2}\/jobs\s+The commands the model runs in the background/m); // /jobs (3 Oct 2026) where it fits
+  expect(small.snapshots.j).toMatch(/^\s{2}\/jobs\s+The commands the model runs/m); // and found by its first letter at 80 × 24
   expect(r.snapshots.all).not.toMatch(/^\s{2}\/btw\s/m);
   expect(r.snapshots.all).toMatch(/\/settings\s+Everything else in one menu/);
   expect(r.snapshots.all).toMatch(/\/exit\s+Quit Agentic Coder/); // the last one shows too: nothing scrolls

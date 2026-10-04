@@ -141,6 +141,8 @@ const PLACES = [
   ['~/.agentic-coder/serve.key', 'the API key coding serve asks other machines for (readable by you only)'],
   ['~/.agentic-coder/mcp.json', 'your MCP servers (/mcp), for every folder: each one’s command or address, its sandbox, and your marks on its tools (off, and “reads”). Never a key: the Keychain holds those, under mcp-<server>'],
   ['.agentic/mcp.json', 'a project’s own MCP servers: never started before you said yes to that very file, and asked about again when it changes; the model cannot change it without asking'],
+  ['~/.agentic-coder/hooks.json', 'your own hooks (/hooks), for every folder: commands of yours run before or after a step, when you send a message, when a reply ends, when it asks you, and when a window opens or closes, in Claude Code’s layout (copy one over as it is)'],
+  ['.agentic/hooks.json', 'a project’s own hooks: never run before you said yes to that very file in /hooks (kept in ~/.agentic-coder/hooks-state.json), and asked about again when it changes; the model cannot change it'],
   ['~/.agentic-coder/logs/mcp-<server>.log', 'what an MCP server printed, and when it started, stopped or changed its tools'],
   ['Keychain · mcp-<server>-signin', 'an MCP server you signed in to: the app’s registration with it and its tokens, refreshed by themselves; /mcp’s o takes them away'],
   ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
