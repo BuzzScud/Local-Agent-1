@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync, spawn } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdRoom, MENU_ROWS, shortcutRows, footerParts } from './screen.jsx';
-import { startTip } from './start.jsx';
+import { startTip, recentRows } from './start.jsx';
 import { loadTimes, saveTime, startLeft, typicalStart } from './start-times.mjs';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
@@ -3813,7 +3813,22 @@ export function App({ opts, win, onRestart }) {
   // moves the conversation as it always did; fn held is Terminal's own highlight.
   const { internal_eventEmitter: rawKeys } = useStdin();
   const tty = win?.out ?? process.stdout;
-  const mouseArmed = mouse && !perm && !picker && !btwShown && !wheelPause && !leaving && !tooSmall;
+  // The start page's Recent activity rows open with a click (start.jsx recentRows), so while the page
+  // is up with any, the mouse is the app's even with /mouse off; it goes back to Terminal with the page.
+  const pageRef = useRef(null);
+  const startShown = holdRef.current || (items[0]?.type === 'welcome' && !items.some((it) => it.type === 'user'));
+  const startClicks = Boolean(startShown && recentRef.current?.length);
+  // The start page's first line, in the window's rows from 0, or null when it is not where a click can
+  // find it. Held (a start on this Mac): Ink's own layout of it, its box's top and its parents', from the
+  // window's first row, where the app starts drawing (cli.jsx). Printed (a start on a remote): the
+  // conversation's first item, on the first row, until your first message and while nothing has
+  // scrolled it away (the hold's own measure, screen.jsx holdRoom).
+  const startPageTop = () => {
+    if (holdRef.current && pageRef.current) { let top = 0; for (let n = pageRef.current; n; n = n.parentNode) top += n.yogaNode?.getComputedTop?.() ?? 0; return top; }
+    if (items[0]?.type === 'welcome' && !items.some((it) => it.type === 'user') && heldRows(items, measure.current) <= holdRoom(items, measure.current, rows ?? 40)) return 0;
+    return null;
+  };
+  const mouseArmed = (mouse || startClicks) && !perm && !picker && !btwShown && !wheelPause && !leaving && !tooSmall;
   const mouseRef = useRef({ armed: false, asked: null, waiting: [], origin: null, down: false, last: null, wheel: null });
   const footerRef = useRef(null);
   useEffect(() => {
@@ -3876,6 +3891,15 @@ export function App({ opts, win, onRestart }) {
     }
     const ev = parseMouse(seq);
     if (!ev || ev.kind === 'other') return;
+    // A press on a Recent activity row of the start page: that conversation, as /resume would open it.
+    // The page's row on screen is Ink's own layout of it (its box's top and its parents'), counted from
+    // the window's first row, where the app starts drawing (cli.jsx).
+    const top = ev.kind === 'press' && startClicks ? startPageTop() : null;
+    if (top != null) {
+      const hit = recentRows(start, width).find((r) => r.row === ev.row - 1 - top && ev.col >= r.from && ev.col <= r.to);
+      if (hit) { holdRef.current = false; resumeSession(hit.id); return; }
+    }
+    if (!mouse) return; // armed only for the start page's rows
     if (ev.kind === 'wheel') {
       setWheelPause(true);
       clearTimeout(m.wheel);
@@ -4450,7 +4474,7 @@ export function App({ opts, win, onRestart }) {
     sessionTokens: sessionTokens.current,
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
-    items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
+    items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
