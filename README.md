@@ -436,7 +436,7 @@ agentic-coder/
 │  ├─ bonsai-2-27b/     the previous model, back in /model: settings (results/ stays local)
 │  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Arena: its runner, page and tests), tools, dev
 │  └─ test/             unit tests of the models part
-└─ docs/                every diagram, preview, report and test page, the one home, by group (gemma-docs/ is one); private/ = the owner's own, on the Mac only; tools/ = the index and its check
+└─ docs/                every diagram, preview, report and test page, the one home, by group (gemma-docs/ is one); private/ = the owner's own, on the Mac only; tools/ = the index and its check; map/ = this repo's code map, for the models
 ```
 
 Only on this Mac, not in git: each model's `results/`, `models/evals/dev/experiments/julia-recall/`
@@ -458,6 +458,8 @@ bun run battle:verify      # prove every Battle test that comes with the arena (
 bun run install-cli        # build one file and put it at ~/.local/bin/coding
 bun run docs               # rewrite docs/README.md, the index; fails if docs/private/ is tracked or a page holds your home path (run before a commit)
 bun run test:record        # add test runs that are on this Mac but not yet in the test record
+bun run pack               # build the pack of Claude's notes (~/.agentic-coder/claude-pack) from Claude Code's memory; --from <copy> adds a copy from another Mac
+bun run codemap [<folder>] # write a project's code map, docs/map/ (a line per folder and main file, by the model on your /remote service)
 bun run check              # is anything here that should not be? secrets, packages, where the code connects, the installed app, the tests
 ```
 

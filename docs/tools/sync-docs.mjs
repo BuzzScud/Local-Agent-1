@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { published, ownerMarks, PAGE_GROUPS } from './to-docs.mjs';
 
 const here = dirname(dirname(fileURLToPath(import.meta.url))); // <repo>/docs (this file is in docs/tools/)
-const own = (f) => f === 'README.md' || f.startsWith('tools/'); // this folder's own files: the index and these tools
+const own = (f) => f === 'README.md' || f.startsWith('tools/') || f.startsWith('map/'); // this folder's own files: the index, these tools and the repo's code map
 const SKIP = /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/;
 const dry = process.argv.includes('--dry');
 

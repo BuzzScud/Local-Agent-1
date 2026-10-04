@@ -19,6 +19,7 @@ import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { factsInFull } from './facts.mjs';
 import { isHomeFolder } from './prompt.mjs';
+import { readLadder, fitLines, nearestPart, openPart, mapRoom } from './ladder.mjs';
 import { HOME } from '../../../models/index.mjs';
 
 const OPENING_MEMORY_CHARS = 8000; // ~2,200 tokens of facts at most
@@ -58,10 +59,49 @@ function topOf(cwd) {
   return { text: `${shown.join('  ')}${entries.length > shown.length ? `  … and ${entries.length - shown.length} more` : ''}`, count: entries.length };
 }
 
+// The maps (3 Oct 2026, ladder.mjs): the project's code map (docs/map/MAP.md, tools/codemap.mjs) and the
+// map of Claude's notes (claude-pack.mjs), as much of each as the model's context has room for
+// (mapRoom: 32k the map lines, 128k and up the code map's part nearest the request too). The same for
+// every model: a model of the remote set gets them in its opening read, one of the local set as a step
+// of their own (agent.mjs giveMaps). notes: the pack as this model may see it (packView: Memory sent).
+// → { parts, lines, commands } or null when there is neither.
+export const MAP_PATH = 'docs/map';
+export function mapsRead(cwd, { ctx = 32768, request = '', notes = null, home = homedir() } = {}) {
+  const room = mapRoom(ctx);
+  const parts = [];
+  const lines = [];
+  const commands = [];
+  const body = (t) => String(t).replace(/^# .*\n+/, '');
+  if (!isHomeFolder(cwd, home)) {
+    const code = readLadder(join(cwd, MAP_PATH));
+    if (code) {
+      parts.push(`The code map (${MAP_PATH}/MAP.md: a line per top folder; open a part with Map {"part": "<name>"} or Read ${MAP_PATH}/<name>.md, then the file)\n${fitLines(body(code.text), room.chars)}`);
+      commands.push(`cat ${MAP_PATH}/MAP.md`);
+      lines.push(`code map: ${code.parts.length} top ${code.parts.length === 1 ? 'folder' : 'folders'}`);
+      const near = room.part ? nearestPart(code, request) : null;
+      const p = near ? openPart(code.dir, near.part.file) : null;
+      if (p) {
+        parts.push(`The part of the code map nearest the request (${MAP_PATH}/${p.file})\n${fitLines(body(p.text), room.part)}`);
+        commands.push(`cat ${MAP_PATH}/${p.file}`);
+        lines.push(`and its part ${p.file}`);
+      }
+    }
+  }
+  const map = notes?.map?.() ?? null;
+  if (map) {
+    const topics = (map.match(/^- /gm) ?? []).length;
+    parts.push(`The map of Claude's notes (NOTES/MAP.md${notes.sent === 'project' ? ": only the topics about this project; Claude's notes about the user stay on their Mac" : ''})\n${fitLines(body(map), room.chars)}`);
+    commands.push('cat NOTES/MAP.md');
+    lines.push(`Claude's notes: ${topics} ${topics === 1 ? 'topic' : 'topics'}${notes.sent === 'project' ? ' about this project' : ''}`);
+  }
+  return parts.length ? { parts, lines, commands } : null;
+}
+
 // The step: { args (the command it stands for, for the screen), body (what the model gets), view (the screen's) }.
 // memory: the agent's memory ({ home }) or null (a practice run, or memoryToRemote none: no memory, the
-// rest still comes). you: false sends only the project's facts (memorySent 'project').
-export function openingRead(cwd, { memory = null, home = homedir(), you = true } = {}) {
+// rest still comes). you: false sends only the project's facts (memorySent 'project'). maps: mapsRead's,
+// put after the rest.
+export function openingRead(cwd, { memory = null, home = homedir(), you = true, maps = null } = {}) {
   const parts = [];
   const lines = []; // the screen's summary
   const commands = [];
@@ -99,6 +139,7 @@ export function openingRead(cwd, { memory = null, home = homedir(), you = true }
       lines.push(`${top.count} ${top.count === 1 ? 'entry' : 'entries'} at the top of the folder`);
     }
   }
+  if (maps) { parts.push(...maps.parts); lines.push(...maps.lines); commands.push(...maps.commands); }
   // Nothing to say (no memory, not a git repository, an empty folder): no step.
   if (!parts.length) return null;
   const command = commands.join('; ');

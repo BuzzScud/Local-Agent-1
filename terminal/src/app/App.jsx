@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync, spawn } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdRoom, MENU_ROWS, shortcutRows, footerParts } from './screen.jsx';
@@ -45,6 +45,7 @@ import { MODE_OPTIONS, VERSION } from './help.mjs';
 import { memoryDirs, readFacts, readLog, undoSave, openMemory, health, healthLine } from '../agent/facts.mjs';
 import { rulesList, changeRules, looksLikeEvent, ALWAYS_MAX } from './rules.mjs';
 import { notesCount, notesDir, claudeOn } from '../agent/claude-notes.mjs';
+import { packState } from '../agent/claude-pack.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, sinceLastTime, saveModeOf } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
@@ -3040,7 +3041,8 @@ export function App({ opts, win, onRestart }) {
         let claude = null;
         if (agent.memory.claude) {
           const c = notesCount(agent.memory.claude === true ? notesDir() : notesDir({ setting: agent.memory.claude }));
-          if (c.dir) claude = { used: c.used, where: tilde(c.dir), leftOut: c.leftOut.length };
+          // From the pack (claude-pack.mjs): when it was built, and how many of Claude's notes changed since.
+          if (c.dir) claude = { used: c.used, where: tilde(c.dir), leftOut: c.leftOut.length, pack: packState(dirname(c.dir)) };
         }
         if (!sections.length && !claude) { push({ type: 'note', text: 'Nothing saved yet. After a task Agentic Coder shows what it would remember and asks; "/update memory" or "remember that …" saves at once.', tone: 'dim' }); break; }
         const last = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d)).filter((l) => l.what !== 'trust').sort((x, y) => String(y.at).localeCompare(String(x.at)))[0];

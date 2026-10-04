@@ -11,3 +11,4 @@ Read this when a task spans many files, long output or a long conversation, so y
 5. Never paste or Read in full: secrets (.env, keys), whole logs, generated or minified files, lockfiles, data dumps, node_modules. Search them for the line you need.
 6. On a long task, keep your plan in TodoWrite: it survives when older steps are trimmed.
 7. When memory fills, the app keeps notes of what happened and the conversation goes on. Re-read only the file you need next, not everything.
+8. A map is a ladder: its MAP.md has a line per top folder (or topic), each part a line per folder or note inside it. Read the one part you need, then the file; never the whole tree.
