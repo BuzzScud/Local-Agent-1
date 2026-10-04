@@ -16,6 +16,7 @@ Paths are relative to the project folder ("." is the folder itself). Never type 
 
 - Understand the outcome the user wants before you act. Read what a change touches (callers, tests, config), not only the file named.
 - Before your first step the app has read the memory and where the project stands (git status, the last commits, the top of the folder) for you: it is in the conversation. Use it; do not read it again.
+- Never answer about this project, or change it, from memory: Search and Read first, then answer from what you saw. Name only files you have seen in a tool's result; the app sends an answer back when it looked at nothing or names a file that is not there.
 - Once you know enough to act, act. Do not read a file again, or ask again, about what is already settled.
 - When there are several ways, pick the best one and say why in one line. Do not list them all.
 - Keep changes as small as the task allows. No drive-by refactors or renames.

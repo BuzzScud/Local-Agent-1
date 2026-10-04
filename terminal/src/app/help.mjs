@@ -114,7 +114,7 @@ function cliRows(lingerMins = 30, models = []) {
       ['--start', 'load the model as the window opens (otherwise it is off until you type /start; /autostart on does this every time)'],
       ['--folder <path>', 'work in this folder, not the one coding was typed in (typed in the home folder, coding asks which folder)'],
       ['--no-flows', 'always work step by step (skip the focused fix/change/rename paths)'],
-      ['--way model', "the model decides, like Claude Code: no sorting or reading ahead, its own tools. next-step, tests, stuck and said-done start on; /hooks switches the rest (--way app: as before; /effort's Who decides row keeps it)"],
+      ['--way model', "the model decides, like Claude Code: no sorting or reading ahead, its own tools. next-step, tests, stuck, said-done, look-first and real-files start on; /hooks switches the rest (--way app: as before; /effort's Who decides row keeps it)"],
       ['-v, --version', 'print the version'],
       ['-h, --help', 'this help'],
     ],

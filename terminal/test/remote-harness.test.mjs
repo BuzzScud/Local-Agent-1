@@ -52,7 +52,8 @@ test('Read takes several paths on App too, a list sent as a string of JSON among
 
 test('Write replaces a file the remote model has read; unread, or on this Mac, it is turned back', async () => {
   const fake = await startFakeServer([
-    { tool: { name: 'Write', args: { path: 'a.txt', content: 'unread\n' } } }, { text: 'Stopped.' },
+    // "Stopped." with nothing read goes back once to look (look-first); the second answer stands, with a line.
+    { tool: { name: 'Write', args: { path: 'a.txt', content: 'unread\n' } } }, { text: 'Stopped.' }, { text: 'Stopped: a.txt has to be read first.' },
     { tool: { name: 'Read', args: { path: 'a.txt' } } }, { tool: { name: 'Write', args: { path: 'a.txt', content: 'gamma\n' } } }, { text: 'Done.' },
     { tool: { name: 'Read', args: { path: 'b.txt' } } }, { tool: { name: 'Write', args: { path: 'b.txt', content: 'delta\n' } } }, { text: 'Done.' },
   ], { delayMs: 0 });
