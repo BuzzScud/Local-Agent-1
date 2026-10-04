@@ -613,8 +613,8 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   two designs drawn by the real code (private: `docs/private/design rounds/`): "1 · Studio, grown", the page growing to
   fill the window, the conversations numbered for `/resume <n>`, and the notes kept but shorter.
 - **The room** (`start.room`, App.jsx): the window less the prompt box, footer, gaps and cursor line (7 with the
-  page's blank line). Held (a start on this Mac), less what sits under it too: the notes, the / menu (18 rows while
-  held) and the shortcuts, so the page shrinks for them and stays live; under `START_MIN` rows it is printed as it is,
+  page's blank line). Held (a start on this Mac), less what sits under it too: the notes, the / menu (while held, the
+  rows the page can give up and keep its bot, 18 at the least) and the shortcuts, so it shrinks for them and stays live; under `START_MIN` rows it is printed as it is,
   as before. Printed at once (a remote or `--url`), it keeps 2 rows for each note still to come (the mode the last
   window left; on a remote where it runs, Big-model mode, the load). Once printed it keeps the room it was shown with
   until the window changes size. The welcome's measured height is keyed by its room too (`rowsKey`).
