@@ -9,8 +9,9 @@
 //          for it are tools it may call (Map, CodeSearch, Rename, TestFirst, Remember:
 //          tools.mjs MODEL_TOOL_DEFS), several calls a reply run in order, and Read takes several
 //          paths. Your permission mode is the safety net (plan mode is the lock), the app's checks
-//          are hooks you switch on (/hooks). Four start on, because this way has no focused
-//          path under it: next-step, tests, stuck, said-done. The memory is saved by the
+//          are hooks you switch on (/hooks). Six start on, because this way has no focused
+//          path under it: next-step, tests, stuck, said-done, look-first and real-files (the last
+//          two hold a model on another machine only). The memory is saved by the
 //          model with Remember, a line saying what it saved.
 // The technical recoveries stay on both ways: a reply that repeats itself, a call cut off at the
 // reply limit, thinking that ran out of room, the step limit, the same step three times.
@@ -22,9 +23,10 @@ export const wayEnv = (env = process.env) => env.AGENTIC_WAY;
 
 // The app's checks, as hooks. On App each one runs as it always has (its own switches still
 // hold: /design check for the layout, the plan question with confirmPlan, the check-ins).
-// On Model, four start on (MODEL_HOOKS): a reply that names a cause and stops, the project's
+// On Model, six start on (MODEL_HOOKS): a reply that names a cause and stops, the project's
 // tests after a change, a question when the same step comes twice or three errors land in a
-// row, and a "done" with no file changed. The rest run only when you switch them on.
+// row, a "done" with no file changed, and on a model on another machine an answer about the code
+// with no look of its own or naming files that are not there. The rest run only when you switch them on.
 export const HOOKS = [
   { id: 'empty', label: 'Empty reply', what: 'an empty answer is sent back once: "Reply to the user now"' },
   { id: 'next-step', label: 'Do it now', what: 'a reply that says what it will do and stops is sent back (twice at most), and a named cause gets "make the change now"' },
@@ -37,12 +39,16 @@ export const HOOKS = [
   { id: 'checkin', label: 'Check-ins', what: 'after 6 looks with no change, it asks you where to look' },
   { id: 'stuck', label: 'Stuck asks', what: 'the same step twice, or three errors in a row, asks you for a hint' },
   { id: 'said-done', label: 'Said done, nothing changed', what: 'a reply that says the work is done when no file changed is sent back once; if it still claims it, a line says nothing was changed' },
+  { id: 'look-first', label: 'Look before answering', what: 'remote models: an answer about the code with nothing read or searched goes back once; then a line says so' },
+  { id: 'real-files', label: 'Files that exist', what: 'remote models: an answer naming files not in the project goes back once; then a line names them' },
   { id: 'desktop', label: 'On the Desktop', what: 'a page asked for "on my desktop" that was saved somewhere else is sent back once to be moved there' },
 ];
 const HOOK_IDS = HOOKS.map((h) => h.id);
 // On for Model way unless settings.json or AGENTIC_HOOKS says otherwise. App way runs every
 // hook either way. next-step is the fourth: a reply that names a cause and stops.
-export const MODEL_HOOKS = ['next-step', 'tests', 'stuck', 'said-done'];
+// look-first and real-files (3 Oct 2026, the owner's picks): models on another machine answered
+// "where is…?" from nothing and named files that are not there.
+export const MODEL_HOOKS = ['next-step', 'tests', 'stuck', 'said-done', 'look-first', 'real-files'];
 export const hooksEnv = (env = process.env) => env.AGENTIC_HOOKS;
 
 // The hooks on, as a Set: AGENTIC_HOOKS when set ("all", "off", or a list such as

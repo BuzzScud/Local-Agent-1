@@ -47,7 +47,7 @@ import { recall, recallNotes, usedFacts } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
 import { packDir, packView } from './claude-pack.mjs';
 import { openPart, readLadder, partsOf } from './ladder.mjs';
-import { MAP_DIR } from '../tools/codemap.mjs';
+import { MAP_DIR, projectFiles } from '../tools/codemap.mjs';
 import { saveLessons, knownAlready, practiceWork, applySave, saveLine } from './lessons.mjs';
 import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
 import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeindex.mjs';
@@ -209,6 +209,32 @@ export function asksForWork(text) {
   if (/^\W*(why|what|how|where|when|which|who|explain|is|are|does|do)\b/i.test(text ?? '')) return false;
   return /\b(add|fix|change|make|implement|create|build|rename|remove|delete|update|refactor|write|save|put|move|replace|edit|restyle|redesign|improve|convert|generate)\b/i.test(text ?? '');
 }
+// Look before answering (3 Oct 2026, the owner's picks after models on the service answered "where
+// is…?" in one step, from nothing, and named files that are not there): a model on another machine
+// answers a question about the project, or a change, only after a look of its own (Read, Search,
+// List, Map, CodeSearch, a helper, a command that only reads); the app's opening read does not count.
+//   aboutTheCode   a question that names something of the code ("where is…", a file, a name()), or
+//                  a request for work. Small talk and general questions ("what is 2+2") are not.
+//   filesInAnswer  the files an answer names, as paths or names with a code or text extension
+const LOOK_TOOLS = new Set(['Read', 'Search', 'List', 'Map', 'CodeSearch', 'Agent']);
+const CODE_WORDS = /\b(code|codebase|file|files|function|method|class|module|folder|repo|project|app|page|test|tests|component|endpoint|route|script|config|setting|bug|error|import|export|variable|defined|implemented|handled|called|where (?:is|are|does|do)|which file|in this)\b/i;
+const NAMEY = /`[^`]+`|\b[\w-]+\.(?:m?[jt]sx?|cjs|py|json|md|sh|css|html|sql|ya?ml|swift|go|rs)\b|\b[a-z]+[A-Z]\w*\b|\b\w+_\w+\b|\b\w+\(\)/;
+export function aboutTheCode(text) {
+  const t = String(text ?? '');
+  if (isSmallTalk(t)) return false;
+  if (asksForWork(t)) return true;
+  return CODE_WORDS.test(t) || NAMEY.test(t);
+}
+const FILE_NAMED = /(?<![\w/.~:-])(?:[\w@.+-]+\/)*[\w@+-][\w@.+-]*\.(?:m?[jt]sx?|cjs|mts|cts|py|json|md|sh|css|html|sql|ya?ml|swift|go|rs|java|rb|php|vue|svelte|toml|txt)\b(?![\w/])/g;
+export const filesInAnswer = (text) => [...new Set(String(text ?? '').match(FILE_NAMED) ?? [])].filter((p) => !/^(NOTES|RULES|SKILLS|Rules)\//.test(p));
+// The words to search for, from the request: its names first (a file, an identifier), then its longest words.
+function searchWords(text) {
+  const t = String(text ?? '');
+  const names = [...t.matchAll(/`([^`]+)`|\b([\w-]+\.[a-z]{1,5})\b|\b([a-z]+[A-Z]\w*|\w+_\w+)\b/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+  const words = (t.toLowerCase().match(/[a-z][a-z-]{4,}/g) ?? []).filter((w) => !/^(where|which|there|about|would|could|should|their|these|those|thing|things|while|other|before|after|every|being|without)$/.test(w)).sort((a, b) => b.length - a.length);
+  return [...new Set([...names, ...words])].slice(0, 3);
+}
+
 // Your answer to "is it right?" after a page is saved (askPage): it looks good (the turn stops),
 // check it, or anything else, which goes to the model ("looks good but make the total bold").
 export const CHECK_IT = 'Check it for me: buttons, phone, dark mode';
@@ -1518,6 +1544,8 @@ export class Agent extends EventEmitter {
     }
     let verified = false;
     let doneUnchanged = false; // sent back once for saying done with nothing changed
+    let unlooked = false; // sent back once for answering about the code without a look of its own
+    let unreal = false; // sent back once for naming files that are not in the project
     let lostChecked = false;
     let layoutSends = 0; // what the layout check found, sent back at most LAYOUT_ROUNDS times
     let layoutDone = false;
@@ -1668,6 +1696,38 @@ export class Agent extends EventEmitter {
             nudges++;
             this.messages.push({ role: 'user', content: auto('You said what you will do next but did not do it. If you meant to, do it now with the tools; if you are waiting for the user, stop.') });
             continue;
+          }
+          // Look before answering (a model on another machine, in a project, aboutTheCode): an answer
+          // with no look of its own goes back once with the words to search for; a request for work
+          // that made a file is not held to it (a new file needs no look). The second time it is
+          // let through with a line under it (the owner's pick).
+          const lookHeld = this.model?.remote && !this.isHelper && !isHomeFolder(this.cwd);
+          // Files the app read for it before its first step count as a look (App reads ahead); the opening
+          // read and the maps do not (they say where things are, not what is in them).
+          const sawCode = this.turn.lookedOwn || (this.turn.given ?? 0) > 0 || this.turn.shown;
+          if (lookHeld && this.hook('look-first') && !sawCode && !this.turn.changed && aboutTheCode(this.turn.request)) {
+            if (!unlooked) {
+              unlooked = true;
+              const words = searchWords(this.turn.request);
+              this.emit('note', { text: 'It answered without looking at the project; asked it to search first.', tone: 'dim' });
+              this.messages.push({ role: 'user', content: auto(`You answered without looking at this project's files. Do not answer about the code from memory: Search for the names in the request${words.length ? ` (for example ${words.map((w) => `"${w}"`).join(', ')})` : ''}, Read what the search finds, then answer from what you saw, naming the files.`) });
+              continue;
+            }
+            this.emit('note', { text: 'Answered without looking at the project\'s files: check it before you rely on it.', tone: 'warn' });
+          }
+          // Files that exist: an answer that names files not in the project (and not made this
+          // message, nor named in the request) goes back once; the second time, a line says which.
+          if (lookHeld && this.hook('real-files')) {
+            const missing = this.missingFiles(text);
+            if (missing.length) {
+              if (!unreal) {
+                unreal = true;
+                this.emit('note', { text: `It named files that are not in the project (${missing.slice(0, 3).join(', ')}); asked it to check.`, tone: 'dim' });
+                this.messages.push({ role: 'user', content: auto(`These files are not in this project: ${missing.join(', ')}. Search for what you meant (Search or List), and answer only with files you have seen in a tool's result.`) });
+                continue;
+              }
+              this.emit('note', { text: `It named files that are not in this project: ${missing.slice(0, 5).join(', ')}.`, tone: 'warn' });
+            }
           }
           // Look first: an answer before the minimum, with nothing changed yet, goes back to look
           // further, with what it has looked at so far (at most LOOK_BACKS times a message).
@@ -1877,6 +1937,8 @@ export class Agent extends EventEmitter {
           // It looked at something besides an MCP server (a file, a search, a command): see the MCP send-back above.
           if (!out.error && !isMcpCall(c.name) && !['List', 'TodoWrite', 'Ask'].includes(c.name)) this.turn.lookedElsewhere = true;
           if (c.name === 'Read' && !out.error) this.turn.readsRun = (this.turn.readsRun ?? 0) + (out.readKeys?.length || 1);
+          // A look of its own at the project (lookFirst below): a read, a search, a list, a command that only reads.
+          if (!out.error && (LOOK_TOOLS.has(c.name) || (c.name === 'Bash' && isReadOnly(String(parseArgs('Bash', c.args).args?.command ?? ''))))) this.turn.lookedOwn = true;
           if (!out.error) { cuts = 0; landed = true; } // a step landed: cut-off replies are no longer "in a row"
           if (!out.error && c.name === 'Write') wrote.push(c);
           const result = { role: 'tool', tool_call_id: c.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) };
@@ -2120,6 +2182,24 @@ export class Agent extends EventEmitter {
     this.messages.push({ role: 'tool', tool_call_id: id, content: r.body, opening: true });
     this.ctxUsed += tokensOf(r.body) + 30;
     this.emit('tool', { id, name: 'List', label: r.view.title, arg: r.args.command, view: r.view, given: true });
+  }
+
+  // The files an answer names that are not in this project: not at that path, and no file of the
+  // project has that name or ends with that path. Left out: files the request names (it may ask
+  // about one that is gone), files made this message, places outside the project (~/…, /…).
+  missingFiles(text) {
+    const named = filesInAnswer(text).filter((p) => !/^(~|\/)/.test(p) && !String(this.turn?.request ?? '').includes(p));
+    if (!named.length) return [];
+    let all = this.turn?.projectFiles;
+    if (!all) { try { all = projectFiles(this.cwd); } catch { all = []; } if (this.turn) this.turn.projectFiles = all; }
+    const made = new Set((this.turn?.created ?? []).map((f) => String(f).replace(/^\.\//, '')));
+    const names = new Set(all.map((f) => f.split('/').pop()));
+    return named.filter((p) => {
+      const rel = p.replace(/^\.\//, '');
+      if (made.has(rel) || [...made].some((m) => m.endsWith(`/${rel}`) || m.split('/').pop() === rel)) return false;
+      if (existsSync(join(this.cwd, rel))) return false;
+      return rel.includes('/') ? !all.some((f) => f === rel || f.endsWith(`/${rel}`)) : !names.has(rel);
+    });
   }
 
   // What of Claude's notes this model may be given: all of them on this Mac and on the owner's own
@@ -2378,6 +2458,7 @@ export class Agent extends EventEmitter {
   // onto the screen like any step. A Read counts as read: asked for again,
   // it is pointed back to, and the file may be edited.
   pretend({ name, args, body, view, abs }) {
+    if (this.turn) this.turn.shown = true; // the app looked for it (lookFirst counts it)
     if (name === 'Read' && abs) {
       this.giveRead(args.path, args, body, view);
       this.readFiles.add(abs);

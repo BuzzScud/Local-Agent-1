@@ -210,6 +210,15 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the app tests that move with the arrow keys; the panel keeps 22 lines because the keys' hint sits on
   the Reset all line.
 
+- **Look before answering and Files that exist** (3 Oct 2026, the owner's picks after models on a service answered
+  "where is…?" in one step and named files that are not there): two hooks (`look-first`, `real-files` in way.mjs, on
+  by default) that hold a model on another machine only, in a project folder. An answer about the code (`aboutTheCode`:
+  a question naming something of it, or a request for work) with no read, search, list, map, helper or read-only
+  command of its own, and no file the app read for it, goes back once with the words to search for; a request that
+  made a file needs no look. An answer naming files not in the project (`missingFiles`: not at that path, no file of
+  that name; files the request names or the message made do not count) goes back once. The second time each is let
+  through with a line under it. The remote HARNESS.md says the same in one line. `terminal/test/look-first.test.mjs`.
+
 - **The A/B checks** of Look first and the tool lines (`models/evals/tools/look-check.mjs`, `habits-check.mjs`)
   share `ab-kit.mjs`: a throwaway home, the small shop project, `coding -p`. `coding -p` ends the lines of
   what the app read for the model before its first step with " [app]", so a check counts only the model's
