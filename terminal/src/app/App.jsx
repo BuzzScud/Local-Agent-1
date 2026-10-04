@@ -18,7 +18,7 @@ import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom, isHome
 import { offerFor, nextMode, modeOf } from '../agent/permissions.mjs';
 import { screenAccess, askScreenAccess, terminalApp } from '../tools/screen.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, ollamaPs, preloadOllama, unloadOllama, isOutOfMemory, floorCtx, setEndpoint, endpointOf, authHeaders } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, ollamaPs, preloadOllama, unloadOllama, OPEN_KEEP, OPEN_KEEP_MS, isOutOfMemory, floorCtx, setEndpoint, endpointOf, authHeaders } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
 import { registerWindow, updateWindow, unregisterWindow, projectOf, othersIn, modelsInUseOn, copyAt, makeCopy, removeCopy, copyChanges, changeLines, putBack, copyDiff, keptCopies } from './copies.mjs';
@@ -827,11 +827,12 @@ export function App({ opts, win, onRestart }) {
         : agent.model?.harness ? `Big-model mode off: ${list}.` : `The shared settings again: ${list}.`, tone: 'dim' });
   };
   // Keep loaded (/effort's Model rows): how long the service keeps the model after each request
-  // (open: until this window closes, as before), carried by every request to it.
+  // (open: OPEN_KEEP, asked again while this window is open, so it goes once it closes), carried by
+  // every request to it.
   const applyKeep = (values = limitsRef.current) => {
     const conn = remoteRef.current.conn;
     if (!conn?.info?.ollama) return;
-    setEndpoint(conn.url, { ...endpointOf(conn.url), keepAlive: typeof values.keepLoaded === 'number' ? values.keepLoaded : -1 });
+    setEndpoint(conn.url, { ...endpointOf(conn.url), keepAlive: typeof values.keepLoaded === 'number' ? values.keepLoaded : OPEN_KEEP });
   };
   // A model's Effort as it comes into use, from its next reply. A model on /remote: its own (/model's
   // menu, /effort), else its default, thinking on unless it cannot think (remoteModel; the owner's pick,
@@ -864,12 +865,17 @@ export function App({ opts, win, onRestart }) {
     if (!atStart && (S.current.live !== IDLE || agent.busy)) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return false; }
     const before = { model, server: serverRef.current };
     if (!model.remote) localModelRef.current = model;
-    remoteRef.current.conn?.stop();
+    const was = remoteRef.current.conn;
+    const wasConf = agent.remoteConf;
     remoteRef.current.conn = null;
     remoteRef.current.on = true;
     setModel(remoteModel(r));
     setStarting(true); setStartPhase('connecting');
     setRemoteState('connecting'); setCatalog(null);
+    // Another service: what this window had there is let go. The same one: only a main model it moves off.
+    const same = wasConf && wasConf.kind === r.kind && wasConf.address === r.address && (wasConf.port ?? null) === (r.port ?? null);
+    const old = was?.info?.model;
+    await leaveService(was, same ? { only: r.model && old && r.model !== old ? [old] : [] } : {});
     let conn;
     try { conn = await connectRemote(r, { serviceSize: true }); } catch (e) {
       remoteRef.current.why = e.message;
@@ -933,9 +939,10 @@ export function App({ opts, win, onRestart }) {
   const useLocal = async ({ note, load = false } = {}) => {
     if (S.current.live !== IDLE || agent.busy) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
     remoteRef.current.on = false;
-    remoteRef.current.conn?.stop();
+    const was = remoteRef.current.conn;
     remoteRef.current.conn = null;
     setRemoteState(null); setCatalog(null);
+    await leaveService(was);
     const back = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
     localModelRef.current = null;
     agent.slots = null;
@@ -1153,15 +1160,32 @@ export function App({ opts, win, onRestart }) {
     }
     maybeTryOut(conn);
   };
+  // What this window has on the service: the main model and the helpers that are on, less any that
+  // another window there uses too.
+  const usedHere = (conn) => {
+    const others = modelsInUseOn(conn.url);
+    const helpers = Object.values(agent.helperJobs ?? {}).filter((j) => j.on && j.model && j.model !== MAIN).map((j) => j.model);
+    return [...new Set([conn.info.model, ...helpers])].filter((n) => n && !others.has(n));
+  };
+  // The window leaves a service while it stays open (back to this Mac, or on to another service):
+  // what it had there is let go first, as at quit (only: just these), then the tunnel closes.
+  // Before, it stayed loaded there for ever (keep_alive -1; 3 Oct 2026).
+  const leaveService = async (conn, { only = null } = {}) => {
+    if (!conn) return;
+    noteModels(null);
+    if (conn.info?.ollama && process.env.AGENTIC_UNLOAD !== 'off') {
+      const names = usedHere(conn).filter((n) => !only || only.includes(n));
+      await Promise.all(names.map((m) => unloadOllama({ url: conn.url, model: m, timeoutMs: 3000 })));
+    }
+    conn.stop();
+  };
   // The window closes: what it used on the service is let go, unless another window uses it. The
   // process is ending, so it is one curl the window waits for (at most 2 seconds), with the key on
   // its stdin, never on its command line.
   remoteFnRef.current.unloadOnQuit = () => {
     const conn = remoteRef.current.conn;
     if (!conn?.info?.ollama || process.env.AGENTIC_UNLOAD === 'off') return;
-    const others = modelsInUseOn(conn.url);
-    const helpers = Object.values(agent.helperJobs ?? {}).filter((j) => j.on && j.model && j.model !== MAIN).map((j) => j.model);
-    const names = [...new Set([conn.info.model, ...helpers])].filter((n) => n && !others.has(n));
+    const names = usedHere(conn);
     if (!names.length) return;
     const head = { ...remoteRef.current.headers, ...authHeaders(conn.url) };
     const q = (v) => JSON.stringify(String(v));
@@ -1186,7 +1210,7 @@ export function App({ opts, win, onRestart }) {
     if (entry.tools === false || readTryouts(where)[name] || remoteRef.current.trying === name) return;
     remoteRef.current.trying = name;
     push({ type: 'note', text: `Trying ${name} once: it reads a file, fixes one line and runs a command (nothing is changed for real).`, tone: 'dim' });
-    tryOut({ url: conn.url, model: name, entry, numCtx: conn.numCtx ?? undefined, keepAlive: -1 }).then((r) => {
+    tryOut({ url: conn.url, model: name, entry, numCtx: conn.numCtx ?? undefined, keepAlive: OPEN_KEEP }).then((r) => {
       saveTryout(where, name, { ok: r.ok, tokS: r.tokS ?? null, why: r.why, steps: r.steps, secs: r.secs });
       push({ type: 'note', text: `${r.ok ? '✔' : '✗'} ${name}: ${r.steps.map((x) => `${x.ok ? '✔' : '✗'} ${x.text}`).join(' · ')}${r.tokS ? ` · ${Math.round(r.tokS)} tok/s` : ''}. ${r.ok ? 'It works with the agent; kept for next time.' : `It did not pass (${r.why}): /model shows ✗ beside it; it can still be used.`}`, tone: r.ok ? 'dim' : 'warn' });
       refreshCatalog(conn);
@@ -1208,7 +1232,7 @@ export function App({ opts, win, onRestart }) {
       let err = null;
       for (;;) {
         try {
-          await preloadOllama({ url: conn.url, model: name, numCtx, keepAlive: -1 });
+          await preloadOllama({ url: conn.url, model: name, numCtx, keepAlive: OPEN_KEEP });
           // The service's own size is less than the agent works in (Ollama's own is 4k): loaded again at
           // the floor, and kept for it below.
           const own = numCtx ? null : (await ollamaModel({ url: conn.url, model: name }).catch(() => null))?.loadedCtx;
@@ -2097,6 +2121,15 @@ export function App({ opts, win, onRestart }) {
       psRef.current = p;
       const spill = (x) => (x?.loaded ? (x.gpuPct ?? 100) < 100 : null);
       if (!prev || spill(prev) !== spill(p) || Boolean(prev.loaded) !== Boolean(p?.loaded)) redrawPs((n) => n + 1);
+      // Keep loaded "while open": with less than two thirds of OPEN_KEEP left, the model is kept
+      // another OPEN_KEEP (an empty request at the context the replies use, so nothing loads again),
+      // and so is one kept for ever (keep_alive -1, an older version's). One the service already let
+      // go of is not loaded back from here: the next reply does that.
+      const ep = endpointOf(psConn.url);
+      const left = p?.loaded && p.until ? Date.parse(p.until) - Date.now() : NaN;
+      if (ep?.keepAlive === OPEN_KEEP && (left < OPEN_KEEP_MS * 2 / 3 || left > 24 * 3600_000)) {
+        preloadOllama({ url: psConn.url, model: name, numCtx: ep.numCtx ?? null, keepAlive: OPEN_KEEP, timeoutMs: 10_000 }).catch(() => {});
+      }
     };
     read();
     const id = setInterval(read, Number(process.env.AGENTIC_PS_EVERY) || 30_000); // ms; the tests read it faster

@@ -614,7 +614,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   expect(tinyAt).toBeGreaterThan(0);
   expect(srv.thinks[tinyAt]).toBe(undefined); // tiny cannot think: nothing asked
   expect(srv.predicts[tinyAt]).toBe(32768); // Reply length auto on a service: 32k (SERVICE_REPLY), room for a file
-  expect(srv.keeps[tinyAt]).toBe(-1);
+  expect(srv.keeps[tinyAt]).toBe('15m');
   // laguna's own came back with it; esc went back to the list, and nothing switched
   expect(s.again).toMatch(/Thinking\s+◀ Max\s+▶ \s/);
   expect(s.again).toMatch(/Context\s+◀ 128k\s+▶/);

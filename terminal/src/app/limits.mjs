@@ -131,12 +131,13 @@ export const LIMITS = [
     note: (v) => (v === 'own' ? 'the model’s own · raise it if it repeats itself or loops' : 'steers it off words it has used · too high and it drifts'),
   },
   {
-    // keep_alive: how long the service keeps it loaded after a request (open: until this window closes).
+    // keep_alive: how long the service keeps it loaded after a request (open: while this window is open,
+    // asked again every few minutes, so it goes 15 min at most after the window does: OPEN_KEEP).
     id: 'keepLoaded', label: 'Keep loaded', model: true, choice: true,
     steps: () => [300, 1800, 'open'],
     def: () => 'open',
     show: (v) => (v === 'open' ? 'while open' : mins(v)),
-    note: (v) => (v === 'open' ? 'on the service until this window closes: every reply starts at once' : `let go after ${mins(v)} without a request; the next reply waits while it loads`),
+    note: (v) => (v === 'open' ? 'on the service while this window is open: every reply starts at once' : `let go after ${mins(v)} without a request; the next reply waits while it loads`),
   },
   {
     id: 'tries', label: 'Tries per fix',

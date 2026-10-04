@@ -133,11 +133,18 @@ export async function ollamaPs({ url, key, model, signal, timeoutMs = 5000 } = {
 // ROCm0 buffer") and Ollama's own check ("requires more system memory").
 export const isOutOfMemory = (text) => /out of memory|failed to allocate|unable to allocate|cudaMalloc failed|resource allocation failed|requires more (?:system |gpu )?memory|insufficient memory|not enough memory/i.test(String(text ?? ''));
 
+// Keep loaded's "while open": every request keeps the model this long, and the open window asks
+// again before it runs out (App.jsx, with the footer's /api/ps look). A window that could not say
+// it was closing (a crash, the Mac restarting, no network as it closed) leaves the model loaded at
+// most this long, not for ever as keep_alive -1 did (3 Oct 2026: a 25 GB model was found kept).
+export const OPEN_KEEP = '15m';
+export const OPEN_KEEP_MS = 15 * 60_000;
+
 // Loads a model on the service without asking it anything (an empty prompt),
 // so a switch is not first felt on the next reply; numCtx: at that context (its
 // cache is part of what has to fit), else at the service's own. Resolves once it
 // is loaded; throws with the service's words when it cannot be.
-// keepAlive: how long the service keeps it after (Ollama's keep_alive: -1 = until told, '30m').
+// keepAlive: how long the service keeps it after (Ollama's keep_alive: '30m', OPEN_KEEP; -1 = until told).
 export async function preloadOllama({ url, key, model, numCtx = null, keepAlive, signal, timeoutMs = 15 * 60_000 }) {
   const t = AbortSignal.timeout(timeoutMs);
   const res = await fetch(`${norm(url)}/api/generate`, {
