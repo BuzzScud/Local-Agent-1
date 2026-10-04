@@ -60,6 +60,8 @@ export { textImage, textPdf, pdfText, mediaTool } from './src/tools/media.mjs';
 // Background sessions and the door between Macs, for the Door check (models/evals/tools/door-check.mjs).
 export { F as SESSION_FRAMES, frame as sessionFrame, frameReader as sessionFrameReader, json as sessionJson, startHost, viewSession } from './src/app/sessions.mjs';
 export { openDoor } from './src/app/door.mjs';
+// The loops a window keeps and the runs it starts (the Loop controls check).
+export { Loops, startRun, parseLoop, PRESET as LOOP_PRESET } from './src/app/loops.mjs';
 export const runInPty = async (o) => (await import('./test/pty.mjs')).runInPty(o);
 // The stand-in MCP server (terminal/test/fake-mcp.mjs), for the MCP check (models/evals/tools/mcp-check.mjs):
 // how to start it as a program, and a picture for it to return (loaded only when a check calls it).
