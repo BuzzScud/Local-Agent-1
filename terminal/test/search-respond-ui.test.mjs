@@ -89,7 +89,7 @@ test('your standing rules go with each request to a model on another machine, an
   expect(rules).not.toContain('The user lives near the sea.');
   const r = openingRead(dir, { memory: { home }, home, you: false });
   expect(r.view.lines[0]).toBe(`0 facts about this project · ${rules.length} rules of yours in the instructions · 1 about you stay on this Mac`);
-  expect(r.view.title).toBe("Reading the project's memory · 1 fact about you stay on this Mac");
+  expect(r.view.title).toBe("Reading the project's memory");
   const fake = await startFakeServer([{ text: 'Done.' }, { text: 'Done here.' }]);
   try {
     const a = agentOn(fake.url, remote, { memory: { home, recall: false }, home });

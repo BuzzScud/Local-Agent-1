@@ -120,7 +120,8 @@ export function openingRead(cwd, { memory = null, home = homedir(), you = true, 
       const rules = m.youAlways ?? 0;
       const kept = m.you - rules;
       lines.push(`${m.project} ${m.project === 1 ? 'fact' : 'facts'} about this project${rules ? ` · ${rules} ${rules === 1 ? 'rule' : 'rules'} of yours in the instructions` : ''}${kept ? ` · ${kept} about you stay on this Mac` : ''}${m.left ? ` · ${m.left} left out` : ''}`);
-      title = `Reading the project's memory${kept ? ` · ${kept} ${kept === 1 ? 'fact' : 'facts'} about you stay on this Mac` : ''}`;
+      // Said once, in the line under it (4 Oct 2026: the title and the line both said what stays here).
+      title = "Reading the project's memory";
     }
   }
   if (!isHomeFolder(cwd, home)) {

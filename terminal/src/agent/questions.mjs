@@ -7,7 +7,8 @@
 // in everyday words, with a file's name at the end.
 import { basename, dirname } from 'node:path';
 
-const MAX_QUESTIONS = 4;
+// Five (4 Oct 2026): the owner asks for "up to 5 clarifying questions" and picks each in the window.
+const MAX_QUESTIONS = 5;
 const MAX_CHOICES = 4;
 const RECOMMENDED = /\s*[([]\s*recommended\s*[)\]]\s*$/i;
 const clip = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -141,6 +142,26 @@ export function errorSaid(name, text) {
   if (at < 0) return '';
   const line = said.slice(Math.max(0, at - 3), at).reverse().map((l) => l.match(/\bline (\d+)\b/)?.[1]).find(Boolean);
   return clip(`${said[at]}${line && !/\bline \d+/.test(said[at]) ? ` (line ${line})` : ''}`, 160);
+}
+
+// A request that asks to be asked ("Ask me up to 5 clarifying questions…"): the questions go through
+// the Ask tool as choices picked in the window, never as text (4 Oct 2026, the owner's ask).
+export const wantsQuestions = (text) => /\bask (?:me|the user)\b[^.?!\n]{0,40}\bquestions?\b|\b(?:clarifying|follow[- ]up) questions?\b/i.test(String(text ?? ''));
+// Questions written out as text: lines (or list items) that end with a question mark.
+export const questionLines = (text) => String(text ?? '').replace(/```[\s\S]*?```/g, ' ').split('\n').filter((l) => /\?\s*[*_)"'”]*\s*$/.test(l.trim())).length;
+// The note that goes with such a request (agent.mjs turn.asks).
+export const ASK_NOTE = 'The request asks for questions. Put them to the user with the Ask tool, never as text: each with 2 to 4 choices, a few words each with an about line, and up to 5 questions in one Ask (question, then the rest in more). When the request also asks for an outline or a plan, write that first as your reply\'s text, then call Ask in the same reply.';
+
+// After "no, this is wrong" about a page it made: what is wrong, as choices (4 Oct 2026, the owner's
+// pick: the answer went back alone, and the model rewrote the same page three times).
+export function pageWrongQuestion(names) {
+  return {
+    question: `What is wrong with ${names}?`,
+    options: ['Not what I asked', 'Parts are missing', 'Wrong place', 'It looks wrong'],
+    about: ['It is about something else than your request.', 'It is on the right subject but leaves things out.', 'It is saved somewhere you did not want.', 'The content is right; the look is not.'],
+    typeLabel: 'Say what is wrong…',
+    typeAbout: 'In your own words.',
+  };
 }
 
 // Stuck: the same step twice, or three that failed; the step, then the error's own words.

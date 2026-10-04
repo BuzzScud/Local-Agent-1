@@ -78,7 +78,7 @@ export const TOOL_DEFS = [
       question: str('One plain question'),
       options: { type: 'array', items: choiceDef, description: '2 to 4 choices' },
       several: { type: 'boolean', description: 'true: they may tick more than one choice' },
-      more: { type: 'array', items: { type: 'object', properties: { question: str('One plain question'), options: { type: 'array', items: choiceDef }, several: { type: 'boolean' } }, required: ['question'] }, description: 'Optional: up to 3 more questions' },
+      more: { type: 'array', items: { type: 'object', properties: { question: str('One plain question'), options: { type: 'array', items: choiceDef }, several: { type: 'boolean' } }, required: ['question'] }, description: 'Optional: up to 4 more questions' },
     }, required: ['question'] },
   },
 ];
@@ -1104,6 +1104,33 @@ async function webSearch(args, env) {
   if (!found.length) return { text: `No results for "${args.query}" (${service}). Try other words.`, view: { kind: 'websearch', count: 0, service } };
   const body = found.map((r, i) => `${i + 1}. ${r.title || '(no title)'}\n   ${r.url}${r.age ? ` · ${r.age}` : ''}${r.snippet ? `\n   ${r.snippet}` : ''}`).join('\n');
   return { text: `${found.length} results for "${args.query}" (${service}). ${UNTRUSTED} WebFetch a result to read it.\n\n${body}`, view: { kind: 'websearch', count: found.length, service, content: body } };
+}
+
+// Where a new file goes when the request does not say (4 Oct 2026, the owner's rule: "default to always
+// writing to the desktop unless the user says otherwise"; their picks: pages and documents always, any
+// other new file not inside an existing folder of the project too, and asked when that is unclear).
+// path: the model's Write path. { to } (the file's place on the Desktop), { ask } (a new code file at the
+// top of a code project: asked once), or null (it stays: the request names a place, an existing folder of
+// the project, a file of the project's own kind, a full path, or a file that is already there).
+const DELIVERABLE = /\.(html?|md|markdown|pdf|csv|tsv|txt|png|jpe?g|gif|svg|webp|docx|xlsx|pptx)$/i;
+const PROJECT_OWN = /^(readme|agents|claude|changelog|license|contributing|notes)(\.[a-z]+)?$|^(package\.json|makefile|dockerfile|\.gitignore|tsconfig.*\.json|.*\.config\.[cm]?[jt]s)$/i;
+const NAMES_A_PLACE = /\b(in|into|to|under|inside) (this|the|my) (folder|project|repo|repository|directory|codebase)\b|\b(right )?here\b|\bin (src|docs|lib|test|tests|app)\b/i;
+export function desktopDefault(path, { cwd, home, request = '', code = false } = {}) {
+  const p = String(path ?? '').trim().replace(/^\.\//, '');
+  if (!p || isAbsolute(p) || p.startsWith('~')) return null;
+  const segs = p.split('/').filter(Boolean);
+  const name = segs.at(-1);
+  const desktop = join(home, 'Desktop');
+  if (cwd === desktop || `${cwd}/`.startsWith(`${desktop}/`) && segs[0] !== 'Desktop') return null; // already on the Desktop
+  // "Desktop/x.html" from a folder with no Desktop of its own means the Desktop.
+  if (segs[0] === 'Desktop' && segs.length > 1 && !existsSync(join(cwd, 'Desktop'))) return { to: join(desktop, ...segs.slice(1)) };
+  if (existsSync(join(cwd, p))) return null;
+  if (segs.length > 1 && existsSync(join(cwd, segs[0]))) return null; // into a folder the project has
+  const req = String(request);
+  if (NAMES_A_PLACE.test(req) || req.includes(p) || (segs.length === 1 && new RegExp(`[\\w./-]+/${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(req))) return null;
+  if (PROJECT_OWN.test(name)) return null;
+  if (cwd === home || DELIVERABLE.test(name) || !code) return { to: join(desktop, ...segs) };
+  return { ask: true, name };
 }
 
 // A plain read in a command: cat, head, tail or sed -n of one file, grep or rg of a pattern, ls of a

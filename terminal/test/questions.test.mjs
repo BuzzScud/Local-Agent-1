@@ -35,9 +35,10 @@ test('a choice is a string or { label, about, recommended }; "(recommended)" in 
   expect(askedQuestions({ question: 'Pick', options: ['One'], several: true })[0].several).toBe(false); // one choice: nothing to tick
 });
 
-test('more questions are asked after the first, four at most; one with no words is left out', () => {
-  const qs = askedQuestions({ question: 'First?', options: ['a', 'b'], more: [{ question: 'Second?', options: ['c', 'd'], several: true }, { question: '' }, { question: 'Third?' }, { question: 'Fourth?' }, { question: 'Fifth?' }] });
-  expect(qs.map((q) => q.question)).toEqual(['First?', 'Second?', 'Third?', 'Fourth?']);
+// Five since 4 Oct 2026 (the owner asks for "up to 5 clarifying questions"; four before).
+test('more questions are asked after the first, five at most; one with no words is left out', () => {
+  const qs = askedQuestions({ question: 'First?', options: ['a', 'b'], more: [{ question: 'Second?', options: ['c', 'd'], several: true }, { question: '' }, { question: 'Third?' }, { question: 'Fourth?' }, { question: 'Fifth?' }, { question: 'Sixth?' }] });
+  expect(qs.map((q) => q.question)).toEqual(['First?', 'Second?', 'Third?', 'Fourth?', 'Fifth?']);
   expect(qs[1].several).toBe(true);
   // A list sent as a string of JSON is read as a list.
   const { args } = parseArgs('Ask', JSON.stringify({ question: 'Which?', options: '[{"label":"A","about":"x"},"B"]' }));
