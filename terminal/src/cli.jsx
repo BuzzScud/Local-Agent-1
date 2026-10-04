@@ -299,7 +299,9 @@ if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
     target = list[i];
   }
   const { viewJumping } = await import('./app/door.mjs');
-  process.exit(await viewJumping({ connect: localConnect(target), name: target.name }, { pick }));
+  // The window the door opened by itself (door.mjs windowFileText) says so: it shows the session, and the size stays the other Mac's.
+  const hello = process.env.AGENTIC_DOOR_WINDOW === '1' ? { mirror: true } : {};
+  process.exit(await viewJumping({ connect: localConnect(target), name: target.name, hello }, { pick }));
 }
 // coding loops [pid]: the loop board of a coding window (/loop makes the loops, /loops opens this in a window of its own).
 if (process.argv[2] === 'loops') {

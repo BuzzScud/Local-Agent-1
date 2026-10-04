@@ -141,7 +141,8 @@ export async function doorFolders(max = 5) {
 
 // A session another Mac started, or opened while no window here showed it, is shown on this Mac
 // too (the owner's pick, 3 Oct 2026: "seeing it both in my terminal and the server 1 terminal"):
-// a Terminal window opens on it, set to the other window's size so neither is drawn smaller.
+// a Terminal window opens on it, set to the other window's size. It only shows the session: the
+// size stays the other window's until this one is typed in or resized (AGENTIC_DOOR_WINDOW).
 // Closing that window only leaves the session.
 export function windowFileText(cmd, name, { cols, rows } = {}, agenticHome = process.env.AGENTIC_HOME) {
   const q = (x) => `'${String(x).replace(/'/g, `'\\''`)}'`;
@@ -149,7 +150,8 @@ export function windowFileText(cmd, name, { cols, rows } = {}, agenticHome = pro
   return `#!/bin/sh
 # Opened in Terminal by Agentic Coder's door: another Mac of yours works in this session, and this
 # window shows it too. What is typed in either window reaches it; closing this one only leaves.
-${size}${agenticHome ? `export AGENTIC_HOME=${q(agenticHome)}\n` : ''}exec ${cmd.map(q).join(' ')} attach ${q(name)}
+${size}export AGENTIC_DOOR_WINDOW=1
+${agenticHome ? `export AGENTIC_HOME=${q(agenticHome)}\n` : ''}exec ${cmd.map(q).join(' ')} attach ${q(name)}
 `;
 }
 function showHere(name, size) {
@@ -242,8 +244,9 @@ export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = proces
         piped.on('connect', () => {
           state = 'piped';
           sock.write(frame(F.NAMED, { name: rec.name, v: PROTO, beats: true, mac }));
-          // The window's own hello, without its key; a window from another Mac never owns the session.
-          piped.write(frame(F.HELLO, { cols: h.cols, rows: h.rows, fresh: Boolean(h.fresh), owner: false, via: 'door', from: who, mac, jumps: Boolean(h.jumps) }));
+          // The window's own hello, without its key; a window from another Mac never owns the session. again: it
+          // comes back after a lost link (or only watches): opening it again does not make the session its size.
+          piped.write(frame(F.HELLO, { cols: h.cols, rows: h.rows, fresh: Boolean(h.fresh), owner: false, via: 'door', from: who, mac, jumps: Boolean(h.jumps), again: Boolean(h.again) }));
           for (const f of waiting.splice(0)) piped.write(f);
           if (window) { try { show(rec.name, { cols: h.cols, rows: h.rows }); } catch {} }
         });

@@ -7,8 +7,9 @@
 //   - ctrl+b in the window leaves the app running with no window ("sent to the
 //     background"); `coding attach` opens it again;
 //   - several windows can show one session at once (this Mac's, and another
-//     Mac's through the door, door.mjs). The app is drawn at the smallest of
-//     their sizes, and what any of them types reaches it;
+//     Mac's through the door, door.mjs). The app is drawn at the size of the
+//     one used last (typed in, resized or opened), and what any of them types
+//     reaches it;
 //   - closing the window it was started in ends it, as before; closing one
 //     that attached only leaves.
 // AGENTIC_SESSIONS=off (the tests), a Bun without a PTY, or no terminal: the
@@ -34,12 +35,13 @@ export const DETACH_LABEL = 'ctrl+b';
 // (JSON), LEAVE (this window goes, the app stays), END (the window it started
 // in closed: the app ends). Host → window: OUTPUT (what the app drew), ENDED
 // (JSON: the app quit, its exit code), NOTE (JSON: a line to show), LIST (JSON:
-// the door's list of sessions), NAMED (JSON: the session the door opened). PING (window) and
+// the door's list of sessions), NAMED (JSON: the session the door opened), DRAWN (JSON: the size
+// the app is drawn at, and whether it is that window's: one smaller that it is not, cuts its lines). PING (window) and
 // PONG (its answer) are the check-in of a window on another Mac: a link that stalled says
 // nothing, so each side learns it from the silence (door.mjs).
 // JUMP (/jumptomac): from the app to its own host, on a connection of its own with no hello: send the
 // window that typed last to another Mac (JSON: mac); and from the host to that window.
-export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, PING: 6, JUMP: 7, OUTPUT: 10, ENDED: 11, NOTE: 12, LIST: 13, NAMED: 14, PONG: 15 };
+export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, PING: 6, JUMP: 7, OUTPUT: 10, ENDED: 11, NOTE: 12, LIST: 13, NAMED: 14, PONG: 15, DRAWN: 16 };
 // What a window and a door say they speak (v in their hello, list and named). 2: the check-in,
 // a folder for a new session, opening the same session again after a lost link. One without it
 // is an app from before 3 Oct 2026: it is served as before.
@@ -192,7 +194,7 @@ export function selfCommand() {
 // the other screen). A window that joins later is told them, or its mouse and
 // paste would not reach the app; a window that leaves turns them off again.
 const MODES = new Set(['25', '47', '1000', '1002', '1003', '1004', '1005', '1006', '1015', '1047', '1049', '2004']);
-const RESET_MODES = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?2004l\x1b[?25h\x1b[0m';
+const RESET_MODES = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?2004l\x1b[?25h\x1b[?7h\x1b[0m';
 export function modeTracker() {
   const on = new Map();
   let carry = '';
@@ -208,6 +210,16 @@ export function modeTracker() {
     altScreen() { return on.get('1049') || on.get('1047') || on.get('47'); },
   };
 }
+
+// Keys from a window that someone typed, as against what a terminal sends by itself: the answer
+// to the app's cursor question, focus coming or going, the mouse moving with no button held.
+export function typedBySomeone(keys) {
+  const rest = String(keys).replace(/\x1b\[\d+;\d+R|\x1b\[[IO]|\x1b\[<(\d+);\d+;\d+[Mm]/g, (m, b) => (b !== undefined && (Number(b) & 35) !== 35 ? m : ''));
+  return rest.length > 0;
+}
+// A window's size change within this long of it opening is the size it settles on (the window the
+// door opens is sized by its first line), not someone resizing it.
+const OPENING_MS = 2000;
 
 // The host itself (`coding session-host`, started by startHost). spec: { name,
 // folder, cmd, cols, rows }; env: the app's environment. It runs until the app
@@ -226,6 +238,8 @@ export async function runHost(spec, env = process.env) {
   let asks = 0; // cursor-position questions the app asked and no window answered yet
   let ended = false;
   let typedLast = null; // the window whose keys came last: the one a /jumptomac was typed in
+  let uses = 0; // counts each time a window is used (opened, typed in, resized): the latest sets the size
+  let led = null; // the window the app was last drawn for
 
   const rec = { name, pid: process.pid, folder, started: new Date().toISOString(), socket, viewers: 0, local: 0, args: spec.args ?? [] };
   let gone = false; // the record is removed: nothing writes it again
@@ -263,16 +277,37 @@ export async function runHost(spec, env = process.env) {
     },
   });
 
-  // The pretend terminal is the smallest of the windows (so nothing is cut off
-  // in any of them); with none open it keeps its last size.
+  // The pretend terminal is the size of the window used last (4 Oct 2026, the owner's pick: "the
+  // one I'm using"): typed in, resized, or opened. The window the door opens by itself on this Mac
+  // only shows the session, and a window that comes back through the door after a lost link (or
+  // only watches, as a watch-only window does) has not been used yet, so their opening does not
+  // count. A window smaller than that cuts its lines
+  // at its edge (viewSession); one bigger has room to spare. Before any window is used, the smallest
+  // of them, as before. With none open it keeps its last size.
+  const leader = () => {
+    let best = null;
+    for (const v of viewers) if (v.cols && v.rows && v.at && (!best || v.at > best.at)) best = v;
+    return best;
+  };
+  // Each window is told the size the app is drawn at, and whether it is the one drawn for (a window
+  // from before this does not listen).
+  const tell = (only = null) => {
+    for (const v of only ? [only] : viewers) { try { v.sock.write(frame(F.DRAWN, { cols, rows, yours: v === led })); } catch {} }
+  };
   const fit = ({ redraw = false } = {}) => {
     const sized = [...viewers].filter((v) => v.cols && v.rows);
     if (!sized.length) return;
-    const c = Math.max(20, Math.min(...sized.map((v) => v.cols)));
-    const r = Math.max(5, Math.min(...sized.map((v) => v.rows)));
-    if (c !== cols || r !== rows) { cols = c; rows = r; try { proc.terminal.resize(cols, rows); } catch {} return; }
-    // The same size, but a window that just joined needs the whole screen: one
-    // row less and back again makes the app clear and print everything again.
+    const lead = leader();
+    const by = lead ? [lead] : sized;
+    const c = Math.max(20, Math.min(...by.map((v) => v.cols)));
+    const r = Math.max(5, Math.min(...by.map((v) => v.rows)));
+    const handed = lead !== led;
+    if (handed) { led = lead; if (lead && viewers.size > 1) log(`drawn for the window ${lead.from ? `from ${lead.from}` : 'on this Mac'} (${c}×${r})`); }
+    if (c !== cols || r !== rows) { cols = c; rows = r; try { proc.terminal.resize(cols, rows); } catch {} tell(); return; }
+    if (handed) tell();
+    // The same size, but a window that just joined, or was resized and ended where it began, needs
+    // the whole screen (Terminal re-wrapped what it showed): one row less and back again makes the
+    // app clear and print everything again.
     if (redraw && !ended) {
       try { proc.terminal.resize(cols, Math.max(5, rows - 1)); } catch {}
       setTimeout(() => { try { proc.terminal.resize(cols, rows); } catch {} }, 40);
@@ -280,7 +315,7 @@ export async function runHost(spec, env = process.env) {
   };
 
   const server = net.createServer((sock) => {
-    const v = { sock, cols: 0, rows: 0, owner: false, hello: false, left: false, via: '', from: '', mac: '', jumps: false };
+    const v = { sock, cols: 0, rows: 0, owner: false, hello: false, left: false, via: '', from: '', mac: '', jumps: false, mirror: false, at: 0, joined: 0 };
     const drop = () => { if (viewers.delete(v)) { note(); fit(); log(`a window left${v.from ? ` (${v.from})` : ''}; ${viewers.size} open`); } };
     // The window it started in gone without a word (killed, crashed): the
     // session ends, as the app did with its window before.
@@ -295,6 +330,10 @@ export async function runHost(spec, env = process.env) {
         // A window on another Mac: the door says so, with that Mac's name and this one's.
         if (h.via === 'door') { v.via = 'door'; v.from = String(h.from ?? '').slice(0, 80); v.mac = String(h.mac ?? '').slice(0, 80); }
         v.jumps = Boolean(h.jumps); // the window can leave for another Mac and come back (/jumptomac)
+        // The window the door opened by itself, or one back after a lost link: it sets the size once typed in or resized.
+        v.mirror = Boolean(h.mirror);
+        v.joined = Date.now();
+        if (!v.mirror && !h.again) v.at = ++uses;
         viewers.add(v);
         note();
         log(`a window joined${v.from ? ` from ${v.from}` : ''}${v.owner ? ' (the one it started in)' : ''}; ${viewers.size} open`);
@@ -302,6 +341,7 @@ export async function runHost(spec, env = process.env) {
         const m = modes.replay();
         if (m) sock.write(frame(F.OUTPUT, m));
         fit({ redraw: drawn > 0 && !h.fresh });
+        tell(v);
         return;
       }
       // The app itself (it gives no hello): the window it was typed in goes to another Mac.
@@ -317,6 +357,8 @@ export async function runHost(spec, env = process.env) {
       if (kind === F.INPUT) {
         typedLast = v;
         let keys = Buffer.from(body).toString('latin1');
+        // Typed in: the app is drawn for this window from now on (before the keys reach it).
+        if (v.at !== uses && typedBySomeone(keys)) { v.at = ++uses; fit(); }
         // Every window answers the app's cursor question; only the first answer goes in.
         keys = keys.replace(/\x1b\[\d+;\d+R/g, (m) => (asks > 0 ? (asks--, m) : ''));
         if (keys) { try { proc.terminal.write(Buffer.from(keys, 'latin1')); } catch {} }
@@ -324,7 +366,9 @@ export async function runHost(spec, env = process.env) {
         const s = json(body);
         v.cols = Number(s.cols) || v.cols;
         v.rows = Number(s.rows) || v.rows;
-        fit();
+        // Resized by someone: drawn for this window, and drawn whole again even when the size ended where it began.
+        if (Date.now() - v.joined > OPENING_MS) v.at = ++uses;
+        fit({ redraw: leader() === v });
       } else if (kind === F.PING) {
         sock.write(frame(F.PONG));
       } else if (kind === F.LEAVE) {
@@ -417,7 +461,8 @@ export async function startHost({ folder, args = [], cols, rows, env = process.e
 // (a session can take a while to start there; a door that is held up says nothing at all).
 // jumps: this window can be sent to another Mac (/jumptomac): it then leaves the session running
 // and answers { jump: <mac>, name } instead of a code; the caller shows that Mac and comes back.
-export function viewSession({ connect, name: named, owner = false, fresh = false, where = '', input = process.stdin, output = process.stdout, hello = {}, again = null, beatMs = 10_000, retryMs = 2000, silent = '', firstMs = 20_000, jumps = false }) {
+// sizeMs: how long a window on another Mac holds still before its new size is sent.
+export function viewSession({ connect, name: named, owner = false, fresh = false, where = '', input = process.stdin, output = process.stdout, hello = {}, again = null, beatMs = 10_000, retryMs = 2000, silent = '', firstMs = 20_000, jumps = false, sizeMs = 100 }) {
   let name = named;
   return new Promise((resolve) => {
     const modes = modeTracker();
@@ -430,6 +475,9 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
     let heard = 0; // when it last said anything
     let lostAt = 0; // when the link was lost; 0 while it is up
     let retry = null;
+    let drawnAt = null; // the size the app is drawn at and whether for this window, as its host says (one from before 4 Oct 2026 never does)
+    let cut = false; // this window's lines are cut at its edge
+    let sizing = null;
     const raw = input.isTTY;
     // The last line of the window, over what the app drew there; the app draws everything again when the link is back.
     const status = (text) => { try { output.write(`\x1b7\x1b[999;1H\x1b[2K${text}\x1b8`); } catch {} };
@@ -439,6 +487,7 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       done = true;
       clearInterval(beat);
       clearTimeout(retry);
+      clearTimeout(sizing);
       input.off('readable', onReadable);
       output.off?.('resize', onResize);
       for (const s of ['SIGHUP', 'SIGTERM']) process.off(s, onClose);
@@ -480,7 +529,24 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       let chunk;
       while (!done && (chunk = input.read()) !== null) onKeys(chunk);
     };
-    const onResize = () => { if (!lostAt) send(F.SIZE, { cols: output.columns, rows: output.rows }); };
+    // A window narrower than the app is drawn, and not the one it is drawn for, cuts each line at its
+    // edge (Terminal's wrapping off), so a long line does not run onto the next and push everything
+    // under it out of place. The one drawn for is only narrower mid-drag, until its new size is drawn.
+    const edge = () => {
+      const want = Boolean(drawnAt && !drawnAt.yours && output.columns && output.columns < drawnAt.cols);
+      if (want === cut) return;
+      cut = want;
+      try { output.write(want ? '\x1b[?7l' : '\x1b[?7h'); } catch {}
+    };
+    const sendSize = () => { if (!lostAt && !done) send(F.SIZE, { cols: output.columns, rows: output.rows }); };
+    // On another Mac the size goes once the window holds still: a drag is dozens of sizes a second,
+    // each a trip there and a resize of the session.
+    const onResize = () => {
+      edge();
+      if (!again) { sendSize(); return; }
+      clearTimeout(sizing);
+      sizing = setTimeout(sendSize, sizeMs);
+    };
     // The window closed: the one it started in ends the session (as closing a
     // window always did); one that attached only leaves.
     const onClose = () => { for (const s of ['SIGHUP', 'SIGTERM']) process.off(s, onClose); if (!lostAt) send(owner ? F.END : F.LEAVE); finish(0, '', { closed: true }); };
@@ -530,6 +596,10 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
         if (sock !== mine) return;
         clearTimeout(quiet);
         if (kind === F.OUTPUT) { modes.see(body); output.write(body); }
+        else if (kind === F.DRAWN) {
+          const d = json(body);
+          if (Number(d.cols) > 0 && Number(d.rows) > 0) { drawnAt = { cols: Number(d.cols), rows: Number(d.rows), yours: Boolean(d.yours) }; edge(); }
+        }
         else if (kind === F.NAMED) {
           const n = json(body);
           name = n.name || name;
