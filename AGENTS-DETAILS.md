@@ -441,6 +441,50 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   (`models/evals/tools/mcp-check.mjs`, `/test mcp`, `/test mcp-remote`): nine checks with the real model on two
   stand-in servers, judged by the servers' own log.
 
+## Changed files, background commands and your own hooks (3 Oct 2026)
+
+- **What they are.** The owner asked how Agentic Coder compares with Claude Code and picked three of its parts to
+  build: a guard for files that changed since the model read them, long and background commands, and hooks of their
+  own. Their picks: the guard shows the changed lines; a job that ends after a reply wakes the model; hooks are added
+  with a form in /hooks.
+- **The changed-file guard** (`terminal/src/agent/seen.mjs`): `agent.readFiles` is a `SeenFiles`, each file kept as
+  the model last saw it (its Read, the app's reading ahead, its own Edit or Write, the studio's rebuild after one). An
+  Edit or Write of a file that changed on disk since (a command, a formatter, you, another session) is turned back with
+  the changed lines, numbered (`changedBlocks`: a change at line 10 and one at line 500 are two places), and that
+  counts as reading it again; past `SHOW_MAX` (40 lines) it asks for a new Read from the first change. A deleted file
+  is not news (Edit says it is missing; Write may make it). Edit still needs a Read first, and on the local set Write
+  still never replaces a file (as before).
+- **Long and background commands** (`terminal/src/tools/jobs.mjs`, Bash's `timeout` and `background`, the `Jobs` tool,
+  `/jobs`). `timeout` is seconds up to 600 (`secsOf`: from 10,000 up it is Claude Code's milliseconds; between the cap
+  and that, seconds past the cap); /effort's Command timeout stays the default. `background: true` starts the command
+  in its own process group and answers after its first 1.5 s with its id (`job1`…) and first lines; one that ended by
+  then answers as a plain command. Four run at once at most. `Jobs` (on both ways, after the app's tools, so the list
+  never moves) reads what is new, lists, or stops (`stop: true`, the whole group). A job that ends by itself is news:
+  with the next step's result while a reply runs (`takeJobNews`), with your next message after you stopped a reply,
+  and otherwise the app sends it as a message of its own (`jobs-waiting` → App.jsx `jobWakeRef`, `agent.jobWake`,
+  `send(..., { wake: true })`, which nothing sorts or reads ahead for, as when the model decides); with the model off
+  it waits for /start. One the model or you stopped, or one of a conversation you cleared (`orphan`), is only a line.
+  Jobs stop when the window closes (quit, and an exit hook for a quit that skips it) and when a `coding -p` run ends.
+  A helper shares its parent's jobs. The full suite paragraph above still holds: the default limit is 2 minutes.
+- **Your own hooks** (`terminal/src/agent/user-hooks.mjs`, `terminal/src/app/hooks-form.mjs`). Claude Code's layout,
+  so a hook copies over: `~/.agentic-coder/hooks.json` (the form writes it) and a project's `.agentic/hooks.json`, run
+  only after a yes to that very file (fingerprint in `hooks-state.json`; asked from /hooks; in `PROTECTED` and `OWN`).
+  Seven moments: PreToolUse (exit 2 or a deny stops the step and the model is told why; `permissionDecision` allow
+  skips the question, ask asks; a hard stop still holds), PostToolUse (what it says goes with the result; a hook that
+  changed an edited file is said with its lines and counts as read), UserPromptSubmit (exit 2 keeps the message from
+  being sent; what it prints goes with it; not for a job's wake), Stop (exit 2 sends the model back, three times at
+  most a message, `stop_hook_active` after the first; not for helpers or the focused paths), Notification (a
+  permission question or the Ask tool; not waited for), SessionStart (window start, /clear, /resume; what it prints
+  goes with the next message) and SessionEnd (quit and /clear, 5 s at most). A matcher is a pattern over the whole
+  tool name and fits Claude Code's names too (Grep, Glob, Task, MultiEdit); `tool_input` carries Claude Code's
+  `file_path`, `old_string`, `new_string`. A hook runs as you, in the project folder, no sandbox, 60 s unless it says.
+  `/hooks` is one picker: yours (enter edits, space on/off, t tests, d removes), + Add a hook, the project's line, then
+  the app's checks (space on/off, as `/hooks on 1` still does). `coding -p` runs yours (`userHooks: true` in cli.jsx);
+  the benches run none; `AGENTIC_USER_HOOKS=off` turns them off.
+- **Tests**: `seen.test.mjs`, `jobs.test.mjs`, `user-hooks.test.mjs` (the parts and whole conversations on a scripted
+  model), `app-jobs.test.mjs` (a job that ends after the reply wakes the model; /jobs) and `app-hooks.test.mjs` (a hook
+  added in the form, tested, saved, and stopping the next command).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

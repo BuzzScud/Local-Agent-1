@@ -28,6 +28,8 @@ import { homedir } from 'node:os';
 import { basename, join, dirname, relative } from 'node:path';
 import { runFlows, runKind, isSmallTalk, routeByRules, isCodeProject } from '../flows/index.mjs';
 import { wayOf, hooksOn, wayPrompt } from './way.mjs';
+import { SeenFiles, changedNote, changesText } from './seen.mjs';
+import { toolInput, STOP_BACKS } from './user-hooks.mjs';
 import { clarify } from '../flows/clarify.mjs';
 import { isFollowUp, sortLine, wantsDesktop } from '../flows/words.mjs';
 import { checkInText } from '../flows/fix.mjs';
@@ -37,6 +39,7 @@ import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
 import { upFrontFor, SERVICE_REPLY } from './room.mjs';
 import { readResults, testsFailed } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
+import { Jobs, took } from '../tools/jobs.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
 import { autoCheck } from './auto-check.mjs';
 import { screenAccess } from '../tools/screen.mjs';
@@ -545,7 +548,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null, userHooks = null }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -614,10 +617,17 @@ export class Agent extends EventEmitter {
     this.promptStampUsed = this.rulesSetUsed === this.rulesSet() ? this.promptStamp() : null;
     if (this.promptStampUsed === null && typeof system === 'string') this.refreshNotes();
     this.allowedPrefixes = new Set();
-    this.readFiles = new Set(); // files read (or written) in this conversation
+    this.readFiles = new SeenFiles(); // files read (or written) in this conversation
+    // Background commands (Bash with background: true): each one's end is news for the model (jobEnded).
+    this.jobs = new Jobs({ onEnd: (job) => this.jobEnded(job) });
+    this.jobNews = []; // jobs that ended by themselves, not yet told
+    // Your own hooks (user-hooks.mjs UserHooks): commands of yours at seven moments, beside the app's checks.
+    this.userHooks = userHooks;
+    this.sessionContext = null; // what a SessionStart hook printed, for the next message
     this.todos = null;
     this.ctxUsed = tokensOf(this.messages[0].content) + 1200; // system + tool definitions, until the server reports
     this.busy = false;
+    this.sending = false;
     this.stats = { tps: null, pps: null, outTokens: 0, requests: 0 };
   }
 
@@ -814,13 +824,14 @@ export class Agent extends EventEmitter {
     const before = tokensOf(this.messages[0].content);
     this.cwd = dir;
     this.rewind?.moved(dir);
+    this.userHooks?.moveTo(dir);
     this.testCmd = this.verify ? testCommand(dir) : null;
     this.notesRoomUsed = this.notesRoomNow;
     this.rulesSetUsed = this.rulesSet();
     this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(dir), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()) }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.promptStampUsed = this.promptStamp();
-    this.readFiles = new Set();
+    this.readFiles = new SeenFiles();
     this.mapGiven = false;
     this.lastRoute = null;
     this.codeIndex = null;
@@ -1090,7 +1101,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.
@@ -1236,7 +1247,25 @@ export class Agent extends EventEmitter {
   // shown: the message as you typed it (what /rewind lists and puts back).
   // images: pictures you attached ([{ path, mime, data, w, h }]), carried beside the text (images.mjs).
   // fromServer: the message is an MCP server's own prompt (/server:prompt): no MCP note goes with it.
-  async send(text, { signal, shown, images, fromServer = null } = {}) {
+  // wake: the app's own message for a background job that ended after the reply (jobWake): it carries
+  // on the last turn, so nothing sorts it or reads ahead for it, as when the model decides.
+  async send(text, { signal, shown, images, fromServer = null, wake = false } = {}) {
+    this.sending = true;
+    // Your hooks for a message you send (not the app's own wake): exit 2 stops it; what one prints
+    // goes with it, as does what a SessionStart hook printed.
+    if (!wake && this.userHooks?.has('UserPromptSubmit')) {
+      const r = await this.userHooks.run('UserPromptSubmit', { prompt: String(text) }, { signal, permissionMode: this.mode });
+      if (r.block) {
+        this.sending = false;
+        this.emit('note', { text: `Your hook stopped this message, so it was not sent: ${r.reason || 'it said no'}`, tone: 'warn' });
+        return 'blocked';
+      }
+      if (r.context) text = `${text}\n\n(From the user's hook: ${r.context})`;
+    }
+    if (this.sessionContext && !wake) { text = `${text}\n\n(From the user's hook at the start: ${this.sessionContext})`; this.sessionContext = null; }
+    // Background jobs that ended while nothing was running ride with this message.
+    const news = this.takeJobNews();
+    if (news) text = `${text}\n\n(Meanwhile: ${news})`;
     this.fromServer = fromServer;
     this.corrected(text);
     this.turn = null;
@@ -1255,7 +1284,11 @@ export class Agent extends EventEmitter {
     let reason;
     // This conversation's MCP tools, taken before its first message (mcpTake).
     try { await this.mcpTake(); } catch { /* no MCP tools in this conversation */ }
-    try { reason = await this.work(text, { signal, images }); } finally {
+    try { reason = await this.work(text, { signal, images, wake }); } finally {
+      this.sending = false;
+      // A job that ended during the reply and was not told with a step: the app sends it now
+      // (not after you stopped the reply: it goes with your next message then).
+      if (this.jobNews.length && reason !== 'interrupted') setTimeout(() => { if (this.idle() && this.jobNews.length) this.emit('jobs-waiting', { count: this.jobNews.length }); }, 0);
       this.off('note', warn);
       if (point) { try { await this.rewind.finish(point, { files: happened.files, message: happened.message }); } catch { /* this message cannot be rewound */ } }
     }
@@ -1271,13 +1304,13 @@ export class Agent extends EventEmitter {
     this.turn = null;
     this.todos = null;
     this.keptWrite = null;
-    this.readFiles = new Set();
+    this.readFiles = new SeenFiles();
     this.mapGiven = this.messages.some((m) => m.role === 'tool' && String(m.content).startsWith('Code files in the project'));
     this.ctxUsed = this.messages.reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : '') + tokensOf(m.reasoning_content ?? ''), 0) + 1300;
     return true;
   }
 
-  async work(text, { signal, images } = {}) {
+  async work(text, { signal, images, wake = false } = {}) {
     // A hub save applies between tasks; in-flight requests keep their snapshot.
     const instructions = readInstructions();
     this.workingInstructions = instructions.sections;
@@ -1320,7 +1353,7 @@ export class Agent extends EventEmitter {
     this.emit('turn-start', { started });
     // The model decides (way.mjs): no word rules pick a path for it, not even for a greeting or
     // "update memory" (it answers, or saves with Remember). Only the loop below runs.
-    const decides = this.way === 'model';
+    const decides = this.way === 'model' || wake;
     if (!decides && isSmallTalk(text)) { this.happened.small = true; return this.chat(text, started, signal); }
     // "update memory" / "remember that …": saved straight to the memory file, never a question about where.
     if (!decides && isMemoryRequest(text)) { this.happened.small = true; return this.updateMemory(text, started, signal); }
@@ -1433,6 +1466,7 @@ export class Agent extends EventEmitter {
     let repeats = 0;
     let errorsInRow = 0;
     let nudges = 0;
+    let stopBacks = 0; // your Stop hooks' send-backs this message
     let checks = 0;
     let cuts = 0; // replies cut off at the reply limit mid-tool-call
     let toolsUsed = 0; // tool calls run for this message: a nudge is only for work already under way
@@ -1914,6 +1948,17 @@ export class Agent extends EventEmitter {
             const found = await this.secondOpinion(signal);
             if (found) { this.messages.push({ role: 'user', content: auto(found) }); continue; }
           }
+          // Your Stop hooks (user-hooks.mjs): exit 2 sends it back to work with what the hook says,
+          // STOP_BACKS times at most in one message (stop_hook_active says it was sent back already).
+          if (this.userHooks?.has('Stop') && !this.isHelper && !signal?.aborted && stopBacks < STOP_BACKS) {
+            const r = await this.userHooks.run('Stop', { stop_hook_active: stopBacks > 0, last_assistant_message: text }, { signal, permissionMode: this.mode });
+            if (r.block) {
+              stopBacks++;
+              this.emit('note', { text: `Your stop hook sent it back: ${(r.reason || 'it said no').split('\n')[0].slice(0, 160)}`, tone: 'dim' });
+              this.messages.push({ role: 'user', content: auto(`A hook of the user's says the work is not done: ${r.reason || 'it said no'}. Carry on, then report.`) });
+              continue;
+            }
+          }
           break;
         }
         // One call at a time on App (the prompt asks for it; extra calls were dropped
@@ -1941,7 +1986,9 @@ export class Agent extends EventEmitter {
           if (!out.error && (LOOK_TOOLS.has(c.name) || (c.name === 'Bash' && isReadOnly(String(parseArgs('Bash', c.args).args?.command ?? ''))))) this.turn.lookedOwn = true;
           if (!out.error) { cuts = 0; landed = true; } // a step landed: cut-off replies are no longer "in a row"
           if (!out.error && c.name === 'Write') wrote.push(c);
-          const result = { role: 'tool', tool_call_id: c.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) };
+          // A background job that ended meanwhile is told with this step's result.
+          const news = this.takeJobNews();
+          const result = { role: 'tool', tool_call_id: c.id, content: news ? `${out.text}\n\n(Meanwhile: ${news})` : out.text, ...(out.images?.length ? { images: out.images } : {}) };
           this.messages.push(result);
           if (out.error) this.noteError(out.text, result);
           else if (/^(?:Rules\/)?SKILLS\//.test(String(out.text))) result.keep = 'skill';
@@ -2739,7 +2786,92 @@ export class Agent extends EventEmitter {
     return /(?:^|[\s"'`(])([\w.-]+\.(?:html?|md|txt|csv|json|jsx?|mjs|cjs|tsx?|css|py|sh|rb|go|rs|java|swift|ya?ml|toml|xml|svg))\b/i.exec(this.turn?.request ?? '')?.[1] ?? null;
   }
 
+  // ---- background jobs (tools/jobs.mjs) ----
+  // Nothing running: no reply, and no message on its way in.
+  idle() { return !this.busy && !this.sending; }
+
+  // A background job ended. One stopped (by the model, by you, at quit) or one of a conversation
+  // that was cleared is only a line. One that ended by itself is news for the model: told with its
+  // next step while a reply runs, and once nothing runs the app sends it as a message of its own
+  // ('jobs-waiting', App.jsx), as Claude Code does (the owner's pick, 3 Oct 2026).
+  jobEnded(job) {
+    const how = job.stopped ? 'stopped' : `ended, exit code ${job.code ?? '?'}`;
+    if (job.stopped !== 'model') this.emit('note', { text: `${job.id} ${how} after ${took(job.ended - job.started)}: ${job.command}`, tone: job.stopped || job.code === 0 ? 'dim' : 'warn' });
+    if (job.stopped || job.orphan) return;
+    this.jobNews.push(job);
+    if (this.idle()) this.emit('jobs-waiting', { count: this.jobNews.length });
+  }
+
+  // The ended jobs not told yet, as one note (and from now on told); null when there are none.
+  takeJobNews(lines = 10) {
+    if (!this.jobNews.length) return null;
+    return this.jobNews.splice(0).map((j) => {
+      const last = this.jobs.tail(j, lines);
+      return `background job ${j.id} (${j.command}) ended by itself: exit code ${j.code ?? '?'} after ${took(j.ended - j.started)}.${last.length ? ` Its last lines:\n${last.join('\n')}` : ''}`;
+    }).join('\n\n');
+  }
+
+  // The message that wakes the model for jobs that ended after its reply: { text, shown } or null.
+  jobWake() {
+    const ids = this.jobNews.map((j) => j.id);
+    const news = this.takeJobNews(20);
+    if (!news) return null;
+    return {
+      text: `(From Agentic Coder, not the user: ${news})\nA background job you started ended after your last reply. Carry on with what it was for; if nothing is left to do, say so in one line.`,
+      shown: `${ids.join(', ')} ended`,
+    };
+  }
+
+  // ---- your hooks (user-hooks.mjs) ----
+  // The window opens, comes back after /clear or /resume: what a SessionStart hook prints goes with
+  // the next message. source: startup · resume · clear.
+  async startSession(source = 'startup') {
+    if (!this.userHooks?.has('SessionStart')) return;
+    const r = await this.userHooks.run('SessionStart', { source }, { permissionMode: this.mode });
+    if (r.context) this.sessionContext = r.context;
+  }
+  // The window closes, or /clear: SessionEnd, waited for at most ms. reason: quit · clear · exit.
+  async endSession(reason = 'quit', ms = 5000) {
+    if (!this.userHooks?.has('SessionEnd')) return;
+    await Promise.race([this.userHooks.run('SessionEnd', { reason }), new Promise((r) => setTimeout(r, ms).unref?.())]);
+  }
+
+  // A step, with your hooks around it: PreToolUse may stop it (the model is told why), allow it
+  // without a question or make it ask; PostToolUse may tell the model something after it. A hook
+  // that changed a file the model has seen (a formatter after an Edit) is said with the lines.
   async runTool(call, signal) {
+    const hooks = this.userHooks;
+    const name = toolNameOf(call.name, this.way);
+    if (!hooks || (!hooks.has('PreToolUse', name) && !hooks.has('PostToolUse', name))) return this.runStep(call, signal);
+    const args = parseArgs(name, call.args, this.way).args ?? {};
+    const input = toolInput(name, args, this.cwd);
+    let pre = null;
+    if (hooks.has('PreToolUse', name)) {
+      pre = await hooks.run('PreToolUse', { tool_name: name, tool_input: input }, { tool: name, signal, permissionMode: this.mode });
+      if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
+      if (pre.block) {
+        const why = pre.reason || 'it said no';
+        this.emit('tool', { id: call.id, name, ...display(name, args), view: { kind: 'denied', message: `your hook: ${why.split('\n')[0].slice(0, 160)}` }, error: true });
+        return { text: `A hook of the user's stopped this ${name}: ${why}. Do something else, or ask the user.`, error: true };
+      }
+    }
+    const out = await this.runStep({ ...call, pre }, signal);
+    if (out.error || out.stop || signal?.aborted || !hooks.has('PostToolUse', name)) return out;
+    const r = await hooks.run('PostToolUse', { tool_name: name, tool_input: input, tool_response: { output: String(out.text ?? '').slice(0, 20_000), ...(input.file_path ? { filePath: input.file_path } : {}) } }, { tool: name, signal, permissionMode: this.mode });
+    if (r.block || r.reason) out.text += `\n\n(A hook of the user's says: ${r.reason || 'something is wrong with this step'})`;
+    if ((name === 'Edit' || name === 'Write') && input.file_path) {
+      const ch = this.readFiles.changed(input.file_path);
+      if (ch) {
+        const rel = relative(this.cwd, input.file_path);
+        const lines = changesText(ch);
+        out.text += lines ? `\n(A hook of the user's changed ${rel} after this ${name}; this counts as reading it:\n${lines})` : `\n(A hook of the user's changed ${rel} after this ${name}: Read it again before you Edit it.)`;
+        if (lines) this.readFiles.add(input.file_path, ch.now);
+      }
+    }
+    return out;
+  }
+
+  async runStep(call, signal) {
     call = { ...call, name: toolNameOf(call.name, this.way) };
     // A tool of an MCP server: by its name here, through Mcp, or by the tool's own name when
     // that is no tool of the app's and only one server has it (runMcp).
@@ -2809,7 +2941,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -2842,11 +2974,26 @@ export class Agent extends EventEmitter {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: msg }, error: true });
       return { text: msg, error: true };
     }
+    // Like Claude Code: a file that changed on disk since the model saw it (a command, a
+    // formatter, you, another session) is not changed from the old copy. The lines that changed
+    // are shown, and that counts as seeing it again (seen.mjs); too many, and it reads it again.
+    if ((call.name === 'Edit' || call.name === 'Write') && prepared.abs && !prepared.created) {
+      const ch = this.readFiles.changed(prepared.abs);
+      if (ch) {
+        const note = changedNote(prepared.rel, ch, call.name);
+        if (note.shown) this.readFiles.add(prepared.abs, ch.now);
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: `${prepared.rel} changed since it was read: ${note.shown ? 'shown the changes' : 'asked to read it again'}` }, error: true });
+        return { text: note.text, error: true };
+      }
+    }
     const at = args.path ? resolvePath(this.cwd, args.path) : null;
     const away = Boolean(at && !at.inside && this.desktopOpen(call.name, at.abs)); // on the Desktop (desktopOpen)
     const inside = at ? at.inside || away : true;
     const rules = this.savedRules();
     let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel });
+    // Your PreToolUse hook's answer (runTool): allow skips the question, ask asks; a hard stop still holds.
+    if (call.pre?.allow && d.decision !== 'deny') d = { decision: 'allow' };
+    else if (call.pre?.ask && d.decision !== 'deny') d = { ...d, decision: 'ask' };
     // Auto (/mode): the rules left this step open, so the model checks it against your
     // request first (auto-check.mjs): it runs, or it asks you with the check's reason.
     if (d.decision === 'check') {
@@ -2875,6 +3022,7 @@ export class Agent extends EventEmitter {
     }
     if (d.decision === 'ask') {
       this.emit('tool-ask', { id, name: call.name, ...shown });
+      this.userHooks?.fire('Notification', { message: `Agentic Coder needs your permission to use ${call.name}`, notification_type: 'permission_prompt' });
       const answer = await this.ask({ id, name: call.name, args, prepared, ...shown, ...(d.once ? { once: true } : {}), ...(d.protectedBy ? { protectedBy: d.protectedBy } : {}), ...(d.rule ? { rule: d.rule } : {}), ...(d.autoReason ? { autoReason: d.autoReason } : {}), ...(call.name === 'WebSearch' ? { service: PROVIDER_NAMES[this.web?.search] } : {}) });
       if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
       if (answer.choice === 'no') {
@@ -2930,7 +3078,7 @@ export class Agent extends EventEmitter {
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
     // This message's searches, newest first: a Read of a long file shows what they found in it.
     if (this.turn && !out.error && call.name === 'Search' && args.pattern) this.turn.searches = [args.pattern, ...(this.turn.searches ?? []).filter((p) => p !== args.pattern)].slice(0, 3);
-    if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.readFiles.add(prepared.abs);
+    if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.readFiles.add(prepared.abs, prepared.after);
     if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) {
       this.keepOriginal(prepared);
       this.turn.changed = true;
@@ -2957,6 +3105,8 @@ export class Agent extends EventEmitter {
     // into it, so it opens with a double-click and no internet.
     if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs && /\.html?$/i.test(prepared.abs)) {
       const note = await this.buildStudio(prepared);
+      // The built styles are the app's own change: the file as it is now is what the model has seen.
+      this.readFiles.add(prepared.abs);
       if (note) out.text += `\n${note}`;
     }
     // The lsp helper: a new file that does not parse is said in the same
@@ -3094,6 +3244,7 @@ export class Agent extends EventEmitter {
     if (d.decision === 'deny') return fail(shown, `Not allowed: ${d.reason}. Do something else.`, { kind: 'denied', message: d.reason });
     if (d.decision === 'ask') {
       this.emit('tool-ask', { id, name: call.name, ...shown });
+      this.userHooks?.fire('Notification', { message: `Agentic Coder needs your permission to use ${call.name}`, notification_type: 'permission_prompt' });
       const answer = await this.ask({ id, name: MCP_TOOL, args, ...shown, ...(d.once ? { once: true } : { rule }), mcp: { id: entry.id, server: entry.server, tool: entry.tool, name: entry.name, print: now, says: entry.says, changed, note, where: server?.where ?? null, runs: server?.runs ?? null } });
       if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
       if (answer.choice === 'no') {
@@ -3178,7 +3329,7 @@ export class Agent extends EventEmitter {
     });
     // Its tools: the app's, and of the MCP tools those its file names (mcp__github__get_* names several).
     const toolFilter = own ? helperToolFilter(own.tools, [...this.tools().map((t) => t.function.name), ...this.mcpEntries().map((e) => e.name)]) : kind === 'explore' ? EXPLORE_TOOLS : null;
-    Object.assign(helper, { isHelper: true, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
+    Object.assign(helper, { jobs: this.jobs, userHooks: this.userHooks, isHelper: true, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
     // The same MCP servers and this conversation's list of their tools (worked out for its own room), and what you allowed.
     if (this.mcpFrozen) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
@@ -3686,6 +3837,7 @@ export class Agent extends EventEmitter {
   // permission (or the answers hook when there is no screen).
   // Several questions (more) are asked one after another, each with its place ("1 of 2").
   async askUser(id, args, shown, signal) {
+    this.userHooks?.fire('Notification', { message: `Agentic Coder asks: ${String(args.question ?? '').slice(0, 200)}`, notification_type: 'question' });
     const questions = askedQuestions(args);
     if (!questions.length) questions.push({ question: String(args.question ?? ''), options: [], about: [], recommended: -1, several: false });
     const got = [];

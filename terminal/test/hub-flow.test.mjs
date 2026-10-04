@@ -119,7 +119,7 @@ test('every model gets the same parts: its own box, the same rows in the same pl
   expect(page).toContain('both went down the same path on all 5 tasks');
   expect(page).toContain('Fix<tspan class="cn"> · 1 of the 5 tasks</tspan>');
   // The limits and the tools are the app's own.
-  expect(page).toContain('up to 40 steps a request'); expect(page).toContain('up to 8, in a scratch copy'); expect(page).toContain('>8 tools<');
+  expect(page).toContain('up to 40 steps a request'); expect(page).toContain('up to 8, in a scratch copy'); expect(page).toContain('>9 tools<');
   // The names at the top are buttons: all of them first, then one a model, as on the Harness tab.
   expect(page).toMatch(/<button type="button" class="chip" data-pick="" aria-pressed="true">Both<\/button><button type="button" class="chip" data-pick="alpha" data-name="Alpha 12B" data-short="Alpha" aria-pressed="false">/);
   expect(page).toContain('data-name="Beta 9B &lt;b&gt;" data-short="Beta"');

@@ -223,7 +223,7 @@ test('Bash shows the output lines and stops at the timeout /effort set', async (
   const whole = await execute('Bash', { command: 'seq 1 100' }, {}, { cwd, bash: { maxLines: 160, timeoutMs: 120_000 } });
   expect(whole.view.lines).toHaveLength(100);
   const slow = await execute('Bash', { command: 'sleep 5' }, {}, { cwd, bash: { maxLines: 80, timeoutMs: 500 } });
-  expect(slow.text).toContain('(stopped after 1 s)');
+  expect(slow.text).toContain('(stopped after 1 s; for longer, send timeout (up to 600 seconds)');
 }, 15_000);
 
 test('Search rows: named choices move along their list, junk is left out, and only a change is saved', () => {

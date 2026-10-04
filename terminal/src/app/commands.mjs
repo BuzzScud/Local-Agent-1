@@ -30,6 +30,7 @@ export const COMMANDS = [
   { name: 'loops', desc: 'Open the loop board in a window of its own: each loop, the step its run is on, and a chat box to steer it' },
   { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'mcp', desc: 'Your MCP servers: tools from programs on this Mac and services on the internet (GitHub, a database, your own scripts); add one, Test it, switch its tools on or off and mark the ones that only read; each tool asks before its first use' },
+  { name: 'jobs', desc: 'The commands the model runs in the background (a dev server, a long test run): each one, how long it has run, its last lines; /jobs stop <id|all> stops them', arg: '[stop <id|all>]' },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'autostart', desc: 'Load the model as soon as a window opens (on), or only when you type /start (off, the default)', arg: '[on|off]', picker: true },
@@ -90,7 +91,8 @@ export const TYPED_ONLY = new Set(['morning']);
 // /loop and /loops (3 Oct 2026) follow it the same way, and /mcp after them (the owner's pick: typed in
 // full, like /jumptomac; the hub's Help page lists it), in this order: a window with one free row
 // shows /jumptomac, with four all of them.
-export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'loops', 'mcp']);
+// /jobs (3 Oct 2026) last: the background commands, listed and stopped.
+export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'loops', 'mcp', 'jobs']);
 const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On

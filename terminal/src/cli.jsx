@@ -451,7 +451,7 @@ if (opts.print) {
       return agent.canSee;
     } : null;
     const r = await runHeadless({
-      images, canSee, visionOn,
+      images, canSee, visionOn, userHooks: true,
       prompt: opts.prompt, cwd: opts.cwd, url, model: runModel, ctx: ctx ?? 32768,
       thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots, limits,
       // What you saved with /permissions: commands that run without asking, and the ones that never run.

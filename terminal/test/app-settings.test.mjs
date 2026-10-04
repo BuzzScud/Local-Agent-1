@@ -48,8 +48,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect([...TYPED_ONLY]).toEqual(['morning']);
   // /jumptomac (3 Oct 2026): in the whole menu where a 19th row fits (a window taller than 80 × 24),
   // and in any window once its name is typed; typed only, nobody saw it.
-  // /loop and /loops (3 Oct 2026) follow it, in that order, and /mcp after them: one free row shows /jumptomac, four all of them.
-  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'loops', 'mcp']);
+  // /loop and /loops (3 Oct 2026) follow it, in that order, then /mcp and /jobs: one free row shows /jumptomac, five all of them.
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'loops', 'mcp', 'jobs']);
   expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'test', 'settings', 'exit']);
   expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('loops');
   expect(matchCommands('/', { room: 21 }).map((c) => c.name)).toContain('mcp'); // a fourth free row is /mcp's
@@ -57,8 +57,9 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect(matchCommands('/mc').map((c) => c.name)).toEqual(['mcp']);
   expect(menu).not.toContain('jumptomac');
   const tall = matchCommands('/', { room: 49, side: true }).map((c) => c.name);
-  expect(tall).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'mcp', 'test', 'settings', 'exit']);
-  expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac']);
+  expect(tall).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'test', 'settings', 'exit']);
+  expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac', 'jobs']);
+  expect(matchCommands('/jo').map((c) => c.name)).toEqual(['jobs']);
   expect(matchCommands('/jump').map((c) => c.name)).toEqual(['jumptomac']);
   expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size + WHEN_ROOM.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /subagents, on a service only)
   expect(matchCommands('/doc')).toEqual([]); // half a hidden name finds nothing

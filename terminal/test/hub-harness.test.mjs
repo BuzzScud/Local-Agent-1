@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { startWeightsServer } from '../src/app/weights.mjs';
 import { harnessData, harnessPage } from '../src/app/harness-hub.mjs';
 import { sortLine } from '../src/flows/words.mjs';
-import { TOOL_DEFS } from '../src/agent/tools.mjs';
+import { toolDefs } from '../src/agent/tools.mjs';
 
 // Two made-up settings cards and a run they share: nothing here depends on the models on this Mac.
 const card = (id, name, more = {}) => ({ folder: id, id, name, file: `${id}.gguf`, bytes: 6.7e9, attnLayers: 8, kvHeads: 1, headDim: 512, maxCtx: 262144, slots: 2, thinkingLevels: [{ id: 'low', label: 'Low', effort: null }, { id: 'high', label: 'High', effort: 'high' }], thinkingBudget: 4096,
@@ -45,7 +45,7 @@ test('the hub has a built-in Harness tab: the page is served with its five tabs,
     expect(data.models.length).toBeGreaterThan(1);
     for (const m of data.models) { expect(page).toContain(`data-model="${m.id}"`); expect(m).toMatchObject({ by: expect.any(String), read: expect.any(Number), kbPerToken: expect.any(Number), needGB: expect.any(Number) }); }
     expect(data.models.filter((m) => m.tags.includes('default'))).toHaveLength(1);
-    expect(data.tools).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask']);
+    expect(data.tools).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask', 'Jobs']);
     const help = await (await fetch(base + '/help')).text();
     expect(help).toContain("['Harness', 'how a request travels through Agentic Coder, and every model in /model");
   } finally { s.stop(); }
@@ -116,8 +116,9 @@ test('the words on the page follow the code: the sorter’s own kinds, the tools
   // The kinds are the ones the line under a request names (flows/words.mjs).
   const kinds = ['rename', 'fix', 'change', 'question', 'other'].map((k) => /^Sorted as: (\w+)/.exec(sortLine(k))[1]);
   expect(page).toContain(`Word rules pick the kind: ${kinds.slice(0, -1).join(', ')} or ${kinds.at(-1)}.`);
-  for (const t of TOOL_DEFS) expect(page).toContain(t.name === 'TodoWrite' ? 'a to-do list' : t.name === 'Ask' ? 'a question to you' : t.name);
-  expect(page).toContain(`the ${TOOL_DEFS.length} tools`);
+  // The tools of the way in use (App here), Jobs among them since 3 Oct 2026.
+  for (const t of toolDefs('app')) expect(page).toContain(t.name === 'TodoWrite' ? 'a to-do list' : t.name === 'Ask' ? 'a question to you' : t.name);
+  expect(page).toContain(`the ${toolDefs('app').length} tools`);
   expect(page).toContain('up to 60 steps'); expect(page).toContain('up to 12 tries'); expect(page).toContain('60 steps and 12 tries at most');
   expect(page).not.toContain('40 steps'); expect(page).not.toContain('8 tries');
   expect(page).toContain('Not yet: the 3 tasks on the Results tab were run once on each model.');
