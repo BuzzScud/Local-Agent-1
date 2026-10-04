@@ -177,6 +177,9 @@ export const RUN_TESTS = [
   { id: 'door', name: 'Door check', what: 'background sessions and the door between Macs, on this Mac alone: a big paste arrives whole, a window whose link stalls is let go and takes no more memory, wrong keys sent together are still slowed, a cut link comes back by itself, a new session starts in the folder named, and a list is answered even when the folders cannot be read; no model, about 90 seconds, with a results page', model: false, total: 10, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/door-check.mjs', args: () => [],
     stop: 'SIGTERM', record: { kind: 'other', name: '^Door check$', part: false } },
+  { id: 'follow-through', name: 'Follow-through replay', what: 'the calculator task of 4 Oct 2026 played again on the model /remote uses on a service, from the home folder in Bypass, as it was run then: the same request, a copy of the folder, questions answered as you would; it passes when the run leaves no wrong file name as a dead end, no long page or data file without its parts, no login unasked and unsaid, no "all passed" after a failing run, and writes a plan; about 15 minutes, with a results page. Its task and folder are private: they live on the Mac that made them (~/.agentic-coder/evals/follow-through)', model: false, total: 1, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/tools/follow-through-replay.mjs', args: () => [],
+    stop: 'SIGTERM', record: { kind: 'check', name: '^Follow-through replay$', part: false } },
 ];
 
 export const runTestById = (id) => RUN_TESTS.find((t) => t.id === id) ?? null;

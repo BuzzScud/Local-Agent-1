@@ -12,7 +12,8 @@ export const sec = (x) => (x == null ? '—' : `${x < 10 ? x.toFixed(1) : Math.r
 
 //     verdict  the first line, when the pass rule is not "every check" (HTML the caller wrote)
 //     first    false: no "Checks passed" card (the caller's cards say what passed)
-export function buildCheckPage({ title, summary: s, rows, prev = null, cards = [], how = [], raw = [], passRule = `all ${s.of} checks`, yes = '', verdict: said = null, first = true }) {
+//     more     extra tabs before How it was measured: [{ id, name, html }] (HTML the caller wrote)
+export function buildCheckPage({ title, summary: s, rows, prev = null, cards = [], how = [], raw = [], passRule = `all ${s.of} checks`, yes = '', verdict: said = null, first = true, more = [] }) {
   const before = prev ? Object.fromEntries(prev.rows.map((r) => [r.id, r])) : {};
   const failed = rows.filter((r) => !r.ok);
   const verdict = said && !s.stopped ? said : s.stopped
@@ -22,10 +23,11 @@ export function buildCheckPage({ title, summary: s, rows, prev = null, cards = [
   const cardHtml = allCards.map((c) => `<div class="card"><div class="k">${esc(c.k)} · ${esc(c.dir)}</div><div class="v">${esc(c.v)}</div><div class="s">${esc(c.sub)}</div></div>`).join('');
   const list = `<ol class="list">${rows.map((r) => `<li><span class="${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✗'}</span> ${esc(r.name)} <span class="dim">· ${sec(r.secs)}</span></li>`).join('')}</ol><p class="dim small">Tab 2 has what each check showed.</p>`;
   const table = `<table><thead><tr><th>#</th><th>Check</th><th>Result</th><th class="num">Seconds<small>lower is faster</small></th>${prev ? '<th class="num">Before<small>seconds</small></th>' : ''}<th>What it showed</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td class="dim">${i + 1}</td><td><b>${esc(r.name)}</b></td><td class="${r.ok ? 'ok' : 'no'}">${r.ok ? '✓ passed' : '✗ failed'}</td><td class="num">${sec(r.secs)}</td>${prev ? `<td class="num dim">${before[r.id] ? `${sec(before[r.id].secs)}${before[r.id].ok ? '' : ' ✗'}` : '—'}</td>` : ''}<td class="what">${esc(r.detail)}</td></tr>`).join('')}</tbody></table>`;
-  const tabs = [['result', 'Result'], ['checks', 'The checks'], ['how', 'How it was measured']];
+  const tabs = [['result', 'Result'], ['checks', 'The checks'], ...more.map((m) => [m.id, m.name]), ['how', 'How it was measured']];
   const panels = {
     result: `<p class="verdict">${verdict}</p><div class="chips"><span class="chip ${s.pass ? 'ok' : 'no'}">${s.pass ? '✓' : '✗'} pass: ${esc(passRule)}</span><span class="chip">${esc(s.sub)}</span></div><div class="cards">${cardHtml}</div>${list}`,
     checks: `<div class="table-wrap">${table}</div>`,
+    ...Object.fromEntries(more.map((m) => [m.id, m.html])),
     how: `<ul class="how">${[...how, ...(raw.length ? [`Raw results, on this Mac: ${raw.map((r) => `<code>${esc(r)}</code>`).join(', ')}`] : [])].map((h) => `<li>${h}</li>`).join('')}</ul>`,
   };
   return `<!doctype html>
