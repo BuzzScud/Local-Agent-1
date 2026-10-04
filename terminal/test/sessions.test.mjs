@@ -12,6 +12,9 @@ import net from 'node:net';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
 import { startFakeServer } from './fake-server.mjs';
+import { openTerm } from './term.mjs';
+import { checkScreen } from './screen-checks.mjs';
+import { needs } from './needs.mjs';
 
 // A throwaway home before the models part is imported (it reads AGENTIC_HOME once).
 const unitHome = mkdtempSync(join(tmpdir(), 'agentic-sessions-'));
@@ -404,6 +407,8 @@ test('the window opened on this Mac for a session another Mac works in: its size
   expect(text.startsWith('#!/bin/sh\n')).toBe(true);
   expect(text).toContain("printf '\\033[8;%d;%dt' 40 120\n");
   expect(text.trimEnd().endsWith("exec '/Users/x/.agentic-coder/app/agentic-coder' attach 'demo-1'")).toBe(true);
+  // It says it was opened by the door: it shows the session, and the size stays the other window's until it is used.
+  expect(text).toContain('export AGENTIC_DOOR_WINDOW=1\n');
   // No size known: none set. A test home comes along.
   expect(D.windowFileText(['/a/b'], 'demo-1', {}, "/tmp/it's")).not.toContain('printf');
   expect(D.windowFileText(['/a/b'], 'demo-1', {}, "/tmp/it's")).toContain("export AGENTIC_HOME='/tmp/it'\\''s'");
@@ -741,3 +746,190 @@ test.skipIf(!S.canHost())('/jumptomac in the app: a Mac reached for the first ti
     await fake.close();
   }
 }, 150_000);
+
+// ---- the size a session is drawn at (4 Oct 2026, the owner's pick: "the one I'm using") ----
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('keys someone typed, against what a terminal sends by itself', () => {
+  for (const k of ['a', '\x1b[A', '\r', '\x1b[<0;10;5M', '\x1b[<64;10;5M', '\x1b[<32;10;5M', '\x1b[12;5Rx']) expect([k, S.typedBySomeone(k)]).toEqual([k, true]);
+  // The answer to a cursor question, focus in and out, the mouse moving with no button held.
+  for (const k of ['\x1b[12;5R', '\x1b[I', '\x1b[O', '\x1b[<35;10;5M', '\x1b[I\x1b[3;1R']) expect([k, S.typedBySomeone(k)]).toEqual([k, false]);
+});
+
+test.skipIf(!S.canHost())('the app is drawn for the window used last (opened, typed in, resized); the window the door opened by itself only shows until it is used; a resize that ends where it began draws it all again', async () => {
+  const home = process.env.AGENTIC_HOME;
+  // A program that prints its terminal's size at the start and at each change.
+  const show = "const p = () => process.stdout.write('[' + process.stdout.rows + ' ' + process.stdout.columns + ']'); p(); process.stdout.on('resize', p); setInterval(() => {}, 1000);";
+  const h = await plainHost('size-1', [process.execPath, '-e', show], home);
+  const rec = h.record();
+  const open = (hello) => new Promise((res) => {
+    const s = net.connect(rec.socket);
+    const w = { s, out: '', drawn: [] };
+    const read = S.frameReader((kind, body) => {
+      if (kind === S.F.OUTPUT) w.out += Buffer.from(body).toString('latin1');
+      else if (kind === S.F.DRAWN) w.drawn.push(S.json(body));
+    });
+    s.on('data', (c) => read(c));
+    s.on('error', () => {});
+    s.on('connect', () => { s.write(S.frame(S.F.HELLO, hello)); res(w); });
+  });
+  const sizes = (w) => [...w.out.matchAll(/\[(\d+) (\d+)\]/g)].map((m) => `${m[2]}×${m[1]}`);
+  const now = (w) => sizes(w).at(-1);
+  try {
+    const a = await open({ cols: 120, rows: 40 });
+    const aOpened = Date.now();
+    expect(await until(() => now(a) === '120×40', 5000)).toBe(true);
+    expect(await until(() => a.drawn.length > 0, 3000)).toBe(true);
+    expect(a.drawn.at(-1)).toEqual({ cols: 120, rows: 40, yours: true });
+    // The window the door opens by itself: smaller, and settling on a size as it opens. The app stays drawn for a
+    // (before 4 Oct it shrank to the smallest window), and that window is told the size, to cut its lines.
+    const m = await open({ cols: 80, rows: 24, mirror: true });
+    m.s.write(S.frame(S.F.SIZE, { cols: 78, rows: 22 }));
+    expect(await until(() => m.drawn.length > 0, 3000)).toBe(true);
+    await sleep(400);
+    expect(now(a)).toBe('120×40');
+    expect(m.drawn.at(-1)).toEqual({ cols: 120, rows: 40, yours: false });
+    // A window back after a lost link, or one that only watches (huge, as a watch-only window opens): not used yet.
+    const w = await open({ cols: 400, rows: 200, via: 'door', again: true });
+    await sleep(400);
+    expect(now(a)).toBe('120×40');
+    w.s.destroy();
+    // What its terminal sends by itself (a cursor answer, focus) is not someone using it.
+    m.s.write(S.frame(S.F.INPUT, '\x1b[5;1R\x1b[I'));
+    await sleep(400);
+    expect(now(a)).toBe('120×40');
+    // Typed in: drawn for it, and every window is told.
+    m.s.write(S.frame(S.F.INPUT, 'x'));
+    expect(await until(() => now(a) === '78×22', 5000)).toBe(true);
+    expect(await until(() => a.drawn.at(-1)?.cols === 78 && m.drawn.at(-1)?.cols === 78, 3000)).toBe(true);
+    expect([a.drawn.at(-1).yours, m.drawn.at(-1).yours]).toEqual([false, true]);
+    // a resized (well after it opened): drawn for a again, at its new size.
+    await sleep(Math.max(0, 2200 - (Date.now() - aOpened)));
+    a.s.write(S.frame(S.F.SIZE, { cols: 150, rows: 50 }));
+    expect(await until(() => now(a) === '150×50', 5000)).toBe(true);
+    // Resized and ended where it began: the whole screen again (one row less and back).
+    const n = sizes(a).length;
+    a.s.write(S.frame(S.F.SIZE, { cols: 150, rows: 50 }));
+    expect(await until(() => sizes(a).length >= n + 2, 5000)).toBe(true);
+    expect(sizes(a).slice(n)).toEqual(['150×49', '150×50']);
+    // a leaves: drawn for the one used before it.
+    a.s.write(S.frame(S.F.LEAVE));
+    expect(await until(() => now(m) === '78×22', 5000)).toBe(true);
+    m.s.destroy();
+  } finally { h.stop(); }
+}, 40_000);
+
+test('a window narrower than the app is drawn cuts its lines at its edge; on another Mac its size goes once it holds still; leaving puts the wrapping back', async () => {
+  const sizes = [];
+  let conn = null;
+  const server = net.createServer((sock) => {
+    conn = sock;
+    const read = S.frameReader((kind, body) => {
+      if (kind === S.F.HELLO) {
+        sock.write(S.frame(S.F.NAMED, { name: 'demo-1', v: 2, beats: true, mac: 'server-1' }));
+        sock.write(S.frame(S.F.DRAWN, { cols: 120, rows: 40 }));
+      } else if (kind === S.F.SIZE) sizes.push(S.json(body));
+    });
+    sock.on('data', (c) => read(c));
+    sock.on('error', () => {});
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.columns = 100; output.rows = 30;
+  let shown = '';
+  output.on('data', (c) => { shown += c; });
+  const count = (seq) => shown.split(seq).length - 1;
+  try {
+    const view = S.viewSession({
+      name: 'demo-1', where: 'server-1', input, output,
+      connect: () => net.connect({ host: '127.0.0.1', port: server.address().port }),
+      hello: { key: 'k', v: 2, op: 'attach', name: 'demo-1' }, again: (n) => ({ key: 'k', v: 2, op: 'attach', name: n, again: true }),
+    });
+    // 100 columns, drawn at 120: cut.
+    expect(await until(() => count('\x1b[?7l') === 1, 5000)).toBe(true);
+    // Dragged wider: the wrapping back the moment it is wide enough; one size sent, the last, once it holds still.
+    for (const c of [110, 125, 130]) { output.columns = c; output.emit('resize'); await sleep(20); }
+    expect(count('\x1b[?7h')).toBe(1);
+    expect(sizes).toEqual([]);
+    expect(await until(() => sizes.length === 1, 3000)).toBe(true);
+    await sleep(250);
+    expect(sizes).toEqual([{ cols: 130, rows: 30 }]);
+    // Drawn wider again (another window used): cut again. Drawn for this window (mid-drag it can be narrower): not cut.
+    conn.write(S.frame(S.F.DRAWN, { cols: 160, rows: 50 }));
+    expect(await until(() => count('\x1b[?7l') === 2, 3000)).toBe(true);
+    conn.write(S.frame(S.F.DRAWN, { cols: 160, rows: 50, yours: true }));
+    expect(await until(() => count('\x1b[?7h') === 2, 3000)).toBe(true);
+    // The session ends: the window wraps again, as before it opened.
+    conn.end(S.frame(S.F.ENDED, { code: 0 }));
+    expect(await view).toBe(0);
+    expect(count('\x1b[?7h')).toBe(3);
+  } finally { server.close(); }
+}, 15_000);
+
+test.skipIf(!S.canHost() || needs('python3'))('through the door the app is drawn for the window used: growing it and ending a drag where it began each end in one clean screen; the window opened by the door cuts its lines, and takes over once typed in', async () => {
+  const { cwd, env } = sessionsEnv();
+  const fake = await startFakeServer([{ text: 'The project is a small Node.js script that reads trades.json and prints it as CSV, with two tests in export.test.mjs and no dependencies beyond Node itself.' }], { delayMs: 2 });
+  const before = process.env.AGENTIC_HOME;
+  process.env.AGENTIC_HOME = env.AGENTIC_HOME;
+  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-test-key', mac: 'server-1', peerName: () => 'mac-mini', show: () => {} });
+  const port = String(door.address().port);
+  const viaDoor = { ...env, AGENTIC_REMOTE_KEY: 'acd-test-key', AGENTIC_REMOTE_KEYSTORE: 'file' };
+  // drawn: the width the app is drawn at, when this window is not it (where the start page's middle line falls).
+  const clean = async (t, what, { anchored = true, drawn = t.cols } = {}) => {
+    const bad = checkScreen(await t.lines(), { cols: drawn, rows: t.rows, anchored, scrollback: await t.lines({ all: true }) }).filter((c) => !c.ok);
+    expect([what, bad.map((c) => `${c.what} ${c.detail}`)]).toEqual([what, []]);
+  };
+  const settle = async (t, c, r) => { t.resize(c, r); await sleep(300); await t.idle(500, 6000); };
+  let a = null;
+  let b = null;
+  try {
+    expect(coding(['--bg', '--url', fake.url], { cwd, env }).stdout).toContain('Started in the background: demo-project-1');
+    expect(await until(() => records(env).includes('demo-project-1.json'))).toBe(true);
+    // The window on the other Mac, through the door.
+    a = openTerm({ cwd, env: viaDoor, cols: 120, rows: 36, args: ['attach', '127.0.0.1', 'demo-project-1', '--port', port] });
+    await a.waitFor('? for shortcuts', 30_000);
+    await a.type('hi'); a.key('enter'); await a.waitFor('no dependencies'); await a.idle(500);
+    // The window the door opens by itself, smaller. a stays drawn whole (before 4 Oct: shrunk to 90×28).
+    b = openTerm({ cwd, env: { ...env, AGENTIC_DOOR_WINDOW: '1' }, cols: 90, rows: 28, args: ['attach', 'demo-project-1'] });
+    await b.waitFor('no dependencies', 30_000); await b.idle(500); await a.idle(500);
+    // And a watch-only window through the door (as one Claude Code session opens to follow yours): huge, never typing.
+    const watcher = net.connect({ host: '127.0.0.1', port: Number(port) });
+    watcher.on('error', () => {});
+    watcher.on('data', () => {});
+    watcher.on('connect', () => watcher.write(S.frame(S.F.HELLO, { key: 'acd-test-key', v: 2, op: 'attach', name: 'demo-project-1', cols: 400, rows: 200, again: true, jumps: false })));
+    await sleep(800); await a.idle(500);
+    await clean(a, 'a, after the door window and a watcher opened');
+    // The window in use is drawn for: never narrower than the drawing, so it never cuts its lines (a cut screen
+    // can look whole, so this is the check that the size stayed its own).
+    const cuts = () => a.raw().toString('latin1').split('\x1b[?7l').length - 1;
+    expect(cuts()).toBe(0);
+    // Its lines are cut at its edge, not wrapped onto the next.
+    await clean(b, 'b, smaller than the drawing', { anchored: false, drawn: 120 });
+    // a made bigger: drawn at its new size.
+    await settle(a, 150, 44);
+    await clean(a, 'a grown to 150×44');
+    await b.idle(300);
+    await clean(b, 'b, while a is 150×44', { anchored: false, drawn: 150 });
+    // A drag that ends where it began: drawn whole again, once.
+    const at = a.raw().length;
+    for (const [c, r] of [[140, 40], [130, 38], [150, 44]]) { a.resize(c, r); await sleep(20); }
+    await sleep(300); await a.idle(500, 6000);
+    await clean(a, 'a after a drag back to 150×44');
+    expect(a.raw().subarray(at).toString('latin1').split('\x1b[3J').length - 1).toBe(1);
+    expect(cuts()).toBe(0);
+    // Typed in the door's window: drawn for it now; a keeps the room to spare.
+    await b.type('x');
+    await sleep(300); await b.idle(500, 6000); await a.idle(300);
+    await clean(b, 'b after typing in it');
+    await clean(a, 'a, bigger than the drawing', { anchored: false, drawn: 90 });
+    watcher.destroy();
+  } finally {
+    await a?.close();
+    await b?.close();
+    door.close();
+    process.env.AGENTIC_HOME = before;
+    await fake.close();
+  }
+}, 120_000);

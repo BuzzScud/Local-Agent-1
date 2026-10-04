@@ -348,7 +348,8 @@ coding attach [name]      # open one in this window (ctrl+b leaves it again; qui
 
 Closing the window a session started in ends it, as before; closing one that attached only
 leaves. Several windows can show one session at once: what any of them types reaches it, and it
-is drawn at the smallest window's size.
+is drawn at the size of the one used last (typed in, resized or opened). A smaller window cuts its
+lines at its edge; the window the door opens by itself only shows the session until it is used.
 
 From another Mac, over [Tailscale](https://tailscale.com): on the Mac with the sessions run
 `coding door on` once, in Terminal. It listens on that Mac's Tailscale address only and asks for a
