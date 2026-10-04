@@ -50,6 +50,7 @@ export function lookFacts(turn, { home = '' } = {}) {
   if (t.outlined?.size) out.push(`Seen only as an outline (none of its text): ${[...t.outlined].slice(0, 5).map(tilde).join(', ')}.`);
   if (t.created?.length) out.push(`Files it created: ${t.created.slice(0, 8).join(', ')}.`);
   if (t.madeByCommand?.size) out.push(`Files its commands wrote: ${[...t.madeByCommand.keys()].slice(0, 8).map(tilde).join(', ')}.`);
+  for (const l of t.pageReads ?? []) out.push(`A page it wrote, opened as a reader sees it: ${l}.`);
   if (!t.changed && !t.wroteByCommand) out.push('No file was changed.');
   return out;
 }

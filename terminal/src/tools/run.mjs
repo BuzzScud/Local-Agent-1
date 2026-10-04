@@ -88,6 +88,8 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
         fenced,
         ms: Date.now() - started,
         lines: cut ? [...lines.slice(0, maxLines / 2), `… ${lines.length - maxLines} lines cut …`, ...lines.slice(-maxLines / 2)] : lines,
+        // What was cut is kept whole (up to 5 MB) for whoever wants to save it (agent/scripts.mjs saveOutput).
+        ...(cut && out.length <= 5e6 ? { whole: out } : {}),
       });
     };
     child.on('close', (code) => finish(code));

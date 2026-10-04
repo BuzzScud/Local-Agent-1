@@ -153,12 +153,15 @@ export function toolUseText(text = readPromptFile('tools').text) {
 // The Tool use lines of a set (the remote TOOLS.md, or the local one standing in for it).
 // mcp: a tool of an MCP server is offered, so the file's "## MCP tools" lines go with them, and
 // when it is the servers' list (agent/mcp.mjs mcpBrief), that list after them.
-export const toolUseFor = (set = 'local', dir = rulesDir(), { mcp = false } = {}) => {
+// web: WebFetch is offered (/web), so the file's "## Web tools" lines go with them (4 Oct 2026: Qwen3.6,
+// holding WebFetch, thought "my tools don't include that" and ran curl into the sandbox four times).
+export const toolUseFor = (set = 'local', dir = rulesDir(), { mcp = false, web = false } = {}) => {
   const text = readPromptFile('tools', dir, set).text;
   const lines = toolUseText(text);
+  const pages = web ? sectionOf(text, 'Web tools') || '' : '';
   const more = mcp ? sectionOf(text, 'MCP tools') || sectionOf(set === 'remote' ? BUILT_IN_REMOTE.tools ?? '' : BUILT_IN.tools, 'MCP tools') || '' : '';
   const brief = typeof mcp === 'string' ? mcp : '';
-  return [lines, more, brief].filter(Boolean).join('\n');
+  return [lines, pages, more, brief].filter(Boolean).join('\n');
 };
 
 const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'skill';

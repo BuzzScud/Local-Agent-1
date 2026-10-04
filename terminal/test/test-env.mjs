@@ -52,3 +52,5 @@ process.env.AGENTIC_OPEN ??= 'off';
 process.env.AGENTIC_SESSIONS ??= 'off';
 // A window starts in Manual, not in the mode another test's window was left in (store.mjs firstMode).
 process.env.AGENTIC_LAST_MODE ??= 'off';
+// No page is opened in WebKit to see what a reader sees (page-read.mjs), unless a test asks for it.
+process.env.AGENTIC_PAGE_READ ??= 'off';

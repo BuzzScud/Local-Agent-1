@@ -3,6 +3,7 @@
 The lines under **Tool use** are the "Tool use" part of the instructions for remote models,
 in every conversation. When Who decides is Model (/effort), the last line is swapped for
 the model's own tool lines, as on this Mac.
+The lines under **Web tools** join them only while reading pages is on (/web).
 The lines under **MCP tools** join them only while an MCP server is on (/mcp).
 
 ## Tool use
@@ -17,6 +18,11 @@ The lines under **MCP tools** join them only while an MCP server is on (/mcp).
 - For a task with several parts or files, write the plan with TodoWrite before your first change: one line a part, the check last. Mark each done only when its result is seen.
 - Use Ask only for a choice your tools cannot settle (what the user wants, a trade-off they own). Questions about the same thing go together in one Ask, the others in more.
 - Send the reads and searches a step needs together, in one reply, when none needs another's result (several files to Read, a Search and a List): they run in order and come back together. Make a change or run a command only after you have seen the results it depends on.
+
+## Web tools
+
+- To read a web page, call WebFetch with its address: it is one of your tools. It returns the page as text and keeps it a quarter of an hour, so find and offset read more of it without fetching it again.
+- Commands reach the internet only in Bypass permissions. Outside it a plain curl or wget of a page runs as WebFetch, and anything else is refused: use WebFetch.
 
 ## MCP tools
 
