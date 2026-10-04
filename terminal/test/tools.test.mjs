@@ -74,6 +74,31 @@ test('Read on a big model (big-model mode): a file up to 400 lines comes back wh
   expect((await execute('Read', { path: 'longer.js', offset: 1, limit: 5000 }, {}, { cwd: dir })).view.lines).toBe(400);
 });
 
+test('Read of few but long lines (an HTML report): not whole, and a part ends at the last whole line that fits', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-read-long-lines-'));
+  const line = (i) => `<path d="${String(i).repeat(1990)}"/>`.slice(0, 2000);
+  writeFileSync(join(dir, 'report.html'), Array.from({ length: 20 }, (_, i) => line(i + 1)).join('\n') + '\n');
+  writeFileSync(join(dir, 'one.html'), 'x'.repeat(50_000) + '\n');
+  const env = { cwd: dir, read: { whole: 400, part: 400, max: 1000 }, maxResultChars: 12_000 };
+  // 20 lines is "whole" by lines, but 40,000 characters is not: its outline comes first
+  expect((await execute('Read', { path: 'report.html' }, {}, env)).view.outline).toBe(true);
+  // a part: 5 lines of 2,000 fit in 12,000 (6 would not), and the next part starts at line 6
+  const first = await execute('Read', { path: 'report.html', offset: 1, limit: 100 }, {}, env);
+  expect(first.view.lines).toBe(5);
+  expect(first.text).toContain('report.html (lines 1-5 of 20; pass offset to read more):');
+  expect(first.text).not.toContain('(cut:');
+  const next = await execute('Read', { path: 'report.html', offset: 6 }, {}, env);
+  expect(next.text).toContain(`lines 6-10 of 20`);
+  expect(next.text).toContain(line(6));
+  // one line longer than the room: that line, cut
+  const one = await execute('Read', { path: 'one.html', offset: 1 }, {}, env);
+  expect(one.view.lines).toBe(1);
+  expect(one.text).toContain('(cut: 38000 more characters)');
+  // a small file comes back whole as before
+  writeFileSync(join(dir, 'small.html'), '<p>hi</p>\n');
+  expect((await execute('Read', { path: 'small.html' }, {}, env)).text).toBe('small.html (1 lines):\n<p>hi</p>');
+});
+
 test('paths outside the project folder are refused for changes', () => {
   expect(resolvePath(dir, '../x').inside).toBe(false);
   expect(prepare('Write', { path: '/etc/hosts', content: 'x' }, { cwd: dir }).error).toContain('outside the project folder');

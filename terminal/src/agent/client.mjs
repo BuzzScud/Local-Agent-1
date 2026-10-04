@@ -6,6 +6,10 @@
 // size), and the Claude API goes through Anthropic's own Messages API (claude.mjs).
 // A server that answers with an error throws one carrying its status: it is up,
 // it said no (the agent connects again only when the connection itself broke).
+// Bun's fetch gives up on a request that receives nothing for 6 minutes ("The operation
+// timed out.", before the first word or mid-reply); a busy service or a long conversation
+// read again takes longer, so the model's requests turn that off (timeout: false). Esc
+// still stops them (signal).
 import { thinkingKwargs, thinkingLevel, endpointOf, authHeaders, isOutOfMemory } from '../../../models/index.mjs';
 import { streamClaude } from './claude.mjs';
 import { openAIMessages, ollamaMessages } from './images.mjs';
@@ -112,7 +116,7 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
   let res;
   for (let tries = 0; ; tries++) {
     res = await fetch(`${url}/v1/chat/completions`, {
-      method: 'POST', signal, headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body),
+      method: 'POST', signal, timeout: false, headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body),
     });
     if (res.ok) break;
     const text = await res.text().catch(() => '');
@@ -216,7 +220,7 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
   drop();
   let res;
   for (let tries = 0; ; tries++) {
-    res = await fetch(`${url}/api/chat`, { method: 'POST', signal, headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body) });
+    res = await fetch(`${url}/api/chat`, { method: 'POST', signal, timeout: false, headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body) });
     if (res.ok) break;
     const text = await res.text().catch(() => '');
     const field = tries < 2 ? refusedField(res.status, text, { reasoning_effort: body.think, tools: body.tools }) : null;

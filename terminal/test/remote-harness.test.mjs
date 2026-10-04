@@ -279,3 +279,49 @@ test('a call written as text under another name gets the decision a real call ge
   expect([seen['bypass Bash'], seen['bypass Write'], seen['bypass Edit']].map((r) => r.asked.length)).toEqual([0, 0, 0]);
   expect([seen['bypass Bash'].made, seen['bypass Write'].wrote]).toEqual([true, true]);
 }, 120_000);
+
+// 4 Oct 2026: Qwen3.6 on the shared service, a 165k-token conversation, and Bun's fetch gave up after 6
+// minutes of nothing ("The operation timed out."): the message ended there as an error.
+test("the model's requests do not end at Bun's 6 minutes of nothing (timeout: false), on an Ollama service or llama-server's way", async () => {
+  const { streamChat } = await import('../src/agent/client.mjs');
+  const url = 'http://127.0.0.1:1';
+  const seen = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (to, init) => { seen.push({ to, timeout: init.timeout, signal: Boolean(init.signal) }); return new Response(to.endsWith('/api/chat') ? '{"done":true}\n' : 'data: [DONE]\n\n'); };
+  const stop = new AbortController();
+  try {
+    for await (const ev of streamChat({ url, messages: [{ role: 'user', content: 'hi' }], signal: stop.signal })) void ev;
+    setEndpoint(url, { ollama: true, model: 'qwen3.6:35b', family: 'qwen35moe' });
+    for await (const ev of streamChat({ url, messages: [{ role: 'user', content: 'hi' }], signal: stop.signal })) void ev;
+  } finally { globalThis.fetch = real; dropEndpoint(url); }
+  expect(seen.map((s) => [s.to.replace(url, ''), s.timeout, s.signal])).toEqual([['/v1/chat/completions', false, true], ['/api/chat', false, true]]);
+});
+
+test('a service that sent nothing back in time is asked once more; a second time, the message says so in words', async () => {
+  const fake = await startFakeServer([{ error: 'The operation timed out.' }, { text: 'It says alpha.' }], { delayMs: 0 });
+  try {
+    const a = agentOn(fake.url, remote, { way: 'model', hooks: [] });
+    const notes = [];
+    a.on('note', (n) => notes.push(n.text));
+    expect(await a.send('what is in a.txt?')).toBe('done');
+    expect(notes).toContain('The model service sent nothing back for minutes (busy, or reading a long conversation again); asking once more…');
+    expect(a.messages.at(-1).content).toBe('It says alpha.');
+  } finally { fake.close(); }
+  const stuck = await startFakeServer([{ error: 'The operation timed out.' }, { error: 'The operation timed out.' }], { delayMs: 0 });
+  try {
+    const a = agentOn(stuck.url, remote, { way: 'model', hooks: [] });
+    const notes = [];
+    a.on('note', (n) => notes.push(n));
+    expect(await a.send('what is in a.txt?')).toBe('error');
+    expect(stuck.requests.filter((r) => r.stream).length).toBe(2);
+    expect(notes.some((n) => n.tone === 'error' && n.text.startsWith('The model service sent nothing back in time, twice'))).toBe(true);
+  } finally { stuck.close(); }
+});
+
+test("one tool result keeps at most RESULT_MAX characters, however big the service's context", async () => {
+  const { RESULT_MAX } = await import('../src/agent/agent.mjs');
+  const at = (ctx) => new Agent({ url: 'http://127.0.0.1:1', model: remote, cwd: proj, system: 'x', ctx, memory: false }).maxResultChars;
+  expect(at(262_144)).toBe(RESULT_MAX); // was 141,557: one Read of a report page brought 142,000 characters
+  expect(at(32_768)).toBe(Math.floor(32_768 * 0.15 * 3.6)); // smaller contexts as before
+  expect(at(8_192)).toBe(4_423);
+});

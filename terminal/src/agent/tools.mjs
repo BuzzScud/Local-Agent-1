@@ -815,7 +815,9 @@ export async function execute(name, args, prepared, env) {
       const total = full.split('\n').length;
       const lim = env.read ?? {};
       const wholeMax = lim.whole ?? WHOLE_MAX;
-      const whole = total <= wholeMax;
+      // Few lines but long ones (an HTML report's charts: 322 lines, 43,000 characters) are not a small
+      // file: whole, they filled the result's room and an offset asked for was not kept (4 Oct 2026).
+      const whole = total <= wholeMax && full.length <= max;
       // find: the lines around a word or name, so a long file is never walked
       // part by part. (On a 27,000-line page the model never once passed an
       // offset; it read outlines again and again.)
@@ -864,9 +866,14 @@ export async function execute(name, args, prepared, env) {
       // The model gets the plain text (small models copy line numbers into
       // their edits); the screen keeps the numbered view for ctrl+o.
       const from = whole ? 1 : args.offset ?? 1;
-      const plain = hideBuilt(r.text).split('\n').slice(from - 1, from - 1 + r.shown).join('\n');
-      const head = whole || r.shown >= r.lineCount ? `${args.path} (${r.lineCount} lines):` : `${args.path} (lines ${from}-${from + r.shown - 1} of ${r.lineCount}; pass offset to read more):`;
-      return { text: `${note}${head}\n${cut(plain, max)}`, view: { kind: 'read', lines: r.shown, total: r.lineCount, content: hideBuilt(r.numbered) } };
+      // A part ends at the last whole line that fits the result's room (one line at least, cut): cut
+      // in the middle, the next part began after the lines cut off, and they were never read.
+      const lines = hideBuilt(r.text).split('\n').slice(from - 1, from - 1 + r.shown);
+      let fit = 0;
+      for (let used = 0; fit < lines.length && used + lines[fit].length + 1 <= max; fit++) used += lines[fit].length + 1;
+      const shown = r.shown ? Math.max(1, Math.min(fit, r.shown)) : 0;
+      const head = whole || shown >= r.lineCount ? `${args.path} (${r.lineCount} lines):` : `${args.path} (lines ${from}-${from + shown - 1} of ${r.lineCount}; pass offset to read more):`;
+      return { text: `${note}${head}\n${cut(lines.slice(0, shown).join('\n'), max)}`, view: { kind: 'read', lines: shown, total: r.lineCount, content: hideBuilt(r.numbered).split('\n').slice(0, shown).join('\n') } };
     }
     case 'List': {
       const lp = resolvePath(env.cwd, args.path ?? '.');
