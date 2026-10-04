@@ -278,15 +278,15 @@ test('the form opens on This Mac with only Run on and Switch; → walks the serv
   expect(showValue(f, 'source')).toBe('Claude API');
   expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Connect']); // Connect · Save only: one row
   expect([showValue(f, 'model'), showValue(f, 'key')]).toEqual(['Opus 5.5', 'none']);
-  expect(rowNote(f, 'more')).toBe('address, context, memory sent');
+  expect(rowNote(f, 'more')).toBe('address, context, memory sent, clean up at');
   f = moveRow(f, 'more', 1);
-  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Address', 'Context', 'Memory sent', 'Connect']);
+  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Address', 'Context', 'Memory sent', 'Clean up at', 'Connect']);
   expect(showValue(f, 'address')).toBe('api.anthropic.com');
   f = moveRow(f, 'source', 1);
   expect(showValue(f, 'source')).toBe('My other computer');
   expect(f.more).toBe(false); // another service: More folded again
   expect(labels(f)).toEqual(['Run on', 'Address', 'Reach by', 'API key', 'More', 'Connect']);
-  expect(rowNote(f, 'more')).toBe('port, server, model, context, memory sent');
+  expect(rowNote(f, 'more')).toBe('port, server, model, context, memory sent, clean up at');
   f = moveRow(moveRow(f, 'connect', 1), 'connect', 1);
   expect(showValue(f, 'connect')).toBe('SSH tunnel');
   expect(rowNote(f, 'address')).toBe('user@host, or a name from ~/.ssh/config');

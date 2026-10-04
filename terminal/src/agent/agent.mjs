@@ -27,7 +27,7 @@ import { findProjects, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
 import { basename, join, dirname, relative } from 'node:path';
 import { runFlows, runKind, isSmallTalk, routeByRules, isCodeProject } from '../flows/index.mjs';
-import { wayOf, hooksOn, wayPrompt } from './way.mjs';
+import { wayOf, hooksOn, wayPrompt, OPT_IN_HOOKS } from './way.mjs';
 import { SeenFiles, changedNote, changesText } from './seen.mjs';
 import { toolInput, STOP_BACKS } from './user-hooks.mjs';
 import { clarify } from '../flows/clarify.mjs';
@@ -42,6 +42,7 @@ import { runCommand } from '../tools/run.mjs';
 import { Jobs, took } from '../tools/jobs.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
 import { autoCheck } from './auto-check.mjs';
+import { driftCheck, recentSteps, nudgeText, DRIFT_EVERY, DRIFT_NUDGES } from './drift.mjs';
 import { screenAccess } from '../tools/screen.mjs';
 import { isMemoryRequest } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
@@ -65,6 +66,11 @@ const MAX_STEPS = 40;
 // Its plan (TodoWrite) goes back with a step's result after this many steps without it, while steps
 // are left: in a long message the list it wrote at the start is far up the conversation by then.
 const PLAN_EVERY = 5;
+// Your request comes back the same way every REQUEST_EVERY steps on a model whose memory is this big or
+// bigger (a model on a service: 256k), where by then much of the conversation sits between it and the
+// newest step. A smaller memory is cleaned up long before that, and starts again from the request.
+const REQUEST_EVERY = 10;
+const BIG_MEMORY = 65_536;
 const newConversation = () => randomUUID().slice(0, 8);
 // How many times what the layout check finds goes back to the model in one
 // message: the first look, and once more when its fix left something (30 Sep:
@@ -554,6 +560,10 @@ const stepText = (t) => String(t?.text ?? t?.content ?? '').replace(/\s+/g, ' ')
 function planList(todos) {
   return (todos ?? []).filter(stepText).map((t) => `- [${t.status === 'done' ? 'done' : t.status === 'in_progress' ? 'doing now' : 'to do'}] ${stepText(t).slice(0, 160)}`).join('\n');
 }
+export function requestReminder(request) {
+  const words = String(request ?? '').replace(/\s+/g, ' ').trim();
+  return words ? `(What the user asked, which this message is for: "${words.length > 400 ? `${words.slice(0, 399)}…` : words}")` : '';
+}
 export function planReminder(todos) {
   const items = (todos ?? []).filter(stepText);
   const left = items.filter((t) => t.status !== 'done');
@@ -772,7 +782,7 @@ export class Agent extends EventEmitter {
     return { search: w.search && w.search !== 'off' ? w.search : null, fetch: w.fetch !== false };
   }
   // Whether one of the app's checks runs (way.mjs HOOKS): always on App, when switched on on Model.
-  hook(id) { return this.way !== 'model' || this.hooks.has(id); }
+  hook(id) { return OPT_IN_HOOKS.has(id) ? this.hooks.has(id) : this.way !== 'model' || this.hooks.has(id); }
   // /subagents (helper-models.mjs): the helper model for a job on an Ollama service, as
   // the endpoint override a call takes, or undefined (the job is off, its model is the
   // main one, or this is not an Ollama service). helperJobs is set by the app.
@@ -795,6 +805,11 @@ export class Agent extends EventEmitter {
   // /effort's Look first (look.mjs): 'auto' follows Effort, 'off', or a number of seconds. The app
   // and coding -p set it from /effort (auto by default); a bare Agent (tests, the practice runs) does not look first.
   look = 'off';
+  // /remote's Clean up at (settings.json "remoteCleanAt", 4 Oct 2026): on a model on another machine the
+  // memory is cleaned up (notes, then a fresh start from them) as if it held only this many tokens. The
+  // model keeps its whole memory, so one big file still fits. 0: its whole memory, as before.
+  workRoom = 0;
+  get cleanCap() { return this.workRoom > 0 && this.model?.remote ? Math.min(this.ctx, this.workRoom) : this.ctx; }
   get lookSecsNow() { return lookSecs(this.look, { thinking: this.thinking, effort: this.effort }); }
   rulesRoom = 0;
   upFront = 0;
@@ -1131,6 +1146,47 @@ export class Agent extends EventEmitter {
     const line = planReminder(this.todos);
     if (line) t.planAt = t.steps ?? 0;
     return line;
+  }
+  // Your request (requestReminder) on a model with a big memory, REQUEST_EVERY steps after it was last in sight.
+  requestDue() {
+    const t = this.turn;
+    if (!t || this.ctx < BIG_MEMORY || !String(t.request ?? '').trim()) return '';
+    if ((t.steps ?? 0) - (t.requestAt ?? 0) < REQUEST_EVERY) return '';
+    t.requestAt = t.steps ?? 0;
+    return requestReminder(t.request);
+  }
+  // Who checks that a model on another machine stays on task (drift.mjs): on an Ollama service its Side
+  // jobs helper, else the main model; on the owner's other Mac (coding serve) the main model on the
+  // server's second lane, as Auto's check does, so the conversation's own lane is not read again.
+  driftWho() {
+    if (!this.model?.remote) return null;
+    const ep = endpointOf(this.url);
+    if (ep?.ollama) return { use: this.sideUse() };
+    if (ep?.kind === 'llama') return this.slots?.side !== undefined ? { slot: this.slots.side } : { none: 'its server has one lane (coding serve --slots 2 gives it a second)' };
+    return null;
+  }
+  // Stays on task (/hooks, off until you switch it on): every DRIFT_EVERY steps, the check; off task, the
+  // line that brings it back (DRIFT_NUDGES a message at most). Answers that line, or ''.
+  async driftDue(signal) {
+    const t = this.turn;
+    if (!t || this.isHelper || !this.hook('drift') || (t.nudges ?? 0) >= DRIFT_NUDGES) return '';
+    if ((t.steps ?? 0) - (t.driftAt ?? 0) < DRIFT_EVERY) return '';
+    t.driftAt = t.steps ?? 0;
+    const who = this.driftWho();
+    if (!who) return '';
+    if (who.none) {
+      if (!t.driftNone) { t.driftNone = true; this.emit('note', { text: `Stays on task: not checked, ${who.none}.`, tone: 'dim' }); }
+      return '';
+    }
+    const { steps, said } = recentSteps(this.messages);
+    this.emit('busy', { task: 'checking it stays on task' });
+    const r = await driftCheck({ url: this.url, model: this.model, slot: who.slot, use: who.use, request: t.request, plan: t.planAt != null ? planList(this.todos) : '', steps, said, signal });
+    const secs = `${(r.ms / 1000).toFixed(1)} s`;
+    if (r.failed) { this.emit('note', { text: `Stays on task: not checked (${r.reason}).`, tone: 'dim' }); return ''; }
+    if (r.on) { this.emit('note', { text: `Stays on task: on track (${secs}).`, tone: 'dim' }); return ''; }
+    t.nudges = (t.nudges ?? 0) + 1;
+    this.emit('note', { text: `Stays on task: ${r.reason}. Nudged it back (${t.nudges} of ${DRIFT_NUDGES}, ${secs}).`, tone: 'warn' });
+    return nudgeText(r.reason);
   }
   setMode(mode) { this.mode = mode; this.emit('mode', mode); }
   // What you saved with /permissions for the folder Agentic Coder works in now:
@@ -2043,12 +2099,18 @@ export class Agent extends EventEmitter {
         }
         if (stopped) { reason = stopped; break; }
         if (signal?.aborted) { reason = 'interrupted'; break; }
-        // Its plan, with this step's result, when it has not seen it for a while (on the end, so the
+        // Its plan and your request, with this step's result, when it has not seen them for a while,
+        // and the line that brings it back when the check says it moved off (on the end, so the
         // conversation before it is not read again).
         const plan = this.planDue(calls);
-        if (plan && this.messages.at(-1)?.role === 'tool') {
-          this.messages.at(-1).content += `\n\n${plan}`;
-          this.emit('note', { text: `Reminded it of its plan: ${plan.match(/\d+ of \d+ steps done/)[0]}`, tone: 'dim' });
+        const asked = this.requestDue();
+        const nudge = await this.driftDue(signal);
+        if (signal?.aborted) { reason = 'interrupted'; break; }
+        const extra = [plan, asked, nudge].filter(Boolean);
+        if (extra.length && this.messages.at(-1)?.role === 'tool') {
+          this.messages.at(-1).content += `\n\n${extra.join('\n')}`;
+          if (plan) this.emit('note', { text: `Reminded it of its plan: ${plan.match(/\d+ of \d+ steps done/)[0]}`, tone: 'dim' });
+          if (asked) this.emit('note', { text: 'Reminded it of your request', tone: 'dim' });
         }
         // A page saved for this request: the turn stops here, the page opens, and you are asked
         // before anything checks it (askPage). Once a message; after that the end of it asks.
@@ -3997,17 +4059,19 @@ export class Agent extends EventEmitter {
     // tight memory the thinking shrinks first, and nothing is cut while it fits.
     let est = this.estNow();
     const room = replyRoom(this.thinking, this.thinkRoom(est));
-    if (est + room < this.ctx * this.trimAt) return;
+    // Where the cleanup starts: the model's whole memory, or /remote's Clean up at (cleanCap).
+    const cap = this.cleanCap;
+    if (est + room < cap * this.trimAt) return;
     // Notes and a summary both start over from what a restart keeps. When that
     // alone leaves no room for a reply, they free nothing and come back after
     // the very next step: at 16k a 7,300-token start wrote notes four times in
     // 18 minutes and changed nothing (countdown card, 1 Oct). Then only
     // trimming old output can help.
     const kept = this.keptTokens();
-    const restartFits = kept + NOTES_ROOM + room < this.ctx * this.trimAt;
+    const restartFits = kept + NOTES_ROOM + room < cap * this.trimAt;
     if (!restartFits && this.turn && !this.turn.toldTight) {
       this.turn.toldTight = true;
-      this.emit('note', { text: `The ${Math.round(this.ctx / 1024)}k memory is nearly all taken by this request's start (about ${kept.toLocaleString('en-US')} tokens: the instructions, the request and what came with it), so notes would free nothing; carrying on without them. A bigger memory in /effort gives it room.`, tone: 'warn' });
+      this.emit('note', { text: `The ${Math.round(cap / 1024)}k memory is nearly all taken by this request's start (about ${kept.toLocaleString('en-US')} tokens: the instructions, the request and what came with it), so notes would free nothing; carrying on without them. ${cap < this.ctx ? 'A later Clean up at in /remote’s More' : 'A bigger memory in /effort'} gives it room.`, tone: 'warn' });
     }
     // Notes first. Emptying old output makes the model read again everything
     // after it (measured: 186 to 261 s each time, up to half of a long try).
@@ -4029,7 +4093,7 @@ export class Agent extends EventEmitter {
     const tools = this.messages.map((m, i) => (m.role === 'tool' ? i : -1)).filter((i) => i > 0);
     const keep = new Set(tools.slice(-2)); // the two newest outputs stay
     for (const i of tools) {
-      if (est - freed < this.ctx * TRIM_TO) break;
+      if (est - freed < cap * TRIM_TO) break;
       const m = this.messages[i];
       if (keep.has(i) || m.keep || m.content.length <= 300) continue;
       freed += tokensOf(m.content);
@@ -4038,7 +4102,7 @@ export class Agent extends EventEmitter {
     est -= freed;
     this.ctxUsed = Math.max(0, this.ctxUsed - freed);
     if (freed) this.emit('note', { text: `Trimmed old tool output to save memory (about ${freed.toLocaleString()} tokens).`, tone: 'dim' });
-    if (restartFits && est + room >= this.ctx * this.fullAt) await this.compact(signal);
+    if (restartFits && est + room >= cap * this.fullAt) await this.compact(signal);
   }
 
   // Its notes, written by the model in the conversation it already holds
@@ -4131,6 +4195,8 @@ export class Agent extends EventEmitter {
     const steps = this.turn?.planAt != null ? planList(this.todos) : '';
     const plan = steps ? `\n\nMy plan, as I last wrote it with TodoWrite:\n${steps}` : '';
     if (plan) this.turn.planAt = this.turn.steps ?? 0;
+    // The request is at the top again: its reminder counts from here.
+    if (this.turn) this.turn.requestAt = this.turn.steps ?? 0;
     // The notes that go with the request (the steps for its kind of bug, a
     // check the fix path made) follow the request into the new conversation.
     for (const x of [this.turn?.bug, this.turn?.skill, this.turn?.look, this.turn?.math, this.turn?.design, this.turn?.carried].filter(Boolean)) {

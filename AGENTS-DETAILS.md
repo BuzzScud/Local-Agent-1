@@ -377,6 +377,36 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   kept and put back, the app with its board in a second pseudo-terminal). `/loop` and `/loops` are in the / menu
   where the window has room (`WHEN_ROOM`, after /jumptomac).
 
+## Staying on task on a model on another machine (4 Oct 2026)
+
+- **What and why.** The owner asked how to keep a model on task in long runs on /remote, where a model holds up to
+  256k and the memory was cleaned up only at 78% of it (about 200k), so the request could sit far behind the newest
+  step. No saved conversation on this Mac had come near that, so nothing here is measured yet. Their picks: all three
+  parts, a nudge that lets the run go on, the other Mac too, and no before/after test: the cleanup and the check are
+  built off, for them to switch on and try.
+- **Your request comes back** (`requestDue`, `requestReminder` in agent.mjs; on, as the plan reminder is): on a model
+  with 64k of memory or more, every 10 steps since it was last in sight, one line with the request goes on the end of
+  that step's result (on the end, so nothing before it is read again), and the screen says "Reminded it of your
+  request". A restart from notes puts the request at the top again, and the count starts over.
+- **Clean up at** (/remote's More, one choice for every service like Memory sent; settings.json `remoteCleanAt`: 0 ·
+  32768 · 65536 · 131072; `agent.workRoom`, `cleanCap`): on a model on another machine, fitContext's trim, notes and
+  summary lines are worked out against that size instead of the whole memory. The model keeps its whole memory, so
+  one big file still fits. 0 (the default, "when nearly full") is the old behaviour; a model on this Mac ignores it.
+  The window sets it on the agent and again when the form saves; `coding -p` (and so every loop run) passes it.
+- **Stays on task** (`terminal/src/agent/drift.mjs`, the /hooks check `drift`, in `OPT_IN_HOOKS`: off until switched
+  on, on App too): every 10 steps one short call (20 s at most, else skipped with a line) is asked "on" or "off" with
+  the request, the plan, the last 10 steps in words (`recentSteps`: "changing README.md", "running npm test") and the
+  model's last words, never a tool's output, so a file's text cannot steer it. Off: the model gets "(A check of your
+  last steps: … Go back to what the user asked; finish that first.)" on the end of that step's result, the screen a
+  warn line, and the run goes on; twice a message at most (`DRIFT_NUDGES`), then no more checks. Who checks
+  (`driftWho`): on an Ollama service its Side jobs helper (/subagents), else the main model; on the other Mac
+  (`coding serve`, kind llama) the main model on the server's second lane (`slots.side`, as Auto's check), and with a
+  single lane nobody (one line says `coding serve --slots 2`); the Claude API, other services and this Mac: none.
+  `coding -p` has no /subagents jobs, so on an Ollama service its runs check with the main model.
+- **Tests**: `terminal/test/stay-on-task.test.mjs` (the reminder on 256k and not on 32k, the cleanup point on a
+  remote and not here, the form row, the switch on both ways and in /hooks, what the check sees, two nudges on the
+  second lane then none, on track, one lane, the Ollama helper then the main model on the Ollama stand-in).
+
 ## MCP servers (3 Oct 2026)
 
 - **What it is.** `/mcp` gives the model tools from outside the app (the Model Context Protocol): a program on this

@@ -460,6 +460,8 @@ if (opts.print) {
       helpers: helpersFrom(settings),
       // Who decides (--way, else AGENTIC_WAY, else /effort's row in limits) and the hooks /hooks left on.
       way: opts.way, hooks: hooksFrom(settings),
+      // /remote's Clean up at: where a remote model's memory is cleaned up (0: when nearly full).
+      workRoom: Number(settings.remoteCleanAt) || 0,
       // --agents: the request goes through /agents' six stages (agents-run.mjs) instead of one message.
       agents: !!opts.agents,
       // The web as /web left it: a search service and reading pages (each asks, or --yes allows).

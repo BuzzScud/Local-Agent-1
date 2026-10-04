@@ -1436,7 +1436,7 @@ function HooksPicker({ app }) {
         const on = i === Math.min(pk.index, rows.length - 1);
         const mark = <Text color={C.accent} bold>{on ? '❯ ' : '  '}</Text>;
         const head = i === 0 ? <Text color={C.dim} wrap="truncate-end">Your hooks · ~/.agentic-coder/hooks.json, in Claude Code's layout{pk.off ? ' · off in this window (AGENTIC_USER_HOOKS=off)' : ''}</Text>
-          : r.check && r.n === 1 ? <><Text> </Text><Text color={C.dim} wrap="truncate-end">The app's checks · on Model the ones on run; on App all of them</Text></> : null;
+          : r.check && r.n === 1 ? <><Text> </Text><Text color={C.dim} wrap="truncate-end">The app's checks · on Model the ones on run; on App all of them but Stays on task</Text></> : null;
         let line;
         if (r.id === 'add') line = <Text>{mark}<Text color={on ? C.accent : C.dim} bold={on}>+ Add a hook</Text></Text>;
         else if (r.id === 'project') line = <Text wrap="truncate-end">{mark}<Text color={on ? C.accent : C.warn} bold={on}>{hooksProjectLine(pk.project)}</Text></Text>;

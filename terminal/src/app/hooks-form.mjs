@@ -7,7 +7,7 @@
 // This file is the picker's state and words; user-hooks.mjs keeps and runs the hooks, and App.jsx
 // does the saving and the keys.
 import { EVENTS, eventOf, runHook, readOutcome, matches, HOOK_SECS } from '../agent/user-hooks.mjs';
-import { HOOKS } from '../agent/way.mjs';
+import { HOOKS, OPT_IN_HOOKS } from '../agent/way.mjs';
 
 const TIME_STEPS = [10, 30, 60, 120, 300, 600];
 const DEFAULTS = { event: 'PreToolUse', matcher: '', command: '', timeout: HOOK_SECS };
@@ -43,8 +43,8 @@ export function projectLine(p) {
   if (p.answer === 'never') return `This project's own hooks (.agentic/hooks.json): ${n}, never run · enter to look again`;
   return `This project brings its own hooks (.agentic/hooks.json): ${n}, not run${p.changed ? ' (the file changed since your yes)' : ''} · enter to look`;
 }
-// A check's on/off: on App every check runs, as it always has.
-export const checkOn = (pk, c) => pk.way === 'app' || pk.checks.has(c.id);
+// A check's on/off: on App every check runs, as it always has, but one you switch on yourself (OPT_IN_HOOKS).
+export const checkOn = (pk, c) => pk.checks.has(c.id) || (pk.way === 'app' && !OPT_IN_HOOKS.has(c.id));
 
 // The window of rows the list shows in room lines: { start, shown, above, below }.
 export function rowWindow(rows, index, room) {
