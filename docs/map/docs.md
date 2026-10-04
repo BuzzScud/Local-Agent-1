@@ -3,9 +3,9 @@
 Every folder under docs/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right.
 
 - docs/ — Every page about Agentic Coder (diagrams, reports, test results, design rounds, Gemma pages) and this code map ✓
-  - docs/README.md (173) — Main index listing all project documentation pages by category.
-- docs/design rounds/ — Design drafts for agentic coder features and interfaces
-  - also: agentic-coder-agents-md-before-after-2026-09-30.html, agentic-coder-arena-4-designs-2026-09-30.html, agentic-coder-arena-wizard-2-designs-2026-10-01.html, agentic-coder-conversation-2-designs-2026-09-29.html, agentic-coder-docs-merge-before-after-2026-09-30.html, agentic-coder-flow-tab-2-designs-20… (43 files)
+  - docs/README.md (176) — Agentic Coder docs Every diagram, preview, report and test page about Agentic Coder, newest first, by group: `diagrams/`, `reports/`, `tests/`, `design rounds/…
+- docs/design rounds/ — 44 files
+  - also: agentic-coder-agents-md-before-after-2026-09-30.html, agentic-coder-arena-4-designs-2026-09-30.html, agentic-coder-arena-wizard-2-designs-2026-10-01.html, agentic-coder-conversation-2-designs-2026-09-29.html, agentic-coder-docs-merge-before-after-2026-09-30.html, agentic-coder-flow-tab-2-designs-20… (44 files)
 - docs/diagrams/ — Folder holding diagrams for the agentic coder system and embedding models
   - also: agentic-coder-flow-diagram-2026-09-30.html, agentic-coder-question-walkthrough-2026-09-30-v2.html, agentic-coder-structure-2026-10-01.html, embedder-retriever-reranker-explained-v2.html
 - docs/gemma-docs/ — Gemma documentation files covering plans, comparisons, and setup details ✓
@@ -19,8 +19,8 @@ Every folder under docs/ with a plain line, its main files with a line each (lin
   - also: agentic-coder-code-search-plan-2026-09-29.html, agentic-coder-finish-the-rename-plan-2026-09-28.html, agentic-coder-move-to-bay2-plan-2026-09-29.html
 - docs/reports/ — Directory for project reports and documentation
   - also: agentic-coder-mac-memory-built-2026-09-28.html, where-qwen-lands-2026-09-30-v5.html
-- docs/tests/ — Folder holding test logs and records for the agentic coder system
-  - also: agentic-coder-auto-screen-check-qwen-2026-10-01-2326.html, agentic-coder-auto-screen-check-qwen-2026-10-01-2329.html, agentic-coder-auto-screen-check-qwen-2026-10-02-0241.html, agentic-coder-auto-screen-check-qwen-2026-10-02-0246.html, agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01… (40 files)
+- docs/tests/ — 42 files
+  - also: agentic-coder-auto-screen-check-qwen-2026-10-01-2326.html, agentic-coder-auto-screen-check-qwen-2026-10-01-2329.html, agentic-coder-auto-screen-check-qwen-2026-10-02-0241.html, agentic-coder-auto-screen-check-qwen-2026-10-02-0246.html, agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01… (42 files)
 - docs/tools/ — Scripts to manage documentation pages and their organization.
   - docs/tools/sync-docs.mjs (83) — Updates the README index and checks for private files before commit.
-  - docs/tools/to-docs.mjs (81) — Defines page groups and paths for saving finished Agentic Coder reports.
+  - docs/tools/to-docs.mjs (81) — Every finished Agentic Coder page (report, preview, diagram, test page) is saved into this repo's docs/ folder, in one of its page groups: the pages' one home …
