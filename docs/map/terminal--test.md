@@ -1,14 +1,14 @@
-# terminal/test/ — Tests for the terminal application's core features and agent logic.
+# terminal/test/ — 3 folders: fixture-fix/, fixture-page/, fixture-rename/; 166 files
 
 Every folder under terminal/test/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right.
 
-- terminal/test/ — Tests for the terminal application's core features and agent logic.
+- terminal/test/ — 3 folders: fixture-fix/, fixture-page/, fixture-rename/; 166 files
   - terminal/test/agents.test.mjs (134) — Tests subagent helpers that delegate work to other agents with fresh conversations.
   - terminal/test/app-remote.test.mjs (650) — Tests the remote model connection form and key management in the pseudo-terminal.
-  - terminal/test/app-settings.test.mjs (170) — Tests the settings menu commands and coding hub tab completion logic.
-  - terminal/test/app-test-run.test.mjs (84) — Tests running tests from the hub tab and managing window memory during runs.
+  - terminal/test/app-settings.test.mjs (172) — /settings: the commands kept out of the / menu, in one grouped menu (the real app in a pseudo-terminal, see app.test.mjs), and `coding hub [tab]`.
+  - terminal/test/app-test-run.test.mjs (84) — End-to-end, the real app in a pseudo-terminal (see app.test.mjs).
   - terminal/test/app.test.mjs (162) — Tests end-to-end terminal interaction, screen turns, and menu navigation with a fake model.
-  - also: agent-files.test.mjs, agent.test.mjs, agents-guards.test.mjs, agents-headless.test.mjs, agents-md.test.mjs, agents-run.test.mjs, agents-tree.test.mjs, app-agents-run.test.mjs, app-agents.test.mjs, app-battle.test.mjs, app-btw-remote.test.mjs, app-btw.test.mjs, app-clear.test.mjs, app-effort.test.mj… (157 files)
+  - also: agent-files.test.mjs, agent.test.mjs, agents-guards.test.mjs, agents-headless.test.mjs, agents-md.test.mjs, agents-run.test.mjs, agents-tree.test.mjs, app-agents-run.test.mjs, app-agents.test.mjs, app-battle.test.mjs, app-btw-remote.test.mjs, app-btw.test.mjs, app-clear.test.mjs, app-effort.test.mj… (161 files)
 - terminal/test/fixture-fix/ — Folder with small statistics helpers for trade prices.
   - terminal/test/fixture-fix/stats.mjs (16) — Exports mean, median, and range functions for calculating price statistics.
   - terminal/test/fixture-fix/stats.test.mjs (9) — Tests the mean, median, and range helper functions.
