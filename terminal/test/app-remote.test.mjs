@@ -42,7 +42,7 @@ test('/remote: Run on My other computer, its rows filled in (a pasted key); a Co
     ...right(2), { sleep: 100 }, { snapshot: 'computer' }, // Run on: My other computer
     ...down(1), { type: '127.0.0.1' }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address (enter: on to Reach by)
     ...down(1), { key: `\x1b[200~test-wrong-0123456789\n\x1b[201~` }, { sleep: 150 }, { snapshot: 'typingKey' }, { key: 'enter' }, { sleep: 80 }, // API key, pasted (enter: on to More)
-    { key: 'enter' }, { sleep: 100 }, // More opens
+    ...right(1), { sleep: 100 }, // More opens (→: with an address, enter connects)
     ...down(1), { type: String(remote.port) }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, { snapshot: 'more' }, // Port
     ...down(4), { key: 'enter' }, { wait: 'it did not work' }, { sleep: 150 }, { snapshot: 'failed' }, // Connect (past Memory sent): the wrong key
     { fn: () => { afterFail = existsSync(join(base, 'home', 'settings.json')) ? settingsOf(base).remote ?? null : null; } },
@@ -60,14 +60,15 @@ test('/remote: Run on My other computer, its rows filled in (a pasted key); a Co
   for (const row of ['Address', 'API key', 'Connect', 'Save only']) expect(hasRow(form, row)).toBe(false); // This Mac has nothing to fill in
   const computer = r.snapshots.computer;
   expect(computer).toMatch(/Run on\s+◀ My other computer\s+▶/);
-  for (const row of ['Address', 'Reach by', 'API key', 'More', 'Connect', 'Save only']) expect(hasRow(computer, row)).toBe(true);
+  for (const row of ['Address', 'Reach by', 'API key', 'More']) expect(hasRow(computer, row)).toBe(true);
+  expect(computer).toMatch(/│ [ ❯]\s+Connect\s+Save only\s/); // one row: Connect · Save only
   for (const row of ['Port', 'Server', 'Context']) expect(hasRow(computer, row)).toBe(false); // behind More
   expect(computer).not.toContain('Not ready'); // nothing tried yet
   expect(r.snapshots.typingKey).toContain(`${'•'.repeat('test-wrong-0123456789'.length)}`);
   expect(r.snapshots.typingKey).not.toContain('test-wrong-0123456789');
   expect(r.snapshots.more).toMatch(new RegExp(`Port\\s+${remote.port}`));
   expect(r.snapshots.more).toMatch(/Server\s+◀ llama\.cpp\s+▶/);
-  expect(r.snapshots.failed).toMatch(/Connect\s+✗ it did not work/);
+  expect(r.snapshots.failed).toMatch(/Connect\s+Save only\s+✗ it did not work/);
   expect(r.snapshots.failed).toContain('the API key was not accepted');
   expect(afterFail).toBe(null); // nothing saved by a Connect that did not work
   expect(r.snapshots.on).toContain(`On the remote: Gemma 4 12B QAT · 127.0.0.1:${remote.port} · llama.cpp`);
@@ -195,7 +196,7 @@ test('/remote with Run on: Claude API: a key, a model from the list, its address
     ...right(1), { sleep: 100 }, { snapshot: 'claude' }, // Run on: Claude API
     ...down(1), { key: `\x1b[200~${claude.key}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 80 }, // API key (enter: on to Model)
     ...right(1), { sleep: 100 }, { snapshot: 'model' }, // Model: Opus 5.5 → Sonnet 5.5
-    ...down(1), { key: 'enter' }, { sleep: 100 }, // More opens
+    ...down(1), ...right(1), { sleep: 100 }, // More opens (→: with a key, enter connects)
     ...down(1), { type: claude.url }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address: the stand-in (enter: on to Context)
     ...down(2), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect (past Memory sent)
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.' }, { sleep: 200 },
@@ -248,7 +249,7 @@ test('/remote claude with no key yet asks only for it, then Connect; the compute
   await claude.close();
   expect(r.snapshots.asked).toMatch(/Run on\s+◀ Claude API\s+▶/);
   expect(r.snapshots.asked).toMatch(/API key\s+█?\s*0 characters/); // typing in the key row straight away
-  expect(r.snapshots.ready).toMatch(/❯ Connect\s+enter to connect/);
+  expect(r.snapshots.ready).toMatch(/❯\s+Connect\s+Save only\s+checks the key and asks for one word/);
   expect(r.snapshots.model).toMatch(/Claude API · Opus 5\.5\s+Anthropic · billed to your key\s+✔ in use/);
   expect(r.snapshots.model).toMatch(/My other computer · 127\.0\.0\.1:\d+\s+llama\.cpp · another computer/);
   // each key under its own name: the computer's where it was, Claude's under "claude"
@@ -665,7 +666,7 @@ test('Connect on a service that is slow to answer: the line says what was found,
   expect(r.snapshots.service).toContain('slow-model');
   const line = r.snapshots.waiting.split('\n').find((l) => l.includes('esc stops')) ?? '';
   expect(line).toMatch(/✔ reached in \d+ ms · ✔ model slow-model.* · asking it for one word… [2-5] s · esc stops/);
-  expect(r.snapshots.waiting).toMatch(/Connect\s+checking…/);
+  expect(r.snapshots.waiting).toMatch(/Connect\s+Save only\s+checking…/);
   expect(dropped).toBe(true);
   expect(r.code).toBe(0);
 }, T);

@@ -276,23 +276,23 @@ test('the form opens on This Mac with only Run on and Switch; → walks the serv
   expect(moveRow(f, 'source', -1)).toBe(f); // stops at the end
   f = moveRow(f, 'source', 1);
   expect(showValue(f, 'source')).toBe('Claude API');
-  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Connect', 'Save only']);
+  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Connect']); // Connect · Save only: one row
   expect([showValue(f, 'model'), showValue(f, 'key')]).toEqual(['Opus 5.5', 'none']);
   expect(rowNote(f, 'more')).toBe('address, context, memory sent');
   f = moveRow(f, 'more', 1);
-  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Address', 'Context', 'Memory sent', 'Connect', 'Save only']);
+  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Address', 'Context', 'Memory sent', 'Connect']);
   expect(showValue(f, 'address')).toBe('api.anthropic.com');
   f = moveRow(f, 'source', 1);
   expect(showValue(f, 'source')).toBe('My other computer');
   expect(f.more).toBe(false); // another service: More folded again
-  expect(labels(f)).toEqual(['Run on', 'Address', 'Reach by', 'API key', 'More', 'Connect', 'Save only']);
+  expect(labels(f)).toEqual(['Run on', 'Address', 'Reach by', 'API key', 'More', 'Connect']);
   expect(rowNote(f, 'more')).toBe('port, server, model, context, memory sent');
   f = moveRow(moveRow(f, 'connect', 1), 'connect', 1);
   expect(showValue(f, 'connect')).toBe('SSH tunnel');
   expect(rowNote(f, 'address')).toBe('user@host, or a name from ~/.ssh/config');
   f = moveRow(f, 'source', 1);
   expect(showValue(f, 'source')).toBe('Another service');
-  expect(labels(f)).toEqual(['Run on', 'Address', 'API key', 'Model', 'More', 'Connect', 'Save only']);
+  expect(labels(f)).toEqual(['Run on', 'Address', 'API key', 'Model', 'More', 'Connect']);
   // nothing typed yet: no "Not ready" until a Connect was tried
   expect(formWarning(f)).toBe(null);
   expect(formWarning({ ...f, tried: true })).toEqual({ tone: 'error', text: 'Not ready: it has no address yet.' });
@@ -396,7 +396,7 @@ test('Connect and Save only: what is kept, and which remote is in use next', () 
   expect(plan.remotes.claude).toMatchObject({ source: 'claude', kind: 'claude', model: 'claude-opus-5-5', key: true, keyEnd: 'wxyz', keyId: 'claude' });
   expect(plan.remotes.machine).toEqual(machine);
   expect(plan.remote).toEqual({ ...machine, use: true });
-  expect(rowNote(f, 'keep')).toBe('keeps it · this window stays on My other computer');
+  expect(rowNote({ ...f, action: 'save' }, 'go')).toBe('keeps it, without connecting · this window stays on My other computer');
   // Connect: the Claude API in use next
   plan = savePlan(f, settings, { connect: true });
   expect(plan.remote).toMatchObject({ source: 'claude', use: true, key: true });
@@ -489,4 +489,36 @@ test('Memory sent (3 Oct 2026): one row behind More saves settings.json "memoryT
   // a saved choice opens as it was, on every service's form
   const g = moveRow(openForm({ memoryToRemote: 'all' }), 'source', 1);
   expect([showValue(g, 'memory'), rowChanged(g, 'memory')]).toEqual(['to every service', false]);
+});
+
+test('enter connects once a service has what Connect needs; Connect · Save only share the last row; Save only names this Mac when another Mac shows it', async () => {
+  const { formReady } = await import('../src/app/remote-form.mjs');
+  const service = { source: 'openai', address: 'http://203.0.113.7:60009', port: null, connect: 'http', kind: 'openai', model: 'qwen3-coder:30b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  // This Mac: enter switches back, from any row
+  expect(formReady(openForm({}))).toBe(true);
+  // a fresh service has no address yet: enter edits its rows, as before
+  const fresh = moveRow(moveRow(moveRow(openForm({}), 'source', 1), 'source', 1), 'source', 1);
+  expect(showValue(fresh, 'source')).toBe('Another service');
+  expect(formReady(fresh)).toBe(false);
+  // the saved one (as in the owner's window: saved, not in use): ready, on Connect, and the hint says what it does
+  let f = moveRow(moveRow(moveRow(openForm({ remote: { ...service, use: false }, remotes: { openai: service } }), 'source', 1), 'source', 1), 'source', 1);
+  expect(formReady(f)).toBe(true);
+  expect(f.action).toBe('connect');
+  expect(rowNote(f, 'go')).toBe('checks it answers, saves it, then this window uses qwen3-coder:30b there');
+  // → on the last row picks Save only, ← Connect again; This Mac has only Switch there
+  f = moveRow(f, 'go', 1);
+  expect(f.action).toBe('save');
+  expect(rowNote(f, 'go')).toBe('keeps it, without connecting · this Mac stays on its own model');
+  expect(moveRow(f, 'go', -1).action).toBe('connect');
+  expect(moveRow(openForm({}), 'go', 1).action).toBe('connect');
+  // shown on another Mac through the door: this Mac by its name
+  const away = moveRow(moveRow(moveRow(moveRow(openForm({ remotes: { openai: service } }, { mac: 'server-1' }), 'source', 1), 'source', 1), 'source', 1), 'go', 1);
+  expect(rowNote(away, 'go')).toBe('keeps it, without connecting · server-1 stays on its own model');
+  // the Claude API is ready with a key typed in the form, not before
+  const claude = moveRow(openForm({}), 'source', 1);
+  const noEnv = process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_API_KEY;
+  try {
+    expect(formReady(claude)).toBe(false);
+    expect(formReady({ ...claude, keys: { ...claude.keys, claude: 'sk-ant-test-0123456789' } })).toBe(true);
+  } finally { if (noEnv !== undefined) process.env.ANTHROPIC_API_KEY = noEnv; }
 });

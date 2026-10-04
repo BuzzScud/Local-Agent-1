@@ -23,7 +23,7 @@ import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
 import { registerWindow, updateWindow, unregisterWindow, projectOf, othersIn, modelsInUseOn, copyAt, makeCopy, removeCopy, copyChanges, changeLines, putBack, copyDiff, keptCopies } from './copies.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
-import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices, openModelPick, movePick, moveCopy, commitPick, closePick, modelChoices } from './remote-form.mjs';
+import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, formReady, remoteChoices, openModelPick, movePick, moveCopy, commitPick, closePick, modelChoices } from './remote-form.mjs';
 import { openService, serviceRows, atRow, moveService, filterService, toggleFold, ctxWord, suggestModel } from './remote-models.mjs';
 import { suggestedFor } from './remote-suggested.mjs';
 import { jobsOf, openSubagents, moveJob, stepModel, toggleJob, savedOf, MAIN } from './subagents.mjs';
@@ -438,6 +438,10 @@ export function App({ opts, win, onRestart }) {
   // The remote in use (/remote): its connection ({ url, stop, … } from
   // connectRemote), why it last failed, and the model on this Mac to go back to.
   const remoteRef = useRef({ conn: null, why: null, on: remoteAtStart });
+  // This Mac's name while a window on another Mac shows this one (sharedOn below), else null.
+  const sharedRef = useRef(null);
+  // The service Save only just kept, for its "Connect now?" question: { source, label, again }.
+  const savedAskRef = useRef(null);
   const localModelRef = useRef(null);
   const remoteFnRef = useRef({});
   // The remote as the footer tells it (connecting · on · loading: a model loading on the service ·
@@ -634,6 +638,14 @@ export function App({ opts, win, onRestart }) {
           { id: 'leave', label: 'Leave those as they are', note: 'the real folder keeps its version; /copy asks again later' },
           { id: 'mine', label: 'Use this window\'s version for those', note: 'overwrites the other window\'s change in those files' },
         ] };
+    }
+    // Save only kept a service that can connect: connect now? (asked as the app's questions are).
+    if (id === 'remote-saved') {
+      const a = savedAskRef.current ?? {};
+      return { ask: true, title: a.again ? `Connect to ${a.label} again now, with the changes?` : `Connect to ${a.label} now?`, blurb: '', what: 'the remote', current: null, escWord: 'not now', options: [
+        { id: 'connect', label: 'Connect now', recommended: true, note: `checks it answers, then this window uses ${a.model ?? 'it'} there` },
+        { id: 'later', label: 'Not now', note: `it stays saved: /remote ${remoteWord(a.source)} connects it any time` },
+      ] };
     }
     if (id === 'remote-down') {
       const local = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
@@ -983,7 +995,7 @@ export function App({ opts, win, onRestart }) {
   // The form opens on the service in use in this window (This Mac when none is),
   // or on `source`; ask: a row to start typing in (/remote claude with no key yet).
   const openRemoteForm = ({ source = null, ask = null } = {}) => {
-    const f = openForm(settings, { on: Boolean(remoteRef.current.on), source });
+    const f = openForm(settings, { on: Boolean(remoteRef.current.on), source, mac: sharedRef.current });
     if (!ask) { setPicker(f); return; }
     setPicker({ ...startEdit({ ...f, index: remoteRows(f).findIndex((r) => r.id === ask) }, ask), ask });
   };
@@ -1102,14 +1114,24 @@ export function App({ opts, win, onRestart }) {
     });
   };
   // Save only: kept for next time; this window stays where it is.
+  // Save only: kept, not connected. The note says where the window stays (this Mac by its name when
+  // another Mac shows it), then, when the service has what Connect needs, the app asks whether to
+  // connect now (the owner's pick, 3 Oct 2026: "Another service saved" read as something else using it).
+  const remoteWord = (src) => (src === 'machine' ? 'computer' : src === 'openai' ? 'service' : 'claude');
   const saveOnlyForm = (pk) => {
     const plan = keepForm(pk, { connect: false });
     if (!plan) return;
     setPicker(null);
     const r = plan.remotes[pk.source];
-    const where = remoteRef.current.on ? sourceWord(sourceOf(settings.remote)) : 'this Mac';
     const inUse = remoteRef.current.on && sourceOf(settings.remote) === pk.source;
-    push({ type: 'note', text: `${sourceWord(pk.source)} saved${r?.address ? ` (${remoteLabel(r)}${r.key ? ' · with a key' : ''})` : r?.key ? ' (with a key)' : ''}. This window stays on ${where}${inUse ? ': the changes are used from the next Connect or start' : `; Connect (or /remote ${pk.source === 'machine' ? 'computer' : pk.source === 'openai' ? 'service' : 'claude'}) switches`}.`, tone: 'dim' });
+    const label = r?.address ? remoteLabel(r) : '';
+    const stays = inUse ? 'The changes are used from the next Connect or start.'
+      : remoteRef.current.on ? `This window is still on ${sourceWord(sourceOf(settings.remote))} (${remoteLabel(settings.remote)}).`
+        : `This window is still on ${sharedRef.current ?? 'this Mac'}’s own model, which is ${modelOff ? 'off' : 'on'}.`;
+    push({ type: 'note', text: `Saved: ${sourceWord(pk.source)}${label ? ` (${label}${r.key ? ' · with a key' : ''})` : r?.key ? ' (with a key)' : ''}. ${stays}`, tone: 'dim' });
+    if (!readyRemote(r) || busyNow()) { push({ type: 'note', text: `/remote ${remoteWord(pk.source)} connects it any time.`, tone: 'dim' }); return; }
+    savedAskRef.current = { source: pk.source, label: label || sourceWord(pk.source), again: inUse, model: r.kind === 'claude' ? null : r.model || null };
+    openChoice('remote-saved');
   };
   // /remote claude, /remote computer, /remote service: straight to that saved
   // service; one not set up yet opens the form on it, typing in its first row.
@@ -1176,6 +1198,8 @@ export function App({ opts, win, onRestart }) {
     noteModels(null);
     if (conn.info?.ollama && process.env.AGENTIC_UNLOAD !== 'off') {
       const names = usedHere(conn).filter((n) => !only || only.includes(n));
+      // A renewal already on its way would load the model again after it was let go: it lands first.
+      await renewRef.current;
       await Promise.all(names.map((m) => unloadOllama({ url: conn.url, model: m, timeoutMs: 3000 })));
     }
     conn.stop();
@@ -1936,6 +1960,16 @@ export function App({ opts, win, onRestart }) {
       else push({ type: 'note', text: `Left ${copyAsk.current.conflicts.join(', ')} as they are in the real folder; /copy asks again later.`, tone: 'dim' });
       return;
     }
+    if (id === 'remote-saved') {
+      const a = savedAskRef.current;
+      savedAskRef.current = null;
+      if (!a) return;
+      if (value !== 'connect') { push({ type: 'note', text: `Left saved, not connected. /remote ${remoteWord(a.source)} connects it any time.`, tone: 'dim' }); return; }
+      // The one in use with new settings connects again; any other is switched to as /remote service would.
+      if (a.again) useRemote(settings.remote);
+      else remoteTo(a.source);
+      return;
+    }
     if (id === 'remote-down') {
       if (value === 'retry') useRemote(settings.remote);
       else if (value === 'local') useLocal({ note: 'This window uses the model on this Mac for now; /remote is still on for the next start.', load: true });
@@ -2093,6 +2127,8 @@ export function App({ opts, win, onRestart }) {
   // Mac's name, lower right, so the window there says where its keys go. The session's record
   // says who is in it (sessions.mjs): read when a window joins, which redraws, and every 2 s.
   const [sharedOn, setSharedOn] = useState(null);
+  // Kept for the /remote form and its notes, which name this Mac ("server-1") while it is shown elsewhere.
+  sharedRef.current = sharedOn;
   useEffect(() => {
     const name = process.env.AGENTIC_IN_HOST;
     if (!name) return;
@@ -2107,6 +2143,8 @@ export function App({ opts, win, onRestart }) {
   // new figure waits for the next redraw, so Terminal keeps a highlight (1 Oct 2026); a spill onto
   // the CPU starting or ending, or the model unloading, is drawn at once.
   const psRef = useRef(null);
+  // Keep loaded's renewal on its way to the service, if any: leaving the service waits for it first.
+  const renewRef = useRef(null);
   const [, redrawPs] = useState(0);
   const psConn = model.remote && remoteState === 'on' && remoteRef.current.conn?.info?.ollama ? remoteRef.current.conn : null;
   const psKey = psConn ? `${psConn.url} ${model.remote.model}` : null;
@@ -2126,10 +2164,12 @@ export function App({ opts, win, onRestart }) {
       // another OPEN_KEEP (an empty request at the context the replies use, so nothing loads again),
       // and so is one kept for ever (keep_alive -1, an older version's). One the service already let
       // go of is not loaded back from here: the next reply does that.
+      // Only while the window is still on this service: a look already under way as it went back to
+      // this Mac (leaveService) would load the model it has just let go.
       const ep = endpointOf(psConn.url);
       const left = p?.loaded && p.until ? Date.parse(p.until) - Date.now() : NaN;
-      if (ep?.keepAlive === OPEN_KEEP && (left < OPEN_KEEP_MS * 2 / 3 || left > 24 * 3600_000)) {
-        preloadOllama({ url: psConn.url, model: name, numCtx: ep.numCtx ?? null, keepAlive: OPEN_KEEP, timeoutMs: 10_000 }).catch(() => {});
+      if (remoteRef.current.conn === psConn && ep?.keepAlive === OPEN_KEEP && (left < OPEN_KEEP_MS * 2 / 3 || left > 24 * 3600_000)) {
+        renewRef.current = preloadOllama({ url: psConn.url, model: name, numCtx: ep.numCtx ?? null, keepAlive: OPEN_KEEP, timeoutMs: 10_000 }).catch(() => {}).finally(() => { renewRef.current = null; });
       }
     };
     read();
@@ -3820,10 +3860,12 @@ export function App({ opts, win, onRestart }) {
       }
       return;
     }
-    // /remote: ↑↓ a row, ←→ a choice row (More: open / fold), enter (or a
-    // letter) edits a text row, opens or folds More, runs Connect or Save only,
-    // and on a choice row goes to the next row; while a row is being edited, its
-    // keys only. /web: the same form keys, its own rows (web-form.mjs), Test and Save.
+    // /remote: ↑↓ a row (↑ from Run on lands on Connect), ←→ a choice row (More: open / fold;
+    // the last row: Connect or Save only; a text row: edit it), a letter edits a text row. Once the
+    // service has what Connect needs, enter connects from any row, or saves on Save only (the owner's
+    // pick, 3 Oct 2026); before that, enter edits a text row, opens or folds More, and on a choice
+    // row goes to the next row. While a row is being edited, its keys only. /web: the same form
+    // keys, its own rows (web-form.mjs), Test and Save.
     // /mcp: the list of your MCP servers, one server's form, its tools (mcpKeys).
     if (cur.picker?.kind === 'mcp') { mcpKeys(cur.picker, ch, key); return; }
     if (cur.picker?.kind === 'remote' || cur.picker?.kind === 'web') {
@@ -3854,15 +3896,20 @@ export function App({ opts, win, onRestart }) {
       // A key row with no search service picked has nothing to take.
       const text = (row.type === 'text' || row.type === 'secret') && !(web && pk.values.search === 'off');
       const typed = ch && !key.ctrl && !key.meta && !key.escape && !key.return && !key.tab && ch >= ' ';
-      if (key.upArrow) setPicker({ ...pk, index: (pk.index + n - 1) % n });
+      const ready = !web && formReady(pk);
+      if (key.upArrow) setPicker({ ...pk, index: (pk.index + n - 1) % n, ...(!web && pk.index === 0 ? { action: 'connect' } : {}) });
       else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % n });
+      // A text row with nothing to step through: ←→ edits it, its text kept (enter connects now).
+      else if ((key.leftArrow || key.rightArrow) && !web && text && !(row.id === 'model' && modelChoices(pk).length > 1)) setPicker(startEdit(pk, row.id));
       else if (key.leftArrow || key.rightArrow) setPicker((web ? moveWebRow : moveRow)(pk, row.id, key.rightArrow ? 1 : -1));
+      else if (key.return && ready && row.id === 'go' && pk.action === 'save') saveOnlyForm(pk);
+      else if (key.return && ready) { if (!pk.test?.running) connectForm(pk); }
       else if (key.return && !web && row.id === 'model' && modelChoices(pk).length > 1) setPicker(openModelPick(pk));
       else if (key.return && text) setPicker(startEdit(pk, row.id));
       else if (key.return && web) (row.id === 'test' ? runWebTest : saveWeb)(pk);
       else if (key.return && row.id === 'more') setPicker({ ...pk, more: !pk.more });
+      else if (key.return && row.id === 'go' && pk.action === 'save') saveOnlyForm(pk);
       else if (key.return && row.id === 'go') { if (!pk.test?.running) connectForm(pk); }
-      else if (key.return && row.id === 'keep') saveOnlyForm(pk);
       else if (key.return) setPicker({ ...pk, index: Math.min(n - 1, pk.index + 1) });
       // Typing on a text row starts it over with what you type (enter keeps the old text to change it).
       else if (typed && text) setPicker({ ...startEdit(pk, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, ch) });
@@ -3910,6 +3957,7 @@ export function App({ opts, win, onRestart }) {
       else if (key.escape || (key.ctrl && ch === 'c')) {
         setPicker(null);
         if (pk.id === 'memory-save') { applyChoice('memory-save', 'skip'); return; }
+        if (pk.id === 'remote-saved') { applyChoice('remote-saved', 'later'); return; }
         // The message with the picture was not sent: it goes back into the prompt.
         if (pk.id === 'vision-switch') {
           const wait = visionWaitRef.current;
@@ -4159,6 +4207,8 @@ export function App({ opts, win, onRestart }) {
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),
     shareBadge: sharedOn ? `⇄ on ${sharedOn}` : null,
+    // The /remote form's title, right side: where this window runs now.
+    remoteWhere: remoteRef.current.on && remoteRef.current.conn ? `this window runs on ${remoteLabel(settings.remote)} · ${model.remote?.model ?? model.name}` : `this window runs on ${sharedOn ?? 'this Mac'} · its own model is ${modelOff ? 'off' : 'on'}`,
     // Loops made in this window (/loop): how many are open, and whether one waits for you.
     loopsBadge,
     // The footer's right side starts with these (screen.jsx footerParts): this window's own copy, the cost meter.

@@ -16,7 +16,7 @@ import { AgentsView, AgentsLine } from './agents-view.jsx';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { gaugesOf, gaugeLine, fitRemote, meterWords } from './remote-footer.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
-import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc } from './remote-form.mjs';
+import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc, formReady } from './remote-form.mjs';
 import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord, isBig, isHelper as isHelperModel } from './remote-models.mjs';
 import { triedWord } from './tryouts.mjs';
 import { statusOf as statusOfJob, roomLine as subRoomLine, MAIN } from './subagents.mjs';
@@ -963,6 +963,21 @@ function ModePicker({ app }) {
 function ChoicePicker({ app }) {
   const pk = app.picker;
   if (pk.id === 'mode' || pk.id === 'startmode') return <ModePicker app={app} />;
+  // A question the app asks for itself (ask: true), drawn as the model's questions are (AskChoices):
+  // one line a choice, "(recommended)" beside one, what the highlighted one means under the list.
+  if (pk.ask) {
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={C.ask} paddingX={1} width={app.width}>
+        <Text>{pk.title}</Text>
+        {pk.options.map((o, i) => {
+          const on = i === pk.index;
+          return <Text key={o.id} color={on ? C.ask : undefined}>{on ? '❯' : ' '} {i + 1}. {o.label}{o.recommended ? <Text color={C.dim}>  (recommended)</Text> : null}</Text>;
+        })}
+        <Box marginTop={1} paddingX={2}><Text color={C.dim}>{pk.options[pk.index]?.note ? `ⓘ ${pk.options[pk.index].note}` : ''}</Text></Box>
+        <Box marginTop={1}><Text color={C.dim}>Enter pick · ↑/↓ move · Esc {pk.escWord ?? 'go back'}</Text></Box>
+      </Box>
+    );
+  }
   const w = Math.max(...pk.options.map((o) => o.label.length)) + 2;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
@@ -1206,10 +1221,24 @@ function RemotePicker({ app }) {
     return <><Text>{from ? '…' : ''}{before}</Text><Text inverse>{at}</Text><Text>{after}</Text>{e.id === 'key' ? <Text color={C.dim}>  {e.value.length} characters</Text> : null}</>;
   };
   const changed = (id) => (web ? (id === 'key' ? pk.key !== null : id in pk.values && pk.values[id] !== pk.saved[id]) : rowChanged(pk, id));
+  // enter connects from any row once the service has what Connect needs (formReady); the line under
+  // the title and the keys' line say so.
+  const ready = !web && formReady(pk);
+  const save = !web && pk.source !== 'here' && pk.action === 'save';
+  // Connect · Save only on one row: the one enter runs is filled in while the row is picked.
+  const buttons = (on, tone) => {
+    const btn = (t, picked) => <Text color={picked ? (on ? 'ansi256(233)' : tone ?? C.accent) : on ? undefined : C.dim} backgroundColor={picked && on ? tone ?? C.accent : undefined} bold={picked}>{` ${t} `}</Text>;
+    return <>{btn('Connect', !save)}<Text>{'  '}</Text>{btn('Save only', save)}<Text>{' '.repeat(Math.max(1, lw + vw - 22))}</Text></>;
+  };
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      <Text bold>{web ? 'Web' : 'Remote model'}</Text>
-      <Text color={C.dim} wrap="truncate-end">{web ? 'What the model may do on the web. Test checks the key before anything is saved. Kept for every folder.' : 'Pick where it runs, fill in its rows, then Connect. Nothing changes unless it works.'}</Text>
+      {web ? <Text bold>Web</Text> : (
+        <Box justifyContent="space-between">
+          <Text bold>Remote model</Text>
+          <Text color={C.dim} wrap="truncate-start">{app.remoteWhere ?? ''}</Text>
+        </Box>
+      )}
+      <Text color={C.dim} wrap="truncate-end">{web ? 'What the model may do on the web. Test checks the key before anything is saved. Kept for every folder.' : pk.source === 'here' ? 'Pick where it runs, fill in its rows, then Connect. Nothing changes unless it works.' : ready ? 'Enter connects from any row. Typing changes the row you are on. Nothing changes unless it works.' : 'Fill in its rows, then Connect. Nothing changes unless it works.'}</Text>
       {ROWS.map((r, i) => {
         const on = i === pk.index;
         const e = pk.editing?.id === r.id ? pk.editing : null;
@@ -1217,8 +1246,23 @@ function RemotePicker({ app }) {
         const unsaved = changed(r.id);
         const v = showValueOf(pk, r.id);
         const note = noteOf(pk, r.id);
-        const done = r.id === checkRow && pk.test && !pk.test.running;
+        const done = r.id === checkRow && pk.test && !pk.test.running && !save;
         const tone = done ? (pk.test.ok ? C.ok : pk.test.needModel ? C.warn : C.bad) : undefined;
+        // The last row of a service: the two buttons, then what enter does there (or what Connect found).
+        if (!web && r.id === 'go' && pk.source !== 'here') {
+          const status = pk.test?.running || done ? v : '';
+          return (
+            <React.Fragment key={r.id}>
+              <Text> </Text>
+              <Text wrap="truncate-end">
+                <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} </Text>
+                {buttons(on, tone)}
+                <Text color={tone ?? (pk.test?.running ? C.accent : C.dim)}>{status ? `${status}  ` : ''}{done ? '' : note}</Text>
+              </Text>
+              {done ? <Box paddingLeft={4}><Text color={tone}>{note}</Text></Box> : null}
+            </React.Fragment>
+          );
+        }
         return (
           <React.Fragment key={r.id}>
             {r.id === checkRow ? <Text> </Text> : null}
@@ -1240,7 +1284,7 @@ function RemotePicker({ app }) {
       })}
       {warn ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="wrap">{warn.text}</Text> : null}
       {pk.error ? <Text color={C.bad} wrap="truncate-end">{pk.error}</Text> : null}
-      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : web ? '↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · the web' : modelChoices(pk).length > 1 ? '↑↓ choose · ←→ change · enter on Model opens the list · esc cancels' : '↑↓ choose · ←→ change · enter edits a row or runs it · esc cancels'}</Text>
+      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : web ? '↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · the web' : ready && pk.source !== 'here' ? 'enter connects · ↑↓ rows · ←→ change · type to edit a row · esc closes' : !web && pk.source === 'here' ? '↑↓ choose · ←→ change where it runs · enter switches · esc cancels' : modelChoices(pk).length > 1 ? '↑↓ choose · ←→ change · enter on Model opens the list · esc cancels' : '↑↓ choose · ←→ change · enter edits a row or runs it · esc cancels'}</Text>
     </Box>
   );
 }

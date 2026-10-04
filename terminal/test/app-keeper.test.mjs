@@ -168,3 +168,24 @@ test.skipIf(!S.canHost())('through the keeper: /mouse on, and a drag in the prom
     await ranInKeeper(home, seen);
   } finally { await fake.close(); }
 }, T);
+
+test.skipIf(!S.canHost())('through the keeper: /remote, → to a saved service, ↑ lands on Connect and enter connects (the owner’s keys of 3 Oct)', async () => {
+  const { cwd, env, home } = keeperEnv();
+  const { fakeOllama } = await import('./fake-ollama.mjs');
+  const svc = await fakeOllama();
+  const saved = { source: 'openai', address: svc.url, port: null, connect: 'http', kind: 'openai', model: 'coder:30b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  writeFileSync(join(home, 'settings.json'), JSON.stringify({ remote: { ...saved, use: false }, remotes: { openai: saved } }));
+  const seen = {};
+  try {
+    const r = await runInPty({ cwd, env: { ...env, AGENTIC_MODEL_AT_START: 'off', AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
+      { wait: '? for shortcuts', ms: 30_000 }, noteRecord(home, seen), { sleep: 300 },
+      { type: '/remote' }, { key: '\r' }, { wait: 'Remote model' }, { sleep: 200 },
+      { key: '\x1b[C' }, { sleep: 100 }, { key: '\x1b[C' }, { sleep: 100 }, { key: '\x1b[C' }, { sleep: 200 },
+      { key: '\x1b[A' }, { sleep: 250 }, { snapshot: 'up' },
+      { key: '\r' }, { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' }, ...quit,
+    ] });
+    expect(r.snapshots.up).toMatch(/❯\s+Connect\s+Save only/);
+    expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain('On the remote: coder:30b');
+    await ranInKeeper(home, seen);
+  } finally { await svc.close(); }
+}, T);
