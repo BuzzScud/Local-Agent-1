@@ -407,6 +407,63 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   remote and not here, the form row, the switch on both ways and in /hooks, what the check sees, two nudges on the
   second lane then none, on track, one lane, the Ollama helper then the main model on the Ollama stand-in).
 
+## Follow-through: doing what it was asked (4 Oct 2026)
+
+- **Why.** The owner watched a run on their other Mac (Qwen3.6 35B-A3B on their Ollama service, from the home folder,
+  in Bypass): asked to take the formulas from a calculator's page and test them against a folder of exports, it met a
+  login and tested something else without asking, typed a file's name wrong, read only the outline of the report page
+  and said it had found the math, wrote no plan, and answered "All 24 formulas passed" after a run that printed "22
+  passed, 2 failed". The remote rules already said "never claim a result you did not see", but as a guide it never
+  opened. Their picks (all recommended): everything, stop and ask at a wall, ask "Work in that folder?", the second
+  look on after real work, and a replay of the run before and after.
+- **Outlines for pages and data** (`tools/outline.mjs` `docParts`, `jsonShape`; Read only, the maps' `outline()` is
+  unchanged): a long page gives its headings, its sections and tabs with an id (a section and the heading under it are
+  one part), styles and scripts; Markdown its headings; a CSV or TSV its header row and the first row; JSON a line
+  saying what it holds (a list's length and its items' keys, where the first item starts). Before, any of these came
+  back as "too long, and it has no functions to list", which the rail showed as "-1 parts". Read counts the parts it
+  lists (`view.parts`, 0 for none; the rail says "no parts"), and `view.matched` says lines of the file came with it.
+- **The closest name in its folder** (`tools/fs.mjs` `nearNames`, `nearPath`; `agent/tools.mjs` `settlePath`): a path
+  that is not there is set right one missing part at a time from what is really in that folder, when one name is
+  clearly closest (a third of the letters at most, the same words, or the name with its date left off). Read, Search,
+  List and Edit use it, then didYouMean's walk (off from the home folder, as before, unless the request named a folder:
+  `env.workFolder`). Never a walk, so it is safe from the home folder.
+- **Stop when blocked** (hook `blocked`): `wallOf` in agent/tools.mjs: a fetch answered 401, 403 or 407, a short answer
+  that says it needs a login (even with a 200), a move to a login page, or a 404/410/5xx at an address the request
+  gave; and a Read or List of a path the request named that is not there. The result ends with "Do not do a different
+  task instead. Tell the user what blocked you and ask how to go on, with Ask"; the agent keeps it (`turn.walls`, a
+  warn line on screen), reminds it once if two steps later it has not asked (`followDue`), and sends back once an answer
+  that neither asked nor names the wall (`MENTIONS_WALL`).
+- **Answer matches results** (hook `results`): every Bash run whose output counts passed and failed (`readResults`
+  now also reads a script's own "22 passed, 2 failed" and "22/24 passed") or that is a test run is kept
+  (`turn.checks`); an answer that says all passed or it works (`claimsAllGood`) after a failing last run goes back
+  once with that run's own line, then a warn line under it. Before, only a run after an Edit or Write counted, and the
+  run's scripts were written by heredocs.
+- **Read before claiming** (hook `read-first`): files seen only as an outline with none of their lines
+  (`turn.outlined`); a reply that says it found or has what it needs (`claimsFound`) gets a line on its next step's
+  result, or a final answer goes back once.
+- **Plan for several asks** (hook `to-do`): a request with two questions or more, or a list (`severalAsks`), and no
+  TodoWrite by the third step: one line asks for the plan, which then comes back every 5 steps (`planDue`).
+- **The folder a request names** (`projects.mjs` `foldersNamed`): from the home folder, a path in quotes (spaces and
+  all) or after ~/ or /, code project or not, is offered as "Work in …?" (staying is the first choice), and either way
+  becomes `turn.workFolder`: Look before answering and Files that exist hold there too (`missingFiles` also checks full
+  paths into it, `fullPathsIn`), and didYouMean walks from it. The agent's own `home` decides what the home folder is.
+- **Second look** (hook `second-look`, `agent/second-look.mjs`; on, the owner's pick): after a message that ran
+  commands, wrote files or fetched pages, one call checks the final answer against what the app recorded: the request,
+  the plan, the model's own calls cut short (a command's first 400 characters, so a script's numbers show), the check
+  runs with their counts and exit codes, errors in the app's own words, walls, files only outlined. Never a page's or a
+  command's output. Wrong: up to three problems, sent back once ("it can be wrong"); a warn line says them. Who: as for
+  Stays on task (`lookWho`), and on this Mac the server's second lane. `AGENTIC_SECOND_LOOK=off` (test-env.mjs) keeps
+  it out of the tests that count a stand-in's replies.
+- **Two rules in both instruction sets** (prompt.mjs WORK_HABITS, rules/remote/HARNESS.md): say you found, read,
+  checked or worked out something only when a tool showed it (an outline is not the text; an expected value is worked
+  out with a command), and a blocked request stops for an Ask.
+- **The replay** (`models/evals/tools/follow-through-replay.mjs`, the Arena's `follow-through`): the run of 4 Oct
+  played again, `coding -p --loop-events` in a throwaway home with a copy of the folder, questions answered as the
+  owner would, scored from the whole conversation (`AGENTIC_TRANSCRIPT=<file>` makes `coding -p` write it) on six slips;
+  `--before <a checkout>` plays the code before beside it. Its task (the request, the calculator's and the service's
+  addresses, the answers) and the folder are private: `~/.agentic-coder/evals/follow-through/`. The page names neither
+  address. `terminal/test/follow-through.test.mjs` holds each part on a stand-in model.
+
 ## MCP servers (3 Oct 2026)
 
 - **What it is.** `/mcp` gives the model tools from outside the app (the Model Context Protocol): a program on this

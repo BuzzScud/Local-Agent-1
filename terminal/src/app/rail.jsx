@@ -16,7 +16,8 @@ export const RAIL = 'ansi256(243)'; // #767676: C.faint (#585858) all but vanish
 const STRIP = 'ansi256(236)'; // #303030, the grey strip under your message
 const PATH = 'ansi256(250)';
 const CODE = 'ansi256(252)';
-const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+// "match" → "matches" (4 Oct 2026: the Search line said "0 matchs").
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : /(?:s|x|z|ch|sh)$/.test(w) ? 'es' : 's'}`;
 
 // A step: its mark in the rail's column, its words beside it.
 export const Node = ({ g, c, children }) => (
@@ -141,7 +142,7 @@ export function ToolNode({ it }) {
         </Box>
       );
     }
-    case 'read': return <Node g="○" c={C.dim}><Head verb={v.outline ? 'Outline' : 'Read'} c="ansi256(250)" what={what} detail={v.outline ? `${v.parts} parts of ${plural(v.total, 'line')}` : `${plural(v.lines, 'line')}${v.total > v.lines ? ` of ${v.total}` : ''}`} hint="ctrl+o to expand" /></Node>;
+    case 'read': return <Node g="○" c={C.dim}><Head verb={v.outline ? 'Outline' : 'Read'} c="ansi256(250)" what={what} detail={v.outline ? `${v.parts > 0 ? plural(v.parts, 'part') : 'no parts'} of ${plural(v.total, 'line')}` : `${plural(v.lines, 'line')}${v.total > v.lines ? ` of ${v.total}` : ''}`} hint="ctrl+o to expand" /></Node>;
     case 'screen': return <Node g="○" c={C.dim}><Head verb="Looked at" c="ansi256(250)" what={v.what} detail={`${v.size} · a picture, nothing clicked`} /></Node>;
     case 'same': return <Node g="○" c={C.dim}><Head verb="Read" c="ansi256(250)" what={what} detail="already read above, unchanged" /></Node>;
     case 'list': return <Node g="○" c={C.dim}><Head verb="Listed" c="ansi256(250)" what={it.arg} detail={plural(v.count, 'path')} /></Node>;

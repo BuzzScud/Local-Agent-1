@@ -120,7 +120,8 @@ test('a whole K2 turn: thinking "as thinking", a call written in it, run, then t
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   const fake = await startFakeServer([
     { reasoning: `The user wants the name. Read package.json.\n</ifm|think_fast>\nLet me look.\n${xmlCall}` },
-    { reasoning: 'Got it.</ifm|think_fast>\nThe package is called demo.' },
+    // The demo project has no package.json: the answer says so (since 4 Oct 2026 one that leaves out a missing file the request names goes back).
+    { reasoning: 'Got it.</ifm|think_fast>\npackage.json is not there; the folder is the demo project.' },
   ]);
   const events = [];
   const agent = new Agent({ url: fake.url, model: k2, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: true, effort: 'medium', mode: 'edits', flows: false, ask: async () => ({ choice: 'yes' }) });

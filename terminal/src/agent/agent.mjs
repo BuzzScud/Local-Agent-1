@@ -23,7 +23,7 @@ import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
 import { pickPieces, studioNotes, buildStyles, buildNote, isBuilt } from './studio.mjs';
 import { layoutCheck, layoutNote, pagesToCheck, findChrome, needsServer } from '../flows/layoutcheck.mjs';
-import { findProjects, projectsNamed } from './projects.mjs';
+import { findProjects, projectsNamed, foldersNamed } from './projects.mjs';
 import { homedir } from 'node:os';
 import { basename, join, dirname, relative } from 'node:path';
 import { runFlows, runKind, isSmallTalk, routeByRules, isCodeProject } from '../flows/index.mjs';
@@ -43,6 +43,7 @@ import { Jobs, took } from '../tools/jobs.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
 import { autoCheck } from './auto-check.mjs';
 import { driftCheck, recentSteps, nudgeText, DRIFT_EVERY, DRIFT_NUDGES } from './drift.mjs';
+import { secondLook, ownSteps, lookFacts, lookText, lookOn } from './second-look.mjs';
 import { screenAccess } from '../tools/screen.mjs';
 import { isMemoryRequest } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
@@ -244,6 +245,19 @@ export function aboutTheCode(text) {
   return CODE_WORDS.test(t) || NAMEY.test(t);
 }
 const FILE_NAMED = /(?<![\w/.~:-])(?:[\w@.+-]+\/)*[\w@+-][\w@.+-]*\.(?:m?[jt]sx?|cjs|mts|cts|py|json|md|sh|css|html|sql|ya?ml|swift|go|rs|java|rb|php|vue|svelte|toml|txt)\b(?![\w/])/g;
+// Full paths into `base` that a text names, spaces and all ("/Users/x/Desktop/agent docs/report.html"):
+// found from where the folder's own path (or its ~ form) appears, up to a file's extension.
+export function fullPathsIn(text, base, home = homedir()) {
+  const t = String(text ?? '');
+  const out = new Set();
+  for (const form of [base, base.startsWith(`${home}/`) ? `~${base.slice(home.length)}` : null].filter(Boolean)) {
+    for (let i = t.indexOf(form); i >= 0; i = t.indexOf(form, i + 1)) {
+      const m = /^\/[^\n`'"]*?\.(?:m?[jt]sx?|cjs|py|json|md|sh|css|html?|sql|ya?ml|csv|tsv|txt|pdf|png)\b/.exec(t.slice(i + form.length));
+      if (m) out.add(`${base}${m[0]}`);
+    }
+  }
+  return [...out];
+}
 export const filesInAnswer = (text) => [...new Set(String(text ?? '').match(FILE_NAMED) ?? [])].filter((p) => !/^(NOTES|RULES|SKILLS|Rules)\//.test(p));
 // The words to search for, from the request: its names first (a file, an identifier), then its longest words.
 function searchWords(text) {
@@ -272,6 +286,29 @@ export function missingParts(html, dir) {
   }
   return out;
 }
+
+// An answer that says the checks all passed or that it works (4 Oct 2026: "All 24 formulas passed" and
+// "the calculator validated every formula" after a run that printed "22 passed, 2 failed", exit code 1).
+export function claimsAllGood(text) {
+  const t = String(text ?? '').replace(/```[\s\S]*?```/g, ' ');
+  return /\b(all (?:\d+ |of (?:the|them|my|your) )?(?:[\w-]+ ){0,2}(?:pass(?:ed|es)?|work(?:s|ed)?|succeed(?:ed|s)?|validated|verified|match(?:ed|es)?|are green|check(?:ed)? out)|every (?:[\w-]+ ){0,3}(?:pass(?:ed|es)?|works?|validated|verified|matched|checks? out)|(?:validated|verified|confirmed) (?:every|all)|everything (?:pass(?:ed|es)?|works?|checks out|is correct)|no (?:failures|errors|failing)|100 ?% (?:pass|correct|of))/i.test(t);
+}
+// A reply that says it found or has what it needs (it read the math out of a page it had seen only the
+// outline of: "Good — I found the math. The report page has all the formulas built right into it.").
+export function claimsFound(text) {
+  return /\b(i (?:have |'ve )?found|found (?:the|all|every|it|them)|got (?:all|the|everything)|i now have|now i have|i have (?:all|everything|a (?:good|clear|full|complete|comprehensive) (?:picture|view|idea|list))|have all the)\b/i.test(String(text ?? ''));
+}
+// An answer that names what blocked it (a login, a page or file not there): it did not hide it.
+const MENTIONS_WALL = /\b(log ?in|sign ?in|sign ?up|login|token|auth\w*|password|blocked|not (?:there|found|open)|missing|does not exist|doesn't exist|could ?n[o'’]t (?:reach|open|get|find|read)|unable to (?:reach|open|get|find|read)|40[134]|5\d\d)\b/i;
+// A request with several asks ("analyze the link… can we use the calculator…? can you check? can you
+// take all of the formulas… and test them all?"): two questions or more, or a list of things to do.
+export function severalAsks(text) {
+  const t = String(text ?? '');
+  return (t.match(/\?/g) ?? []).length >= 2 || (t.match(/^\s*(?:\d+[.)]|[-*•])\s+\S/gm) ?? []).length >= 2 || (t.length > 120 && (t.match(/\b(?:and then|then|also|after that|as well as)\b/gi) ?? []).length >= 2);
+}
+// The run of a check for the facts: its command's last line (a heredoc script ends with the line that runs it).
+const runLine = (cmd) => String(cmd ?? '').trim().split('\n').map((l) => l.trim()).filter(Boolean).pop()?.slice(0, 140) ?? '';
+const countLine = (out) => String(out ?? '').split('\n').map((l) => l.trim()).reverse().find((l) => /\b\d+ (?:passed|failed|passing|failing)\b|\b\d+\s*(?:\/|of)\s*\d+ (?:passed|pass|ok)\b/i.test(l))?.slice(0, 160) ?? '';
 
 // A request that wants its file on the Desktop (flows/words.mjs, where the sorting uses it too).
 export { wantsDesktop };
@@ -915,17 +952,24 @@ export class Agent extends EventEmitter {
   // Outside a project, a request naming one ("the chart bug in MAIN2026") asks
   // once whether to work there. Each project is offered once a session.
   async offerProject(text, signal) {
-    const home = homedir();
+    const home = this.home ?? homedir();
+    this.namedFolder = null;
     // Only from the home folder or its Desktop, Documents and Downloads.
-    if (!isHomeFolder(this.cwd)) return null;
+    if (!isHomeFolder(this.cwd, home)) return null;
     this.projects ??= findProjects(home);
     this.offered ??= new Set();
-    const found = projectsNamed(text, this.projects, this.cwd).filter((d) => !this.offered.has(d));
+    const projects = projectsNamed(text, this.projects, this.cwd);
+    // A folder the request names by its path, a code project or not (4 Oct 2026, the owner's pick: ask
+    // "Work in that folder?"; either way the checks the home folder turns off work for it: turn.workFolder).
+    const named = projects.length ? projects : foldersNamed(text, this.cwd, home);
+    this.namedFolder = named.length === 1 ? named[0] : null;
+    const found = named.filter((d) => !this.offered.has(d));
     if (!found.length || found.length > 4) return null;
     for (const d of found) this.offered.add(d);
     const tilde = (p) => (p === home ? '~' : p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p);
     const one = found.length === 1;
-    const question = `${one ? `Work in ${tilde(found[0])}?` : 'Work in which project?'} Agentic Coder then uses its tests and its AGENTS.md, and its commands can only change files there, until /clear.`;
+    const code = found.some((d) => this.projects.includes(d));
+    const question = `${one ? `Work in ${tilde(found[0])}?` : `Work in which ${code ? 'project' : 'folder'}?`} ${code ? 'Agentic Coder then uses its tests and its AGENTS.md, and its' : 'Agentic Coder then starts there:'} commands can only change files there, until /clear.`;
     // Staying is the first choice, so enter keeps you where you started: a
     // pasted command that named the app's own repo once moved it there, and the
     // next request's page could not reach the Desktop (28 Sep).
@@ -1155,6 +1199,33 @@ export class Agent extends EventEmitter {
     t.requestAt = t.steps ?? 0;
     return requestReminder(t.request);
   }
+  // The follow-through lines with a step's result (4 Oct 2026, the owner's picks after a Qwen run): a wall
+  // it met and has not asked you about after two more steps (Stop when blocked); a reply that says it
+  // found what it needs when it saw only outlines of the files (Read before claiming); a request with
+  // several asks and no plan by the third step (Plan for several asks). Each once a message.
+  followDue(calls, text) {
+    const t = this.turn;
+    if (!t || this.isHelper) return [];
+    const out = [];
+    const wall = t.walls[0];
+    if (wall && !t.askedUser && !t.wallReminded && (t.steps ?? 0) - wall.step >= 2 && this.hook('blocked')) {
+      t.wallReminded = true;
+      this.emit('note', { text: 'It has not asked you about what blocked it; reminded it to ask.', tone: 'warn' });
+      out.push(`(You have not asked the user yet: ${wall.why}. Ask now, with Ask, before you go on. Do not do a different task instead.)`);
+    }
+    if (!t.readFirstSent && t.outlined.size && claimsFound(text) && this.hook('read-first')) {
+      t.readFirstSent = true;
+      const names = [...t.outlined].slice(0, 3).map((f) => basename(f));
+      this.emit('note', { text: `It says it found what it needs, but saw only the outline of ${names.join(', ')}; told it to read the part first.`, tone: 'warn' });
+      out.push(`(You wrote that you found or have what you need, but of ${names.join(', ')} you have seen only the outline: its parts and line numbers, none of its text. Read the part you need (offset and limit, or find) before you use what is in it.)`);
+    }
+    if (!t.toDoSent && t.planAt == null && (t.steps ?? 0) >= 3 && !calls.some((c) => c.name === 'TodoWrite') && severalAsks(t.request) && this.hook('to-do') && this.tools().some((x) => x.function?.name === 'TodoWrite')) {
+      t.toDoSent = true;
+      this.emit('note', { text: 'Several asks and no plan yet: asked it to write one.', tone: 'dim' });
+      out.push('(Your request has several asks. Write your plan now with TodoWrite: one item for each thing the user asked, and mark each one as you finish it.)');
+    }
+    return out;
+  }
   // Who checks that a model on another machine stays on task (drift.mjs): on an Ollama service its Side
   // jobs helper, else the main model; on the owner's other Mac (coding serve) the main model on the
   // server's second lane, as Auto's check does, so the conversation's own lane is not read again.
@@ -1164,6 +1235,31 @@ export class Agent extends EventEmitter {
     if (ep?.ollama) return { use: this.sideUse() };
     if (ep?.kind === 'llama') return this.slots?.side !== undefined ? { slot: this.slots.side } : { none: 'its server has one lane (coding serve --slots 2 gives it a second)' };
     return null;
+  }
+  // Who takes the second look (second-look.mjs): on a model on another machine as for Stays on task; on this
+  // Mac the server's second lane when it has one (as the Done check); the Claude API and other services: none.
+  lookWho() {
+    if (this.model?.remote) return this.driftWho();
+    return this.slots?.side !== undefined ? { slot: this.slots.side } : null;
+  }
+  // Second look (/hooks, on): after a message that ran commands, wrote files or fetched pages, the answer is
+  // checked against what the app saw; one that does not hold goes back once. Answers the line to send, or ''.
+  async lookDue(answer, signal) {
+    const t = this.turn;
+    if (!t || this.isHelper || t.looked2 || !lookOn() || !this.hook('second-look')) return '';
+    if (!(t.ranCommand || t.changed || t.wroteByCommand || t.fetched)) return '';
+    t.looked2 = true;
+    const who = this.lookWho();
+    if (!who || who.none) return '';
+    this.emit('busy', { task: 'taking a second look at the answer' });
+    // The model's own calls of this message, kept as they ran (a summary of the conversation cannot lose them).
+    const steps = ownSteps([{ role: 'assistant', tool_calls: t.callLog ?? [] }]);
+    const r = await secondLook({ url: this.url, model: this.model, slot: who.slot, use: who.use, request: t.request, plan: t.planAt != null ? planList(this.todos) : '', steps, facts: lookFacts(t, { home: this.home ?? homedir() }), answer, signal });
+    const secs = `${(r.ms / 1000).toFixed(1)} s`;
+    if (r.failed) { this.emit('note', { text: `Second look: not made (${r.reason}).`, tone: 'dim' }); return ''; }
+    if (r.ok) { this.emit('note', { text: `Second look: the answer holds (${secs}).`, tone: 'dim' }); return ''; }
+    this.emit('note', { text: `Second look: ${r.problems.join(' · ')} Sent it back (${secs}).`, tone: 'warn' });
+    return lookText(r.problems);
   }
   // Stays on task (/hooks, off until you switch it on): every DRIFT_EVERY steps, the check; off task, the
   // line that brings it back (DRIFT_NUDGES a message at most). Answers that line, or ''.
@@ -1567,6 +1663,10 @@ export class Agent extends EventEmitter {
     let cuts = 0; // replies cut off at the reply limit mid-tool-call
     let toolsUsed = 0; // tool calls run for this message: a nudge is only for work already under way
     this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '', looked: [], since: Date.now(), planOk: false,
+      // What the follow-through checks keep (4 Oct 2026): walls met, files seen only as an outline, the check runs.
+      walls: [], outlined: new Set(), checks: [],
+      // From the home folder, the folder the request names (offerProject): look-first, real-files and did-you-mean use it.
+      workFolder: isHomeFolder(this.cwd, this.home) ? this.namedFolder ?? null : null,
       // The request's words steer which lines of a long file a Read shows first.
       request: typeof request?.content === 'string' ? request.content : '',
       requestMsg: request,
@@ -1836,7 +1936,7 @@ export class Agent extends EventEmitter {
           // with no look of its own goes back once with the words to search for; a request for work
           // that made a file is not held to it (a new file needs no look). The second time it is
           // let through with a line under it (the owner's pick).
-          const lookHeld = this.model?.remote && !this.isHelper && !isHomeFolder(this.cwd);
+          const lookHeld = this.model?.remote && !this.isHelper && (!isHomeFolder(this.cwd) || Boolean(this.turn.workFolder));
           // Files the app read for it before its first step count as a look (App reads ahead); the opening
           // read and the maps do not (they say where things are, not what is in them).
           const sawCode = this.turn.lookedOwn || (this.turn.given ?? 0) > 0 || this.turn.shown;
@@ -1908,6 +2008,42 @@ export class Agent extends EventEmitter {
               continue;
             }
             this.emit('note', { text: `Note: ${files} did not exist before; Agentic Coder created it just now.`, tone: 'warn' });
+          }
+          // Answer matches results: it says all passed or it works, but its last run of the checks failed
+          // (4 Oct 2026: "All 24 formulas passed" after "Results: 22 passed, 2 failed", exit code 1). Back
+          // once with that run's own line; if it still says so, a line under the answer does.
+          const lastCheck = this.turn.checks.at(-1);
+          if (lastCheck?.failed && claimsAllGood(text) && this.hook('results')) {
+            const said = `\`${lastCheck.cmd}\`${lastCheck.counts ? ` printed "${lastCheck.counts}"` : ''}${lastCheck.code ? ` and ended with exit code ${lastCheck.code}` : ''}`;
+            if (!this.turn.resultsBack) {
+              this.turn.resultsBack = true;
+              this.emit('note', { text: `Its answer says everything passed, but its last check run did not (${lastCheck.counts || `exit code ${lastCheck.code}`}); sent it back.`, tone: 'warn' });
+              this.messages.push({ role: 'user', content: auto(`Your answer says it all passed or works, but your last run of the checks did not: ${said}. Answer again from that run: what passed, what failed and why, in plain words. If you fixed it since, run the checks again first and answer from that run.`) });
+              continue;
+            }
+            this.emit('note', { text: `Check this answer: its last check run did not pass (${lastCheck.counts || `exit code ${lastCheck.code}`}).`, tone: 'warn' });
+          }
+          // Stop when blocked: it met a wall (a login, an address or path you gave that is not there) and
+          // its answer neither asked you nor says so. Back once to say it and ask; then a line names it.
+          const wallMet = this.turn.walls[0];
+          if (wallMet && !this.turn.askedUser && !MENTIONS_WALL.test(text) && this.hook('blocked')) {
+            if (!this.turn.wallBack) {
+              this.turn.wallBack = true;
+              this.emit('note', { text: `Its answer leaves out what blocked it (${wallMet.why}); sent it back to say so and ask you.`, tone: 'warn' });
+              this.messages.push({ role: 'user', content: auto(`Your answer leaves out what blocked you: ${wallMet.why}. Say it plainly at the start of your answer, say what you did instead (if anything), and ask the user how they want to go on.`) });
+              continue;
+            }
+            this.emit('note', { text: `Not said in the answer: ${wallMet.why}.`, tone: 'warn' });
+          }
+          // Read before claiming, at the end: the answer says it found what it needs while files it leans
+          // on were seen only as outlines. Back once to read the part; the step-by-step line (followDue)
+          // covers the replies before.
+          if (!this.turn.readFirstSent && this.turn.outlined.size && claimsFound(text) && this.hook('read-first')) {
+            this.turn.readFirstSent = true;
+            const names = [...this.turn.outlined].slice(0, 3).map((f) => basename(f));
+            this.emit('note', { text: `It says it found what it needs, but saw only the outline of ${names.join(', ')}; sent it back to read the part.`, tone: 'warn' });
+            this.messages.push({ role: 'user', content: auto(`You wrote that you found or have what you need, but of ${names.join(', ')} you have seen only the outline: its parts and line numbers, none of its text. Read the part you need (offset and limit, or find), then answer from what it says.`) });
+            continue;
           }
           // A blank answer (seen once after "hello"): ask for one, once.
           if (!text.trim() && turn.finish !== 'length' && !blankRetry && this.hook('empty')) {
@@ -2049,6 +2185,12 @@ export class Agent extends EventEmitter {
             const found = await this.secondOpinion(signal);
             if (found) { this.messages.push({ role: 'user', content: auto(found) }); continue; }
           }
+          // Second look (second-look.mjs): the answer against what happened, once a message, after real work.
+          if (!signal?.aborted && text.trim()) {
+            const back = await this.lookDue(text, signal);
+            if (signal?.aborted) { reason = 'interrupted'; break; }
+            if (back) { this.messages.push({ role: 'user', content: auto(back) }); continue; }
+          }
           // Your Stop hooks (user-hooks.mjs): exit 2 sends it back to work with what the hook says,
           // STOP_BACKS times at most in one message (stop_hook_active says it was sent back already).
           if (this.userHooks?.has('Stop') && !this.isHelper && !signal?.aborted && stopBacks < STOP_BACKS) {
@@ -2106,7 +2248,8 @@ export class Agent extends EventEmitter {
         const asked = this.requestDue();
         const nudge = await this.driftDue(signal);
         if (signal?.aborted) { reason = 'interrupted'; break; }
-        const extra = [plan, asked, nudge].filter(Boolean);
+        const follow = this.followDue(calls, text);
+        const extra = [plan, asked, nudge, ...follow].filter(Boolean);
         if (extra.length && this.messages.at(-1)?.role === 'tool') {
           this.messages.at(-1).content += `\n\n${extra.join('\n')}`;
           if (plan) this.emit('note', { text: `Reminded it of its plan: ${plan.match(/\d+ of \d+ steps done/)[0]}`, tone: 'dim' });
@@ -2364,18 +2507,23 @@ export class Agent extends EventEmitter {
   // project has that name or ends with that path. Left out: files the request names (it may ask
   // about one that is gone), files made this message, places outside the project (~/…, /…).
   missingFiles(text) {
-    const named = filesInAnswer(text).filter((p) => !/^(~|\/)/.test(p) && !String(this.turn?.request ?? '').includes(p));
-    if (!named.length) return [];
+    // From the home folder, the folder the request names stands for the project (turn.workFolder).
+    const base = this.turn?.workFolder ?? this.cwd;
+    const request = String(this.turn?.request ?? '');
+    // A full path into that folder is looked at where it says (4 Oct 2026: answers there name files by their full path).
+    const full = this.turn?.workFolder ? fullPathsIn(text, base).filter((p) => !request.includes(p) && !existsSync(p) && !(this.turn?.created ?? []).some((c) => p.endsWith(String(c).replace(/^\.\//, '')))) : [];
+    const named = filesInAnswer(text).filter((p) => !/^(~|\/)/.test(p) && !request.includes(p));
+    if (!named.length) return full;
     let all = this.turn?.projectFiles;
-    if (!all) { try { all = projectFiles(this.cwd); } catch { all = []; } if (this.turn) this.turn.projectFiles = all; }
+    if (!all) { try { all = projectFiles(base); } catch { all = []; } if (this.turn) this.turn.projectFiles = all; }
     const made = new Set((this.turn?.created ?? []).map((f) => String(f).replace(/^\.\//, '')));
     const names = new Set(all.map((f) => f.split('/').pop()));
     return named.filter((p) => {
       const rel = p.replace(/^\.\//, '');
       if (made.has(rel) || [...made].some((m) => m.endsWith(`/${rel}`) || m.split('/').pop() === rel)) return false;
-      if (existsSync(join(this.cwd, rel))) return false;
+      if (existsSync(join(this.cwd, rel)) || existsSync(join(base, rel))) return false;
       return rel.includes('/') ? !all.some((f) => f === rel || f.endsWith(`/${rel}`)) : !names.has(rel);
-    });
+    }).concat(full);
   }
 
   // What of Claude's notes this model may be given: all of them on this Mac and on the owner's own
@@ -3074,7 +3222,7 @@ export class Agent extends EventEmitter {
       }
     }
     if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
-    if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
+    if (call.name === 'Ask') { if (this.turn) this.turn.askedUser = true; return this.askUser(id, args, shown, signal); }
     // Read of a web address, with WebFetch on: read as the page it is (asked about as WebFetch is).
     if (call.name === 'Read' && typeof args.path === 'string' && /^https?:\/\//i.test(args.path.trim()) && this.webTools()?.fetch) return this.runTool({ id, name: 'WebFetch', args: JSON.stringify({ url: args.path.trim(), ...(args.find ? { find: args.find } : {}), ...(args.offset ? { offset: args.offset } : {}) }) }, signal);
     // The model's own tools when it decides (Map, CodeSearch, Rename, TestFirst, Remember),
@@ -3100,7 +3248,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -3254,6 +3402,23 @@ export class Agent extends EventEmitter {
         out.text = `${paged.outline ? `(You asked for ${args.path} again without an offset. The answer before had only its outline, so here is its next part.` : `(You asked for the same part of ${args.path} again; it is above, so here is the part after it.`} For another part, pass offset and limit.)\n${out.text}`;
       } else if (shownLines && out.view.total > shownLines) Object.assign(out, { next: (args.offset ?? 1) + shownLines, total: out.view.total });
     }
+    // Files seen only as an outline (with none of their lines), and walls met (Read before claiming, Stop when blocked).
+    if (this.turn) {
+      if (call.name === 'Read' && !out.error && args.path) {
+        const abs = resolvePath(this.cwd, args.path).abs;
+        if (out.view?.outline && !out.view?.matched) { if (!this.turn.readSome?.has(abs)) this.turn.outlined.add(abs); }
+        else if (!out.view?.outline) { this.turn.outlined.delete(abs); (this.turn.readSome ??= new Set()).add(abs); }
+      }
+      if (call.name === 'Bash' && this.turn.outlined.size) for (const f of [...this.turn.outlined]) if (String(args.command ?? '').includes(basename(f))) this.turn.outlined.delete(f);
+      if (call.name === 'WebFetch') this.turn.fetched = true;
+      (this.turn.callLog ??= []).push({ function: { name: call.name, arguments: JSON.stringify(args ?? {}) } });
+      // The app's own words for a step that failed (never a page's or a command's output): the second look's facts.
+      if (out.error) (this.turn.errors ??= []).push(call.name === 'Bash' ? `${runLine(args.command)} ended with exit code ${out.view?.code ?? '?'}` : `${call.name}: ${String(out.text).split('\n')[0].split(' What it said')[0].slice(0, 160)}`);
+      if (out.wall && !this.turn.walls.some((w) => w.url === out.wall.url)) {
+        this.turn.walls.push({ ...out.wall, step: this.turn.steps ?? 0 });
+        this.emit('note', { text: `Blocked: ${out.wall.why}. Told it to ask you rather than do something else.`, tone: 'warn' });
+      }
+    }
     // What this step did, for which facts the turn really used (usedFacts).
     if (this.happened && this.happened.did.length < 60) this.happened.did.push(`${call.name} ${args.path ?? args.command ?? args.pattern ?? ''}`.slice(0, 300));
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
@@ -3319,6 +3484,16 @@ export class Agent extends EventEmitter {
     // How many fail, when the runner counted them: a loop's run says it (loop-run.mjs), and a
     // debugging loop that is not getting closer waits for you (loops.mjs stuckWhy).
     const count = known ? failsOf(out.view?.lines?.join('\n') ?? out.text, tests.failed)?.failed : null;
+    // Every run of checks this message (Answer matches results): a test run, or any command whose output
+    // counts what passed and failed (a script of its own, written by a heredoc: 4 Oct 2026).
+    if (this.turn && call.name === 'Bash' && out.view?.kind === 'bash') {
+      const said = out.view.lines?.join('\n') ?? out.text;
+      const counted = readResults(said, out.view.code ?? 0);
+      if (run || counted.failed !== null) {
+        const failed = run && tests.failed !== null ? tests.failed : counted.failed !== null ? counted.failed > 0 || (out.view.code ?? 0) !== 0 : (out.view.code ?? 0) !== 0;
+        this.turn.checks.push({ cmd: runLine(args.command), code: out.view.code ?? 0, failed, counts: countLine(said), step: this.turn.steps ?? 0 });
+      }
+    }
     if (Number.isFinite(count)) tests.count = count;
     if (this.keepProgress && this.turn && known && !this.turn.changed && !this.turn.failsBefore) this.turn.failsBefore = failsOf(out.view?.lines?.join('\n') ?? out.text, tests.failed);
     if (this.turn && known && this.turn.changed) {

@@ -1,7 +1,7 @@
 // List and Search: walk the project folder without node_modules, .git and
 // other bulky folders; git grep when the folder is a git repo (much faster).
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { join, relative, resolve, dirname, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.venv', 'venv', '__pycache__', '.cache', 'coverage', '.turbo']);
@@ -118,4 +118,61 @@ export function searchFiles(root, { pattern, path = '.', glob, max = 50 } = {}) 
     }
   }
   return { lines: matches, total };
+}
+
+// A name typed a little wrong, set right from what is really in its folder (4 Oct 2026: Qwen
+// searched "forecast-export-exports-report-2026-10-03.html" for "forecast-exports-report-2026-10-03.html",
+// three steps after listing that folder, and got "does not exist"). Only the folder named is looked
+// in, never a walk, so it is safe from the home folder too.
+// The letters two names do not share, as edits (Levenshtein), on names up to 200 characters.
+function editDistance(a, b) {
+  a = a.toLowerCase().slice(0, 200); b = b.toLowerCase().slice(0, 200);
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+// The entries of `dir` close to `name`, closest first: [{ name, d }]. Close: at most a third of the
+// name's letters differ (and at most 12), or the same words in another order or with one word more or
+// less ("report-2026" for "exports-report-2026"), or the start of the name.
+export function nearNames(dir, name, { max = 3 } = {}) {
+  let entries;
+  try { entries = readdirSync(dir); } catch { return []; }
+  const words = (s) => s.toLowerCase().replace(/\.[a-z0-9]+$/, '').split(/[^a-z0-9]+/).filter(Boolean);
+  const want = words(name);
+  const ext = (s) => (/\.([a-z0-9]+)$/i.exec(s)?.[1] ?? '').toLowerCase();
+  const out = [];
+  for (const e of entries) {
+    if (e.startsWith('.') && !name.startsWith('.')) continue;
+    if (ext(e) !== ext(name)) continue;
+    const d = editDistance(name, e);
+    const have = words(e);
+    const shared = want.filter((w) => have.includes(w)).length;
+    // …or the name with its date or number left off ("forecaster-4-preview.html" for "forecaster-4-preview-2026-10-03.html").
+    const stem = name.replace(/\.[a-z0-9]+$/i, '').toLowerCase();
+    const prefix = stem.length >= 6 && e.toLowerCase().startsWith(`${stem}-`);
+    const close = prefix || d <= Math.min(12, Math.max(2, Math.floor(name.length / 3))) || (shared >= 2 && Math.abs(have.length - want.length) <= 1 && shared >= Math.min(have.length, want.length) - 1);
+    if (close) out.push({ name: e, d });
+  }
+  return out.sort((a, b) => a.d - b.d).slice(0, max);
+}
+// A path that does not exist, set right one missing part at a time from the first that is missing
+// (at most 3 parts): { fixed, picks } when each part had one clear match (the closest, and the next
+// at least 3 edits further), else { fixed: null, picks: the closest names for the first missing part }.
+export function nearPath(abs) {
+  const parts = resolve(abs).split('/');
+  let at = '/';
+  let fixes = 0;
+  for (let i = 1; i < parts.length; i++) {
+    const next = join(at, parts[i]);
+    if (existsSync(next)) { at = next; continue; }
+    const near = nearNames(at, parts[i]);
+    const clear = near.length === 1 || (near.length > 1 && near[1].d - near[0].d >= 3);
+    if (!near.length || !clear || ++fixes > 3) return { fixed: null, picks: near.map((n) => join(at, n.name)) };
+    at = join(at, near[0].name);
+  }
+  return fixes ? { fixed: at, picks: [at] } : { fixed: null, picks: [] };
 }
