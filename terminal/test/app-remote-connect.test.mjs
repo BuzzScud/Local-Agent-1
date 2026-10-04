@@ -47,7 +47,7 @@ test('their keys, ↑ then enter, now connect: ↑ from Run on lands on Connect;
   // ↑: the button row, on Connect (Save only is beside it, not under it)
   expect(s.up).toMatch(/❯\s+Connect\s+Save only\s+checks it answers, saves it, then this window uses coder:30b there/);
   expect(flat(s.on)).toContain(`On the remote: coder:30b · ${label} · OpenAI-compatible`);
-  expect(flat(s.on)).toContain(`now go to ${label}`);
+  expect(flat(s.on)).toContain('your prompts and files go there');
   expect(settingsOf(base).remote).toMatchObject({ source: 'openai', use: true });
 }, T);
 

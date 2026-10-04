@@ -2009,7 +2009,10 @@ function TooSmall({ app }) {
 // before the first frame): measuring inside a render makes React print a
 // warning into the terminal.
 const itemHeights = new Map();
-const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}`;
+// The start page's height follows its room (start.jsx StartPage, start.room) and what it lists: the
+// conversations (more after /clear), the tip (gone at your first message), the sessions in the background.
+const pageKey = (s) => [s?.room, s?.recent?.length, s?.tip ? 1 : 0, s?.running?.length].join(':');
+const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `\0${pageKey(ctx.start)}` : ''}`;
 // An item as printed: a turn's step brings the rail line linking it to the step before and has no
 // blank line under it; the turn's end line, and everything outside a turn, has one. Your message's
 // strip has its own padding.

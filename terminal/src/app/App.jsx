@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync, spawn } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdRoom, MENU_ROWS, shortcutRows, footerParts } from './screen.jsx';
-import { startTip, recentRows } from './start.jsx';
+import { startTip, recentRows, recentOf, START_MIN, START_BIG } from './start.jsx';
 import { loadTimes, saveTime, startLeft, typicalStart } from './start-times.mjs';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
@@ -91,6 +91,8 @@ const VERBS = [['Whittling', 'Whittled'], ['Untangling', 'Untangled'], ['Kneadin
 const END_WORDS = { stuck: 'Stopped: it was stuck', limit: 'Stopped at the step limit', error: 'Stopped by an error', declined: 'Stopped: you said no' };
 const PLACEHOLDERS = ['Try "explain what this project does"', 'Try "add a test for …"', 'Try "fix the failing tests"', 'Try "find where … is set"'];
 const IDLE = { phase: 'idle' };
+// Big-model mode's note in few words: a row's new value as "12 tries", "the model decides" (limits.mjs show).
+const BIG_WORDS = { way: (v) => `the ${v.toLowerCase()} decides`, tries: (v) => `${v} tries`, steps: (v) => `${v} steps`, outputLines: (v) => `${v.replace(' lines', '')}-line output` };
 const INIT_PROMPT = 'Look through this project and write an AGENTS.md at its root for a coding assistant: what the project is, how to run it and its tests, the main folders and files, and conventions you notice in the code. Keep it under 60 lines. If an AGENTS.md already exists, improve it instead.';
 const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
 let seq = 0;
@@ -348,6 +350,8 @@ export function App({ opts, win, onRestart }) {
   const [tip, setTip] = useState(() => startTip(opts.start));
   const recentRef = useRef(opts.start?.recent ?? []);
   const holdRef = useRef(!opts.url && !remoteAtStart);
+  // The start page's room as it was last shown held ({ room, rows }), kept for its printed copy.
+  const pageRoomRef = useRef(null);
   // Quitting or restarting: the terminal's cursor leaves the prompt box for the
   // line under it, so what is printed after the app goes there, not into the box.
   const [leaving, setLeaving] = useState(false);
@@ -614,7 +618,7 @@ export function App({ opts, win, onRestart }) {
   }, [mode]);
   // Started in the mode the last window was left in: said once, so Bypass is never a surprise.
   useEffect(() => {
-    if (startedIn.from === 'last' && startedIn.mode !== 'ask') push({ type: 'note', text: `Started in ${modeWord(startedIn.mode)}, the mode the last window was left in; shift+tab or /mode changes it.`, tone: startedIn.mode === 'bypass' ? 'warn' : 'dim' });
+    if (startedIn.from === 'last' && startedIn.mode !== 'ask') push({ type: 'note', text: `Started in ${modeWord(startedIn.mode)}, as the last window left it · shift+tab changes it`, tone: startedIn.mode === 'bypass' ? 'warn' : 'dim' });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The menus that /mode, /meters and /mouse open when typed alone: a title, a line
@@ -870,8 +874,10 @@ export function App({ opts, win, onRestart }) {
     limitsRef.current = next;
     applyLimits(agent, next);
     const list = moved.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
+    // Big-model mode's note is one of the start's: a line, the new values only (4 Oct 2026, the owner's pick).
+    const brief = moved.map((c) => BIG_WORDS[c.id]?.(c.to) ?? `${c.label.toLowerCase()} ${c.to}`).join(', ');
     push({ type: 'note', text: m.harness
-      ? `Big-model mode for ${name}${own?.limits ? ' and its own settings' : ''}: ${list}, and it reads files ${m.harness.read.whole} lines at a time. /effort changes any of it.`
+      ? `Big-model mode for ${name}${own?.limits ? ' (its own settings)' : ''}: ${brief}, ${m.harness.read.whole}-line reads · /effort`
       : own?.limits ? `${name}’s own settings: ${list}. /effort changes them.`
         : agent.model?.harness ? `Big-model mode off: ${list}.` : `The shared settings again: ${list}.`, tone: 'dim' });
   };
@@ -969,7 +975,7 @@ export function App({ opts, win, onRestart }) {
     await agent.mcpTake({ settled: true }).catch(() => {});
     try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: setStartPhase }); } catch {}
     setStarting(false);
-    push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · ${Math.round(conn.ctx / 1024)}k context. Your prompts, your code and the files it reads now go to ${remoteLabel(r)}; /remote switches back.`, tone: 'dim' });
+    push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · your prompts and files go there; /remote switches back`, tone: 'dim' });
     setRemoteState('on');
     // A model still loading on the service: a waiting message goes once it has (preloadRemote).
     const loading = preloadRemote(conn);
@@ -3502,6 +3508,15 @@ export function App({ opts, win, onRestart }) {
       case 'resume': {
         const list = listSessions(cwd);
         if (!list.length) { push({ type: 'note', text: 'No earlier conversations in this folder.', tone: 'dim' }); break; }
+        // /resume <n>: the conversation the start page numbers n (start.jsx, the same repeats left out).
+        if (/^\d+$/.test(arg.trim())) {
+          const numbered = recentOf(list, 99);
+          const pick = numbered[Number(arg.trim()) - 1];
+          if (!pick) { push({ type: 'note', text: `No conversation ${arg.trim()} here: the start page numbers ${numbered.length}. /resume lists them.`, tone: 'dim' }); break; }
+          holdRef.current = false;
+          resumeSession(pick.id);
+          break;
+        }
         setPicker({ title: 'Resume a conversation', index: 0, items: list.map((s) => ({ key: s.id, label: s.title, desc: `${new Date(s.updated).toLocaleString()} · ${s.turns} prompt${s.turns === 1 ? '' : 's'}` })) });
         break;
       }
@@ -3720,9 +3735,9 @@ export function App({ opts, win, onRestart }) {
   const btwShown = Boolean(btw && !perm && !answerWait);
   if (!perm && !picker && !btwShown && input.value !== menuClosedFor) {
     // The rows the / menu may take: 18 as ever, and more in a window with room for them (the box, the
-    // footer and their gaps take 6). Under the start page while it is still live, only what fits
-    // under it: one row too many would print the page, and /start could no longer change it in place.
-    const fits = holdRef.current ? holdRoom(items, measure.current, rows ?? 40) - heldRows(items, measure.current) : (rows ?? 24) - 6;
+    // footer and their gaps take 6). Under the start page while it is still live, the rows it can give
+    // up and still show its bot (2 + START_BIG and its blank line; start.room, below, shrinks it to fit).
+    const fits = holdRef.current ? (rows ?? 40) - 7 - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 6;
     const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
     const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined) }) : [];
     if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
@@ -4426,15 +4441,29 @@ export function App({ opts, win, onRestart }) {
     queueMicrotask(() => { try { if (on && primeRows(itemsRef.current, measure.current)) bumpRows((n) => n + 1); } catch {} });
     return () => { on = false; };
   }, [items, width]);
-  // What primeRows needs to measure items as they are printed.
-  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]) };
+  // Held until your first message (sendPrompt lets it go). Let go for good, printed as it is, when
+  // what came under it, the / menu or the shortcuts would leave it fewer than START_MIN rows, or when a
+  // panel, pop-up or question opens (the page and a tall panel would not fit together).
+  // The rows the start page may use (start.jsx StartPage, start.room): the window less the prompt box,
+  // the footer, their gaps and the cursor's line (6) and the page's own blank line; held, less what
+  // sits under it too (the notes, the / menu, the shortcuts), so it shrinks to make room and stays
+  // live. Printed at once (a start on a remote, or --url), it keeps rows for the notes that come after
+  // it, a line and a gap each: the mode the last window left, and on a remote where it runs, its
+  // Big-model mode and its load. Once printed it keeps the room it was shown with, until the window
+  // changes size.
+  const underRows = heldRows(items, measure.current) + (menu ? Math.min(menu.rows ?? MENU_ROWS, menu.items.length) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
+  const heldRoom = (rows ?? 40) - 7 - underRows;
+  if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRoom >= START_MIN)) holdRef.current = false;
+  if (holdRef.current) pageRoomRef.current = { room: heldRoom, rows: rows ?? 40 };
+  const kept = pageRoomRef.current;
+  const comingNotes = (startedIn.from === 'last' && startedIn.mode !== 'ask' ? 2 : 0) + (remoteAtStart ? 6 : 0);
+  const pageRoom = holdRef.current ? heldRoom : kept?.rows === (rows ?? 40) ? kept.room : Math.max(START_MIN, (rows ?? 40) - 7 - comingNotes);
+  // What primeRows needs to measure items as they are printed. The tip (startTip) is on the page while
+  // it has room for its Try rows, else on the footer.
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running };
+  const tipOnPage = Boolean(tip) && pageRoom - 2 >= START_BIG;
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start };
   itemsRef.current = items;
-  // Held until your first message (sendPrompt lets it go). Let go for good, printed as it is, when
-  // what came under it, the / menu or the shortcuts would not fit in the window beside it, or when a
-  // panel, pop-up or question opens (the page and a tall panel would not fit together).
-  const underRows = heldRows(items, measure.current) + (menu ? Math.min(menu.rows ?? MENU_ROWS, menu.items.length) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
-  if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && underRows <= holdRoom(items, measure.current, rows ?? 40))) holdRef.current = false;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
   const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;
@@ -4474,7 +4503,7 @@ export function App({ opts, win, onRestart }) {
     sessionTokens: sessionTokens.current,
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
-    items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
+    items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip: tipOnPage ? null : tip,
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,

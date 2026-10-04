@@ -65,10 +65,10 @@ test('the window keeps the mode it is left in, and the next one starts in it wit
   ] });
   expect(JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8')).lastMode).toBe('bypass');
   const r = await runInPty({ cwd, env: on, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'the mode the last window was left in' }, { wait: 'bypass permissions on' }, { key: 'shiftTab' }, { sleep: 300 }, ...quit,
+    { wait: 'as the last window left it' }, { wait: 'bypass permissions on' }, { key: 'shiftTab' }, { sleep: 300 }, ...quit,
   ] });
   await fake.close();
-  expect(r.text).toContain('Started in bypass permissions, the mode the last window was left in; shift+tab or /mode changes it.');
+  expect(r.text).toContain('Started in bypass permissions, as the last window left it · shift+tab changes it');
   expect(JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8')).lastMode).not.toBe('bypass'); // shift+tab moved on, and that is kept
 }, T);
 

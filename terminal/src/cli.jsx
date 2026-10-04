@@ -552,6 +552,35 @@ if (opts.print) {
       ...(st.modeFrom && st.mode !== 'ask' ? [`starts in ${modeWord(st.mode)} (/permissions)`] : []),
     ];
     opts.start = { notes: names, git, also, recent: listSessions(opts.cwd) };
+    // The page's other parts, each left out when it cannot be read: the app's newest changes (its own
+    // git history; AGENTIC_NEWS=off leaves them out, as the app's tests do: they would change with
+    // every commit), the folders you worked in (the others listed from your home folder), the facts
+    // the memory holds, and the sessions running in the background with no window on them.
+    const { homedir } = await import('node:os');
+    const tilde = (p) => (p === homedir() ? '~' : p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p);
+    try {
+      const { findRepo, runGit } = await import('./app/update.mjs');
+      const repo = findRepo();
+      const log = repo && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_NEWS ?? '') ? await runGit(repo, ['log', '-5', '--format=%cI%x09%s'], { timeout: 1500 }) : null;
+      if (log?.ok) opts.start.news = log.out.split('\n').filter(Boolean).map((l) => { const [at, ...text] = l.split('\t'); return { at, text: text.join('\t') }; });
+    } catch {}
+    try {
+      const { recentFolders } = await import('./app/store.mjs');
+      const all = recentFolders({ max: 50 });
+      opts.start.folders = all.length;
+      if (opts.cwd === homedir()) opts.start.places = all.filter((f) => f.folder !== opts.cwd).slice(0, 6).map((f) => ({ folder: tilde(f.folder), convs: f.convs, updated: f.updated }));
+    } catch {}
+    if (memoryOn(st)) {
+      try {
+        const { memoryDirs, readFacts } = await import('./agent/facts.mjs');
+        const d = memoryDirs(opts.cwd);
+        opts.start.memory = { you: readFacts(d.you).length, project: d.project ? readFacts(d.project).length : 0 };
+      } catch {}
+    }
+    try {
+      const { listBackground } = await import('./app/sessions.mjs');
+      opts.start.running = listBackground().filter((r) => r.name !== process.env.AGENTIC_IN_HOST && !r.viewers).map((r) => ({ name: r.name, folder: tilde(r.folder ?? '') }));
+    } catch {}
     opts.loaded = [
       names.join(' + ') || 'no AGENTS.md',
       ...(st.fromFolder?.length ? [`folder settings (${st.fromFolder.filter((k) => k !== 'thinking').join(', ')})`] : []),

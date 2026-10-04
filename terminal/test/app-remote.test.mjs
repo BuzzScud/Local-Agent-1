@@ -72,7 +72,7 @@ test('/remote: Run on My other computer, its rows filled in (a pasted key); a Co
   expect(r.snapshots.failed).toContain('the API key was not accepted');
   expect(afterFail).toBe(null); // nothing saved by a Connect that did not work
   expect(r.snapshots.on).toContain(`On the remote: Gemma 4 12B QAT · 127.0.0.1:${remote.port} · llama.cpp`);
-  expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain(`now go to 127.0.0.1:${remote.port}; /remote switches back`);
+  expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain('your prompts and files go there; /remote switches back');
   expect(r.snapshots.doctor).toContain('in the key file (••••6789)');
   // the chat went to the remote with the key; nothing went there with the right key but /health and the checks
   const chats = remote.seen.filter((x) => x.path === '/v1/chat/completions' && x.auth === `Bearer ${KEY}`);
@@ -446,8 +446,8 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (mo
   expect(s.list).toMatch(/coder:30b\s+30\.5B MoE.*18\.6 GB\s+not tried\s+big/);
   expect(s.list).toMatch(/huge:120b.*\s+big/);
   expect(s.list).not.toMatch(/tiny:3b.*\bbig\b/);
-  // on: said in a note, from → to
-  expect(flat(s.switched)).toContain('Big-model mode for coder:30b: Who decides App → Model · Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines, and it reads files 400 lines at a time. /effort changes any of it.');
+  // on: said in a note of a line, the new values
+  expect(flat(s.switched)).toContain('Big-model mode for coder:30b: the model decides, 12 tries, 80 steps, 160-line output, 400-line reads · /effort');
   // /effort shows the new defaults as the defaults
   expect(s.panel).toMatch(/Who decides\s+◀ Model\s+▶\s+default · it sorts, looks and saves for itself, like Claude Code/);
   expect(s.panel).toMatch(/Steps per request\s+◀ 80\s+▶\s+default/);
@@ -597,7 +597,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   expect(s.filled).toMatch(/Reply length\s+◀ 32k tokens\s+▶ •\s+✓ suggested · up to 32k a reply, thinking and answer together/);
   // the switch: loaded at its own context, its own settings in use, and it thinks (Max: think true)
   expect(srv.loads.find((l) => l.model === 'laguna-s-2.1:latest')).toEqual({ model: 'laguna-s-2.1:latest', numCtx: 131072, ok: true });
-  expect(flat(s.switched)).toContain('Big-model mode for laguna-s-2.1:latest and its own settings: Who decides App → Model · Reply length auto → 32k tokens · Keep loaded while open → 30 min · Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines · Command timeout 2 min → 10 min');
+  expect(flat(s.switched)).toContain('Big-model mode for laguna-s-2.1:latest (its own settings): the model decides, reply length 32k tokens, keep loaded 30 min, 12 tries, 80 steps, 160-line output, command timeout 10 min');
   expect(srv.chats[0]).toEqual({ model: 'laguna-s-2.1:latest', tools: true, numCtx: 131072 });
   expect(srv.thinks[0]).toBe(true);
   // its Reply length and Keep loaded reach the service with each request
