@@ -83,4 +83,7 @@ test('the done line says where the time went; zero counts and old sessions show 
   expect(doneCounts({ steps: 9, reads: 4, thinkTokens: 1820 })).toBe(' · 9 steps · 4 reads · ~1,820 thinking tokens');
   expect(doneCounts({ steps: 1, reads: 1, thinkTokens: 0 })).toBe(' · 1 step · 1 read');
   expect(doneCounts({})).toBe('');
+  // The window's total since it opened (4 Oct 2026, the owner's pick: on the spinner and end lines).
+  expect(doneCounts({ steps: 12, thinkTokens: 2300, session: 32040 })).toBe(' · 12 steps · ~2,300 thinking tokens · ↓ 32.0k tokens this session');
+  expect(doneCounts({ session: 840 })).toBe(' · ↓ 840 tokens this session');
 });

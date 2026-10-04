@@ -260,11 +260,11 @@ function MemoryPanel({ it, width }) {
   );
 }
 
-// The counts on the done line: " · 9 steps · 4 reads · ~1,820 thinking tokens"
+// The counts on the done line: " · 9 steps · 4 reads · ~1,820 thinking tokens · ↓ 31.2k tokens this session"
 // (a count of 0 is left out; old saved sessions have none).
 export function doneCounts(it) {
   const n = (x, one, many) => (x ? ` · ${x.toLocaleString('en-US')} ${x === 1 ? one : many}` : '');
-  return `${n(it.steps, 'step', 'steps')}${n(it.reads, 'read', 'reads')}${it.thinkTokens ? ` · ~${it.thinkTokens.toLocaleString('en-US')} thinking tokens` : ''}`;
+  return `${n(it.steps, 'step', 'steps')}${n(it.reads, 'read', 'reads')}${it.thinkTokens ? ` · ~${it.thinkTokens.toLocaleString('en-US')} thinking tokens` : ''}${it.session ? ` · ↓ ${fmtTok(it.session)} tokens this session` : ''}`;
 }
 
 export function Item({ it, width, model, cwd, loaded, start }) {
@@ -421,7 +421,13 @@ export function Spinner({ app }) {
   const busy = live.busyUntil > now ? ` · waiting for the service, trying again in ${Math.ceil((live.busyUntil - now) / 1000)} s` : '';
   const pace = busy ? busy : !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting ? ' · reading' : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
   const doing = live.rail ? '' : doingWords(live);
-  const note = `${step !== null ? ` · this step ${fmtSecs(step)}` : ` · ↓ ${fmtTok(live.tokens)} tokens`}${pace}${doing ? ` · ${doing}` : ''}${live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : ''}`;
+  // The tokens: every one written since the window opened, this request's as they stream. In a
+  // narrow window " this session" goes first, then the count, so "esc to interrupt" stays whole.
+  const rest = `${step !== null ? ` · this step ${fmtSecs(step)}` : ''}${pace}${doing ? ` · ${doing}` : ''}${live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : ''}`;
+  const count = ` · ↓ ${fmtTok((app.sessionTokens ?? 0) + (live.tokens ?? 0))} tokens`;
+  // "  ╰─ " on the rail, the glyph and a space, "Verb… (", the seconds, the note, " · esc to interrupt)".
+  const long = (n) => (live.rail ? 5 : 0) + 2 + String(live.verb ?? '').length + 3 + fmtSecs(secs).length + n.length + 20;
+  const note = [`${count} this session${rest}`, `${count}${rest}`].find((n) => long(n) <= (app.width ?? 80)) ?? rest;
   const icon = spinFrame(app.spinner, secs, { tokens: live.tokens, sinceToken: live.lastTokenAt ? (now - live.lastTokenAt) / 1000 : Infinity });
   return (
     <Box marginBottom={1} width={app.width}>

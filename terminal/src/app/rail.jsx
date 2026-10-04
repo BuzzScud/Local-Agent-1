@@ -7,7 +7,7 @@
 // have no blank line between them, and the end line leaves one under it.
 import React from 'react';
 import { Box, Text } from 'ink';
-import { C, MARK, fmtSecs } from '../ui/theme.mjs';
+import { C, MARK, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { wrap } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { money } from '../agent/spend.mjs';
@@ -235,7 +235,7 @@ export function EndLine({ it, counts = '' }) {
   // What the request cost on a paid service (/remote, spend.mjs).
   const cost = it.usd > 0 ? <Text color={C.dim}> · {money(it.usd)} for this request</Text> : null;
   if (it.reason === 'interrupted') return <Text>{lead}<Text color={C.warn}>■ {it.text ?? 'Interrupted · What should Agentic Coder do instead?'}</Text>{cost}</Text>;
-  if (it.reason && it.reason !== 'done') return <Text>{lead}<Text color={it.left ? C.warn : C.dim}>{it.text ?? `Stopped (${it.reason})`}{it.left ? ` · ${plural(it.left, 'layout problem')} left` : ''}</Text><Text color={C.dim}>{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''} · {clock(it.at)}</Text>{cost}</Text>;
+  if (it.reason && it.reason !== 'done') return <Text>{lead}<Text color={it.left ? C.warn : C.dim}>{it.text ?? `Stopped (${it.reason})`}{it.left ? ` · ${plural(it.left, 'layout problem')} left` : ''}</Text><Text color={C.dim}>{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''}{it.session ? ` · ↓ ${fmtTok(it.session)} tokens this session` : ''} · {clock(it.at)}</Text>{cost}</Text>;
   const left = it.left ? <Text color={C.warn}>✗ Ended with {plural(it.left, 'layout problem')} left · </Text> : null;
   const time = it.secs >= 1 ? `${it.past} for ${fmtSecs(it.secs)}${counts} · done ${clock(it.at)}` : `done ${clock(it.at)}`;
   return <Text>{lead}{left}<Text color={it.left ? C.warn : C.accent}>{it.left ? '' : `${MARK} `}</Text><Text color={C.dim}>{time}</Text>{cost}</Text>;

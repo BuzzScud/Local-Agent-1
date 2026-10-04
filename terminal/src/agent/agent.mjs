@@ -2035,7 +2035,7 @@ export class Agent extends EventEmitter {
           if (out.error) this.noteError(out.text, result);
           else if (/^(?:Rules\/)?SKILLS\//.test(String(out.text))) result.keep = 'skill';
           if (out.images?.length) this.ctxUsed += out.images.length * IMAGE_TOKENS;
-          for (const r of out.readKeys ?? (out.readKey ? [out] : [])) this.turn.reads.set(r.readKey, { msg: result, mtime: r.mtime, ...(r.outline ? { outline: true, next: r.next, total: r.total } : {}) });
+          for (const r of out.readKeys ?? (out.readKey ? [out] : [])) this.turn.reads.set(r.readKey, { msg: result, mtime: r.mtime, ...(r.next ? { outline: Boolean(r.outline), next: r.next, total: r.total } : {}) });
           if (out.stop) stopped = out.stop;
         }
         if (stopped) { reason = stopped; break; }
@@ -3142,10 +3142,12 @@ export class Agent extends EventEmitter {
       // The answer before was a long file's outline, not its lines: "it is above" was not
       // true, and Qwen3.6 went round seven times between the outline and that line until it
       // was stopped as stuck (3 Oct 2026). Asked again with no offset, it gets the file's next
-      // part, and the step counts as new.
-      if (seen?.outline && seen.mtime === mtime && args.offset === undefined && args.limit === undefined && !args.find && seen.next <= (seen.total ?? Infinity)) {
-        paged = seen.next;
-        args.offset = paged;
+      // part, and the step counts as new. The same for one part asked for twice (the same
+      // offset and limit): Qwen3.6 read lines 1-100 of a report twice and the stuck question
+      // came up (4 Oct 2026, the owner's pick: give the next part instead).
+      if (seen?.next && seen.mtime === mtime && !args.find && seen.next <= (seen.total ?? Infinity) && this.messages.includes(seen.msg) && !String(seen.msg.content).startsWith('[older output removed')) {
+        paged = { from: seen.next, outline: seen.outline };
+        args.offset = paged.from;
         this.turn.paged = true;
       } else
       // Asked a second time, it is pointed back; asked a third time, it gets
@@ -3172,12 +3174,13 @@ export class Agent extends EventEmitter {
     if (out.error && /outside the project folder/.test(String(out.text)) && String(args.command ?? args.path ?? '').split(/[\s'"]+/).some((w) => w.includes('/') && this.noteNames(w))) out.text += ' If the note that came with the request answers it, answer from the note now.';
     if (readKey && !out.error) {
       Object.assign(out, { readKey, mtime });
-      // An outline, or a part given for a repeat of it: the next repeat moves on (see above).
+      // An outline, or one part of a long file: a repeat of the same Read moves on (see above).
+      const shownLines = out.view?.kind === 'read' && !args.find ? out.view.lines ?? 0 : 0;
       if (out.view?.outline) Object.assign(out, { outline: true, next: 1, total: out.view.total });
       else if (paged) {
-        Object.assign(out, { outline: true, next: paged + (out.view?.lines ?? 0), total: out.view?.total });
-        out.text = `(You asked for ${args.path} again without an offset. The answer before had only its outline, so here is its next part. For another part, pass offset and limit.)\n${out.text}`;
-      }
+        Object.assign(out, { outline: paged.outline, next: paged.from + shownLines, total: out.view?.total });
+        out.text = `${paged.outline ? `(You asked for ${args.path} again without an offset. The answer before had only its outline, so here is its next part.` : `(You asked for the same part of ${args.path} again; it is above, so here is the part after it.`} For another part, pass offset and limit.)\n${out.text}`;
+      } else if (shownLines && out.view.total > shownLines) Object.assign(out, { next: (args.offset ?? 1) + shownLines, total: out.view.total });
     }
     // What this step did, for which facts the turn really used (usedFacts).
     if (this.happened && this.happened.did.length < 60) this.happened.did.push(`${call.name} ${args.path ?? args.command ?? args.pattern ?? ''}`.slice(0, 300));

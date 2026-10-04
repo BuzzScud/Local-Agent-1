@@ -374,6 +374,9 @@ export function App({ opts, win, onRestart }) {
   // The cost meter (/remote, spend.mjs): the footer's words, after each answer and every 15 s
   // (today's total counts the other windows too); turnSpend: the window's dollars as a request began.
   const turnSpend = useRef(0);
+  // Every token the model wrote since the window opened: the spinner line and each end line
+  // say it (the owner's pick, 4 Oct 2026: "add the total tokens … i cant see it").
+  const sessionTokens = useRef(0);
   const [spend, setSpend] = useState('');
   useEffect(() => {
     const show = () => setSpend(spendLabel());
@@ -2483,8 +2486,11 @@ export function App({ opts, win, onRestart }) {
       on('compacted', ({ summary, inPlace, n }) => { push({ type: 'note', text: inPlace ? `Picked up from its notes${n ? ` (${n})` : ''}` : `Summarized${n ? ` (${n})` : ''}, carrying on`, tone: 'dim' }); fold({ title: 'Summary', text: summary }); }),
       // A background job ended with nothing running: told to the model once a queued message had its turn.
       on('jobs-waiting', () => setTimeout(() => jobWakeRef.current?.(), 150)),
-      on('turn-end', ({ reason, secs, steps, reads, thinkTokens }) => {
+      on('turn-end', ({ reason, secs, steps, reads, thinkTokens, tokens }) => {
         const past = S.current.live?.past ?? 'Worked';
+        // The service's count when it gave one, else what streamed (a greeting's turn has none).
+        sessionTokens.current += tokens || S.current.live?.tokens || 0;
+        const session = sessionTokens.current;
         setLive(IDLE);
         setPerm(null);
         answerRef.current = null;
@@ -2496,9 +2502,9 @@ export function App({ opts, win, onRestart }) {
         // What this request cost on a paid service (spend.mjs), for its end line.
         const spent = windowSpend().usd - (turnSpend.current ?? 0);
         const usd = spent > 0 ? spent : undefined;
-        if (reason === 'interrupted') { push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd }); setPlaceholder('Tell Agentic Coder what to do instead'); }
-        else if (reason === 'done') push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left, usd });
-        else push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd });
+        if (reason === 'interrupted') { push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd, session }); setPlaceholder('Tell Agentic Coder what to do instead'); }
+        else if (reason === 'done') push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left, usd, session });
+        else push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd, session });
         railOn.current = false;
         pre.current = null;
         // In its own copy: changed files are offered back to the real folder (copies.mjs).
@@ -4398,6 +4404,7 @@ export function App({ opts, win, onRestart }) {
   }, [agentsMoving, agentsView, agentsShown]);
   const agentsLiveLine = agentsState && !agentsShown && agentsView === 'chat' ? agentsLine(agentsState, agentsNow) : null;
   const app = {
+    sessionTokens: sessionTokens.current,
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,

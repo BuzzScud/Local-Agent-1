@@ -1103,3 +1103,23 @@ test('a step turned away points back at Claude\'s note only when the note names 
   agent.claudeCame = false;
   expect(agent.noteNames('/Users/x/Desktop/MATH')).toBe(false);
 });
+
+// 4 Oct 2026: Qwen3.6 read lines 1-100 of a 769-line report twice, and "the same step twice"
+// asked the owner. Their pick: the same part asked for again gets the part after it.
+test('the same part of a file asked for twice: the part after it, and no stuck question', async () => {
+  const cwd = project();
+  writeFileSync(join(cwd, 'report.html'), Array.from({ length: 769 }, (_, i) => `<p>row ${i + 1}</p>`).join('\n'));
+  const part = { tool: { name: 'Read', args: { path: 'report.html', offset: 1, limit: 100 } } };
+  const fake = await startFakeServer([part, part, { text: 'Rows 1 to 200 are plain paragraphs.' }]);
+  const asked = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false,
+    ask: async (req) => { asked.push(req); return { choice: 'yes' }; } });
+  expect(await agent.send('what is in the report?')).toBe('done');
+  await fake.close();
+  const reads = agent.messages.filter((m) => m.role === 'tool' && String(m.content).includes('report.html')).map((m) => String(m.content));
+  expect(reads.length).toBe(2);
+  expect(reads[0]).toContain('report.html (lines 1-100 of 769');
+  expect(reads[1]).toStartWith('(You asked for the same part of report.html again; it is above, so here is the part after it.');
+  expect(reads[1]).toContain('report.html (lines 101-200 of 769');
+  expect(asked.some((r) => r.kind === 'stuck')).toBe(false);
+});
