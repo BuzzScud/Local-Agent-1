@@ -23,6 +23,9 @@ export const showLook = (v) => (/^\d+$/.test(String(v)) ? `${v} s` : String(v));
 
 // Goes with the request when Look first is on.
 export const LOOK_NOTE = 'Look first: before your first change or answer, Search for the names this involves and Read where they are defined, where they are used and where they are tested.';
+// The same for a folder of data, not code (folder.mjs folderKind, 4 Oct 2026): a README or manifest
+// says what the files are; a file's outline says what its rows hold.
+export const LOOK_NOTE_DATA = "Look first: before your first change or answer, read what the folder says about itself (a README or manifest), find the files the request names, and Read each one's outline to see what its rows hold: its time range, its gaps, how full it is.";
 
 // Sent back when it answers before the minimum: what it looked at so far, and where to look next.
 export function lookBackNote(looked) {

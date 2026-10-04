@@ -2442,7 +2442,7 @@ export function App({ opts, win, onRestart }) {
       on('busy', ({ until }) => setLive((l) => (l.phase ? { ...l, busyUntil: until } : l))),
       on('turn-start', () => { try { const u = [...agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} turnSpend.current = windowSpend().usd; railOn.current = true; pre.current = null; lastCheck.current = null; const [verb, past] = pick(VERBS); setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
-      on('waiting', ({ room, thinkCap } = {}) => setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, task: null }))),
+      on('waiting', ({ room, thinkCap, whole } = {}) => setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null }))),
       // A reply that will not run as it was (cut off, repeating itself): its live lines go.
       on('reply-dropped', () => setLive((l) => ({ ...l, thinking: null, text: null, writing: null }))),
       // The app working between replies (notes, a summary): the working line says so.

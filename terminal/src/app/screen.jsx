@@ -419,7 +419,10 @@ export function Spinner({ app }) {
   const step = live.rail && live.stepStart ? Math.max(0, (now - live.stepStart) / 1000) : null;
   // A busy service (busy.mjs): the seconds to its next try.
   const busy = live.busyUntil > now ? ` · waiting for the service, trying again in ${Math.ceil((live.busyUntil - now) / 1000)} s` : '';
-  const pace = busy ? busy : !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting ? ' · reading' : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
+  // On an Ollama service a tool call comes whole once written: words stop while a long one is
+  // written, and the line says so instead of a speed that stood still (4 Oct 2026: 4 minutes at "34.5 tok/s").
+  const quiet = live.whole && live.lastTokenAt && !live.waiting ? (now - live.lastTokenAt) / 1000 : 0;
+  const pace = busy ? busy : !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting ? ' · reading' : quiet >= 15 ? ` · writing its next step, sent whole when done (${fmtSecs(quiet)})` : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
   const doing = live.rail ? '' : doingWords(live);
   // The tokens: every one written since the window opened, this request's as they stream. In a
   // narrow window " this session" goes first, then the count, so "esc to interrupt" stays whole.

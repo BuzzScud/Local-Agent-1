@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt, WORK_HABITS } from '../src/agent/prompt.mjs';
-import { askedQuestions, fileSaid, planSaid, changesSaid, lookSaid, stepSaid, checkInQuestion, stuckQuestion } from '../src/agent/questions.mjs';
+import { askedQuestions, fileSaid, planSaid, changesSaid, lookSaid, stepSaid, errorSaid, checkInQuestion, stuckQuestion } from '../src/agent/questions.mjs';
 import { parseArgs, TOOL_DEFS } from '../src/agent/tools.mjs';
 import { permissionOptions } from '../src/app/screen.jsx';
 import { cleanChoices } from '../src/flows/clarify.mjs';
@@ -83,8 +83,24 @@ test("the app's own questions in plain words: files by name, the Desktop as your
   expect(stepSaid('Edit', { path: 'src/export.mjs' })).toBe('changing export.mjs in src');
   expect(stepSaid('Write', { path: 'notes.txt' })).toBe('writing notes.txt');
   expect(stepSaid('List', { path: 'src' })).toBe('looking at the files in src');
-  // The error's own words come last.
-  expect(stuckQuestion('errors', 'x', 'ENOENT: no such file').question).toBe('Three steps in a row did not work. The last one said: ENOENT: no such file What should I do?');
+  // The step, then the error's own words.
+  expect(stuckQuestion('errors', 'running cat a.txt', 'ENOENT: no such file').question).toBe('Three steps in a row did not work. The last one (running cat a.txt) ended with: ENOENT: no such file. What should I do?');
+  expect(stuckQuestion('errors', 'running make', '').question).toBe('Three steps in a row did not work. The last one (running make) gave no error words. What should I do?');
+  // A script typed into the command is named by its first line.
+  expect(stepSaid('Bash', { command: "python3 - <<'PYEOF'\nimport json\nprint(1)\nPYEOF" })).toBe("running python3 - <<'PYEOF' …");
+});
+
+// 4 Oct 2026: a script printed "=== MNQ ===" and its numbers, then a traceback; the question quoted
+// "=== MNQ ===", the first line, and asked the same thing again after three more failures.
+test("the stuck question quotes the line that says what went wrong", () => {
+  const out = ['=== MNQ ===', '  name: MNQ', '  total: 2681', 'Traceback (most recent call last):', '  File "<stdin>", line 279, in <module>', '    html += cards_res.get(r)', "AttributeError: 'str' object has no attribute 'get'", '(exit code 1)'].join('\n');
+  expect(errorSaid('Bash', out)).toBe("AttributeError: 'str' object has no attribute 'get' (line 279)");
+  expect(errorSaid('Bash', 'src/a.c:3: error: expected ;\nmake: *** [all] Error 1\n(exit code 2)')).toBe('src/a.c:3: error: expected ;');
+  // No line reads as an error: the last one, never the app's own exit line.
+  expect(errorSaid('Bash', 'building\nhalf way\n(exit code 1)')).toBe('half way');
+  expect(errorSaid('Bash', '(exit code 1)')).toBe('');
+  // Another tool's result says what went wrong first.
+  expect(errorSaid('Edit', 'old_string was not found in a.mjs\nthe nearest lines:\n  error = 1')).toBe('old_string was not found in a.mjs');
 });
 
 test("the opening question's answers keep their about lines", () => {

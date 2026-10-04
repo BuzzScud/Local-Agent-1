@@ -49,6 +49,7 @@ export function lookFacts(turn, { home = '' } = {}) {
   for (const e of (t.errors ?? []).slice(-6)) out.push(`An error: ${e}`);
   if (t.outlined?.size) out.push(`Seen only as an outline (none of its text): ${[...t.outlined].slice(0, 5).map(tilde).join(', ')}.`);
   if (t.created?.length) out.push(`Files it created: ${t.created.slice(0, 8).join(', ')}.`);
+  if (t.madeByCommand?.size) out.push(`Files its commands wrote: ${[...t.madeByCommand.keys()].slice(0, 8).map(tilde).join(', ')}.`);
   if (!t.changed && !t.wroteByCommand) out.push('No file was changed.');
   return out;
 }
@@ -61,15 +62,24 @@ export async function secondLook({ url, model, slot, use, request = '', plan = '
   const timer = setTimeout(() => late.abort(), timeoutMs);
   const ms = () => Date.now() - t0;
   try {
-    const r = await ask({
-      url, model, slot, use, temperature: 0, maxTokens: 260, thinking: false, schema: SCHEMA, system: LOOK_SYSTEM,
-      signal: signal ? AbortSignal.any([signal, late.signal]) : late.signal,
-      user: `The user's request:\n${String(request).trim().slice(0, 2000) || '(none given)'}${plan ? `\n\nThe assistant's plan:\n${plan}` : ''}\n\nIts steps, oldest first:\n${steps.map((s) => `- ${s}`).join('\n') || '(none)'}\n\nWhat the app recorded:\n${facts.map((f) => `- ${f}`).join('\n') || '- nothing failed or blocked'}\n\nIts answer:\n${String(answer).trim().slice(0, 2500)}`,
+    const user = `The user's request:\n${String(request).trim().slice(0, 2000) || '(none given)'}${plan ? `\n\nThe assistant's plan:\n${plan}` : ''}\n\nIts steps, oldest first:\n${steps.map((s) => `- ${s}`).join('\n') || '(none)'}\n\nWhat the app recorded:\n${facts.map((f) => `- ${f}`).join('\n') || '- nothing failed or blocked'}\n\nIts answer:\n${String(answer).trim().slice(0, 2500)}`;
+    const call = (more, maxTokens) => ask({
+      url, model, slot, use, temperature: 0, maxTokens, thinking: false, schema: SCHEMA, system: LOOK_SYSTEM,
+      signal: signal ? AbortSignal.any([signal, late.signal]) : late.signal, user: `${user}${more}`,
     });
+    const listed = (r) => (Array.isArray(r?.json?.problems) ? r.json.problems : []).map((p) => short(p, 220)).filter(Boolean).slice(0, 3);
+    const r = await call('', 260);
     const v = r?.json?.verdict;
     if (v !== 'ok' && v !== 'wrong') return { failed: true, reason: 'the check gave no clear answer', ms: ms() };
-    const problems = (Array.isArray(r.json.problems) ? r.json.problems : []).map((p) => short(p, 220)).filter(Boolean).slice(0, 3);
-    if (v === 'wrong' && !problems.length) return { failed: true, reason: 'the check found something but did not say what', ms: ms() };
+    let problems = listed(r);
+    // "wrong" with no problem named (4 Oct 2026, a report page's run): asked once more, with room, for
+    // what is wrong; still nothing, and the answer stands with a line saying so.
+    if (v === 'wrong' && !problems.length) {
+      const again = await call('\n\nYou found this answer wrong. Name each problem in one short sentence.', 500);
+      problems = again?.json?.verdict === 'wrong' ? listed(again) : [];
+      if (again?.json?.verdict === 'ok') return { ok: true, problems: [], ms: ms() };
+      if (!problems.length) return { failed: true, reason: 'the check thought the answer may not hold, but named nothing, twice', ms: ms() };
+    }
     return { ok: v === 'ok', problems, ms: ms() };
   } catch (e) {
     if (signal?.aborted) throw e;

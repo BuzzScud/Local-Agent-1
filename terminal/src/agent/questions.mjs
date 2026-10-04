@@ -97,8 +97,10 @@ export function lookSaid(name, args = {}) {
 
 // One step as the stuck question names it: the command it ran, the file it changed, else what it
 // looked at ("running npm test", "changing export.mjs in src", "looking at the files in src").
+// A script typed into the command (a heredoc) is named by its first line, not its body run together.
 export function stepSaid(name, args = {}) {
-  if (name === 'Bash' && String(args.command ?? '').trim()) return `running ${clip(args.command, 80)}`;
+  const cmd = String(args.command ?? '').trim();
+  if (name === 'Bash' && cmd) return `running ${cmd.includes('\n') ? `${clip(cmd.split('\n')[0], 76)} …` : clip(cmd, 80)}`;
   if (['Edit', 'Update', 'Write'].includes(name) && args.path) return `${name === 'Write' ? 'writing' : 'changing'} ${fileSaid(args.path)}`;
   return `looking at ${lookSaid(name, args)}`;
 }
@@ -124,13 +126,31 @@ export function checkInQuestion(looked, secs) {
   };
 }
 
-// Stuck: the same step twice, or three that failed; the error's own words come last.
-// step: the step in words (stepSaid).
+// The words of a failed step that say what went wrong. A command's output: the last line that
+// reads as an error (a Python traceback ends with it), with the line number the traceback gives,
+// else its last line; never the app's own "(exit code 1)" or make's "*** Error 1". Other tools: their first line.
+// 4 Oct 2026: a script that printed "=== MNQ ===" before its traceback was asked about as
+// "The last one said: === MNQ ===".
+const ERROR_LINE = /\w*(Error|Exception)\b|\berror\b|\bfatal\b|no such file|not found|denied|refused|cannot|can't|failed|invalid/i;
+export function errorSaid(name, text) {
+  const lines = String(text ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (name !== 'Bash') return clip(lines[0] ?? '', 160);
+  const said = lines.filter((l) => !/^\((exit code -?\d+|stopped after [^)]*)\)$/.test(l) && !/^… \d+ lines cut …$/.test(l));
+  const hit = said.findLastIndex((l) => ERROR_LINE.test(l) && !/^(Traceback \(most recent call last\)|make(\[\d+\])?: \*\*\*)/.test(l));
+  const at = hit >= 0 ? hit : said.length - 1;
+  if (at < 0) return '';
+  const line = said.slice(Math.max(0, at - 3), at).reverse().map((l) => l.match(/\bline (\d+)\b/)?.[1]).find(Boolean);
+  return clip(`${said[at]}${line && !/\bline \d+/.test(said[at]) ? ` (line ${line})` : ''}`, 160);
+}
+
+// Stuck: the same step twice, or three that failed; the step, then the error's own words.
+// step: the step in words (stepSaid); err: errorSaid.
 export function stuckQuestion(why, step, err) {
+  const end = /[.!?]$/.test(err ?? '') ? '' : '.';
   return {
     question: why === 'repeat'
       ? `I tried the same step twice (${step}) and I am not getting further. What should I do?`
-      : `Three steps in a row did not work.${err ? ` The last one said: ${err}` : ''} What should I do?`,
+      : `Three steps in a row did not work. The last one (${step}) ${err ? `ended with: ${err}${end}` : 'gave no error words.'} What should I do?`,
     options: ['Keep going'],
     about: ['I try again my own way.'],
     typeLabel: 'Give me a hint…',

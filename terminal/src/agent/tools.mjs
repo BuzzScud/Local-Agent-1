@@ -17,6 +17,7 @@ import { mathPathFor, mathDir } from './expertise.mjs';
 import { designPathFor, designDir, inDesignDir } from './design.mjs';
 import { studioPathFor, studioDir, inStudioDir, hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
+import { scriptsPathFor, inScripts, saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote } from './scripts.mjs';
 import { permissionsTable } from './permissions.mjs';
 
 const str = (description) => ({ type: 'string', description });
@@ -406,6 +407,9 @@ export function resolvePath(cwd, p) {
     const d = studioPathFor(p);
     if (d) return { abs: d.abs, rel: p, inside: true, design: true, shelf: STUDIO_SHELF() };
   }
+  // "SCRIPTS/…" is this window's saved scripts (scripts.mjs): the model's own, so it may change them.
+  const sc = scriptsPathFor(p, cwd);
+  if (sc) return { abs: sc.abs, rel: p, inside: true, scripts: true };
   // The folder's own name used as a path ("project", "project/a.js") means the folder.
   const own = cwd.split(sep).pop();
   if (!isAbsolute(p) && own && (p === own || p.startsWith(`${own}/`)) && !existsSync(resolve(cwd, p))) p = p === own ? '.' : p.slice(own.length + 1);
@@ -444,6 +448,8 @@ export function resolvePath(cwd, p) {
     const r = relative(mathDir(), abs);
     return { abs, rel: `MATH${r ? `/${r}` : ''}`, inside: true, math: true, shelf: MATH_SHELF() };
   }
+  const script = !inside ? inScripts(abs) : null;
+  if (script) return { abs, rel: script, inside: true, scripts: true };
   const inDesign = !inside && existsSync(abs) ? inDesignDir(abs) : null;
   if (inDesign) return { abs, rel: inDesign, inside: true, design: true, shelf: DESIGN_SHELF() };
   const inStudio = !inside && existsSync(abs) ? inStudioDir(abs) : null;
@@ -956,12 +962,21 @@ export async function execute(name, args, prepared, env) {
       // A model on another machine gets a test run's passing tests folded into one line (squeezeTests).
       // Bypass permissions lifts the folder fence and the internet block (sandbox.mjs open).
       const open = env.permissionsNow?.().mode === 'bypass';
-      const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal, squeeze: env.rulesSet === 'remote', ...(open ? { sandbox: { open: true } } : {}) });
+      // A long script typed in as a heredoc is saved as SCRIPTS/… too; SCRIPTS/… in a command is the
+      // real folder, which the sandbox may read (scripts.mjs). The command itself runs as typed.
+      const saved = saveScript(args.command, env.cwd);
+      const scripts = Boolean(saved) || usesScripts(args.command, env.cwd);
+      const sandbox = open ? { open: true } : scripts ? { readOnly: [scriptsDir()] } : null;
+      const r = await runCommand(commandWithScripts(args.command, env.cwd), { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal, squeeze: env.rulesSet === 'remote', ...(sandbox ? { sandbox } : {}) });
+      if (scripts) r.lines = r.lines.map(outputWithScripts);
       const body = r.lines.join('\n');
       const took = timeoutMs >= 90_000 && timeoutMs % 60_000 === 0 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
       const longer = r.timedOut && timeoutMs < MAX_TIMEOUT_SECS * 1000 ? `; for longer, send timeout (up to ${MAX_TIMEOUT_SECS} seconds), or background: true for one that need not be waited for` : '';
       const status = r.timedOut ? `\n(stopped after ${took}${longer})` : r.code === 0 ? '' : `\n(exit code ${r.code})`;
-      return { text: cut(body || '(no output)', max) + status, error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut, ...(r.timedOut ? { after: took } : {}) } };
+      // Where a failed script stopped, with its lines (a traceback's "line 279 of <stdin>"), and the saved file.
+      const where = r.code !== 0 && !r.timedOut ? failingLine(body, { body: heredocScript(args.command)?.body ?? null, saved: saved?.name ?? null, cwd: env.cwd }) : '';
+      const after = [where, saved ? savedNote(saved) : ''].filter(Boolean).join('\n');
+      return { text: cut(body || '(no output)', max) + status + (after ? `\n${after}` : ''), error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut, ...(r.timedOut ? { after: took } : {}), ...(saved ? { saved: saved.name } : {}) }, ...(saved ? { saved } : {}) };
     }
     case 'Jobs': return jobsTool(args, env, max);
     case 'WebSearch': return webSearch(args, env);
@@ -1001,7 +1016,10 @@ async function startJob(args, env, max) {
   if (!env.jobs) return { text: 'Background jobs are not available here. Run the command without background; timeout gives it up to 600 seconds.', error: true, view: { kind: 'error', message: 'no background jobs here' } };
   // Bypass permissions lifts the folder fence and the internet block here too (sandbox.mjs open).
   const open = env.permissionsNow?.().mode === 'bypass';
-  const r = await env.jobs.start(args.command, { cwd: env.cwd, description: args.description ?? '', ...(open ? { sandbox: { open: true } } : {}) });
+  // SCRIPTS/… is the real folder of saved scripts, which the sandbox may read (scripts.mjs).
+  const scripts = usesScripts(args.command, env.cwd);
+  const sandbox = open ? { open: true } : scripts ? { readOnly: [scriptsDir()] } : null;
+  const r = await env.jobs.start(commandWithScripts(args.command, env.cwd), { cwd: env.cwd, description: args.description ?? '', ...(sandbox ? { sandbox } : {}) });
   if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: 'too many background jobs' } };
   const { job } = r;
   const first = env.jobs.look(job, env.bash?.maxLines ?? 80).lines;

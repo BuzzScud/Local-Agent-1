@@ -76,6 +76,12 @@ export function outline(text, path = '') {
 // said it had found the formulas in it). A page: its headings, its sections and tabs with an id, its
 // styles and scripts. Markdown: its headings. A table (CSV, TSV): the header row, then the rows with
 // the first one shown. JSON: the keys at the top. Fewer than two found: [] (blocks of 60 lines then).
+// The keys most of a JSON-lines file's records have (of its first 50), as "a, b, c".
+function recordKeys(lines) {
+  const count = new Map();
+  for (const l of lines.slice(0, 50)) { try { const o = JSON.parse(l); if (o && typeof o === 'object' && !Array.isArray(o)) { const k = Object.keys(o).join(', '); count.set(k, (count.get(k) ?? 0) + 1); } } catch {} }
+  return [...count].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+}
 const clean = (s, n = 70) => { const t = String(s).replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z]+;|&#\d+;/g, ' ').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 export function docParts(text, path = '') {
   const lines = text.split('\n');
@@ -106,6 +112,20 @@ export function docParts(text, path = '') {
       { name: `header, ${cols} columns: ${clean(lines[0].split(sep).join(', '), 160)}`, line: 1, end: 1, top: true },
       { name: `${rows - 1} rows; the first: ${clean(lines[1], 160)}`, line: 2, end: lines.length, top: true },
     ];
+  } else if (/\.(ndjson|jsonl)$/i.test(path)) {
+    // One record a line: how many, the keys of the first, and the first itself.
+    // A first line with keys of its own (a "meta" header) is said apart from the records.
+    const rows = lines.filter((l) => l.trim()).length;
+    if (rows < 2) return [];
+    const keys = recordKeys(lines);
+    const keysOf = (l) => { try { const o = JSON.parse(l); return o && typeof o === 'object' && !Array.isArray(o) ? Object.keys(o).join(', ') : ''; } catch { return ''; } };
+    if (keys && keysOf(lines[0]) !== keys) {
+      return [
+        { name: `a header line with ${clean(keysOf(lines[0]) || 'no keys', 60)}: ${clean(lines[0], 120)}`, line: 1, end: 1, top: true },
+        { name: `${rows - 1} records, one a line, each with ${clean(keys, 160)}; the first: ${clean(lines[1], 160)}`, line: 2, end: lines.length, top: true },
+      ];
+    }
+    return [{ name: `${rows} records, one a line${keys ? `, each with ${clean(keys, 160)}` : ''}; the first: ${clean(lines[0], 160)}`, line: 1, end: lines.length, top: true }];
   } else if (/\.json$/i.test(path)) {
     // The keys one level in, each on a line of its own (a file laid out by JSON.stringify(x, null, 2)).
     const first = lines.findIndex((l, i) => i > 0 && /^\s+"[^"]+"\s*:/.test(l));
@@ -151,6 +171,81 @@ export function jsonShape(text) {
   return `It holds ${keys.join('; ')}${Object.keys(v).length > 12 ? '; …' : ''}.`;
 }
 
+// What a table's rows hold, worked out from all of them (CSV, TSV, NDJSON; 4 Oct 2026): the time
+// column's range, its usual step and longest gaps, the rows in each day, month or year, and each
+// number column's range and median, with how many rows sit under a tenth of the median. Why: a
+// year of hourly bars whose first row (the outline's "the first:") had traded one contract; the
+// file was thin and full of day-long gaps until mid-2026, which nothing in the outline said, and
+// a "2-hour" test ran across those gaps. '' when it has nothing to say.
+const TIME_COL = /^(ts|t|time|timestamp|date|datetime|created_at|time_utc|day)$/i;
+const ISO = /^\d{4}-\d{2}-\d{2}/;
+const num = (x) => (typeof x === 'number' ? x : String(x ?? '').trim() === '' ? NaN : Number(String(x).trim().replace(/^"|"$/g, '')));
+const nice = (x) => (Math.abs(x) >= 1000 ? Math.round(x).toLocaleString('en-US') : String(Number(x.toPrecision(6))));
+const dur = (ms) => { const m = ms / 60000; return m < 1 ? `${Math.round(ms / 1000)}s` : m < 60 ? `${Math.round(m)}m` : m < 1440 * 2 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
+export function tableProfile(text, path) {
+  const lines = text.split('\n').filter((l) => l.trim());
+  if (lines.length < 3 || lines.length > 300_000) return '';
+  let cols, rows;
+  if (/\.(ndjson|jsonl)$/i.test(path)) {
+    const keys = recordKeys(lines);
+    const recs = [];
+    for (const l of lines) { try { const o = JSON.parse(l); if (o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).join(', ') === keys) recs.push(o); } catch {} }
+    if (recs.length < 2) return '';
+    cols = Object.keys(recs[0]).slice(0, 30);
+    rows = recs.map((o) => cols.map((c) => o[c]));
+  } else if (/\.(csv|tsv)$/i.test(path)) {
+    const sep = /\.tsv$/i.test(path) ? '\t' : ',';
+    cols = lines[0].split(sep).map((c) => c.trim().replace(/^"|"$/g, ''));
+    rows = lines.slice(1).map((l) => l.split(sep));
+  } else return '';
+  const out = [];
+  // The time column: by its name, else the first column whose first value is a date.
+  const raw0 = (i) => (typeof rows[0][i] === 'string' ? rows[0][i].trim().replace(/^"|"$/g, '') : rows[0][i]);
+  let ti = cols.findIndex((c) => TIME_COL.test(c));
+  if (ti < 0) ti = cols.findIndex((_, i) => ISO.test(String(raw0(i) ?? '')));
+  const timeOf = (v) => {
+    const s = typeof v === 'string' ? v.trim().replace(/^"|"$/g, '') : v;
+    if (typeof s === 'string' && ISO.test(s)) return Date.parse(s.length === 10 ? `${s}T00:00:00Z` : s);
+    const n = num(s);
+    return n > 1e12 && n < 1e14 ? n : n > 1e9 && n < 1e11 ? n * 1000 : NaN;
+  };
+  if (ti >= 0) {
+    const pts = rows.map((r) => ({ ms: timeOf(r[ti]), raw: r[ti] })).filter((p) => Number.isFinite(p.ms));
+    if (pts.length >= 2) {
+      const ordered = pts.every((p, i) => i === 0 || p.ms >= pts[i - 1].ms);
+      if (!ordered) pts.sort((a, b) => a.ms - b.ms);
+      const iso = (p) => (typeof p.raw === 'string' && ISO.test(p.raw.trim()) ? p.raw.trim().replace(/^"|"$/g, '') : new Date(p.ms).toISOString());
+      const at = (p) => iso(p).replace('T', ' ').slice(0, 16);
+      const steps = pts.slice(1).map((p, i) => ({ d: p.ms - pts[i].ms, after: pts[i] })).filter((s) => s.d > 0);
+      const sorted = steps.map((s) => s.d).sort((a, b) => a - b);
+      const usual = sorted[Math.floor(sorted.length / 2)] ?? 0;
+      const share = usual ? Math.round((steps.filter((s) => Math.abs(s.d - usual) <= usual * 0.01).length / steps.length) * 100) : 0;
+      const gaps = usual ? steps.filter((s) => s.d > usual * 3).sort((a, b) => b.d - a.d).slice(0, 2) : [];
+      out.push(`${cols[ti]}: ${at(pts[0])} → ${at(pts.at(-1))}${ordered ? '' : ' (not in time order)'}${usual ? `; usual step ${dur(usual)} (${share}% of steps)` : ''}${gaps.length ? `; longest gaps ${gaps.map((g) => `${dur(g.d)} after ${at(g.after)}`).join(', ')}` : ''}`);
+      const span = pts.at(-1).ms - pts[0].ms;
+      const [cut, per] = span <= 16 * 86_400_000 ? [10, 'day'] : span <= 16 * 31 * 86_400_000 ? [7, 'month'] : [4, 'year'];
+      const by = new Map();
+      for (const p of pts) { const k = iso(p).slice(0, cut); by.set(k, (by.get(k) ?? 0) + 1); }
+      if (by.size > 1 && by.size <= 17) out.push(`rows by ${per}: ${[...by].map(([k, n]) => `${k} ${n.toLocaleString('en-US')}`).join(' · ')}`);
+    }
+  }
+  // The number columns: range and median; a column that is never negative also says how many rows
+  // sit under a tenth of its median (a thin stretch: volume 1 where the median is thousands).
+  const said = [];
+  for (let i = 0; i < cols.length && said.length < 8; i++) {
+    if (i === ti) continue;
+    const vals = rows.map((r) => num(r[i])).filter(Number.isFinite);
+    if (vals.length < rows.length * 0.9) continue;
+    vals.sort((a, b) => a - b);
+    const med = vals[Math.floor(vals.length / 2)];
+    const thin = vals[0] >= 0 && med > 0 ? vals.filter((v) => v < med / 10).length / vals.length : 0;
+    said.push(`${cols[i]} ${nice(vals[0])} … ${nice(vals.at(-1))} (median ${nice(med)}${thin >= 0.1 ? `; ${Math.round(thin * 100)}% of rows under a tenth of it` : ''})`);
+  }
+  if (said.length) out.push(said.join(' · '));
+  if (!out.length) return '';
+  return `What the rows hold (worked out from all ${rows.length.toLocaleString('en-US')}):\n${out.map((l) => `  ${l}`).join('\n')}`;
+}
+
 export function outlineText(text, path, { max = 80 } = {}) {
   const shape = /\.json$/i.test(path) ? jsonShape(text) : '';
   if (shape) return `${path} is ${text.split('\n').length} lines, too long to show at once. ${shape}\n${outlineText(text, `${path}\u0000`, { max }).split('\n').slice(1).join('\n')}`.replace(/\u0000/g, '');
@@ -164,5 +259,6 @@ export function outlineText(text, path, { max = 80 } = {}) {
   // A long page or stylesheet has no functions to list: blocks of 60 lines say
   // nothing (a 27,000-line page gave 450 of them), so only the way in is given.
   if (parts.length > 12 && parts.every((p) => !p.name)) return `${path} is ${total} lines, too long to show at once, and it has no functions to list. Read only the part you need: Read again with find (a word or a name, such as an id or a class) to see the lines around it, or with offset (first line) and limit (number of lines).`;
-  return `${path} is ${total} lines, too long to show at once. Its parts (lines, name):\n${rows.join('\n')}${more}\nRead only the part you need: Read again with find (a word or a name) to see the lines around it, or with offset (first line) and limit (number of lines)${big ? `, e.g. offset ${big.line} and limit ${Math.min(200, big.end - big.line + 1)} for ${big.name ?? 'the largest part'}` : ''}.`;
+  const profile = /\.(csv|tsv|ndjson|jsonl)$/i.test(path) ? tableProfile(text, path) : '';
+  return `${path} is ${total} lines, too long to show at once. Its parts (lines, name):\n${rows.join('\n')}${more}${profile ? `\n${profile}` : ''}\nRead only the part you need: Read again with find (a word or a name) to see the lines around it, or with offset (first line) and limit (number of lines)${big ? `, e.g. offset ${big.line} and limit ${Math.min(200, big.end - big.line + 1)} for ${big.name ?? 'the largest part'}` : ''}.`;
 }
