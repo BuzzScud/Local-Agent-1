@@ -606,6 +606,29 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   model), `app-jobs.test.mjs` (a job that ends after the reply wakes the model; /jobs) and `app-hooks.test.mjs` (a hook
   added in the form, tested, saved, and stopping the next command).
 
+## The start page fills the window (4 Oct 2026)
+
+- **What and why.** The owner's screenshot of a start on their other Mac (152 × 56) had the page in its top 13 rows, four
+  start notes as paragraphs under it, about 25 empty rows, and the tip cut on the footer. Their picks, from a round of
+  two designs drawn by the real code (private: `docs/private/design rounds/`): "1 · Studio, grown", the page growing to
+  fill the window, the conversations numbered for `/resume <n>`, and the notes kept but shorter.
+- **The room** (`start.room`, App.jsx): the window less the prompt box, footer, gaps and cursor line (7 with the
+  page's blank line). Held (a start on this Mac), less what sits under it too: the notes, the / menu (18 rows while
+  held) and the shortcuts, so the page shrinks for them and stays live; under `START_MIN` rows it is printed as it is,
+  as before. Printed at once (a remote or `--url`), it keeps 2 rows for each note still to come (the mode the last
+  window left; on a remote where it runs, Big-model mode, the load). Once printed it keeps the room it was shown with
+  until the window changes size. The welcome's measured height is keyed by its room too (`rowsKey`).
+- **What fits** (start.jsx `StartPage`): always a conversation, This folder and Try; then sessions in the background
+  with no window on them (`listBackground`), What's new (the app's last 5 commits by headline, cli.jsx; `AGENTIC_NEWS=off`
+  leaves it out, as `pty.mjs` does for the app tests), then up to 20 conversations and the rest of each change's
+  sentence (`GROW`), then the other folders you worked in (from the home folder). Under the bot: the last 14 days drawn
+  and the memory's facts. With fewer than `START_BIG` rows under the title it is `SmallPage`. The tip (startTip) is on
+  the page while it has its Try rows, else on the footer as before.
+- **Numbers**: a row is numbered as `/resume <n>` takes it (`recentOf`, repeats left out); `recentRows` finds the rows
+  for a click by those numbers. The notes keep their opening words (the tests wait for them) and lose the rest.
+- **Tests**: `terminal/test/start.test.mjs` (the room at eight sizes, never past it, loading as tall as ready, every
+  part, the small page, the numbers, `/resume 2` and the / menu in the real window).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

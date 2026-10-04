@@ -19,6 +19,7 @@ export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '
 // own files, never in the real ~/.agentic; and nothing is saved on its own
 // unless the test asks for it (AGENTIC_MEMORY_SAVE). AGENTIC_TIPS=off: the line under the prompt box
 // says "? for shortcuts" from the start, not a tip picked at random.
+// AGENTIC_NEWS=off: the start page has no What's new, which would change with every commit.
 // A key the terminal itself acts on while the app is not yet reading keys (ctrl+t, ctrl+c, ctrl+z…):
 // not enter, tab or esc and its sequences, which wait in line like any letter.
 const isControl = (k) => typeof k === 'string' && k.length === 1 && k.charCodeAt(0) < 32 && !'\t\r\n\x1b'.includes(k);
@@ -35,7 +36,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   const fifo = `${out}.in`;
   execFileSync('mkfifo', [fifo]);
   const q = (x) => `'${x.replace(/'/g, `'\\''`)}'`;
-  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: { ...process.env, TERM: 'xterm-256color', AGENTIC_NO_OPEN: '1', AGENTIC_HUB_PORT: '0', AGENTIC_FETCH_EVERY: '0', AGENTIC_MEMORY: join(cwd, '..', 'memory-about-you'), AGENTIC_MEMORY_SAVE: 'off', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', ...env }, stdio: 'ignore' });
+  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: { ...process.env, TERM: 'xterm-256color', AGENTIC_NO_OPEN: '1', AGENTIC_HUB_PORT: '0', AGENTIC_FETCH_EVERY: '0', AGENTIC_MEMORY: join(cwd, '..', 'memory-about-you'), AGENTIC_MEMORY_SAVE: 'off', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_NEWS: 'off', ...env }, stdio: 'ignore' });
   const fd = openSync(fifo, 'w');
   const stdin = { write: (s) => { try { writeSync(fd, s); } catch {} } };
   const done = new Promise((resolve) => child.on('exit', (code) => resolve(code)));

@@ -18,7 +18,7 @@ export const COMMANDS = [
   { name: 'helpers', desc: 'The context helpers (Scout, Medic, Oracle, Sentry): what comes along with a request before the first step; switch one on or off', arg: '[on|off] [number|name|all]' },
   { name: 'hooks', desc: "The app's checks (empty reply, tests after a change, done check…) as hooks: which run while the model decides (/effort's Who decides); switch one on or off", arg: '[on|off] [number|name|all]' },
   { name: 'rewind', desc: 'Put the files and the conversation back to before one of your messages (esc twice)' },
-  { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
+  { name: 'resume', desc: 'Pick up an earlier conversation in this folder; a number opens the one the start page numbers so', arg: '[n]', picker: true },
   { name: 'model', desc: 'Pick the model and its effort' },
   // The model is off when a window opens (the user's pick, 30 Sep 2026): /start loads it, /stop gives its memory back.
   { name: 'start', desc: "Load the model (ctrl+t too): it takes the Mac's memory until /stop or you quit" },

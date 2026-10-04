@@ -163,8 +163,8 @@ test('in the window: a click on a Recent activity row of the start page opens th
     write(`\x1b[<0;${at.col};${at.row}m`);
   };
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'the cart total that rounded down' }, { wait: 'click one, or /resume for more' }, { sleep: 300 },
-    { fn: (t) => click(t, 'the cart total that rounded down') }, { wait: 'resumed: the cart total that rounded down' }, { sleep: 300 }, { snapshot: 'end' },
+    { wait: 'cart total that rounded down' }, { wait: 'click one, or /resume' }, { sleep: 300 },
+    { fn: (t) => click(t, 'cart total that rounded down') }, { wait: 'resumed: the cart total that rounded down' }, { sleep: 300 }, { snapshot: 'end' },
     ...quit,
   ] });
   await fake.close();
