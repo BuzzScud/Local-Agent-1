@@ -1,0 +1,61 @@
+# models/evals/battle/work28/ — Battle evaluation workspace for model performance testing (2 of 4; the next is models--evals--battle--work28-3.md)
+
+Every folder under models/evals/battle/work28/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+  - models/evals/battle/work28/w08-reconnect-backoff/check.sh (14) — Script verifying test results and file integrity for the solution
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w08-reconnect-backoff/project/ — Exponential backoff logic for socket reconnection with configurable base and max delays
+  - models/evals/battle/work28/w08-reconnect-backoff/project/reconnect.mjs (20) — Class implementing exponential backoff timer with reset capability on connection success
+  - models/evals/battle/work28/w08-reconnect-backoff/project/reconnect.test.mjs (17) — Tests verifying delay doubling behavior and state reset after successful connection
+  - also: package.json
+- models/evals/battle/work28/w08-reconnect-backoff/solution/ — Folder holding the reconnect backoff strategy solution files
+  - models/evals/battle/work28/w08-reconnect-backoff/solution/reconnect.mjs (22) — Class defining exponential backoff logic for socket reconnection with base and max limits
+- models/evals/battle/work28/w09-stall-detector/ — Detects stalled market tick feeds based on time elapsed.
+  - models/evals/battle/work28/w09-stall-detector/check.sh (10) — Runs tests and validates the stall detection logic implementation.
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w09-stall-detector/project/ — Detects market stalls by checking tick frequency
+  - models/evals/battle/work28/w09-stall-detector/project/stall.mjs (9) — Exports stall detection logic and constant
+  - models/evals/battle/work28/w09-stall-detector/project/stall.test.mjs (14) — Tests stall detection with time scenarios
+  - also: package.json
+- models/evals/battle/work28/w09-stall-detector/solution/ — Detects stalled market tick feeds based on time elapsed.
+  - models/evals/battle/work28/w09-stall-detector/solution/stall.mjs (10) — Exports stall duration constant and function to check if ticks stopped.
+- models/evals/battle/work28/w10-python-point-value/ — Run tests and verify the point value function for futures contracts.
+  - models/evals/battle/work28/w10-python-point-value/check.sh (15) — Execute unit tests and validate specific contract point values.
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w10-python-point-value/project/ — Folder holding code for calculating futures trading profit and loss.
+  - models/evals/battle/work28/w10-python-point-value/project/pnl.py (17) — Script defining point values and a function to compute trade profit or loss.
+  - models/evals/battle/work28/w10-python-point-value/project/test_pnl.py (18) — Test suite verifying the profit and loss calculation logic for various contracts.
+- models/evals/battle/work28/w10-python-point-value/solution/ — Holds Python code for calculating profit and loss on futures trades.
+  - models/evals/battle/work28/w10-python-point-value/solution/pnl.py (19) — Defines point values for symbols and computes trade profit or loss.
+- models/evals/battle/work28/w11-python-bad-rows/ — Folder for solution code handling bad CSV rows in a battle evaluation → models--evals--battle--work28--w11-python-bad-rows.md
+- models/evals/battle/work28/w12-invite-expiry/ — Folder for invite expiry logic and tests
+  - models/evals/battle/work28/w12-invite-expiry/check.sh (13) — Script to run tests and verify file integrity
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w12-invite-expiry/project/ — Folder for invite expiry logic and tests
+  - models/evals/battle/work28/w12-invite-expiry/project/invites.mjs (11) — Exports constants and function to validate single-use sign-up invites within seven days
+  - models/evals/battle/work28/w12-invite-expiry/project/invites.test.mjs (16) — Tests invite validation for expiration after a week and rejection of already used codes
+  - also: package.json
+- models/evals/battle/work28/w12-invite-expiry/solution/ — Folder for a solution handling invite expiration logic.
+  - models/evals/battle/work28/w12-invite-expiry/solution/invites.mjs (13) — Exports constants and a function to validate single-use invites within seven days.
+- models/evals/battle/work28/w13-viewer-role/ — Viewer role battle evaluation workspace for project and solution → models--evals--battle--work28--w13-viewer-role.md
+- models/evals/battle/work28/w14-trash-30-days/ — Trash logic tests for removing and restoring daily bars over thirty days
+  - models/evals/battle/work28/w14-trash-30-days/check.sh (22) — Runs tests and verifies exports of trash removal functions
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w14-trash-30-days/project/ — Project config and trash logic for removing daily bars
+  - models/evals/battle/work28/w14-trash-30-days/project/trash.mjs (7) — Exports function to delete a specific day from the store
+  - models/evals/battle/work28/w14-trash-30-days/project/trash.test.mjs (10) — Tests that removing a day clears it from storage
+  - also: package.json
+- models/evals/battle/work28/w14-trash-30-days/solution/ — Logic for moving days to trash and restoring them before permanent deletion
+  - models/evals/battle/work28/w14-trash-30-days/solution/trash.mjs (26) — Exports constants and functions to manage temporary storage of deleted daily bars
+  - models/evals/battle/work28/w14-trash-30-days/solution/trash.test.mjs (19) — Tests that removing and restoring days works correctly within the trash period
+- models/evals/battle/work28/w15-rename-fetchbars/ — Script verifying fetchBars removal and loadBars usage in project files → models--evals--battle--work28--w15-rename-fetchbars.md
+- models/evals/battle/work28/w16-health-build/ — Directory for health build evaluation work
+  - models/evals/battle/work28/w16-health-build/check.sh (13) — Script to run tests and verify health endpoint behavior
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w16-health-build/project/ — Project folder for a health check service
+  - models/evals/battle/work28/w16-health-build/project/server.mjs (20) — Exports request handler and starts HTTP server
+  - models/evals/battle/work28/w16-health-build/project/server.test.mjs (15) — Tests health endpoint and 404 behavior
+  - also: package.json
+- models/evals/battle/work28/w16-health-build/solution/ — Health check logic for the battle evaluation work ✓
+  - models/evals/battle/work28/w16-health-build/solution/server.mjs (20) — Handles requests and returns health status with uptime details
+  - models/evals/battle/work28/w16-health-build/solution/server.test.mjs (20) — Tests the health endpoint response and build name logic

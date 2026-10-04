@@ -1,0 +1,47 @@
+# terminal/src/ — The app's code: agent/ (the loop, prompt, memory, Claude's notes, maps), app/ (screen, commands, hub), tools/, flows/, ui/ ✓
+
+Every folder under terminal/src/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right.
+
+- terminal/src/ — The app's code: agent/ (the loop, prompt, memory, Claude's notes, maps), app/ (screen, commands, hub), tools/, flows/, ui/ ✓
+  - terminal/src/cli.jsx (564) — Interactive terminal interface for coding agent commands and session management
+  - terminal/src/headless.mjs (175) — Non-interactive execution engine for prompts and practice tasks
+- terminal/src/agent/ — Agent logic, client connections, permissions, prompts, and tool definitions.
+  - terminal/src/agent/agent.mjs (3504) — Main loop sending conversations to models and handling tool results.
+  - terminal/src/agent/client.mjs (266) — Client streamer for chat completions and SSE events.
+  - terminal/src/agent/permissions.mjs (508) — Permission modes and access control rules.
+  - terminal/src/agent/prompt.mjs (280) — System prompt construction and formatting.
+  - terminal/src/agent/tools.mjs (981) — Tool definitions, schemas, and execution logic.
+  - also: agents-demo.mjs, agents-driver.mjs, agents-guards.mjs, agents-run.mjs, auto-check.mjs, btw.mjs, busy.mjs, claude-notes.mjs, claude-pack.mjs, claude-rules.mjs, claude.mjs, design.mjs, expertise.mjs, facts.mjs, helper-models.mjs, helpers.mjs, images.mjs, instructions.mjs, ladder.mjs, lessons.mjs, loo… (36 files)
+- terminal/src/app/ — Terminal app core: manages sessions, prompts, commands, and screen updates
+  - terminal/src/app/App.jsx (3832) — Main entry point: initializes the agent, handles user input, and coordinates the application state
+  - terminal/src/app/commands.mjs (112) — Defines slash commands like help and clear that users can type to control the session
+  - terminal/src/app/help.mjs (197) — Stores static help text and mode options for documentation and CLI usage
+  - terminal/src/app/screen.jsx (1755) — Renders the terminal interface, displaying output, spinners, and status bars
+  - terminal/src/app/weights.mjs (224) — Starts a local server to serve model weights and documentation files
+  - also: agents-tree.mjs, agents-view.jsx, agents-window.mjs, autosave.mjs, builder-hub.mjs, builder.html, clipboard.mjs, connect-cli.mjs, copies.mjs, docs-dir.mjs, door.mjs, edit-input.mjs, favicon.mjs, flow-hub.mjs, flow.html, gguf-edit.mjs, harness-hub.mjs, harness.html, help.html, helpers.mjs, hub.html,… (65 files)
+- terminal/src/flows/ — Routes for handling user requests and code changes
+  - terminal/src/flows/apply.mjs (49) — Shows the diff and asks for permission to save real files
+  - terminal/src/flows/clarify.mjs (125) — Asks questions to resolve vague user instructions
+  - terminal/src/flows/index.mjs (287) — Sorts requests and directs them to the correct path
+  - terminal/src/flows/llm.mjs (126) — Makes focused calls to the language model
+  - terminal/src/flows/scratch.mjs (173) — Creates a temporary copy for safe testing
+  - also: blocks.mjs, change.mjs, excerpts.mjs, explain.mjs, fix.mjs, layoutcheck.mjs, localize.mjs, multi.mjs, pagecheck.mjs, pagescripts.mjs, rename.mjs, rescue.mjs, results.mjs, sort.mjs, testfile.mjs, testfirst.mjs, tries.mjs, units.mjs, words.mjs
+- terminal/src/morning/ — Morning brief shell commands for gathering, picking, and rendering daily reports
+  - terminal/src/morning/cli.mjs (40) — Shell entry point defining commands to gather facts, pick highlights, and render the HTML page
+  - terminal/src/morning/gather.mjs (270) — Collects repository facts like commits, CI status, and open issues from various sources
+  - terminal/src/morning/index.mjs (51) — Orchestrates the full morning brief workflow from data gathering to page generation
+  - terminal/src/morning/render.mjs (326) — Generates the HTML page with terrain charts and daily summaries from gathered facts
+  - terminal/src/morning/words.mjs (147) — Writes plain language headlines and descriptions, validating them against the raw facts
+  - also: config.mjs, day.mjs, fraunces-600.woff2.b64.txt, Fraunces-OFL.txt, sort.mjs
+- terminal/src/tools/ — Tools for code analysis, file access, media handling, execution, and sandboxing
+  - terminal/src/tools/codeindex.mjs (266) — Indexes code parts by meaning using a small model for fast retrieval and ranking
+  - terminal/src/tools/fs.mjs (122) — Walks directories and searches files while skipping bulky folders like node_modules
+  - terminal/src/tools/media-tool.swift (139) — macOS helper for extracting text from PDFs and handling image conversions
+  - terminal/src/tools/run.mjs (90) — Executes shell commands with capped output and optional sandboxing for safety
+  - terminal/src/tools/sandbox.mjs (130) — Enforces macOS sandbox rules to restrict file access during command execution
+  - also: codemap.mjs, edit.mjs, media.mjs, outline.mjs, read.mjs, repomap.mjs, screen.mjs, web.mjs
+- terminal/src/ui/ — UI components for terminal interface
+  - terminal/src/ui/designs.jsx (258) — Three complete terminal layouts using shared parts
+  - terminal/src/ui/parts.jsx (207) — Reusable UI building blocks and helpers
+  - terminal/src/ui/state.mjs (103) — Pure function to compute screen state at time t
+  - terminal/src/ui/theme.mjs (55) — 256-color palette configuration for consistent display

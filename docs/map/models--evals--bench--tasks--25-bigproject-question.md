@@ -1,0 +1,50 @@
+# models/evals/bench/tasks/25-bigproject-question/ — Folder for the twenty-fifth big project benchmark task
+
+Every folder under models/evals/bench/tasks/25-bigproject-question/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right.
+
+- models/evals/bench/tasks/25-bigproject-question/ — Folder for the twenty-fifth big project benchmark task
+  - models/evals/bench/tasks/25-bigproject-question/check.sh (6) — Script verifying the agent's answer contains required terms and no new files
+  - also: task.txt
+- models/evals/bench/tasks/25-bigproject-question/project/ — Root of the big project containing configuration and source code
+  - also: package.json
+- models/evals/bench/tasks/25-bigproject-question/project/src/ — Source files for the bonsai coding agent application
+  - models/evals/bench/tasks/25-bigproject-question/project/src/cli.jsx (114) — Command-line interface defining version, help text, and argument parsing logic
+  - models/evals/bench/tasks/25-bigproject-question/project/src/headless.mjs (35) — Executes a single prompt end-to-end without terminal UI for automation
+  - models/evals/bench/tasks/25-bigproject-question/project/src/setup.mjs (66) — Downloads and verifies the required runtime and model files for the agent ✓
+- models/evals/bench/tasks/25-bigproject-question/project/src/agent/ — Agent logic: orchestrates conversation, model calls, and tool execution.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/agent/agent.mjs (565) — Main loop managing steps, context trimming, and prefetching for file reads.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/agent/client.mjs (79) — Streams chat completions from the server and parses SSE events.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/agent/permissions.mjs (96) — Defines allowed, blocked, and ask-before-run rules for commands.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/agent/prompt.mjs (100) — Constructs system instructions using project notes and git summaries.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/agent/tools.mjs (441) — Defines tool schemas, argument parsing, and execution logic for seven tools.
+- models/evals/bench/tasks/25-bigproject-question/project/src/app/ — Terminal app entry: starts model, runs agent, handles prompt and layout.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/app/App.jsx (598) — Main component wiring model events to screen with verbs and modes.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/app/edit-input.mjs (42) — Pure function managing text cursor and input state.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/app/markdown.jsx (51) — Renders basic Markdown formatting for model replies.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/app/screen.jsx (472) — Displays terminal output in classic or live layout modes.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/app/store.mjs (55) — Manages settings, sessions, and history persistence.
+  - also: commands.mjs
+- models/evals/bench/tasks/25-bigproject-question/project/src/flows/ — Manages code change, fix, rename, and localization workflows
+  - models/evals/bench/tasks/25-bigproject-question/project/src/flows/change.mjs (250) — Adds or modifies code by writing tests first
+  - models/evals/bench/tasks/25-bigproject-question/project/src/flows/fix.mjs (110) — Corrects bugs by iterating on failing tests
+  - models/evals/bench/tasks/25-bigproject-question/project/src/flows/index.mjs (143) — Routes requests to the correct workflow handler
+  - models/evals/bench/tasks/25-bigproject-question/project/src/flows/localize.mjs (105) — Identifies relevant files for a given request
+  - models/evals/bench/tasks/25-bigproject-question/project/src/flows/rename.mjs (182) — Performs built-in renaming without model intervention
+  - also: apply.mjs, llm.mjs, results.mjs, scratch.mjs, testfile.mjs, tries.mjs, units.mjs
+- models/evals/bench/tasks/25-bigproject-question/project/src/server/ — Server logic for managing model instances and memory
+  - models/evals/bench/tasks/25-bigproject-question/project/src/server/memory.mjs (34) — Calculates available RAM and KV cache size per token
+  - models/evals/bench/tasks/25-bigproject-question/project/src/server/models.mjs (77) — Defines paths, ports, and metadata for supported models
+  - models/evals/bench/tasks/25-bigproject-question/project/src/server/server.mjs (166) — Starts, monitors, and restarts the local inference server
+  - models/evals/bench/tasks/25-bigproject-question/project/src/server/warmup.mjs (73) — Pre-loads model state to speed up initial responses
+- models/evals/bench/tasks/25-bigproject-question/project/src/tools/ — Tools for editing files, searching code, outlining structure, running commands, and sandboxing execution.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/tools/edit.mjs (50) — Exact find-and-replace tool with validation to prevent accidental changes in multiple locations.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/tools/fs.mjs (110) — Fast file walker and search utility that skips bulky directories like node_modules.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/tools/outline.mjs (83) — Extracts code structure for JavaScript or Python to avoid reading entire large files.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/tools/run.mjs (60) — Executes shell commands with output limits and optional sandbox restrictions for safety.
+  - models/evals/bench/tasks/25-bigproject-question/project/src/tools/sandbox.mjs (111) — Enforces macOS system-level file access fences to protect the user's home directory.
+  - also: read.mjs
+- models/evals/bench/tasks/25-bigproject-question/project/test/ — Tests for file system and outline utilities
+  - models/evals/bench/tasks/25-bigproject-question/project/test/fs.test.mjs (22) — Verifies glob pattern matching and file listing logic
+  - models/evals/bench/tasks/25-bigproject-question/project/test/outline.test.mjs (11) — Checks function extraction and line number detection
+- models/evals/bench/tasks/25-bigproject-question/reference/ — Reference data folder for the twenty-fifth big project question benchmark task
+  - also: answer.txt

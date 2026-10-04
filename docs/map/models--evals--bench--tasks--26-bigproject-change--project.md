@@ -1,0 +1,45 @@
+# models/evals/bench/tasks/26-bigproject-change/project/ — Root of the big project containing configuration, source, and tests
+
+Every folder under models/evals/bench/tasks/26-bigproject-change/project/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right.
+
+- models/evals/bench/tasks/26-bigproject-change/project/ — Root of the big project containing configuration, source, and tests
+  - also: package.json
+- models/evals/bench/tasks/26-bigproject-change/project/src/ — Source code for the bonsai coding agent application
+  - models/evals/bench/tasks/26-bigproject-change/project/src/cli.jsx (114) — Terminal command interface with usage instructions and version info
+  - models/evals/bench/tasks/26-bigproject-change/project/src/headless.mjs (35) — Executes a single prompt without the user interface for automation
+  - models/evals/bench/tasks/26-bigproject-change/project/src/setup.mjs (66) — Downloads and verifies the required model runtime and files
+- models/evals/bench/tasks/26-bigproject-change/project/src/agent/ — Agent logic for handling model interactions and tool execution
+  - models/evals/bench/tasks/26-bigproject-change/project/src/agent/agent.mjs (565) — Main loop managing conversation steps, context trimming, and prefetching file content
+  - models/evals/bench/tasks/26-bigproject-change/project/src/agent/client.mjs (79) — Streams chat completions from the server and converts events into simple formats
+  - models/evals/bench/tasks/26-bigproject-change/project/src/agent/permissions.mjs (96) — Defines allowed, blocked, and read-only modes for tool execution safety
+  - models/evals/bench/tasks/26-bigproject-change/project/src/agent/prompt.mjs (100) — Constructs system instructions by gathering project notes and configuration files
+  - models/evals/bench/tasks/26-bigproject-change/project/src/agent/tools.mjs (441) — Defines seven available tools with schemas, argument parsing, and execution logic
+- models/evals/bench/tasks/26-bigproject-change/project/src/app/ — Main app entry: starts model, runs agent, handles prompt and commands
+  - models/evals/bench/tasks/26-bigproject-change/project/src/app/App.jsx (598) — Terminal app core: manages state, layout, sessions, and user interaction flow
+  - models/evals/bench/tasks/26-bigproject-change/project/src/app/edit-input.mjs (42) — Pure text editing logic for cursor movement and input manipulation
+  - models/evals/bench/tasks/26-bigproject-change/project/src/app/markdown.jsx (51) — Renderer for model replies supporting code, bold, italic, and lists
+  - models/evals/bench/tasks/26-bigproject-change/project/src/app/screen.jsx (472) — Terminal display logic: renders static output, live streaming, and permission prompts
+  - models/evals/bench/tasks/26-bigproject-change/project/src/app/store.mjs (55) — Persistent storage for settings, sessions, and command history on disk
+  - also: commands.mjs
+- models/evals/bench/tasks/26-bigproject-change/project/src/flows/ — Routes for code changes, fixes, renames, and routing logic
+  - models/evals/bench/tasks/26-bigproject-change/project/src/flows/change.mjs (250) — Adds or modifies code using a test-first approach ✓
+  - models/evals/bench/tasks/26-bigproject-change/project/src/flows/fix.mjs (110) — Fixes bugs by iterating on failing tests
+  - models/evals/bench/tasks/26-bigproject-change/project/src/flows/index.mjs (143) — Routes requests to the correct flow handler
+  - models/evals/bench/tasks/26-bigproject-change/project/src/flows/localize.mjs (105) — Identifies relevant files for a given request
+  - models/evals/bench/tasks/26-bigproject-change/project/src/flows/rename.mjs (182) — Performs built-in renaming across code files
+  - also: apply.mjs, llm.mjs, results.mjs, scratch.mjs, testfile.mjs, tries.mjs, units.mjs
+- models/evals/bench/tasks/26-bigproject-change/project/src/server/ — Holds server logic for managing model instances and memory.
+  - models/evals/bench/tasks/26-bigproject-change/project/src/server/memory.mjs (34) — Calculates available system memory and KV cache size per token.
+  - models/evals/bench/tasks/26-bigproject-change/project/src/server/models.mjs (77) — Defines paths, ports, and metadata for supported AI models.
+  - models/evals/bench/tasks/26-bigproject-change/project/src/server/server.mjs (166) — Starts, monitors, and restarts the local model inference server.
+  - models/evals/bench/tasks/26-bigproject-change/project/src/server/warmup.mjs (73) — Pre-loads model state to speed up initial response times.
+- models/evals/bench/tasks/26-bigproject-change/project/src/tools/ — Tools for editing files, searching code, outlining structure, running commands, and sandboxing.
+  - models/evals/bench/tasks/26-bigproject-change/project/src/tools/edit.mjs (50) — Exact find-and-replace tool that plans diffs and applies safe text changes.
+  - models/evals/bench/tasks/26-bigproject-change/project/src/tools/fs.mjs (110) — Walks project folders skipping bulky dirs and searches using git grep when available. ✓
+  - models/evals/bench/tasks/26-bigproject-change/project/src/tools/outline.mjs (83) — Breaks long files into parts so models read only needed sections efficiently.
+  - models/evals/bench/tasks/26-bigproject-change/project/src/tools/run.mjs (60) — Executes one shell command in the project folder with capped output for safety.
+  - models/evals/bench/tasks/26-bigproject-change/project/src/tools/sandbox.mjs (111) — Enforces macOS sandbox fences to prevent commands from reading or writing outside limits.
+  - also: read.mjs
+- models/evals/bench/tasks/26-bigproject-change/project/test/ — Tests for file system and outline utilities
+  - models/evals/bench/tasks/26-bigproject-change/project/test/fs.test.mjs (22) — Verifies glob pattern matching and file listing behavior
+  - models/evals/bench/tasks/26-bigproject-change/project/test/outline.test.mjs (11) — Checks function extraction with correct line ranges

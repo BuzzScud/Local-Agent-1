@@ -1,0 +1,67 @@
+# models/evals/battle/new28/ — Battle evaluation scenarios for model performance testing (1 of 3; the next is models--evals--battle--new28-2.md)
+
+Every folder under models/evals/battle/new28/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+- models/evals/battle/new28/ — Battle evaluation scenarios for model performance testing
+- models/evals/battle/new28/n01-date-one-day-early/ — Folder for evaluating date formatting logic with tests and solution
+  - models/evals/battle/new28/n01-date-one-day-early/check.sh (7) — Script running tests and verifying output for specific timezones
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n01-date-one-day-early/project/ — Folder holding date formatting logic and its tests ✓
+  - models/evals/battle/new28/n01-date-one-day-early/project/dates.mjs (6) — Exports a function to format ISO dates as month/day/year without leading zeros
+  - models/evals/battle/new28/n01-date-one-day-early/project/dates.test.mjs (9) — Tests the date formatting function with specific input and expected output values
+  - also: package.json
+- models/evals/battle/new28/n01-date-one-day-early/solution/ — Folder for a solution evaluating date formatting logic
+  - models/evals/battle/new28/n01-date-one-day-early/solution/dates.mjs (6) — Exports a function to format ISO dates as month/day/year strings without leading zeros
+- models/evals/battle/new28/n02-csv-quoted-comma/ — Tests CSV parsing with quoted commas to ensure correct splitting logic.
+  - models/evals/battle/new28/n02-csv-quoted-comma/check.sh (5) — Runs tests and verifies the test file has not been modified.
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n02-csv-quoted-comma/project/ — Folder for CSV parsing tests and utilities.
+  - models/evals/battle/new28/n02-csv-quoted-comma/project/csv.mjs (5) — Exports a function to split a CSV line by commas.
+  - models/evals/battle/new28/n02-csv-quoted-comma/project/csv.test.mjs (8) — Tests splitting plain fields, quoted fields with commas, and escaped quotes.
+  - also: package.json
+- models/evals/battle/new28/n02-csv-quoted-comma/solution/ — Handles CSV parsing logic for battle evaluation
+  - models/evals/battle/new28/n02-csv-quoted-comma/solution/csv.mjs (19) — Exports function to split a single CSV line into fields
+- models/evals/battle/new28/n03-missing-await/ — Folder for evaluating a missing await bug in the new28 battle scenario
+  - models/evals/battle/new28/n03-missing-await/check.sh (5) — Script to run tests and verify file integrity
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n03-missing-await/project/ — Folder for evaluating a missing await bug in the new28 battle scenario
+  - models/evals/battle/new28/n03-missing-await/project/save.mjs (7) — Exports saveAll function to process items using a save callback
+  - models/evals/battle/new28/n03-missing-await/project/save.test.mjs (11) — Tests that all items are saved before the saveAll function completes
+  - also: package.json
+- models/evals/battle/new28/n03-missing-await/solution/ — Folder for the new28 battle solution files ✓
+  - models/evals/battle/new28/n03-missing-await/solution/save.mjs (7) — Exports async function saveAll to process items with a saving function
+- models/evals/battle/new28/n04-discount-twice/ — Discount test case for applying discounts twice in cart calculations
+  - models/evals/battle/new28/n04-discount-twice/check.sh (5) — Runs tests and validates output to ensure discount logic works correctly
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n04-discount-twice/project/ — Discount logic for cart lines and totals
+  - models/evals/battle/new28/n04-discount-twice/project/cart.mjs (11) — Functions to calculate discounted line and total prices
+  - models/evals/battle/new28/n04-discount-twice/project/cart.test.mjs (7) — Tests for discount calculations on single and multiple items
+  - also: package.json
+- models/evals/battle/new28/n04-discount-twice/solution/ — Discount logic for cart totals and individual line prices
+  - models/evals/battle/new28/n04-discount-twice/solution/cart.mjs (11) — Exports functions to calculate discounted line and total cart amounts ✓
+- models/evals/battle/new28/n05-python-empty-list/ — Folder for Python empty list battle evaluation setup
+  - models/evals/battle/new28/n05-python-empty-list/check.sh (5) — Script running tests and verifying file integrity
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n05-python-empty-list/project/ — Folder holding evaluation code for a Python average function.
+  - models/evals/battle/new28/n05-python-empty-list/project/stats.py (4) — Function calculating the mean of a list of numbers.
+  - models/evals/battle/new28/n05-python-empty-list/project/test_stats.py (15) — Tests verifying average calculation for normal and empty lists.
+- models/evals/battle/new28/n05-python-empty-list/solution/ — Folder for Python empty list battle solution files
+  - models/evals/battle/new28/n05-python-empty-list/solution/stats.py (6) — Function to calculate the mean of a number list, returning None if empty
+- models/evals/battle/new28/n06-email-check/ — Folder for email validation battle task
+  - models/evals/battle/new28/n06-email-check/check.sh (5) — Script to run tests and verify solution integrity
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n06-email-check/project/ — Folder holding email validation logic and its tests.
+  - models/evals/battle/new28/n06-email-check/project/email.mjs (5) — Exports a function to check if a string contains an at sign.
+  - models/evals/battle/new28/n06-email-check/project/email.test.mjs (7) — Tests the email checker with valid and invalid addresses.
+  - also: package.json
+- models/evals/battle/new28/n06-email-check/solution/ — Folder for email validation solution files
+  - models/evals/battle/new28/n06-email-check/solution/email.mjs (9) — Exports function to check if string is valid email
+- models/evals/battle/new28/n07-cli-csv-flag/ — Script to run tests and verify CLI output formats → models--evals--battle--new28--n07-cli-csv-flag.md
+- models/evals/battle/new28/n08-retry-backoff/ — Tests retry logic with backoff using shell script ✓
+  - models/evals/battle/new28/n08-retry-backoff/check.sh (10) — Runs retry function and validates result count and timing
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n08-retry-backoff/project/ — Folder holding retry logic with backoff helpers
+  - models/evals/battle/new28/n08-retry-backoff/project/retry.mjs (3) — Exports a sleep helper to pause execution between retries
+  - also: package.json
+- models/evals/battle/new28/n08-retry-backoff/solution/ — Folder for retry logic with exponential backoff strategy
+  - models/evals/battle/new28/n08-retry-backoff/solution/retry.mjs (13) — Exports sleep and retry helpers to handle failing function calls

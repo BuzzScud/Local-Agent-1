@@ -1,0 +1,72 @@
+# models/evals/bench/tasks/ — Directory holding various evaluation tasks for code benchmarks (4 of 5; the next is models--evals--bench--tasks-5.md)
+
+Every folder under models/evals/bench/tasks/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+  - models/evals/bench/tasks/34-hard-python-csv/reference/test_report.py (18) — Verifies CSV output and special character handling
+- models/evals/bench/tasks/35-hard-timezone/ — Tests hard timezone logic with specific date and time cases
+  - models/evals/bench/tasks/35-hard-timezone/check.sh (22) — Runs tests to verify zero failures and at least two new test cases exist
+  - also: task.txt
+- models/evals/bench/tasks/35-hard-timezone/project/ — Hard timezone task project folder
+  - models/evals/bench/tasks/35-hard-timezone/project/config.mjs (3) — Sets the trading day time zone to New York
+  - models/evals/bench/tasks/35-hard-timezone/project/totals.mjs (12) — Sums trade values grouped by calendar date
+  - models/evals/bench/tasks/35-hard-timezone/project/totals.test.mjs (8) — Verifies daily totals calculation logic
+  - also: package.json
+- models/evals/bench/tasks/35-hard-timezone/reference/ — Reference data for hard timezone tasks
+  - models/evals/bench/tasks/35-hard-timezone/reference/totals.mjs (15) — Sums trade values grouped by local calendar day
+  - models/evals/bench/tasks/35-hard-timezone/reference/totals.test.mjs (11) — Checks daily totals for morning and evening trades
+- models/evals/bench/tasks/36-hard-perf/ — Hard performance benchmark task configuration folder
+  - models/evals/bench/tasks/36-hard-perf/check.sh (25) — Script to validate test execution and verify unique collection logic
+  - also: task.txt
+- models/evals/bench/tasks/36-hard-perf/project/ — Hard performance task project folder
+  - models/evals/bench/tasks/36-hard-perf/project/collections.mjs (19) — Exports uniqueBy and topN helper functions for array processing ✓
+  - models/evals/bench/tasks/36-hard-perf/project/collections.test.mjs (11) — Tests uniqueBy and topN logic with assertions
+  - also: package.json
+- models/evals/bench/tasks/36-hard-perf/reference/ — Reference data for hard performance benchmark tasks
+  - models/evals/bench/tasks/36-hard-perf/reference/collections.mjs (18) — Exports uniqueBy and topN helper functions for filtering and sorting items
+  - models/evals/bench/tasks/36-hard-perf/reference/collections.test.mjs (18) — Tests correctness and speed of the collection utility functions
+- models/evals/bench/tasks/37-hard-two-bugs/ — Task with two bugs in invoice calculation logic → models--evals--bench--tasks--37-hard-two-bugs.md
+- models/evals/bench/tasks/38-hard-spec/ — Hard specification task directory
+  - models/evals/bench/tasks/38-hard-spec/check.sh (32) — Runs tests and validates status transitions
+  - also: task.txt
+- models/evals/bench/tasks/38-hard-spec/project/ — Folder for hard specification task project files
+  - models/evals/bench/tasks/38-hard-spec/project/SPEC.md (20) — Defines valid order status transitions
+  - models/evals/bench/tasks/38-hard-spec/project/status.mjs (5) — Exports the unimplemented transition function
+  - models/evals/bench/tasks/38-hard-spec/project/status.test.mjs (8) — Tests if transition is a function
+  - also: package.json
+- models/evals/bench/tasks/38-hard-spec/reference/ — Reference data for the hard specification task
+  - models/evals/bench/tasks/38-hard-spec/reference/status.mjs (15) — Exports order status transition logic and valid move rules
+  - models/evals/bench/tasks/38-hard-spec/reference/status.test.mjs (32) — Tests allowed transitions, refund logic, and error handling
+- models/evals/bench/tasks/39-hard-question-trace/ — Folder for hard question trace task thirty-nine
+  - models/evals/bench/tasks/39-hard-question-trace/check.sh (17) — Script verifying answer contains internal, zero subtotal, fee BPS, config, and default twenty-five
+  - also: task.txt
+- models/evals/bench/tasks/39-hard-question-trace/project/ — Hard question trace project folder
+  - models/evals/bench/tasks/39-hard-question-trace/project/checkout.mjs (8) — Calculates order total with subtotal and applied fees
+  - models/evals/bench/tasks/39-hard-question-trace/project/config.mjs (2) — Holds fee basis points and currency settings
+  - models/evals/bench/tasks/39-hard-question-trace/project/fees.mjs (13) — Computes dynamic fee rate and adds it to amount
+  - models/evals/bench/tasks/39-hard-question-trace/project/legacy.mjs (6) — Contains unused old fee calculation logic for reports
+  - also: package.json
+- models/evals/bench/tasks/39-hard-question-trace/reference/ — Reference data folder for hard question trace task 39
+  - also: answer.txt
+- models/evals/bench/tasks/4-rename/ — Folder for renaming task evaluation benchmarks
+  - models/evals/bench/tasks/4-rename/check.sh (5) — Script verifying the rename job succeeded and tests pass
+  - also: task.txt
+- models/evals/bench/tasks/4-rename/project/ — Folder for the rename task project files
+  - models/evals/bench/tasks/4-rename/project/cart.mjs (7) — Function to summarize cart items and total price
+  - models/evals/bench/tasks/4-rename/project/cart.test.mjs (8) — Test verifying the cart summary calculation
+  - models/evals/bench/tasks/4-rename/project/price.mjs (7) — Function to calculate order total with tax
+- models/evals/bench/tasks/4-rename/reference/ — Reference tasks for renaming evaluation benchmarks
+  - models/evals/bench/tasks/4-rename/reference/cart.mjs (7) — Generates a summary string showing item count and total cost
+  - models/evals/bench/tasks/4-rename/reference/price.mjs (7) — Calculates the final order price including tax
+- models/evals/bench/tasks/5-question/ — Five-question benchmark task directory
+  - models/evals/bench/tasks/5-question/check.sh (6) — Script verifying the agent's answer contains specific keywords and no new files
+  - also: task.txt
+- models/evals/bench/tasks/5-question/project/ — Project config file defining dependencies and scripts
+  - also: package.json
+- models/evals/bench/tasks/5-question/project/src/ — Holds source code for the desk monitor application
+  - models/evals/bench/tasks/5-question/project/src/config.mjs (6) — Defines app name, refresh rate, and server port settings
+  - models/evals/bench/tasks/5-question/project/src/server.mjs (7) — Starts a simple HTTP server listening on the configured port
+- models/evals/bench/tasks/5-question/reference/ — Holds reference answers for the five-question benchmark task
+  - also: answer.txt
+- models/evals/bench/tasks/6-question-page-size/ — Benchmark for six-question page size evaluation task
+  - models/evals/bench/tasks/6-question-page-size/check.sh (5) — Script verifying answer contains 25 and paginate references without file changes
+  - also: task.txt

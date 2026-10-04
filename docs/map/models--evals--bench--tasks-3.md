@@ -1,0 +1,62 @@
+# models/evals/bench/tasks/ — Directory holding various evaluation tasks for code benchmarks (3 of 5; the next is models--evals--bench--tasks-4.md)
+
+Every folder under models/evals/bench/tasks/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+  - models/evals/bench/tasks/24-fix-test-passing/check.sh (6) — Script to verify test passing and code correctness
+  - also: answers.json, task.txt
+- models/evals/bench/tasks/24-fix-test-passing/project/ — Directory for a task fixing test passing in a project
+  - models/evals/bench/tasks/24-fix-test-passing/project/export.mjs (20) — Script converting trades JSON data into CSV format output
+  - models/evals/bench/tasks/24-fix-test-passing/project/export.test.mjs (17) — Tests verifying CSV header generation and file reading logic
+  - also: package.json, trades.json
+- models/evals/bench/tasks/24-fix-test-passing/reference/ — Reference data and scripts for fixing test passing in task 24 ✓
+  - models/evals/bench/tasks/24-fix-test-passing/reference/export.mjs (21) — Script to convert trades data into CSV format
+  - models/evals/bench/tasks/24-fix-test-passing/reference/export.test.mjs (21) — Tests verifying the CSV export logic works correctly
+  - also: asked.txt
+- models/evals/bench/tasks/25-bigproject-question/ — Folder for the twenty-fifth big project benchmark task → models--evals--bench--tasks--25-bigproject-question.md
+- models/evals/bench/tasks/26-bigproject-change/ — Task twenty-six big project change evaluation setup → models--evals--bench--tasks--26-bigproject-change.md
+- models/evals/bench/tasks/27-negative-money/ — Tests for formatting negative currency amounts with commas and signs
+  - models/evals/bench/tasks/27-negative-money/check.sh (8) — Runs tests to verify money formatting handles negatives correctly
+  - also: task.txt
+- models/evals/bench/tasks/27-negative-money/project/ — Task folder for handling negative money scenarios
+  - models/evals/bench/tasks/27-negative-money/project/money.mjs (7) — Exports a function to format numbers as currency strings with commas and decimals
+  - models/evals/bench/tasks/27-negative-money/project/money.test.mjs (9) — Tests the currency formatting function for correct output
+  - also: package.json
+- models/evals/bench/tasks/27-negative-money/reference/ — Reference for formatting currency with commas and negative signs
+  - models/evals/bench/tasks/27-negative-money/reference/money.mjs (7) — Exports a function to format numbers as currency strings
+  - models/evals/bench/tasks/27-negative-money/reference/money.test.mjs (14) — Tests formatting logic for positive and negative amounts
+- models/evals/bench/tasks/28-python-multifile/ — Folder for Python multi-file code generation evaluation task number twenty-eight. → models--evals--bench--tasks--28-python-multifile.md
+- models/evals/bench/tasks/29-notes-page/ — Task folder for checking a notes page script
+  - models/evals/bench/tasks/29-notes-page/check-page.cjs (13) — Script that parses inline JavaScript within an HTML file to verify syntax validity
+  - models/evals/bench/tasks/29-notes-page/check.sh (14) — Shell script validating offline notes page structure and local storage usage
+  - also: home.txt, task.txt
+- models/evals/bench/tasks/3-add-function/ — Task to add a function, containing checks and description
+  - models/evals/bench/tasks/3-add-function/check.sh (9) — Script verifying tests pass and the titleCase function exists
+  - also: task.txt
+- models/evals/bench/tasks/3-add-function/project/ — Folder for the add-function task project files
+  - models/evals/bench/tasks/3-add-function/project/strings.mjs (10) — Exports slugify and truncate functions to clean and shorten text strings
+  - models/evals/bench/tasks/3-add-function/project/strings.test.mjs (7) — Tests that slugify and truncate work correctly with sample inputs
+- models/evals/bench/tasks/3-add-function/reference/ — Folder holding reference implementation for the add function task
+  - models/evals/bench/tasks/3-add-function/reference/strings.mjs (14) — Exports text helper functions like slugify, truncate, and title case conversion
+  - models/evals/bench/tasks/3-add-function/reference/strings.test.mjs (8) — Contains unit tests verifying the behavior of the string utility functions
+- models/evals/bench/tasks/30-hard-cache-key/ — Hard cache key benchmark task directory → models--evals--bench--tasks--30-hard-cache-key.md
+- models/evals/bench/tasks/31-hard-refactor-dedupe/ — Folder for hard refactor dedupe task → models--evals--bench--tasks--31-hard-refactor-dedupe.md
+- models/evals/bench/tasks/32-hard-async-order/ — Hard async ordering benchmark task folder
+  - models/evals/bench/tasks/32-hard-async-order/check.sh (23) — Script to run tests and verify correct async order execution
+  - also: task.txt
+- models/evals/bench/tasks/32-hard-async-order/project/ — Async order benchmark task folder
+  - models/evals/bench/tasks/32-hard-async-order/project/fetch-all.mjs (9) — Fetches all items concurrently using promises
+  - models/evals/bench/tasks/32-hard-async-order/project/fetch-all.test.mjs (9) — Tests concurrent fetching logic with assertions
+  - also: package.json
+- models/evals/bench/tasks/32-hard-async-order/reference/ — Reference implementation for hard async ordering benchmark tasks
+  - models/evals/bench/tasks/32-hard-async-order/reference/fetch-all.mjs (15) — Fetches items concurrently with a limit, preserving original order and failing fast on error
+  - models/evals/bench/tasks/32-hard-async-order/reference/fetch-all.test.mjs (21) — Tests that fetching preserves order, respects concurrency limits, and rejects on failure
+- models/evals/bench/tasks/33-hard-pagination/ — Hard pagination benchmark task folder with project and reference data → models--evals--bench--tasks--33-hard-pagination.md
+- models/evals/bench/tasks/34-hard-python-csv/ — Hard Python CSV trading benchmark task
+  - models/evals/bench/tasks/34-hard-python-csv/check.sh (20) — Runs tests and validates CSV output format
+  - also: task.txt
+- models/evals/bench/tasks/34-hard-python-csv/project/ — Holds Python code for a trading task benchmark
+  - models/evals/bench/tasks/34-hard-python-csv/project/models.py (10) — Defines the Trade data class with symbol, quantity, price, and note fields
+  - models/evals/bench/tasks/34-hard-python-csv/project/report.py (11) — Converts a list of trades into a CSV formatted string
+  - models/evals/bench/tasks/34-hard-python-csv/project/test_report.py (9) — Verifies that the CSV output matches expected header and row values
+- models/evals/bench/tasks/34-hard-python-csv/reference/ — Reference data for hard Python CSV task
+  - models/evals/bench/tasks/34-hard-python-csv/reference/report.py (16) — Converts trade objects into a formatted CSV string
