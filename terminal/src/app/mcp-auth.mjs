@@ -13,8 +13,8 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { saveSecret, readSecret, removeKey } from '../../../models/index.mjs';
 
-export const SIGNIN_PORTS = [17690, 17699];
-export const SIGNIN_MS = 5 * 60_000;
+const SIGNIN_PORTS = [17690, 17699];
+const SIGNIN_MS = 5 * 60_000;
 const secretId = (server) => `${server.keyId}-signin`;
 
 // What is kept for a server: { client, tokens } (JSON in the Keychain). {} when nothing is.

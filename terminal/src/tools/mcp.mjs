@@ -21,12 +21,12 @@ import { catalogOf, fingerprint, saysOf } from '../agent/mcp.mjs';
 import { SANDBOX_EXEC, sandboxProfile, sandboxAvailable } from './sandbox.mjs';
 import { preparedImage } from './media.mjs';
 
-export const CLIENT_INFO = { name: 'agentic-coder', version: '0.1.0' };
+const CLIENT_INFO = { name: 'agentic-coder', version: '0.1.0' };
 // How long a server may take to start and list its tools, and one call to finish.
-export const START_MS = 30_000;
-export const CALL_MS = 120_000;
+const START_MS = 30_000;
+const CALL_MS = 120_000;
 // A call that keeps reporting progress may run on, up to this.
-export const CALL_MAX_MS = 15 * 60_000;
+const CALL_MAX_MS = 15 * 60_000;
 const PROBE_MS = 5000;
 const LOG_MAX = 2 * 1024 * 1024;
 
@@ -52,7 +52,7 @@ export function spawnSpec(server, { cwd, key = null, baseEnv = {}, sandbox = tru
 }
 
 // An error from the client or the server, in plain words.
-export function plainError(e, server, { timeoutMs } = {}) {
+function plainError(e, server, { timeoutMs } = {}) {
   const m = String(e?.message ?? e);
   const code = e?.code;
   if (code === 'ENOENT' || /ENOENT|posix_spawn/.test(m)) return `its program was not found: ${server?.command ?? ''} (is it installed, and on the PATH this app was started with?)`;

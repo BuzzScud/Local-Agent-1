@@ -492,7 +492,7 @@ export function remoteLevels(o) {
 
 // Whether a model can think at all: a level that thinks, or no levels said (it is asked, and one that
 // cannot answers without it).
-export const canThink = (m) => (m?.thinkingLevels?.length ? m.thinkingLevels.some((l) => l.effort) : true);
+const canThink = (m) => (m?.thinkingLevels?.length ? m.thinkingLevels.some((l) => l.effort) : true);
 
 // Big-model mode (1 Oct 2026, the user's pick): a model on an Ollama service
 // with 30B parameters or more (by its total, so Qwen3.6 35B-A3B counts) that

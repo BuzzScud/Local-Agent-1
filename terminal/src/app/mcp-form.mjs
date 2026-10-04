@@ -15,7 +15,7 @@ import { whereOf } from '../tools/mcp.mjs';
 
 export const RUNS = ['command', 'address'];
 const RUN_WORDS = { command: 'a command here', address: 'an address' };
-export const SIGNINS = ['none', 'key', 'oauth'];
+const SIGNINS = ['none', 'key', 'oauth'];
 const SIGNIN_WORDS = { none: 'no key', key: 'a key in a header', oauth: 'sign in (browser)' };
 const CLAUDE_WORDS = { here: 'through this Mac', connector: 'Anthropic’s connector' };
 
@@ -51,7 +51,7 @@ const CHOICES = (form) => ({ runs: RUNS, sandbox: [true, false], net: [false, tr
 const DEFAULTS = { name: '', runs: 'command', command: '', keyEnv: '', sandbox: true, net: false, local: '', url: '', auth: 'none', claude: 'here' };
 const localText = (local) => (local === 'any' ? 'any' : (local ?? []).join(', '));
 // A typed "Local services": ports of services already running on this Mac ("5432, 6379"), "any", or nothing.
-export function parseLocal(text) {
+function parseLocal(text) {
   const t = String(text ?? '').trim().toLowerCase();
   if (!t || t === 'none') return [];
   if (t === 'any' || t === 'all') return 'any';
