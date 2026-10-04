@@ -9,6 +9,8 @@
 //   notes    the questions whose notes belong to MAIN2026, asked inside MAIN2026 on the service.
 //   privacy  three questions about the user asked on the service from an empty folder: after the
 //            change no note about the user may go along (before, any that matched did).
+// The model on the service is let go when the run ends or is stopped, unless it was loaded before it
+// (borrowOllama, models/runtime/ollama.mjs).
 // The set names the user's own notes and work, so it is kept on the Mac (models/remote/results,
 // which git ignores), not in the repo.
 //   node models/evals/tools/ladder-check.mjs --label before|after [--repo <app checkout>] [--parts reach,where,notes,privacy]
@@ -124,6 +126,7 @@ async function run() {
   }
 
   let conn = null;
+  let hold = null; // the model on the service, let go when the run ends unless it was loaded before (borrowOllama)
   const modelParts = parts.filter((p) => p !== 'reach');
   if (!modelParts.length || stopping) return finish();
   const localId = opt('model', null);
@@ -140,6 +143,7 @@ async function run() {
     const address = opt('remote', null) ?? (saved?.address ? M.directUrl(saved) : null);
     const name = opt('remote-model', 'Qwen3.6:35B-A3B');
     if (!address) { console.error('no service: give --remote <address>, or --model <id> for a model on this Mac'); process.exit(2); }
+    hold = await M.borrowOllama({ url: address, model: name });
     conn = await M.connectRemote({ use: true, source: 'openai', kind: 'openai', connect: 'http', address, model: name, context: Number(opt('ctx', 32768)), key: false });
     console.log(`on the service: ${conn.info.model} at ${address}, ${Math.round(conn.ctx / 1024)}k context`);
   }
@@ -208,6 +212,9 @@ async function run() {
     }
   } finally {
     try { await conn.stop?.(); } catch {}
+    const r = await hold?.release();
+    if (r === true) console.log(`let go of ${opt('remote-model', 'Qwen3.6:35B-A3B')} on the service`);
+    else if (r === false && hold?.wasLoaded) console.log(`${opt('remote-model', 'Qwen3.6:35B-A3B')} was loaded on the service before this run, so it stays`);
   }
   return finish();
 

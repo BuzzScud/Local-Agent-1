@@ -166,6 +166,28 @@ export async function unloadOllama({ url, key, model, timeoutMs = 10_000 }) {
   } catch { return false; }
 }
 
+// A run that borrows a model of the service (a test's questions, the code map's labels; 3 Oct 2026, the
+// owner's rule after a run left a 26 GB model loaded for an hour: never hold a model on the service
+// after the work is done). Before it starts: whether the model was already loaded (then it is someone
+// else's to keep). When it ends, finished or stopped: release() lets it go, but only when this run
+// loaded it; unknown (the service did not say) counts as loaded by this run. Its own requests ask the
+// service to keep the model RUN_KEEP at most, so even a run killed outright leaves it that long.
+export const RUN_KEEP = '5m';
+export async function borrowOllama({ url, key = null, model }) {
+  const before = await ollamaPs({ url, key, model });
+  const wasLoaded = before?.loaded === true;
+  let done = false;
+  return {
+    wasLoaded,
+    async release() {
+      if (done) return null;
+      done = true;
+      if (wasLoaded) return false;
+      return unloadOllama({ url, key, model });
+    },
+  };
+}
+
 // Everything /api/show says about one model, for the hub's Remote tab: its
 // settings (temperature, stop words…), chat template, built-in system prompt,
 // license, and how it is built (model_info: layers, heads, vocabulary…; the

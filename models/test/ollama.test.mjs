@@ -11,7 +11,7 @@ import { createServer } from 'node:http';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-ollama-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { ollamaCatalog, ollamaModel, ollamaPs, ollamaCtx, floorCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, BIG_WAYS, bigWay, bigHarness, paramsB, HOME } = await import('../index.mjs');
+const { ollamaCatalog, ollamaModel, ollamaPs, ollamaCtx, floorCtx, preloadOllama, borrowOllama, RUN_KEEP, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, BIG_WAYS, bigWay, bigHarness, paramsB, HOME } = await import('../index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // The models as Ollama 0.32 describes them. loaded: in /api/ps at that context.
@@ -248,5 +248,23 @@ test('big-model mode: a model of 30B or more (by its total) that can call tools;
     const t = await connectRemote({ ...r, model: 'tiny:3b' });
     expect(t.model.harness).toBeUndefined();
     t.stop();
+  } finally { await s.close(); }
+});
+
+test('a run lets go of a model it loaded on the service when it ends, and leaves one that was loaded before', async () => {
+  const s = await fakeOllama();
+  const letGo = () => s.bodies.filter((b) => b.path === '/api/generate' && b.keep_alive === 0).map((b) => b.model);
+  try {
+    // coder:30b was not loaded: the run loaded it, so it goes, once however often release is called.
+    const mine = await borrowOllama({ url: s.url, model: 'coder:30b' });
+    expect(mine.wasLoaded).toBe(false);
+    expect(await mine.release()).toBe(true);
+    expect(await mine.release()).toBeNull();
+    // tiny:3b was loaded before the run: it is someone else's and stays.
+    const theirs = await borrowOllama({ url: s.url, model: 'tiny:3b' });
+    expect(theirs.wasLoaded).toBe(true);
+    expect(await theirs.release()).toBe(false);
+    expect(letGo()).toEqual(['coder:30b']);
+    expect(RUN_KEEP).toBe('5m');
   } finally { await s.close(); }
 });

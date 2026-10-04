@@ -8,13 +8,15 @@
 //   --remote   an Ollama service (default: the address /remote saved); --model its model (Qwen3.6:35B-A3B)
 //   --code-only  no model: every line from the code
 //   --check      only the check of the docs/map already there
+// The model is let go on the service when the labels are done or the run is stopped, unless it was
+// loaded before the run (borrowOllama); while it runs, each request keeps it RUN_KEEP at most.
 //   --set-file <fixes.json>  lines checked by hand against the code, [{ "path": "src/a.mjs" | "src/", "line": "…" }]:
 //                kept as checked (✓) while the file is the same; the map is written again, no model asked
 import { readFileSync } from 'node:fs';
 import { join, resolve, basename, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { HOME, directUrl } from '../../models/index.mjs';
+import { HOME, directUrl, borrowOllama, RUN_KEEP } from '../../models/index.mjs';
 import { mapTree, fileCard, folderCard, folderHash, labelRequest, parseLabels, lineFor, loadLabels, saveLabels, writeMap, checkMap, LABEL_SYSTEM, MAP_DIR } from '../src/tools/codemap.mjs';
 
 const args = process.argv.slice(2);
@@ -74,7 +76,7 @@ async function ask(node) {
   const fh = folderHash(folderCard(root, node));
   const want = cards.filter((c) => !lineFor(labels, `f:${c.rel}`, c.hash));
   if (!want.length && lineFor(labels, `d:${node.rel}`, fh)) return 'kept';
-  const body = { model, stream: false, think: false, format: 'json', messages: [{ role: 'system', content: LABEL_SYSTEM }, { role: 'user', content: labelRequest(root, node, cards, childLabels) }], options: { num_ctx: ctx, num_predict: 1500, temperature: 0.2 } };
+  const body = { model, stream: false, think: false, format: 'json', keep_alive: RUN_KEEP, messages: [{ role: 'system', content: LABEL_SYSTEM }, { role: 'user', content: labelRequest(root, node, cards, childLabels) }], options: { num_ctx: ctx, num_predict: 1500, temperature: 0.2 } };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await fetch(`${address.replace(/\/$/, '')}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(180000) });
@@ -95,7 +97,15 @@ async function ask(node) {
 }
 
 const counts = { asked: 0, kept: 0, failed: 0 };
-if (!codeOnly) {
+// The model on the service: let go when the labels are done, or when the run is stopped (^C).
+const hold = codeOnly ? null : await borrowOllama({ url: address, model });
+const letGo = async () => {
+  const r = await hold?.release();
+  if (r === true) console.log(`Let go of ${model} on the service.`);
+  else if (r === false && hold?.wasLoaded) console.log(`${model} was loaded on the service before this run, so it stays.`);
+};
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveLabels(root, labels); letGo().finally(() => process.exit(130)); });
+if (!codeOnly) try {
   // Deepest first; the folders of one depth side by side, `jobs` at a time.
   const depths = [...new Set(folders.map((n) => n.rel.split('/').length))];
   let done = 0;
@@ -112,7 +122,7 @@ if (!codeOnly) {
   // The top's own files.
   counts[await ask(tree.top)]++;
   saveLabels(root, labels);
-}
+} finally { await letGo(); }
 const written = writeMap(root, tree, labels, { name: mapName(root) });
 const problems = checkMap(root);
 const byModel = Object.values(labels).filter((l) => l.by && l.by !== 'code').length;
