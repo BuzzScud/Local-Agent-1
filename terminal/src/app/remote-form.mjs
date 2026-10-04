@@ -4,9 +4,13 @@
 // its own set-up and its own key, so flipping Run on loses nothing. Connect
 // checks the rows as they are (the tunnel, the address, the key, one word
 // back) and only when that works saves them and switches; Save only keeps
-// them. An OpenAI-compatible server with several models and none named opens
+// them. Connect and Save only share the last row (←→ picks), and once the
+// service has what Connect needs, enter connects from any row (the owner's
+// pick, 3 Oct 2026: ↑ from Run on used to land on Save only, which saved
+// without connecting). An OpenAI-compatible server with several models and none named opens
 // the list (a coder highlighted); enter picks one and the check runs again.
-// ←→ moves a choice row; enter (or typing) on a text row edits it in place.
+// ←→ moves a choice row; typing (or ←→) on a text row edits it in place, and
+// enter does too while the service is not ready to connect.
 // A key never leaves the Keychain except to go in a request's header.
 import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf, ollamaCatalog } from '../../../models/index.mjs';
 import { groupsOf, suggestModel } from './remote-models.mjs';
@@ -28,8 +32,8 @@ const ROW = {
   // one choice for every service, so it is the form's, not a service's.
   memory: { id: 'memory', label: 'Memory sent', type: 'choice' },
   more: { id: 'more', label: 'More', type: 'toggle' },
+  // Connect and Save only, one row: form.action says which one enter runs.
   go: { id: 'go', label: 'Connect', type: 'action' },
-  keep: { id: 'keep', label: 'Save only', type: 'action' },
 };
 // Each service's rows: the ones most people fill in, then the ones behind More.
 const LAYOUT = {
@@ -89,11 +93,13 @@ export const remoteRowDesc = (x) => (x.source === 'claude' ? 'Anthropic · bille
 // The form as it opens: on the service in use (This Mac when no remote is),
 // or on `source`. keys: null = the saved key stays; '' = none; a string = a
 // new one, saved with Connect or Save only.
-export function openForm(settings, { on = false, source = null } = {}) {
+// mac: this Mac's name when a window on another Mac shows it (the door's badge), so a line about
+// staying here names it ("server-1"), not "this Mac" read on the other one.
+export function openForm(settings, { on = false, source = null, mac = null } = {}) {
   const saved = remotesOf(settings);
   const inUse = on ? sourceOf(settings?.remote) : 'here';
   return {
-    kind: 'remote', source: source ?? inUse, inUse, index: 0, more: false,
+    kind: 'remote', source: source ?? inUse, inUse, index: 0, more: false, action: 'connect', mac,
     profiles: Object.fromEntries(REMOTE_SOURCES.map((s) => [s, { ...(saved[s] ?? FRESH[s]) }])),
     saved: Object.fromEntries(REMOTE_SOURCES.map((s) => [s, saved[s]])),
     keys: Object.fromEntries(REMOTE_SOURCES.map((s) => [s, null])),
@@ -105,12 +111,24 @@ export function openForm(settings, { on = false, source = null } = {}) {
 const cur = (form) => form.profiles[form.source] ?? null;
 const withValues = (form, patch, more = {}) => ({ ...form, profiles: { ...form.profiles, [form.source]: { ...cur(form), ...patch } }, error: null, ...more });
 
-// The rows shown now: Run on, its service's rows (More's when open), Connect, Save only.
+// The rows shown now: Run on, its service's rows (More's when open), then Connect · Save only.
 export function rowsOf(form) {
   if (form.source === 'here') return [ROW.source, { ...ROW.go, label: 'Switch' }];
   const l = LAYOUT[form.source];
-  return [ROW.source, ...l.main.map((id) => ROW[id]), ROW.more, ...(form.more ? l.more.map((id) => ROW[id]) : []), ROW.go, ROW.keep];
+  return [ROW.source, ...l.main.map((id) => ROW[id]), ROW.more, ...(form.more ? l.more.map((id) => ROW[id]) : []), ROW.go];
 }
+
+// Whether enter connects from any row: the service has what Connect needs (an address; the Claude
+// API a key, saved, typed here or in ANTHROPIC_API_KEY). This Mac always: enter switches back.
+export function formReady(form) {
+  if (form.source === 'here') return true;
+  const v = cur(form);
+  const k = form.keys?.[form.source];
+  return readyRemote({ ...v, key: k === null || k === undefined ? v.key : k });
+}
+
+// Where the window stays after Save only, as the form and the note after it say it.
+const staysOn = (form) => (form.inUse === 'here' ? `${form.mac ?? 'this Mac'} stays on its own model` : `this window stays on ${WORDS.source(form.inUse)}`);
 
 // The models the Model row steps through: the Claude list (and any other the key
 // listed), or what an OpenAI-compatible server listed when it was checked.
@@ -194,6 +212,8 @@ export function moveRow(form, id, dir) {
     return next === form.source ? form : { ...form, source: next, index: 0, more: false, test: null, error: null, tried: false, pick: null };
   }
   if (id === 'more') return { ...form, more: dir > 0 };
+  // The last row: ← Connect, → Save only.
+  if (id === 'go') return form.source === 'here' ? form : { ...form, action: dir > 0 ? 'save' : 'connect' };
   if (id === 'memory') return { ...form, memory: MEMORY_TO[Math.max(0, Math.min(MEMORY_TO.length - 1, MEMORY_TO.indexOf(form.memory ?? 'mine') + dir))] };
   const v = cur(form);
   if (!v) return form;
@@ -209,7 +229,6 @@ export function showValue(form, id) {
   if (id === 'source') return WORDS.source(form.source);
   if (id === 'more') return form.more ? '▾' : '▸';
   if (id === 'go') return form.test?.running ? 'checking…' : form.source === 'here' ? (form.inUse === 'here' ? 'in use now' : 'enter to switch') : form.test?.needModel ? 'pick a model' : form.test && !form.test.ok ? '✗ it did not work' : 'enter to connect';
-  if (id === 'keep') return 'enter to save';
   if (id === 'memory') return WORDS.memory(form.memory ?? 'mine');
   const v = cur(form);
   const claude = v.kind === 'claude';
@@ -239,11 +258,13 @@ export function rowNote(form, id) {
       if (!r.waiting) return 'reaching it, checking the key, asking for one word…';
       return `${(r.steps ?? []).map((x) => `✔ ${x.text}`).join(' · ')}${r.steps?.length ? ' · ' : ''}${r.waiting}… ${r.secs ?? 0} s · esc stops`;
     }
+    if (form.source !== 'here' && form.action === 'save') return rowNote(form, 'keep');
     if (t) return t.steps.map((s) => `${s.ok ? '✔' : '✗'} ${s.text}`).join(' · ');
     if (form.source === 'here') return form.inUse === 'here' ? 'this window runs here already' : 'back to the model here · the remotes stay saved';
-    return form.source === 'claude' ? 'checks the key and asks for one word (a fraction of a cent), then switches' : 'checks it answers, then saves and switches';
+    const m = cur(form)?.model;
+    return form.source === 'claude' ? 'checks the key and asks for one word (a fraction of a cent), then switches' : `checks it answers, saves it, then this window uses ${m || 'it'} there`;
   }
-  if (id === 'keep') return form.inUse === form.source ? 'keeps it · Connect uses it now' : `keeps it · this window stays on ${form.inUse === 'here' ? 'this Mac' : WORDS.source(form.inUse)}`;
+  if (id === 'keep') return form.inUse === form.source ? 'keeps it · Connect uses it now' : `keeps it, without connecting · ${staysOn(form)}`;
   if (id === 'memory') return ({ mine: 'facts about you go whole only to coding serve on your own computer; any other service gets the project’s', all: 'every service gets every fact, about you too', none: 'no memory goes with the first step of a conversation' })[form.memory ?? 'mine'];
   const v = cur(form);
   const claude = v.kind === 'claude';
@@ -251,7 +272,7 @@ export function rowNote(form, id) {
   const store = keyStore() === 'keychain' ? 'Keychain' : 'private key file';
   switch (id) {
     case 'more': {
-      if (form.more) return 'enter folds them away';
+      if (form.more) return '← folds them away';
       const fresh = FRESH[form.source];
       const set = LAYOUT[form.source].more.filter((r) => (r === 'memory' ? (form.memory ?? 'mine') !== 'mine' : r === 'model' && v.kind === 'llama' ? v.model : v[r] !== fresh[r]));
       return set.length ? set.map((r) => `${ROW[r].label.toLowerCase()} ${showValue(form, r)}`).join(' · ') : LAYOUT[form.source].more.map((r) => ROW[r].label.toLowerCase()).join(', ');
@@ -277,7 +298,7 @@ export function rowNote(form, id) {
 
 // Whether a row differs from what is saved (the • after it).
 export function rowChanged(form, id) {
-  if (form.source === 'here' || !(id in ROW) || ['source', 'more', 'go', 'keep'].includes(id)) return false;
+  if (form.source === 'here' || !(id in ROW) || ['source', 'more', 'go'].includes(id)) return false;
   if (id === 'memory') return (form.memory ?? 'mine') !== (form.savedMemory ?? 'mine');
   if (id === 'key') return form.keys[form.source] !== null;
   const before = form.saved[form.source] ?? FRESH[form.source];
