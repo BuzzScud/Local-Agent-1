@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>/loops · round three</title>
+<style>
+:root{color-scheme:dark;--bg:#0f1113;--card:#171a1d;--line:#2a2f35;--text:#e6e6e6;--dim:#9aa3ad;--accent:#7ee2a8;--term:#121212;--warn:#ffaf5f;--bad:#ff8a80}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif}
+header{padding:14px 22px 6px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header h1{font-size:21px;margin:0;font-weight:600;letter-spacing:-.02em}
+header .date{color:var(--dim);font-size:13px}
+nav,.scenes{display:flex;gap:6px;padding:0 22px 8px;flex-wrap:wrap;align-items:center}
+nav button,.scenes button{background:#1b1f23;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+nav button small{opacity:.75;margin-left:4px;font-size:11.5px}
+nav button.on,.scenes button.on{background:var(--accent);color:#0b0d0e;border-color:var(--accent);font-weight:600}
+.scenes{font-size:12.5px;color:var(--dim)}
+.scenes .lab{margin-right:2px}
+.scenes button{padding:3px 10px;font-size:12.5px}
+.sep{width:1px;height:18px;background:var(--line);margin:0 6px}
+.scenes .hint{margin-left:auto;color:var(--dim)}
+.stage{display:flex;gap:16px;align-items:flex-start;padding:2px 22px 22px}
+.left{flex:0 0 auto;min-width:0;max-width:100%}
+.side{flex:1 1 300px;min-width:280px;max-width:460px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 16px}
+.card+.card{margin-top:10px}
+.card h3{margin:2px 0 6px;font-size:15px}
+.card h3 small{color:var(--dim);font-weight:400;font-size:13px;margin-left:6px}
+.card p{margin:6px 0}
+.card ul{margin:4px 0;padding-left:18px}
+.card li{margin:4px 0}
+.good{color:var(--accent)}.weak{color:var(--warn)}.dim{color:var(--dim)}
+.card button{background:#22272c;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:2px 9px;font:inherit;font-size:12.5px;cursor:pointer}
+.card button:hover{border-color:#4a525b}
+code,kbd{font:12.5px "SF Mono",ui-monospace,Menlo,monospace}
+kbd{background:#22272c;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px}
+.win{background:var(--term);border:1px solid var(--line);border-radius:10px;overflow:hidden;width:max-content;max-width:100%}
+.bar{display:flex;align-items:center;gap:7px;padding:6px 10px;background:#22262a;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--dim)}
+.bar i{width:11px;height:11px;border-radius:50%;background:#3a4047;display:inline-block}
+.bar .name{margin:0 auto;padding-right:44px}
+.term{margin:0;padding:6px 9px;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:min(13px,calc((100vw - 70px) / 120 / 0.602));line-height:1.231em;white-space:pre;overflow:hidden;color:#d0d0d0;font-variant-ligatures:none;cursor:text}
+.term b.g{font-weight:inherit;display:inline-block;width:1ch;text-align:center;overflow:visible;white-space:pre}
+.keys{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12.5px;color:var(--dim);max-width:960px}
+.keys button{background:#1b1f23;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font:inherit;font-size:12.5px;cursor:pointer}
+.keys button:hover{border-color:#4a525b}
+.keys button b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-weight:600;color:var(--accent);margin-right:5px}
+.minis{display:none;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;padding:2px 22px 22px}
+.minis.on{display:grid}
+.mini{cursor:pointer}
+.mini h3{margin:0 0 5px;font-size:14px}
+.mini h3 small{color:var(--dim);font-weight:400;margin-left:6px}
+.mini .win{width:100%}
+.mini .term{font-size:min(13px,calc((50vw - 64px) / 120 / 0.602));padding:5px 7px}
+.mini:hover .win{border-color:#4a525b}
+/* the app's colours (xterm-256, terminal/src/ui/theme.mjs and loops-draw.mjs) */
+.a{color:#87d787}.ad{color:#5faf5f}.d{color:#8a8a8a}.f{color:#585858}.f2{color:#3a3a3a}.bd{color:#6c6c6c}.w{color:#eeeeee}.t{color:#d0d0d0}
+.wa{color:#ffaf5f}.bad{color:#ff5f5f}.ok{color:#87d787}.okd{color:#5f875f}.badd{color:#af5f5f}.b{font-weight:700}
+.bg-sel{background:#303030}.bg-usr{background:#3a3a3a}.bg-need{background:#5f5f00}
+.bg-cdbg{background:#5f0000}.bg-ctst{background:#00005f}.bg-cweb{background:#005f5f}.bg-ctsk{background:#5f005f}
+@media (max-width:1380px){.stage{flex-direction:column}.side{max-width:none;width:100%}}
+@media (max-width:900px){.minis.on{grid-template-columns:minmax(0,1fr)}.mini .term{font-size:calc((100vw - 64px) / 120 / 0.602)}.scenes .hint{margin-left:0}}
+</style></head><body>
+<header><h1>/loops · round three: in this window, task first</h1><span class="date">Live preview · 4 Oct 2026 · your picks: the same window, a step-by-step setup, typing always in the box with ctrl keys for commands, a quick check of an unclear task · the two box styles you asked to see (1 and 3) and two new designs · nothing is built yet</span></header>
+<nav id="tabs">
+  <button data-tab="cards">1 · Cards <small>your option 1</small></button>
+  <button data-tab="live">2 · Live <small>your option 3</small></button>
+  <button data-tab="track">3 · Track <small>new</small></button>
+  <button data-tab="messages">4 · Messages <small>new</small></button>
+  <span class="sep"></span>
+  <button data-tab="setup">New loop: the setup</button>
+  <button data-tab="chat">Back in the chat</button>
+  <button data-tab="compare">All four</button>
+</nav>
+<div class="scenes" id="scenes">
+  <span class="lab">Scene</span>
+  <button data-scene="running">Running</button>
+  <button data-scene="needs">Needs you</button>
+  <button data-scene="note">A note you sent</button>
+  <button data-scene="waiting">Waiting</button>
+  <button data-scene="ended">Ended</button>
+  <span class="sep"></span>
+  <button id="speed">Time ×1</button>
+  <span class="hint">Type anywhere: it goes in the screen's box, as it would in the app. Ctrl keys work too.</span>
+</div>
+<div class="stage" id="stage">
+  <div class="left">
+    <div class="win"><div class="bar"><i></i><i></i><i></i><span class="name">agentic-coder-1 — coding — 120×36</span></div><pre class="term" id="screen"></pre></div>
+    <div class="keys" id="keys">
+      <button data-k="^N"><b>^N</b>new loop</button><button data-k="^R"><b>^R</b>run now</button><button data-k="^P"><b>^P</b>pause</button><button data-k="^S"><b>^S</b>stop</button><button data-k="^O"><b>^O</b>rules</button><button data-k="^X"><b>^X</b>start over</button><button data-k="^B"><b>^B</b>undo</button><button data-k="^G"><b>^G</b>whole run</button>
+      <span class="sep"></span>
+      <button data-k="up"><b>↑</b>loop</button><button data-k="down"><b>↓</b>loop</button><button data-k="enter"><b>enter</b>send</button><button data-k="esc"><b>esc</b>chat</button><button data-k="y"><b>y</b></button><button data-k="n"><b>n</b></button>
+    </div>
+  </div>
+  <aside class="side" id="side">
+    <div class="card" data-for="cards">
+      <h3>1 · Cards <small>your option 1: plain sentences</small></h3>
+      <p>Each loop is a card with four lines in words: <b>Now</b> what it is doing, <b>Last</b> how its last run ended, <b>Next</b> when it runs again, <b>You</b> your last note and whether it was read. Under the cards, all that happened, newest first.</p>
+      <p class="good">+ Nothing to decode: the bars and the LOOK / WORK / REPORT / WAIT steps are gone.</p>
+      <p class="weak">− Three cards fit across; a long answer is cut to two lines (^G opens the whole run).</p>
+    </div>
+    <div class="card" data-for="live">
+      <h3>2 · Live <small>your option 3: the conversation</small></h3>
+      <p>The picked loop's run as it happens, drawn like the chat: each step and its result, your note where the run read it, then its answer. Earlier runs fold to one line each. The loops are tabs along the top; ↑↓ moves between them.</p>
+      <p class="good">+ You see exactly what it does; nothing is guessed from tool names.</p>
+      <p class="weak">− One loop at a time: the others are a word in their tab.</p>
+    </div>
+    <div class="card" data-for="track">
+      <h3>3 · Track <small>new</small></h3>
+      <p>A loop is about time, so each loop is a lane on a clock: a mark for each run (green passed, red failed), the run under way growing up to the <b>now</b> line, and ○ where the next runs will be. Under the lanes, the picked loop in sentences.</p>
+      <p class="good">+ When each loop ran, how it went and when it runs next, for all of them at one look.</p>
+      <p class="weak">− New to learn; at 45 s a cell, a run is one cell wide.</p>
+    </div>
+    <div class="card" data-for="messages">
+      <h3>4 · Messages <small>new</small></h3>
+      <p>Each loop is a conversation, as in a messages app. Its runs report to you as messages; your notes go on the right and say <i>read after step 1</i>; a question comes with numbered answers. The list on the left shows which loop has news.</p>
+      <p class="good">+ Telling a loop what to do is just writing to it: nothing to learn.</p>
+      <p class="weak">− It shows results, not every step (^G opens the whole run).</p>
+    </div>
+    <div class="card" data-for="cards live track messages compare">
+      <h3>In all four</h3>
+      <ul>
+        <li><b>The same window.</b> /loops switches this window's screen; esc goes back to the chat, where one line above the prompt shows the loops.</li>
+        <li><b>Typing goes straight in the box.</b> No key to press first, and no letter is a command.</li>
+        <li><b>Commands are ctrl keys:</b> <kbd>^N</kbd> new · <kbd>^R</kbd> run now · <kbd>^P</kbd> pause · <kbd>^S</kbd> stop · <kbd>^O</kbd> rules · <kbd>^X</kbd> start over · <kbd>^B</kbd> undo · <kbd>^G</kbd> whole run · <kbd>↑↓</kbd> pick a loop.</li>
+        <li><b>Stop asks, and only y stops it.</b> Enter does nothing there; s then Enter is probably how test5m was stopped.</li>
+        <li><b>A note stays in sight:</b> "sent", then "read after step 1", or "waits for its next run".</li>
+        <li><b>A loop that ended:</b> type a note and Enter starts it again with it.</li>
+      </ul>
+    </div>
+    <div class="card" data-for="compare">
+      <h3>All four <small>the same moment</small></h3>
+      <p>Click one to open it, or press 1–4. The scene buttons and your typing change all four at once.</p>
+    </div>
+    <div class="card" data-for="setup">
+      <h3>New loop <small>the same in all four designs</small></h3>
+      <p>Three questions, then a read-back: what each run does → how often → when it stops → start. It opens by itself when a window has no loop yet, and with ^N.</p>
+      <p>Try it: <button data-demo="test5m">type test5m</button> <button data-demo="word">type check</button> <button data-demo="full">type a whole task</button></p>
+      <p>"test5m" is caught and turned into "Run the tests every 5 minutes"; a single word is asked about. It is a rule check, so it is instant: no model call.</p>
+      <p class="dim">Mode, spending cap, steps a run and Ask first stay in the full form (^O), as in round two.</p>
+    </div>
+    <div class="card" data-for="setup">
+      <h3>Your 15:00 run <small>what happened</small></h3>
+      <ul>
+        <li><code>/loop test5m</code> made a loop whose whole task was the word "test5m", at its own pace.</li>
+        <li>The model searched for "test5", found nothing and answered "other": that is the "✓ other".</li>
+        <li>Nothing you typed reached the loop: letters were commands until <kbd>t</kbd>. The stop at 15:01:06 was most likely <kbd>s</kbd> then Enter.</li>
+      </ul>
+    </div>
+    <div class="card" data-for="chat">
+      <h3>Back in the chat</h3>
+      <p>esc on the loop screen comes back here. One line above the prompt keeps the loops in sight: a spinner while one runs, <b>!</b> when one asks you, the time of the next run.</p>
+      <p>Type <code>/loops</code> and Enter to go back to the loop screen (it works here too).</p>
+      <p class="dim">A question from a loop also shows as a line in the chat, as now.</p>
+    </div>
+  </aside>
+</div>
+<div class="minis" id="minis">
+  <div class="mini" data-open="cards"><h3>1 · Cards <small>your option 1</small></h3><div class="win"><pre class="term" data-mini="cards"></pre></div></div>
+  <div class="mini" data-open="live"><h3>2 · Live <small>your option 3</small></h3><div class="win"><pre class="term" data-mini="live"></pre></div></div>
+  <div class="mini" data-open="track"><h3>3 · Track <small>new</small></h3><div class="win"><pre class="term" data-mini="track"></pre></div></div>
+  <div class="mini" data-open="messages"><h3>4 · Messages <small>new</small></h3><div class="win"><pre class="term" data-mini="messages"></pre></div></div>
+</div>
+<script>
+// The loop screen of round three, drawn as the app would: rows of [text, style] pieces, each row
+// exactly COLS wide, from one small make-believe of three loops (no model, no app: all scripted).
+const COLS = 120, ROWS = 36;
+const DESIGNS = ['cards', 'live', 'track', 'messages'];
+const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const T0 = 15 * 3600 + 2 * 60; // each scene starts at 15:02:00
+
+// ---- pieces ----
+const P = (t, c = 't') => [String(t), c];
+const len = (s) => [...String(s)].length;
+const W = (row) => row.reduce((n, [t]) => n + len(t), 0);
+function fit(row, n, bg = '') {
+  const out = [];
+  let w = 0;
+  for (const [t, c] of row) {
+    if (w >= n) break;
+    const cs = [...t];
+    const take = cs.length > n - w ? cs.slice(0, n - w).join('') : t;
+    out.push([take, bg && !/\bbg-/.test(c) ? `${c} ${bg}` : c]);
+    w += Math.min(cs.length, n - w);
+  }
+  if (w < n) out.push([' '.repeat(n - w), bg ? `t ${bg}` : 't']);
+  return out;
+}
+const sp = (n) => ' '.repeat(Math.max(0, n));
+const cut = (s, n) => { const cs = [...String(s ?? '')]; return cs.length <= n ? cs.join('') : n <= 0 ? '' : `${cs.slice(0, n - 1).join('')}…`; };
+const pad = (s, n) => { const cs = [...String(s)]; return cs.length >= n ? cs.slice(0, n).join('') : String(s) + sp(n - cs.length); };
+function wrap(text, w) {
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    let line = '';
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      if (len(line ? `${line} ${word}` : word) <= w) { line = line ? `${line} ${word}` : word; continue; }
+      if (line) out.push(line);
+      line = word;
+      while (len(line) > w) { out.push([...line].slice(0, w).join('')); line = [...line].slice(w).join(''); }
+    }
+    out.push(line);
+  }
+  return out;
+}
+// At most two lines, the second ending in … when there is more.
+function lines2(text, w) { const ls = wrap(text, w); return ls.length <= 2 ? [ls[0] ?? '', ls[1] ?? ''] : [ls[0], cut(`${ls[1]} ${ls.slice(2).join(' ')}`, w)]; }
+const blank = (n = COLS) => fit([], n);
+const rule = () => fit([P('─'.repeat(COLS), 'f2')], COLS);
+const two = (n) => String(Math.floor(n)).padStart(2, '0');
+const hms = (s) => `${two((s / 3600) % 24)}:${two((s / 60) % 60)}:${two(s % 60)}`;
+const hm = (s) => `${two((s / 3600) % 24)}:${two((s / 60) % 60)}`;
+const dur = (s) => { s = Math.max(0, Math.round(s)); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${two(s % 60)}s` : `${Math.floor(s / 3600)}h ${two((s / 60) % 60)}m`; };
+const clk = (s) => { s = Math.max(0, Math.ceil(s)); return s >= 3600 ? `${Math.floor(s / 3600)}:${two((s / 60) % 60)}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`; };
+const gapWord = (s) => (s === 3600 ? 'hour' : s % 3600 === 0 ? `${s / 3600} hours` : s === 60 ? 'minute' : s % 60 === 0 ? `${s / 60} min` : `${s} s`);
+const paceOf = (l) => (l.until ? 'until the tests pass' : l.every ? `every ${gapWord(l.every)}` : 'at its own pace');
+const real = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+const spin = () => SPIN[Math.floor(real() / 110) % SPIN.length];
+const blinkOn = () => Math.floor(real() / 530) % 2 === 0;
+const KIND = { test: ['TEST', 'bg-ctst'], debug: ['FIX', 'bg-cdbg'], web: ['WEB', 'bg-cweb'], task: ['TASK', 'bg-ctsk'] };
+const chip = (k) => P(` ${KIND[k][0]} `, `w b ${KIND[k][1]}`);
+const chipW = (k) => KIND[k][0].length + 2;
+// A row from a map of column → [text, style]; the rest is `base`.
+function plot(width, cells, base = [' ', 't']) {
+  const row = [];
+  let x = 0;
+  for (const c of [...cells.keys()].sort((a, b) => a - b)) {
+    if (c < x || c >= width) continue;
+    if (c > x) row.push(P(base[0].repeat(c - x), base[1]));
+    const [s, k] = cells.get(c);
+    const v = [...s].slice(0, width - c).join('');
+    row.push(P(v, k));
+    x = c + len(v);
+  }
+  if (x < width) row.push(P(base[0].repeat(width - x), base[1]));
+  return row;
+}
+
+// ---- what a run does: steps at seconds after it starts, then its answer and its end ----
+const SCRIPT = {
+  test: { steps: [
+    { at: 2, end: 34, label: 'Bash', arg: 'bun run test', out: '411 pass · 1 fails', bad: true, plain: 'running the tests' },
+    { at: 36, end: 38, label: 'Read', arg: 'terminal/test/loops.test.mjs', out: '212 lines', plain: 'reading the failing test' },
+    { at: 40, end: 42, label: 'Search', arg: 'test5m', out: '3 matches in 2 files', plain: 'looking for test5m' },
+  ], text: { at: 48, t: 'One test fails: loops.test.mjs › parseLoop should read "test5m" as a test loop every 5 minutes, and it reads it as the message "test5m". The other 411 pass.' },
+  end: { at: 55, ok: false, said: '1 test fails: parseLoop reads "test5m" as a message' } },
+  testPass: { steps: [
+    { at: 2, end: 33, label: 'Bash', arg: 'bun run test', out: '412 pass', plain: 'running the tests' },
+  ], text: { at: 40, t: 'All 412 tests pass. Nothing changed since the run before.' },
+  end: { at: 44, ok: true, said: 'All 412 tests pass' } },
+  debug: { steps: [
+    { at: 2, end: 4, label: 'Read', arg: 'terminal/src/app/loops.mjs', out: '791 lines', plain: 'reading loops.mjs' },
+    { at: 6, end: 8, label: 'Search', arg: 'LEAD_TIME', out: '2 matches', plain: 'finding where a time is read' },
+    { at: 20, end: 22, label: 'Update', arg: 'terminal/src/app/loops.mjs', out: '+6 −2', plain: 'changing loops.mjs' },
+    { at: 24, end: 41, label: 'Bash', arg: 'bun run test ./terminal/test/loops.test.mjs', out: '30 pass', plain: 'running loops.test.mjs' },
+  ], text: { at: 46, t: 'Fixed: parseLoop now splits a kind and a time typed together, so "test5m" is a test loop every 5 minutes. loops.test.mjs passes, 30 of 30.' },
+  end: { at: 50, ok: true, said: 'Fixed parseLoop: "test5m" is a test loop every 5 minutes · 30 of 30 pass' } },
+  debugMiss: { steps: [
+    { at: 2, end: 4, label: 'Read', arg: 'terminal/src/app/loops.mjs', out: '791 lines', plain: 'reading loops.mjs' },
+    { at: 18, end: 20, label: 'Update', arg: 'terminal/src/app/loops.mjs', out: '+3 −1', plain: 'changing loops.mjs' },
+    { at: 22, end: 40, label: 'Bash', arg: 'bun run test ./terminal/test/loops.test.mjs', out: '29 pass · 1 fails', bad: true, plain: 'running loops.test.mjs' },
+  ], text: { at: 50, t: 'The change to LEAD_TIME did not help: "test5m" is still read as a message. The kind word is read before the time, and "test5m" has no space after "test".' },
+  end: { at: 58, ok: false, said: 'Still 1 failing: the change to LEAD_TIME did not help' } },
+  web: { steps: [
+    { at: 2, end: 6, label: 'Fetch', arg: 'bun.sh/blog', out: 'Bun v1.3.2 · 2 days ago', plain: 'reading bun.sh/blog' },
+  ], text: { at: 9, t: 'Bun 1.3.2 is still the newest version. Nothing new.' },
+  end: { at: 12, ok: true, said: 'Still Bun 1.3.2: nothing new' } },
+  task: { steps: [
+    { at: 2, end: 5, label: 'Read', arg: 'README.md', out: '140 lines', plain: 'reading README.md' },
+    { at: 8, end: 12, label: 'Search', arg: 'TODO', out: '7 matches', plain: 'looking for TODOs' },
+  ], text: { at: 20, t: 'Done: the 7 TODOs in the project, oldest first.' },
+  end: { at: 24, ok: true, said: 'Listed the 7 TODOs in the project' } },
+};
+const TASK = {
+  test: 'Run the tests. Say which fail and why. Change no file.',
+  debug: 'Some tests in this folder fail. Find why and fix the code until every test passes.',
+  web: 'Read the Bun releases page and tell me when there is a new version.',
+};
+const QUESTION = { at: 10, q: 'Should "test5m" be read as a test loop every 5 minutes, or stay the message "test5m"?', options: ['A test loop every 5 minutes', 'Keep it as the message', 'Ask the person each time'] };
+
+// ---- the make-believe ----
+const S = { tab: 'cards', lastDesign: 'cards', scene: 'running', loops: [], sel: 0, typed: '', as: 'note', confirm: null, toast: null, events: [], base: T0, t0: 0, speed: 1, setup: null, chatTyped: '' };
+const clock = () => S.base + ((real() - S.t0) / 1000) * S.speed;
+const mk = (o) => ({ cur: null, next: null, paused: false, pauseAfter: false, stopped: false, done: null, notes: [], maxRuns: null, every: null, until: false, runs: [], ...o });
+const R = (n, start, dur, ok, said, script) => ({ n, start, dur, ok, said, script });
+const scriptOf = (c) => SCRIPT[c.script];
+const shift = (c) => (c.ask && c.ask.answeredAt != null ? c.ask.answeredAt - (c.start + c.ask.at) : 0);
+const abs = (c, t) => c.start + t + (c.ask && t > c.ask.at ? shift(c) : 0);
+function eff(c, now) {
+  let e = now - c.start;
+  if (c.ask) { if (c.ask.answeredAt == null) e = Math.min(e, c.ask.at); else if (e > c.ask.at) e -= shift(c); }
+  return Math.max(0, e);
+}
+// What a loop is doing at `now`, and the part of its run that has happened.
+function live(l, now) {
+  const c = l.cur;
+  const asking = c && c.ask && c.ask.answeredAt == null && now - c.start >= c.ask.at;
+  const state = l.stopped ? 'stopped' : l.done ? 'done' : c ? (asking ? 'needs' : 'running') : l.paused ? 'paused' : 'waiting';
+  if (!c) return { state, e: 0, steps: [], text: null, needs: null };
+  const e = eff(c, now);
+  const sc = scriptOf(c);
+  return { state, e, steps: sc.steps.filter((s) => s.at <= e).map((s) => ({ ...s, done: s.end <= e })), text: sc.text.at <= e ? sc.text.t : null, needs: asking ? c.ask : null };
+}
+const counted = (l) => l.runs.filter((r) => !r.redo).length;
+function startRun(l, at) {
+  const n = (l.runs.at(-1)?.n ?? 0) + 1;
+  const fixed = S.loops.some((x) => x.kind === 'debug' && x.done && x.runs.at(-1)?.ok);
+  l.cur = { n, start: at, script: l.kind === 'test' ? (fixed ? 'testPass' : 'test') : l.kind };
+  l.next = null;
+  for (const nt of l.notes) if (nt.pending) { nt.pending = false; nt.run = n; nt.after = -1; nt.readAt = at; nt.how = `read at the start of run ${n}`; }
+}
+// Runs end, and due runs start, as time goes by.
+function tick(now) {
+  for (const l of S.loops) {
+    const c = l.cur;
+    if (c) {
+      const sc = scriptOf(c);
+      if ((c.ask && c.ask.answeredAt == null) || eff(c, now) < sc.end.at) continue;
+      const end = abs(c, sc.end.at);
+      l.runs.push(R(c.n, c.start, end - c.start, sc.end.ok, sc.end.said, c.script));
+      l.cur = null;
+      for (const nt of l.notes) if (nt.run === c.n && nt.readAt == null) nt.pending = true;
+      if (l.until && sc.end.ok) l.done = `the tests pass after ${counted(l)} run${counted(l) === 1 ? '' : 's'}`;
+      else if (l.maxRuns && counted(l) >= l.maxRuns) l.done = `ran its ${l.maxRuns} runs`;
+      else l.next = end + (l.every ?? (l.until ? 15 : 600));
+      if (l.pauseAfter) { l.pauseAfter = false; l.paused = true; S.events.push({ at: end, l, kind: 'state', text: 'paused after its run, as you asked' }); }
+    } else if (!l.done && !l.stopped && !l.paused && l.next != null && now >= l.next) startRun(l, l.next);
+  }
+}
+function base3() {
+  return [
+    mk({ id: 1, kind: 'test', name: 'Run the tests', task: TASK.test, every: 300, maxRuns: 10 }),
+    mk({ id: 2, kind: 'debug', name: 'Fix the failing tests', task: TASK.debug, until: true }),
+    mk({ id: 3, kind: 'web', name: 'Watch Bun releases', task: TASK.web, every: 1800 }),
+  ];
+}
+const SAID = { pass: 'All 412 tests pass', pass2: 'All 412 tests pass: nothing changed', fail: '1 test fails: parseLoop reads "test5m" as a message', miss: 'Still 1 failing: the change to LEAD_TIME did not help', web1: 'Bun 1.3.2 is the newest: nothing new', web2: 'Still Bun 1.3.2: nothing new' };
+const SCENES = {
+  running() {
+    const [a, b, c] = base3();
+    a.runs = [R(1, T0 - 1074, 48, true, SAID.pass, 'testPass'), R(2, T0 - 726, 51, true, SAID.pass2, 'testPass'), R(3, T0 - 375, 55, false, SAID.fail, 'test')];
+    a.cur = { n: 4, start: T0 - 20, script: 'test' };
+    b.runs = [R(1, T0 - 121, 94, false, SAID.miss, 'debugMiss')];
+    b.cur = { n: 2, start: T0 - 12, script: 'debug' };
+    c.runs = [R(1, T0 - 1951, 31, true, SAID.web1, 'web'), R(2, T0 - 120, 28, true, SAID.web2, 'web')];
+    c.next = T0 - 120 + 28 + 1800;
+    return { loops: [a, b, c], events: [], sel: 0 };
+  },
+  needs() {
+    const s = SCENES.running();
+    const b = s.loops[1];
+    b.runs[0].start = T0 - 149;
+    b.cur = { n: 2, start: T0 - 40, script: 'debug', ask: { ...QUESTION, answeredAt: null } };
+    return { ...s, sel: 1 };
+  },
+  note() {
+    const s = SCENES.running();
+    s.loops[0].notes = [{ at: T0 - 3, text: 'skip the slow e2e tests: run only loops.test.mjs', run: 4, after: 0, readAt: T0 - 20 + 34, pending: false, how: 'read after step 1 · Bash' }];
+    return s;
+  },
+  waiting() {
+    const [a, b, c] = base3();
+    a.runs = [R(1, T0 - 1129, 48, true, SAID.pass, 'testPass'), R(2, T0 - 781, 51, true, SAID.pass2, 'testPass'), R(3, T0 - 430, 55, false, SAID.fail, 'test'), R(4, T0 - 75, 55, false, SAID.fail, 'test')];
+    a.next = T0 - 75 + 55 + 300;
+    b.runs = [R(1, T0 - 330, 94, false, SAID.miss, 'debugMiss'), R(2, T0 - 221, 70, false, SAID.miss, 'debugMiss')];
+    b.paused = true;
+    c.runs = [R(1, T0 - 1951, 31, true, SAID.web1, 'web'), R(2, T0 - 120, 28, true, SAID.web2, 'web')];
+    c.next = T0 - 120 + 28 + 1800;
+    return { loops: [a, b, c], events: [{ at: T0 - 100, l: b, kind: 'state', text: 'paused by you' }], sel: 0 };
+  },
+  ended() {
+    const [a, b, c] = base3();
+    a.runs = Array.from({ length: 10 }, (_, i) => (i === 2 ? R(3, T0 - 2800, 55, false, SAID.fail, 'test') : R(i + 1, T0 - 3500 + i * 350, 46, true, i ? SAID.pass2 : SAID.pass, 'testPass')));
+    a.done = 'ran its 10 runs';
+    b.runs = [R(1, T0 - 2700, 94, false, SAID.miss, 'debugMiss'), R(2, T0 - 2591, 50, true, SCRIPT.debug.end.said, 'debug')];
+    b.done = 'the tests pass after 2 runs';
+    c.runs = [R(1, T0 - 1951, 31, true, SAID.web1, 'web'), R(2, T0 - 120, 28, true, SAID.web2, 'web')];
+    c.stopped = true;
+    return { loops: [a, b, c], events: [{ at: T0 - 60, l: c, kind: 'state', text: 'stopped by you' }], sel: 0 };
+  },
+};
+function setScene(name) {
+  const s = SCENES[name]();
+  Object.assign(S, { scene: name, loops: s.loops, events: s.events, sel: s.sel, base: T0, t0: real(), typed: '', as: 'note', confirm: null, toast: null });
+}
+const toast = (text, c = 'a') => { S.toast = { text, c, until: real() + 3600 }; };
+
+// ---- words shared by the designs ----
+function glyphOf(v) {
+  return { running: [spin(), 'a'], needs: ['!', 'wa b'], waiting: ['○', 'd'], paused: ['‖', 'd'], done: ['✓', 'ok'], stopped: ['■', 'f'] }[v.state];
+}
+function noteState(nt, now) {
+  if (nt.pending) return { t: 'waits for its next run', c: 'd' };
+  if (nt.readAt != null && now >= nt.readAt) return { t: `✓ ${nt.how}`, c: 'ad' };
+  return { t: 'sent · it reads it after this step', c: 'd' };
+}
+const nextN = (l) => (l.runs.at(-1)?.n ?? 0) + 1;
+// Now / Last / Next / You, in words.
+function sentences(l, v, now) {
+  const last = l.runs.at(-1);
+  let nw;
+  if (v.state === 'needs') nw = [`! asks you: ${v.needs.q}`, 'wa'];
+  else if (v.state === 'running') {
+    const s = v.steps.at(-1);
+    const what = v.text && (!s || s.done) ? 'writing what it found' : s ? (s.done ? `${s.plain}: ${s.out}` : `${s.plain}…`) : 'starting…';
+    nw = [`${spin()} ${what} · ${clk(now - l.cur.start)}`, 'a'];
+  } else if (v.state === 'paused') nw = ['‖ paused by you · ^P goes on', 'd'];
+  else if (v.state === 'done') nw = [`✓ ended: ${l.done}`, 'ok'];
+  else if (v.state === 'stopped') nw = ['■ stopped by you', 'f'];
+  else nw = ['waiting for its next run', 'd'];
+  const lt = last ? [`${last.redo ? '↺' : last.ok ? '✓' : '✗'} run ${last.n}: ${last.said}`, last.redo ? 'd' : last.ok ? 'ok' : 'bad'] : ['no run yet', 'f'];
+  const nx = v.state === 'running' || v.state === 'needs' ? [l.until ? '15 s after a miss, until they pass' : `after this run, ${paceOf(l)}`, 'd']
+    : v.state === 'waiting' && l.next != null ? [`run ${nextN(l)} at ${hms(l.next)} · in ${clk(l.next - now)}`, 't']
+    : v.state === 'paused' ? ['nothing until you go on', 'f'] : ['type a note: enter starts it again', 'f'];
+  const nt = l.notes.at(-1);
+  const you = nt ? (() => { const s = noteState(nt, now); return [`“${nt.text}” ${s.t}`, s.c]; })() : null;
+  return { now: nw, last: lt, next: nx, you };
+}
+function miniState(l, v, now) {
+  if (v.state === 'running') return clk(now - l.cur.start);
+  if (v.state === 'needs') return 'asks you';
+  if (v.state === 'waiting') return l.next != null ? `at ${hm(l.next)}` : 'waits';
+  return { paused: 'paused', done: 'ended', stopped: 'stopped' }[v.state];
+}
+
+// ---- the top line and the bottom block every loop screen has ----
+function header(now, title = 'Loops') {
+  const vs = S.loops.map((l) => live(l, now));
+  const run = vs.filter((v) => v.state === 'running').length;
+  const need = vs.filter((v) => v.state === 'needs').length;
+  const left = [P(' esc ', 'w bg-usr'), P(' chat ', 'd'), P(' › ', 'f'), P('↻ ', 'a b'), P(title, 'w b'), P('   agentic-coder-1 · ~/Desktop/agentic-coder', 'd')];
+  const right = [P(`${run} running`, run ? 'a' : 'd'), ...(need ? [P(' · ', 'f'), P(`${need} needs you`, 'wa b')] : []), P('   ● ', 'a'), P('Qwen3.6:35B-A3B', 'd'), P(`   ${hms(now)} `, 'd')];
+  // A narrow top line leaves the folder out first.
+  if (W(left) + W(right) + 2 > COLS) left[5] = P('   agentic-coder-1', 'd');
+  return fit([...left, P(sp(COLS - W(left) - W(right))), ...right], COLS);
+}
+function needRow(now, w = COLS) {
+  const l = S.loops[S.sel];
+  const v = l && live(l, now);
+  if (v?.needs) {
+    const wide = [P(' '), ...v.needs.options.flatMap((o, i) => [P(` ${i + 1} `, 'w b bg-need'), P(` ${o}   `, 'w')]), P('or your own words', 'd')];
+    // A narrow row keeps every choice and drops the hint.
+    return fit(W(wide) <= w ? wide : [P(' '), ...v.needs.options.flatMap((o, i) => [P(` ${i + 1} `, 'w b bg-need'), P(` ${cut(o, Math.floor((w - 2) / v.needs.options.length) - 6)}  `, 'w')])], w);
+  }
+  const other = S.loops.findIndex((x) => live(x, now).needs);
+  if (other >= 0) return fit([P(' ! ', 'wa b'), P(`${S.loops[other].name} asks you something`, 'w'), P(`  ·  ${other < S.sel ? '↑' : '↓'} picks it`, 'd')], w, 'bg-need');
+  return blank(w);
+}
+function inputBox(now, w = COLS) {
+  const l = S.loops[S.sel];
+  const v = l && live(l, now);
+  const ended = v && (v.state === 'done' || v.state === 'stopped');
+  const bc = v?.needs ? 'wa' : 'a';
+  const title = !l ? ' a new loop ' : v.needs ? ` your answer to ${cut(l.name, 30)} ` : S.as === 'redo' ? ` start ${cut(l.name, 30)} over with this · its changes go back ` : ended ? ` ${cut(l.name, 30)} has ended · enter starts it again with this ` : v.state === 'running' ? ` to ${cut(l.name, 30)} · it reads it at its next step ` : ` to ${cut(l.name, 30)} · its next run starts with it `;
+  const room = w - 8;
+  const text = S.typed;
+  const shown = len(text) > room ? `…${[...text].slice(-(room - 1)).join('')}` : text;
+  const ph = v?.needs ? `type 1–${v.needs.options.length}, or answer in your own words` : `type to tell ${l ? l.name : 'it'} what to do`;
+  const inner = [P(' › ', 'a b'), P(shown, 'w'), P(blinkOn() ? '▏' : ' ', 'a'), ...(text ? [] : [P(ph, 'f')])];
+  const hint = ` enter ${v?.needs ? 'answers' : S.as === 'redo' ? 'starts over' : ended ? 'starts it again' : 'sends'} · ↑↓ another loop `;
+  return [
+    fit([P('╭─', bc), P(title, 'w b'), P('─'.repeat(Math.max(0, w - 3 - len(title))), bc), P('╮', bc)], w),
+    fit([P('│', bc), ...fit(inner, w - 2), P('│', bc)], w),
+    fit([P('╰', bc), P('─'.repeat(Math.max(0, w - 4 - len(hint))), bc), P(hint, 'd'), P('─╯', bc)], w),
+  ];
+}
+const BOARD_KEYS = [['^N', 'new'], ['^R', 'run now'], ['^P', 'pause'], ['^S', 'stop'], ['^O', 'rules'], ['^X', 'start over'], ['^B', 'undo'], ['^G', 'whole run'], ['↑↓', 'pick'], ['esc', 'chat']];
+function keysLine(now, keys = BOARD_KEYS) {
+  if (S.confirm) return fit([P(' '), P(S.confirm.text, 'wa b'), P('   y', 'w b'), P(' yes   ', 'd'), P('n', 'w b'), P(' no', 'd'), P('     enter does nothing here', 'f')], COLS);
+  if (S.toast && S.toast.until > real()) return fit([P(' '), P(S.toast.text, S.toast.c)], COLS);
+  const row = [P(' ')];
+  keys.forEach(([k, w], i) => { if (i) row.push(P('  ·  ', 'f')); row.push(P(k, 'w'), P(` ${w}`, 'd')); });
+  return fit(row, COLS);
+}
+const bottom = (now) => [needRow(now), ...inputBox(now), keysLine(now)];
+
+// What happened, newest first, for all the loops.
+function eventsOf(now) {
+  const ev = [];
+  for (const l of S.loops) {
+    for (const r of l.runs) { ev.push({ at: r.start, l, kind: 'start', n: r.n }); ev.push({ at: r.start + r.dur, l, kind: 'end', r }); }
+    if (l.cur) { ev.push({ at: l.cur.start, l, kind: 'start', n: l.cur.n }); if (l.cur.ask && now - l.cur.start >= l.cur.ask.at) ev.push({ at: l.cur.start + l.cur.ask.at, l, kind: 'ask', text: l.cur.ask.q }); }
+    for (const nt of l.notes) ev.push({ at: nt.at, l, kind: 'you', nt });
+  }
+  return [...ev, ...S.events].filter((e) => e.at <= now).sort((a, b) => b.at - a.at);
+}
+function eventRow(e, w, now) {
+  const head = [P(hms(e.at), 'f'), P('  '), chip(e.l.kind), P(sp(7 - chipW(e.l.kind))), P(pad(cut(e.l.name, 22), 23), 'd')];
+  const room = w - W(head);
+  if (e.kind === 'start') return [...head, P(cut(`run ${e.n} started`, room), 'f')];
+  if (e.kind === 'end') return [...head, P(cut(`${e.r.redo ? '↺' : e.r.ok ? '✓' : '✗'} run ${e.r.n}: ${e.r.said}`, room - 9), e.r.redo ? 'f' : e.r.ok ? 'ok' : 'bad'), P(`  ${dur(e.r.dur)}`, 'f')];
+  if (e.kind === 'ask') return [...head, P(cut(`! asks you: ${e.text}`, room), 'wa')];
+  if (e.kind === 'you') { const s = noteState(e.nt, now); return [...head, P(cut(`you: “${e.nt.text}”`, room - len(s.t) - 3), 'w'), P(`  ${s.t}`, s.c)]; }
+  if (e.kind === 'answer') return [...head, P(cut(`you answered “${e.text}”`, room), 't')];
+  return [...head, P(cut(e.text, room), 'd')];
+}
+
+// ---- 1 · Cards: each loop in four plain lines ----
+function card(l, sel, w, now) {
+  const v = live(l, now);
+  const bc = v.state === 'needs' ? 'wa' : sel ? 'w' : 'bd';
+  const inner = w - 4;
+  const side = (row) => fit([P('│ ', bc), ...fit(row, inner), P(' │', bc)], w);
+  const title = ` ${cut(l.name, inner - chipW(l.kind) - 3)} `;
+  const s = sentences(l, v, now);
+  const lab = (t) => P(pad(t, 6), 'f');
+  const tw = inner - 6;
+  const nw = lines2(s.now[0], tw), lt = lines2(s.last[0], tw);
+  const n = l.cur?.n ?? l.runs.at(-1)?.n;
+  return [
+    fit([P('┌─', bc), chip(l.kind), P(title, sel ? 'w b' : 't'), P('─'.repeat(Math.max(0, w - 3 - chipW(l.kind) - len(title))), bc), P('┐', bc)], w),
+    side([P(paceOf(l), 'd'), P(n ? ` · run ${n}${l.maxRuns ? ` of ${l.maxRuns}` : ''}` : ' · no run yet', 'f')]),
+    side([]),
+    side([lab('Now'), P(nw[0], s.now[1])]),
+    side([lab(''), P(nw[1], s.now[1])]),
+    side([lab('Last'), P(lt[0], s.last[1])]),
+    side([lab(''), P(lt[1], s.last[1])]),
+    side([lab('Next'), P(cut(s.next[0], tw), s.next[1])]),
+    side(s.you ? [lab('You'), P(cut(s.you[0], tw), s.you[1])] : [lab('You'), P('nothing yet', 'f2')]),
+    fit([P('└', bc), P('─'.repeat(w - 2), bc), P('┘', bc)], w),
+  ];
+}
+function cardsView(now) {
+  const out = [header(now), rule()];
+  const n = S.loops.length;
+  const show = Math.min(3, n);
+  const first = Math.max(0, Math.min(S.sel - 1, n - show));
+  const vis = S.loops.slice(first, first + show);
+  const bw = 38, gap = 2;
+  const x0 = Math.floor((COLS - (show * bw + (show - 1) * gap)) / 2);
+  const cards = vis.map((l, i) => card(l, first + i === S.sel, bw, now));
+  for (let y = 0; y < 10; y++) out.push(fit([P(sp(x0)), ...cards.flatMap((c, i) => [...(i ? [P(sp(gap))] : []), ...c[y]])], COLS));
+  const more = first + show < n ? `${n - first - show} more ›  ` : '';
+  const less = first > 0 ? `  ‹ ${first} more` : '';
+  out.push(fit([P(less, 'f'), P(sp(COLS - len(less) - len(more))), P(more, 'f')], COLS));
+  out.push(fit([P('  What happened', 'w b'), P('   newest first', 'f')], COLS));
+  const ev = eventsOf(now);
+  for (let i = 0; i < 17; i++) out.push(ev[i] ? fit([P('  '), ...eventRow(ev[i], COLS - 4, now)], COLS) : i === 0 ? fit([P('  nothing yet', 'f')], COLS) : blank());
+  return [...out, ...bottom(now)];
+}
+
+// ---- 2 · Live: the picked loop's run as it happens ----
+function stateWords(l, v, now) {
+  if (v.state === 'running') return [`${spin()} live · ${clk(now - l.cur.start)}`, 'a'];
+  if (v.state === 'needs') return ['! asks you', 'wa b'];
+  if (v.state === 'waiting') return [l.next != null ? `○ run ${nextN(l)} at ${hm(l.next)} · in ${clk(l.next - now)}` : '○ waits', 'd'];
+  if (v.state === 'paused') return ['‖ paused', 'd'];
+  if (v.state === 'done') return [`✓ ended: ${l.done}`, 'ok'];
+  return ['■ stopped by you', 'f'];
+}
+function transcript(l, v, now, w) {
+  const rows = [];
+  const run = l.cur ?? l.runs.at(-1);
+  for (const r of l.runs) {
+    if (r === run) continue;
+    const head = `── run ${r.n} · ${hm(r.start)} · ${dur(r.dur)}  `;
+    rows.push(fit([P(head, 'f'), P(cut(`${r.redo ? '↺' : r.ok ? '✓' : '✗'} ${r.said}`, w - len(head) - 4), r.redo ? 'f' : r.ok ? 'okd' : 'badd'), P(' ', 'f'), P('─'.repeat(w), 'f2')], w));
+  }
+  if (!run) return [...rows, fit([P(' no run yet: ^R runs it now', 'f')], w)];
+  rows.push(blank(w));
+  rows.push(fit([P(' > ', 'd'), P(l.task, 'w')], w, 'bg-usr'));
+  rows.push(fit([P(`   run ${run.n} · ${hm(run.start)} · it is told what the runs before it did`, 'f')], w));
+  const live1 = Boolean(l.cur);
+  const sc = live1 ? scriptOf(l.cur) : SCRIPT[run.script];
+  const steps = live1 ? v.steps : sc.steps.map((s) => ({ ...s, done: true }));
+  const read = (nt) => nt.run === run.n && nt.readAt != null && now >= nt.readAt;
+  const you = (nt, label) => {
+    rows.push(fit([P(' > ', 'ad'), P(`you: ${nt.text}`, 'w')], w, 'bg-usr'));
+    rows.push(fit([P('   ⎿ ', 'f'), P(label, 'ad')], w));
+  };
+  for (const nt of l.notes) if (read(nt) && nt.after === -1) you(nt, 'it starts with your note');
+  steps.forEach((s, i) => {
+    rows.push(fit([P(' ⏺ ', s.done && s.bad ? 'bad' : 'a'), P(s.label, 'w b'), P(`(${cut(s.arg, w - s.label.length - 8)})`, 'd')], w));
+    if (s.done) rows.push(fit([P('   ⎿ ', 'f'), P(s.out, s.bad ? 'badd' : 'd')], w));
+    for (const nt of l.notes) if (read(nt) && nt.after === i) you(nt, `it read your note with the result of ${s.label}`);
+  });
+  const text = live1 ? v.text : sc.text.t;
+  if (text) wrap(text, w - 4).forEach((t, j) => rows.push(fit([P(j ? '   ' : ' ● ', 'w'), P(t, 't')], w)));
+  for (const nt of l.notes) if (nt.run === run.n && nt.readAt != null && now < nt.readAt) rows.push(fit([P(' > ', 'ad'), P(`you: ${nt.text}`, 'd'), P('   sent · it reads it after this step', 'f')], w));
+  if (v.needs) {
+    rows.push(blank(w));
+    wrap(v.needs.q, w - 4).forEach((t, j) => rows.push(fit([P(j ? '   ' : ' ? ', 'wa b'), P(t, 'wa')], w)));
+    v.needs.options.forEach((o, i) => rows.push(fit([P(`   ${i + 1}  `, 'w b'), P(o, 'w')], w)));
+    rows.push(fit([P('   type a number, or answer in your own words, then enter', 'f')], w));
+  } else if (live1) rows.push(fit([P(` ${spin()} `, 'a'), P(`Working… ${clk(now - run.start)}`, 'd')], w));
+  else {
+    rows.push(fit([P(` ${run.redo ? '↺' : run.ok ? '✓' : '✗'} `, run.ok ? 'ok' : 'bad'), P(`${run.said} · took ${dur(run.dur)}`, run.ok ? 'ok' : 'bad')], w));
+    const sw = stateWords(l, v, now);
+    rows.push(fit([P('   '), P(sw[0], sw[1])], w));
+    for (const nt of l.notes) if (nt.pending) rows.push(fit([P(' > ', 'ad'), P(`you: ${nt.text}`, 'd'), P('   its next run starts with it', 'f')], w));
+  }
+  return rows;
+}
+function liveView(now) {
+  const out = [header(now)];
+  const tabs = [P(' ')];
+  S.loops.forEach((l, i) => {
+    const v = live(l, now);
+    const on = i === S.sel;
+    const bg = on ? ' bg-sel' : '';
+    const [g, gc] = glyphOf(v);
+    tabs.push(P(' ', `t${bg}`), P(g, gc + bg), P(` ${cut(l.name, 22)} `, (on ? 'w b' : 'd') + bg), P(`${miniState(l, v, now)} `, (v.state === 'needs' ? 'wa' : 'f') + bg), P('  '));
+  });
+  tabs.push(P('^N', 'w'), P(' new loop', 'd'));
+  out.push(fit(tabs, COLS));
+  out.push(rule());
+  const l = S.loops[S.sel];
+  const v = live(l, now);
+  const sw = stateWords(l, v, now);
+  out.push(fit([P(' '), chip(l.kind), P(` ${l.name}`, 'w b'), P(`   ${paceOf(l)}${l.maxRuns ? ` · ${counted(l) + (l.cur ? 1 : 0)} of ${l.maxRuns} runs` : ''}   `, 'd'), P(sw[0], sw[1])], COLS));
+  const body = transcript(l, v, now, COLS - 2);
+  const H = ROWS - out.length - 5;
+  const start = Math.max(0, body.length - H);
+  for (let i = 0; i < H; i++) out.push(fit([P(' '), ...(body[start + i] ?? [])], COLS));
+  return [...out, ...bottom(now)];
+}
+
+// ---- 3 · Track: each loop a lane on a clock ----
+function trackView(now) {
+  const out = [header(now), rule(), blank()];
+  const NX = 25, TW = COLS - NX - 1, SPC = 45, NOWC = 54;
+  const t0 = now - NOWC * SPC;
+  const colOf = (t) => Math.floor((t - t0) / SPC);
+  const labels = new Map([[NOWC - 1, ['now', 'a b']]]), ticks = new Map([[NOWC, ['▼', 'a']]]);
+  for (let m = Math.ceil(t0 / 600) * 600; colOf(m) < TW; m += 600) {
+    const c = colOf(m);
+    if (Math.abs(c - NOWC) > 5 && c >= 2) labels.set(c - 2, [hm(m), 'f']);
+    if (c !== NOWC) ticks.set(c, ['┬', 'f']);
+  }
+  out.push(fit([P(sp(NX)), ...plot(TW, labels)], COLS));
+  out.push(fit([P(sp(NX)), ...plot(TW, ticks, ['─', 'f2'])], COLS));
+  const n = S.loops.length;
+  const first = Math.max(0, Math.min(S.sel - 1, n - 4));
+  S.loops.slice(first, first + 4).forEach((l, k) => {
+    const i = first + k;
+    const v = live(l, now);
+    const on = i === S.sel;
+    const cells = new Map([[NOWC, ['│', 'ad']]]);
+    if (l.runs.some((r) => colOf(r.start) < 0)) cells.set(0, ['‹', 'f']);
+    for (const r of l.runs) { const c = colOf(r.start); if (c >= 0 && c < TW) cells.set(c, [r.redo ? '↺' : '■', r.redo ? 'f' : r.ok ? 'ok' : 'bad']); }
+    if (l.cur) {
+      for (let c = Math.max(0, colOf(l.cur.start)); c < NOWC; c++) cells.set(c, ['▮', v.state === 'needs' ? 'wa' : 'a']);
+      cells.set(NOWC, v.state === 'needs' ? [blinkOn() ? '!' : ' ', 'wa b'] : [spin(), 'a b']);
+    }
+    if (!l.done && !l.stopped && !l.paused) {
+      const sc = l.cur && scriptOf(l.cur);
+      let t = !l.cur ? l.next : l.until ? null : (v.needs ? now + sc.end.at - l.cur.ask.at : abs(l.cur, sc.end.at)) + (l.every ?? 600);
+      let k2 = counted(l) + (l.cur ? 1 : 0);
+      for (let guard = 0; t != null && colOf(t) < TW && (!l.maxRuns || k2 < l.maxRuns) && guard < 40; guard++) {
+        const c = colOf(t);
+        if (c > NOWC) cells.set(c, ['○', guard ? 'f' : 'd']);
+        k2++;
+        if (!l.every) break;
+        t += l.every + 50;
+      }
+    }
+    if (l.paused && !l.cur) cells.set(NOWC + 1, [' ‖ paused', 'd']);
+    if (l.done || l.stopped) { const r = l.runs.at(-1); const c = Math.max(0, Math.min(TW - 10, colOf(r.start + r.dur) + 1)); cells.set(c, l.done ? [' ✓ ended', 'ok'] : [' ■ stopped', 'f']); }
+    const nameW = NX - 4 - chipW(l.kind);
+    out.push(fit([P(on ? ' ▸ ' : '   ', 'w b'), chip(l.kind), P(` ${pad(cut(l.name, nameW - 1), nameW - 1)}`, on ? 'w b' : 't'), P(' '), ...plot(TW, cells, ['·', 'f2'])], COLS, on ? 'bg-sel' : ''));
+    const s = sentences(l, v, now);
+    const say = v.state === 'waiting' || v.state === 'paused' ? s.next : v.state === 'needs' ? ['! asks you something: type your answer below', 'wa'] : s.now;
+    out.push(fit([P(`     ${pad(cut(paceOf(l), NX - 6), NX - 5)}`, 'f'), P(cut(say[0], TW), say[1])], COLS, on ? 'bg-sel' : ''));
+    out.push(fit([P(sp(NX)), ...plot(TW, new Map([[NOWC, ['│', 'f2']]]))], COLS));
+  });
+  while (out.length < 17) out.push(blank());
+  out.push(fit([P(sp(NX)), P('■', 'ok'), P(' passed   ', 'f'), P('■', 'bad'), P(' failed   ', 'f'), P('▮', 'a'), P(' running   ', 'f'), P('!', 'wa'), P(' asks you   ', 'f'), P('○', 'd'), P(' next runs   ', 'f'), P('│', 'ad'), P(' now   · one cell is 45 s', 'f')], COLS));
+  // The picked loop, in sentences.
+  const l = S.loops[S.sel];
+  const v = live(l, now);
+  const s = sentences(l, v, now);
+  const w = COLS - 2, inner = w - 4, bc = v.state === 'needs' ? 'wa' : 'bd';
+  const side = (row) => fit([P(' '), P('│ ', bc), ...fit(row, inner), P(' │', bc)], COLS);
+  const lab = (t) => P(pad(t, 11), 'f');
+  const right = l.maxRuns ? ` run ${l.cur?.n ?? l.runs.at(-1)?.n ?? 0} of ${l.maxRuns} ` : ` run ${l.cur?.n ?? l.runs.at(-1)?.n ?? 0} `;
+  const title = ` ${l.name} `;
+  out.push(fit([P(' '), P('┌─', bc), chip(l.kind), P(title, 'w b'), P(`· ${paceOf(l)} `, 'd'), P('─'.repeat(Math.max(0, w - 3 - chipW(l.kind) - len(title) - len(`· ${paceOf(l)} `) - len(right) - 1)), bc), P(right, 'f'), P('─┐', bc)], COLS));
+  out.push(side([lab('Each run'), P(cut(l.task, inner - 11), 't')]));
+  out.push(side([]));
+  out.push(side([lab('Now'), P(cut(s.now[0], inner - 11), s.now[1])]));
+  const st = v.steps.at(-1);
+  out.push(side(st ? [lab(''), P('⏺ ', 'a'), P(st.label, 'w b'), P(` ${cut(st.arg, 50)}`, 'd'), ...(st.done ? [P(` → ${st.out}`, st.bad ? 'badd' : 'd')] : [P(' …', 'f')])] : []));
+  const last = l.runs.at(-1);
+  out.push(side([lab('Last'), P(cut(last ? `${last.ok ? '✓' : '✗'} run ${last.n} at ${hm(last.start)}, took ${dur(last.dur)}: ${last.said}` : 'no run yet', inner - 11), last ? (last.ok ? 'ok' : 'bad') : 'f')]));
+  out.push(side([lab('Next'), P(cut(s.next[0], inner - 11), s.next[1])]));
+  out.push(side([lab('You said'), ...(s.you ? [P(cut(s.you[0], inner - 11), s.you[1])] : [P('nothing yet: type below and enter', 'f')])]));
+  out.push(side([]));
+  const marks = l.runs.slice(-30).flatMap((r) => [P(r.redo ? '↺' : '■', r.redo ? 'f' : r.ok ? 'ok' : 'bad'), P(' ')]);
+  if (l.cur) marks.push(P(v.state === 'needs' ? '!' : spin(), v.state === 'needs' ? 'wa' : 'a'), P(' '));
+  const okN = l.runs.filter((r) => r.ok).length, badN = l.runs.filter((r) => !r.ok && !r.redo).length;
+  out.push(side([lab('Runs'), ...marks, P(`  ${okN} passed · ${badN} failed`, 'f')]));
+  out.push(side([lab('Rules'), P(`${paceOf(l)} · ${l.maxRuns ? `stops after ${l.maxRuns} runs` : 'no run limit'} · Bypass permissions · ^O changes them`, 'd')]));
+  out.push(fit([P(' '), P(`└${'─'.repeat(w - 2)}┘`, bc)], COLS));
+  while (out.length < ROWS - 5) out.push(blank());
+  return [...out.slice(0, ROWS - 5), ...bottom(now)];
+}
+
+// ---- 4 · Messages: each loop a conversation ----
+function bubble(title, titleCls, body, bc, w, foot = null, footCls = 'd') {
+  const rows = [fit([P('╭─', bc), P(title, titleCls), P('─'.repeat(Math.max(0, w - 3 - len(title))), bc), P('╮', bc)], w)];
+  for (const [t, c] of body) rows.push(fit([P('│ ', bc), ...fit([P(t, c)], w - 4), P(' │', bc)], w));
+  rows.push(foot ? fit([P('╰', bc), P('─'.repeat(Math.max(0, w - 3 - len(foot))), bc), P(foot, footCls), P('─╯', bc)], w) : fit([P(`╰${'─'.repeat(w - 2)}╯`, bc)], w));
+  return rows;
+}
+const widthFor = (title, body, foot, max) => Math.min(max, Math.max(len(title) + 4, ...body.map(([t]) => len(t) + 4), foot ? len(foot) + 5 : 0));
+function threadRows(l, v, now, RW) {
+  const items = [];
+  const MAXW = 62;
+  const leftB = (title, tc, text, bc, extra = []) => {
+    const body = [...wrap(text, MAXW - 4).map((t) => [t, 't']), ...extra];
+    const w = widthFor(title, body, null, MAXW);
+    return bubble(title, tc, body, bc, w).map((r) => fit([P('  '), ...r], RW));
+  };
+  const rightB = (title, text, foot, footCls) => {
+    const body = wrap(text, 46).map((t) => [t, 'w']);
+    const w = widthFor(title, body, foot, 52);
+    return bubble(title, 'ad b', body, 'ad', w, foot, footCls).map((r) => fit([P(sp(RW - 2 - w)), ...r], RW));
+  };
+  const center = (t, c = 'f') => [fit([P(sp(Math.floor((RW - len(t)) / 2))), P(t, c)], RW)];
+  for (const r of l.runs) {
+    const g = r.redo ? '↺' : r.ok ? '✓' : '✗';
+    items.push({ at: r.start + r.dur, rows: leftB(` ${g} run ${r.n} · ${hm(r.start)} · ${dur(r.dur)} `, r.redo ? 'f' : r.ok ? 'ok b' : 'bad b', r.said, r.redo ? 'f2' : r.ok ? 'okd' : 'badd') });
+  }
+  for (const nt of l.notes) { const s = noteState(nt, now); items.push({ at: nt.at, rows: rightB(` you · ${hm(nt.at)} `, nt.text, ` ${s.t} `, s.c) }); }
+  for (const e of S.events.filter((x) => x.l === l && x.at <= now)) items.push({ at: e.at, rows: e.kind === 'answer' ? rightB(` you · ${hm(e.at)} `, e.text, ' your answer ', 'ad') : center(`· ${e.text} · ${hm(e.at)} ·`) });
+  if (l.cur && v.needs) {
+    const extra = [['', 't'], ...v.needs.options.map((o, i) => [`${i + 1}  ${o}`, 'w']), ['', 't'], ['type a number, or answer in your own words', 'f']];
+    items.push({ at: l.cur.start + l.cur.ask.at, rows: leftB(` ! run ${l.cur.n} asks you `, 'wa b', v.needs.q, 'wa', extra) });
+  } else if (l.cur) {
+    const body = v.steps.slice(-3).map((s) => [`⏺ ${s.label} ${cut(s.arg, 30)}${s.done ? ` → ${s.out}` : ' …'}`, s.done ? (s.bad ? 'badd' : 'd') : 't']);
+    if (v.text) body.push(['', 't'], ...wrap(v.text, MAXW - 4).slice(0, 3).map((t) => [t, 't']));
+    if (!body.length) body.push(['starting…', 'd']);
+    const title = ` ${spin()} run ${l.cur.n} · working · ${clk(now - l.cur.start)} `;
+    items.push({ at: now + 0.5, rows: bubble(title, 'a b', body, 'a', MAXW).map((r) => fit([P('  '), ...r], RW)) });
+  }
+  if (!l.cur) {
+    const sw = stateWords(l, v, now);
+    items.push({ at: now + 1, rows: center(sw[0], sw[1]) });
+  }
+  items.sort((a, b) => a.at - b.at);
+  return items.flatMap((it, i) => (i ? [blank(RW), ...it.rows] : it.rows));
+}
+function messagesView(now) {
+  const out = [header(now), rule()];
+  const LW = 30, RW = COLS - LW - 1;
+  // The list on the left.
+  const left = [blank(LW)];
+  S.loops.forEach((l, i) => {
+    const v = live(l, now);
+    const on = i === S.sel;
+    const [g, gc] = glyphOf(v);
+    const when = l.cur ? hm(l.cur.start) : l.runs.length ? hm(l.runs.at(-1).start + l.runs.at(-1).dur) : '';
+    const status = v.state === 'running' ? `running · run ${l.cur.n} · ${clk(now - l.cur.start)}` : v.state === 'needs' ? 'asks you something' : v.state === 'waiting' ? (l.next != null ? `next run at ${hm(l.next)}` : 'waiting') : v.state === 'paused' ? 'paused' : v.state === 'done' ? `ended: ${l.done}` : 'stopped by you';
+    const bg = on ? 'bg-sel' : '';
+    left.push(fit([P(on ? ' ▸ ' : '   ', 'w b'), P(g, gc), P(' '), P(pad(cut(l.name, LW - 13), LW - 12), on ? 'w b' : 't'), P(pad(when, 5), 'f'), P(' ')], LW, bg));
+    left.push(fit([P('     '), P(cut(status, LW - 6), v.state === 'needs' ? 'wa' : 'd')], LW, bg));
+    left.push(blank(LW));
+  });
+  while (left.length < 30) left.push(blank(LW));
+  left.push(fit([P('  ^N', 'w'), P(' a new loop', 'd')], LW));
+  left.push(fit([P('  ↑↓', 'w'), P(' another loop', 'd')], LW));
+  left.push(fit([P('  esc', 'w'), P(' back to the chat', 'd')], LW));
+  // The conversation on the right.
+  const l = S.loops[S.sel];
+  const v = live(l, now);
+  const right = [];
+  const info = `${paceOf(l)} · ${counted(l) + (l.cur ? 1 : 0)}${l.maxRuns ? ` of ${l.maxRuns}` : ''} runs `;
+  right.push(fit([P(' '), chip(l.kind), P(` ${l.name}`, 'w b'), P(sp(RW - 2 - chipW(l.kind) - len(l.name) - len(info))), P(info, 'd')], RW));
+  right.push(fit([P(' Each run: ', 'f'), P(cut(l.task, RW - 12), 'd')], RW));
+  right.push(fit([P('─'.repeat(RW), 'f2')], RW));
+  const thread = threadRows(l, v, now, RW);
+  const H = 33 - 3 - 4;
+  const start = Math.max(0, thread.length - H);
+  for (let i = 0; i < H; i++) right.push(thread[start + i] ?? blank(RW));
+  right.push(fit([P(' '), ...needRow(now, RW - 1)], RW), ...inputBox(now, RW - 1).map((r) => fit([P(' '), ...r], RW)));
+  for (let i = 0; i < 33; i++) out.push(fit([...left[i], P('│', 'f2'), ...right[i]], COLS));
+  out.push(keysLine(now));
+  return out;
+}
+
+// ---- the setup: what each run does → how often → when it stops → start ----
+const SETUP0 = () => ({ step: 'task', text: '', ex: -1, pick: 0, custom: '', task: '', kind: null, every: null, until: false, everyWord: '', maxRuns: null, stopWord: '', unclear: null, error: null });
+const EXAMPLES = ['run the tests and say what fails', 'fix the failing tests until they all pass', 'read the Bun releases page and tell me when there is a new version', 'check the build and the lint, change nothing'];
+const guessKind = (m) => (/\b(fix|debug|bug|bugs|broken)\b/i.test(m) ? 'debug' : /https?:\/\/|\b(web|page|pages|site|url|release|releases|news)\b/i.test(m) ? 'web' : /\b(test|tests|check|lint|build)\b/i.test(m) ? 'test' : 'task');
+const KIND_WORD = { test: 'testing', debug: 'fixing', web: 'web', task: 'any-job' };
+const nameOf = (task) => (task === TASK.test ? 'Run the tests' : task === TASK.debug ? 'Fix the failing tests' : cut(task.split(/[.:!?](\s|$)/)[0], 28));
+const readGap = (t) => { const m = /^(?:every\s+)?(\d+(?:\.\d+)?)\s*(s|sec|secs|m|min|mins|h|hr|hrs|hours?|minutes?)$/i.exec(t.trim()); if (!m) return null; const u = m[2][0].toLowerCase(); return Math.round(Number(m[1]) * (u === 's' ? 1 : u === 'm' ? 60 : 3600)); };
+// A task the rules cannot read well: a kind and a time typed together, or a single word.
+function unclearOf(t) {
+  const m = /^(tests?|debug|fix|web)\s*(\d+)\s*(s|m|h)$/i.exec(t);
+  if (m) {
+    const kind = /^t/i.test(m[1]) ? 'test' : /^web$/i.test(m[1]) ? 'web' : 'debug';
+    const secs = Number(m[2]) * { s: 1, m: 60, h: 3600 }[m[3].toLowerCase()];
+    const what = { test: 'Run the tests', debug: 'Fix the failing tests', web: 'Read a web page' }[kind];
+    return { why: `"${t}" looks like two things typed together: "${m[1]}" and "${m[2]}${m[3]}".`, options: [
+      { label: `${what}, every ${gapWord(secs)}`, note: kind === 'test' ? 'runs them and says what fails; changes no file' : kind === 'debug' ? 'fixes the code until every test passes' : 'you say which page next', act: 'use', kind, every: secs },
+      { label: `Keep "${t}" as what each run does`, note: 'the model gets only this word', act: 'keep' },
+      { label: 'Type it again', note: '', act: 'again' },
+    ] };
+  }
+  if (!/\s/.test(t) && len(t) < 16) return { why: `"${t}" is one word. Each run gets only these words, so say what it should do.`, options: [
+    { label: 'Type it again', note: 'e.g. "run the tests and say what fails"', act: 'again' },
+    { label: `Keep "${t}" as what each run does`, note: 'the model gets only this word', act: 'keep' },
+  ] };
+  return null;
+}
+function oftenChoices(su) {
+  return [
+    ...(su.kind === 'debug' ? [{ w: 'until the tests pass', note: 'again 15 s after a miss', every: null, until: true }] : []),
+    { w: 'every 5 minutes', every: 300 }, { w: 'every 10 minutes', every: 600 }, { w: 'every 30 minutes', every: 1800 }, { w: 'every hour', every: 3600 },
+    { w: 'at its own pace', note: 'it decides; about every 10 minutes', every: null },
+  ];
+}
+function stopChoices(now) {
+  const in2 = hm(now + 7200);
+  return [
+    { w: 'never', note: 'it ends when this window closes, or after 24 hours', runs: null },
+    { w: 'after 5 runs', runs: 5 }, { w: 'after 10 runs', runs: 10 }, { w: 'after 20 runs', runs: 20 },
+    { w: 'in 2 hours', note: `at ${in2}`, runs: null, at: in2 },
+  ];
+}
+function setupView(now) {
+  const su = S.setup;
+  const out = [header(now, 'New loop'), rule(), blank()];
+  const X = 10, WD = 100;
+  const at = { task: 0, unclear: 0, often: 1, stop: 2, ready: 3 }[su.step];
+  const prog = [P(sp(X))];
+  [['What it does'], ['How often'], ['When it stops'], ['Start']].forEach(([name], i) => {
+    if (i) prog.push(P('  ──  ', 'f2'));
+    prog.push(P(i < at ? '● ' : i === at ? '◉ ' : '○ ', i < at ? 'ok' : i === at ? 'a' : 'f'), P(name, i === at ? 'w b' : i < at ? 't' : 'f'));
+  });
+  out.push(fit(prog, COLS));
+  out.push(fit([P(sp(X + 2)), P([su.task && at > 0 ? nameOf(su.task) : '', at > 1 ? su.everyWord : '', at > 2 ? su.stopWord : ''].filter(Boolean).join('  ·  '), 'f')], COLS));
+  out.push(blank());
+  const row = (pieces, bg = '') => out.push(fit([P(sp(X)), ...fit(pieces, WD, bg)], COLS));
+  const box = (text, ph, bc, title) => {
+    const room = WD - 8;
+    const shown = len(text) > room ? `…${[...text].slice(-(room - 1)).join('')}` : text;
+    row([P('╭─', bc), P(title, 'w b'), P('─'.repeat(WD - 3 - len(title)), bc), P('╮', bc)]);
+    row([P('│', bc), ...fit([P(' › ', 'a b'), P(shown, 'w'), P(su.step === 'task' && blinkOn() ? '▏' : ' ', 'a'), ...(text ? [] : [P(ph, 'f')])], WD - 2), P('│', bc)]);
+    row([P(`╰${'─'.repeat(WD - 2)}╯`, bc)]);
+  };
+  const list = (choices) => choices.forEach((c, i) => row([P(i === su.pick ? ' ▸ ' : '   ', 'a b'), P(`${i + 1}  `, 'f'), P(pad(c.w ?? c.label, 40), i === su.pick ? 'w b' : 't'), P(c.note ?? '', 'f')], i === su.pick ? 'bg-sel' : ''));
+  if (su.step === 'task' || su.step === 'unclear') {
+    row([P('What should each run do?', 'w b')]);
+    row([P('Say it the way you would ask in the chat. Each run is a fresh conversation that gets these words.', 'd')]);
+    out.push(blank());
+    box(su.text, 'run the tests and say what fails', su.step === 'unclear' ? 'wa' : 'a', ' each run does ');
+    out.push(su.error ? fit([P(sp(X)), P('! ', 'wa b'), P(su.error, 'wa')], COLS) : blank());
+    if (su.step === 'unclear') {
+      row([P('! ', 'wa b'), P(su.unclear.why, 'wa')]);
+      out.push(blank());
+      list(su.unclear.options);
+      out.push(blank());
+      row([P(`type 1–${su.unclear.options.length}, or ↑↓ and enter · ← changes the words`, 'f')]);
+    } else {
+      out.push(blank());
+      row([P('For example', 'f'), P('   tab puts one in', 'f2')]);
+      EXAMPLES.forEach((e, i) => row([P(i === su.ex ? ' › ' : '   ', 'a'), P(e, i === su.ex ? 't' : 'd')]));
+    }
+  } else if (su.step === 'often' || su.step === 'stop') {
+    const often = su.step === 'often';
+    row([P(often ? 'How often should it run?' : 'When should it stop?', 'w b')]);
+    row([P(often ? `A ${KIND_WORD[su.kind]} loop. The next run counts from the end of the last one.` : 'It also stops when this window closes, after 24 hours at most, or when a run says the job is done.', 'd')]);
+    out.push(blank());
+    list(often ? oftenChoices(su) : stopChoices(now));
+    out.push(blank());
+    row([P('or type your own: ', 'd'), P(su.custom, 'w'), P(blinkOn() ? '▏' : ' ', 'a'), ...(su.custom ? [] : [P(often ? '7m, 90s, 2h' : 'a number of runs, or a time like 18:30', 'f')])]);
+    out.push(su.error ? fit([P(sp(X)), P('! ', 'wa b'), P(su.error, 'wa')], COLS) : blank());
+  } else {
+    row([P('Ready to start', 'w b')]);
+    row([P('Read it once more: enter starts the loop, and its first run starts right away.', 'd')]);
+    out.push(blank());
+    const lab = (t) => P(pad(t, 12), 'f');
+    const tw = wrap(su.task, WD - 18);
+    row([P(`┌${'─'.repeat(WD - 2)}┐`, 'a')]);
+    tw.slice(0, 2).forEach((t, i) => row([P('│ ', 'a'), ...fit([lab(i ? '' : 'Each run'), P(t, 'w')], WD - 4), P(' │', 'a')]));
+    row([P('│ ', 'a'), ...fit([lab('How often'), P(`${su.everyWord} · the first run starts now`, 't')], WD - 4), P(' │', 'a')]);
+    row([P('│ ', 'a'), ...fit([lab('Stops'), P(`${su.stopWord === 'never' ? 'when this window closes, or after 24 hours' : `${su.stopWord}, or when this window closes`}`, 't')], WD - 4), P(' │', 'a')]);
+    row([P('│ ', 'a'), ...fit([lab('Works in'), P("~/Desktop/agentic-coder · Bypass permissions, this window's mode", 't')], WD - 4), P(' │', 'a')]);
+    row([P('│ ', 'a'), ...fit([lab('Undo'), P('each run keeps a copy, so ^B puts back what it changed', 't')], WD - 4), P(' │', 'a')]);
+    row([P(`└${'─'.repeat(WD - 2)}┘`, 'a')]);
+    out.push(blank());
+    row([P(' enter ', 'w b bg-sel'), P('  Start the loop', 'w'), P('     ← back     esc cancel     ^O more rules: cap, steps, ask first', 'd')]);
+  }
+  while (out.length < ROWS - 1) out.push(blank());
+  const keys = su.step === 'task' ? [['enter', 'next'], ['tab', 'an example'], ['esc', 'cancel'], ['^O', 'every rule at once']] : su.step === 'ready' ? [['enter', 'start'], ['←', 'back'], ['esc', 'cancel']] : [['enter', 'next'], ['↑↓', 'pick'], ['1–9', 'pick'], ['←', 'back'], ['esc', 'cancel']];
+  return [...out.slice(0, ROWS - 1), keysLine(now, keys)];
+}
+function pickUnclear() {
+  const su = S.setup;
+  const o = su.unclear.options[su.pick];
+  if (o.act === 'again') { su.step = 'task'; su.text = ''; su.unclear = null; return; }
+  if (o.act === 'use') { su.kind = o.kind; su.task = TASK[o.kind] ?? su.text; su.text = su.task; }
+  else { su.task = su.text.trim(); su.kind = guessKind(su.task); }
+  toOften(o.every ?? null);
+}
+function toOften(every = null) {
+  const su = S.setup;
+  su.step = 'often'; su.custom = ''; su.error = null; su.unclear = null;
+  const cs = oftenChoices(su);
+  const i = every ? cs.findIndex((c) => c.every === every) : 0;
+  su.pick = Math.max(0, i);
+}
+function setupKey(k) {
+  const su = S.setup;
+  const now = clock();
+  if (k === 'esc') { go(S.lastDesign); return; }
+  if (k === '^O') { toast('^O opens the full form of round two: every rule on one page', 'd'); return; }
+  if (su.step === 'task') {
+    if (k === 'enter') {
+      const t = su.text.trim();
+      if (!t) { su.error = 'Type what each run should do first.'; return; }
+      const u = unclearOf(t);
+      if (u) { su.unclear = u; su.pick = 0; su.step = 'unclear'; su.error = null; return; }
+      su.task = t; su.kind = guessKind(t);
+      toOften(readGap((/every\s+(\S+\s*\S*)$/i.exec(t) ?? [])[1] ?? '') );
+      return;
+    }
+    if (k === 'tab') { su.ex = (su.ex + 1) % EXAMPLES.length; su.text = EXAMPLES[su.ex]; }
+    else if (k === 'backspace') su.text = [...su.text].slice(0, -1).join('');
+    else if (k === '^U') su.text = '';
+    else if (k.length === 1) su.text += k;
+    su.error = null;
+    return;
+  }
+  if (su.step === 'unclear') {
+    const n = su.unclear.options.length;
+    if (k === 'up') su.pick = (su.pick + n - 1) % n;
+    else if (k === 'down') su.pick = (su.pick + 1) % n;
+    else if (/^[1-9]$/.test(k) && Number(k) <= n) { su.pick = Number(k) - 1; pickUnclear(); }
+    else if (k === 'enter') pickUnclear();
+    else if (k === 'left' || k === 'backspace') { su.step = 'task'; su.unclear = null; }
+    return;
+  }
+  if (su.step === 'often' || su.step === 'stop') {
+    const often = su.step === 'often';
+    const cs = often ? oftenChoices(su) : stopChoices(now);
+    if (k === 'up') { su.pick = (su.pick + cs.length - 1) % cs.length; return; }
+    if (k === 'down') { su.pick = (su.pick + 1) % cs.length; return; }
+    if (k === 'left' || (k === 'backspace' && !su.custom)) { if (often) { su.step = 'task'; su.text = su.task; } else { su.step = 'often'; su.pick = 0; } su.custom = ''; su.error = null; return; }
+    if (k === 'backspace') { su.custom = [...su.custom].slice(0, -1).join(''); return; }
+    if (/^[1-9]$/.test(k) && !su.custom && Number(k) <= cs.length) { su.pick = Number(k) - 1; k = 'enter'; }
+    if (k === 'enter') {
+      if (often) {
+        if (su.custom) { const g = readGap(su.custom); if (!g) { su.error = 'A time like 7m, 90s or 2h'; return; } if (g < 60) { su.error = 'The shortest gap is a minute'; return; } su.every = g; su.until = false; su.everyWord = `every ${gapWord(g)}`; }
+        else { const c = cs[su.pick]; su.every = c.every; su.until = Boolean(c.until); su.everyWord = c.w; }
+        su.step = 'stop'; su.pick = 0; su.custom = ''; su.error = null;
+      } else {
+        if (su.custom) {
+          const t = su.custom.trim();
+          if (/^\d+$/.test(t) && Number(t) >= 1) { su.maxRuns = Number(t); su.stopWord = `after ${t} run${t === '1' ? '' : 's'}`; }
+          else if (/^\d{1,2}:\d{2}$/.test(t) || /^\d+\s*h$/i.test(t)) { su.maxRuns = null; su.stopWord = /h$/i.test(t) ? `in ${t}` : `at ${t}`; }
+          else { su.error = 'A number of runs (20) or a time (18:30, 2h)'; return; }
+        } else { const c = cs[su.pick]; su.maxRuns = c.runs; su.stopWord = c.at ? `at ${c.at}` : c.w; }
+        su.step = 'ready'; su.custom = ''; su.error = null;
+      }
+      return;
+    }
+    if (k.length === 1) { su.custom += k; su.error = null; }
+    return;
+  }
+  if (su.step === 'ready') {
+    if (k === 'enter') createLoop(now);
+    else if (k === 'left' || k === 'backspace') { su.step = 'stop'; su.pick = 0; }
+  }
+}
+function createLoop(now) {
+  const su = S.setup;
+  const id = Math.max(0, ...S.loops.map((l) => l.id)) + 1;
+  const l = mk({ id, kind: su.kind, name: nameOf(su.task), task: su.task, every: su.every, until: su.until, maxRuns: su.maxRuns });
+  S.loops.push(l);
+  S.sel = S.loops.length - 1;
+  startRun(l, now);
+  S.events.push({ at: now, l, kind: 'state', text: 'a new loop' });
+  go(S.lastDesign);
+  toast(`Loop ${id} started: ${l.name} · ${paceOf(l)}${l.maxRuns ? ` · stops after ${l.maxRuns} runs` : ''}`);
+}
+
+// ---- back in the chat: one line above the prompt ----
+function chatView(now) {
+  const out = [blank(), fit([P(' ✻ ', 'a'), P('Agentic Coder', 'w b'), P('  ·  agentic-coder-1  ·  ~/Desktop/agentic-coder  ·  Qwen3.6:35B-A3B on its service', 'd')], COLS), blank()];
+  const user = (t) => fit([P(' > ', 'd'), P(t, 'w')], COLS, 'bg-usr');
+  const conv = [
+    user('/loop test 5m'),
+    fit([P('   ↻ ', 'a'), P('Loop 1 started: Run the tests · every 5 min · stops after 10 runs. Its screen is open; esc there comes back here.', 'd')], COLS),
+    blank(), user('/loop debug'),
+    fit([P('   ↻ ', 'a'), P('Loop 2 started: Fix the failing tests · until the tests pass.', 'd')], COLS),
+    blank(), user('how does parseLoop read a time?'),
+    ...wrap('parseLoop reads a time at the start ("10m", "every 2 hours") or at the end ("… every 10 minutes"), after a kind word: debug, test or web. "test5m" has no space, so it reads neither, and the whole word becomes the message.', COLS - 6).map((t, i) => fit([P(i ? '   ' : ' ● ', 'w'), P(t, 't')], COLS)),
+  ];
+  const asking = S.loops.find((l) => live(l, now).needs);
+  if (asking) conv.push(blank(), fit([P(' ↻ ', 'wa'), P(`Loop ${asking.id} (${asking.name}) asks you something. /loops to answer it.`, 'wa')], COLS));
+  out.push(...conv);
+  while (out.length < 31) out.push(blank());
+  const segs = [P(' ↻ ', 'a b')];
+  S.loops.forEach((l, i) => { const v = live(l, now); const [g, gc] = glyphOf(v); if (i) segs.push(P('   ·   ', 'f')); segs.push(P(g, gc), P(` ${cut(l.name, 22)} `, 't'), P(miniState(l, v, now), v.state === 'needs' ? 'wa' : 'd')); });
+  const tail = [P('/loops to open ', 'd')];
+  out.push(fit([...segs, P(sp(COLS - W(segs) - W(tail))), ...tail], COLS));
+  out.push(fit([P(`╭${'─'.repeat(COLS - 2)}╮`, 'bd')], COLS));
+  out.push(fit([P('│', 'bd'), ...fit([P(' > ', 'w'), P(S.chatTyped, 'w'), P(blinkOn() ? '▏' : ' ', 'a'), ...(S.chatTyped ? [] : [P('type /loops to go back to the loop screen', 'f')])], COLS - 2), P('│', 'bd')], COLS));
+  out.push(fit([P(`╰${'─'.repeat(COLS - 2)}╯`, 'bd')], COLS));
+  const vs = S.loops.map((l) => live(l, now));
+  const open = vs.filter((v) => !['done', 'stopped'].includes(v.state)).length, need = vs.filter((v) => v.state === 'needs').length;
+  if (S.toast && S.toast.until > real()) out.push(fit([P('  '), P(S.toast.text, S.toast.c)], COLS));
+  else {
+    const l2 = [P('  ⏵⏵ bypass permissions on', 'a'), P(' (shift+tab to cycle)', 'f')];
+    const r2 = [P(`↻ ${open} loop${open === 1 ? '' : 's'}`, 'a'), ...(need ? [P(` · ${need} needs you`, 'wa b')] : []), P('  ')];
+    out.push(fit([...l2, P(sp(COLS - W(l2) - W(r2))), ...r2], COLS));
+  }
+  return out;
+}
+
+// ---- keys ----
+function boardKey(k) {
+  const now = clock();
+  const l = S.loops[S.sel];
+  const v = l && live(l, now);
+  if (S.confirm) {
+    if (k === 'y') { const c = S.confirm; S.confirm = null; c.yes(now); }
+    else if (k === 'n' || k === 'esc') { S.confirm = null; toast('Left as it was', 'd'); }
+    return;
+  }
+  const ended = v && (v.state === 'done' || v.state === 'stopped');
+  switch (k) {
+    case 'up': S.sel = (S.sel + S.loops.length - 1) % S.loops.length; S.as = 'note'; return;
+    case 'down': S.sel = (S.sel + 1) % S.loops.length; S.as = 'note'; return;
+    case 'esc': if (S.typed || S.as !== 'note') { S.typed = ''; S.as = 'note'; } else go('chat'); return;
+    case 'backspace': S.typed = [...S.typed].slice(0, -1).join(''); return;
+    case '^U': S.typed = ''; return;
+    case 'enter': send(now); return;
+    case '^N': S.setup = SETUP0(); go('setup'); return;
+    case '^G': go('live'); return;
+    case '^O': toast(`${l.name}: its rules open here (how often, stop after, stop at, cap, mode, steps, ask first)`, 'd'); return;
+    case '^R':
+      if (v.state === 'running' || v.state === 'needs') toast(`${l.name} is already running`, 'd');
+      else if (ended) toast(`${l.name} has ended: type a note and enter starts it again`, 'd');
+      else { l.paused = false; startRun(l, now); S.events.push({ at: now, l, kind: 'state', text: 'run now, as you asked' }); toast(`${l.name}: run ${l.cur.n} starts now`); }
+      return;
+    case '^P':
+      if (ended) { toast(`${l.name} has ended`, 'd'); return; }
+      if (l.paused || l.pauseAfter) { l.paused = false; l.pauseAfter = false; if (l.next != null && l.next < now) l.next = now + 1; S.events.push({ at: now, l, kind: 'state', text: 'going again' }); toast(`${l.name}: going again`); }
+      else if (l.cur) { l.pauseAfter = true; toast(`${l.name}: pauses after this run`); }
+      else { l.paused = true; S.events.push({ at: now, l, kind: 'state', text: 'paused by you' }); toast(`${l.name}: paused · ^P goes on`); }
+      return;
+    case '^S':
+      if (ended) { toast(`${l.name} has already ended`, 'd'); return; }
+      S.confirm = { text: `Stop “${l.name}”? Its runs so far stay.`, yes: (t) => {
+        if (l.cur) { l.runs.push(R(l.cur.n, l.cur.start, t - l.cur.start, false, 'stopped by you', l.cur.script)); l.cur = null; }
+        l.stopped = true; l.next = null;
+        S.events.push({ at: t, l, kind: 'state', text: 'stopped by you' });
+        toast(`${l.name}: stopped · type a note and enter starts it again`);
+      } };
+      return;
+    case '^X':
+      if (ended) { toast(`${l.name} has ended: type a note and enter starts it again`, 'd'); return; }
+      S.as = S.as === 'redo' ? 'note' : 'redo';
+      toast(S.as === 'redo' ? 'Type what to do differently, then enter: the run starts over and its changes go back · ^X again: just a note' : 'Back to a plain note', 'd');
+      return;
+    case '^B': {
+      if (l.cur) { toast(`${l.name} is running: wait for run ${l.cur.n} to end, or ^X to start it over`, 'd'); return; }
+      const r = [...l.runs].reverse().find((x) => !x.redo && !x.undone);
+      if (!r) { toast(`${l.name} has no run to put back`, 'd'); return; }
+      if (l.kind !== 'debug') { toast(`Run ${r.n} changed no file: nothing to put back`, 'd'); return; }
+      S.confirm = { text: `Put back what run ${r.n} changed? terminal/src/app/loops.mjs. A file changed since stays as it is.`, yes: (t) => { r.undone = true; S.events.push({ at: t, l, kind: 'state', text: `run ${r.n} put back: terminal/src/app/loops.mjs` }); toast(`Put back run ${r.n}: terminal/src/app/loops.mjs`); } };
+      return;
+    }
+    default:
+      if (k.length === 1) S.typed += k;
+  }
+}
+function send(now) {
+  const text = S.typed.trim();
+  const l = S.loops[S.sel];
+  if (!text || !l) return;
+  const v = live(l, now);
+  S.typed = '';
+  if (v.needs) {
+    const num = /^[1-9]$/.test(text);
+    const opt = num ? v.needs.options[Number(text) - 1] : null;
+    if (num && !opt) { toast(`It gave ${v.needs.options.length} choices`, 'd'); return; }
+    l.cur.ask.answeredAt = now;
+    S.events.push({ at: now, l, kind: 'answer', text: opt ?? text });
+    toast(`${l.name}: you answered “${opt ?? text}” · it goes on`);
+    return;
+  }
+  const ended = v.state === 'done' || v.state === 'stopped';
+  if (ended || S.as === 'redo') {
+    if (ended) { l.done = null; l.stopped = false; S.events.push({ at: now, l, kind: 'state', text: 'started again with your note' }); }
+    else if (l.cur) { l.runs.push(R(l.cur.n, l.cur.start, now - l.cur.start, false, 'stopped to start over · its changes put back', l.cur.script)); l.runs.at(-1).redo = true; }
+    l.paused = false;
+    startRun(l, now);
+    l.notes.push({ at: now, text, run: l.cur.n, after: -1, readAt: now, pending: false, how: `read at the start of run ${l.cur.n}` });
+    S.as = 'note';
+    toast(ended ? `${l.name} starts again, with your note` : `${l.name}: run ${l.cur.n} starts over with your note`);
+    return;
+  }
+  const nt = { at: now, text, run: null, after: null, readAt: null, pending: false, how: '' };
+  if (v.state === 'running') {
+    const i = scriptOf(l.cur).steps.findIndex((s) => s.end > v.e);
+    if (i >= 0) { const s = scriptOf(l.cur).steps[i]; Object.assign(nt, { run: l.cur.n, after: i, readAt: abs(l.cur, s.end), how: `read after step ${i + 1} · ${s.label}` }); }
+    else nt.pending = true;
+  } else nt.pending = true;
+  l.notes.push(nt);
+  toast(nt.pending ? `${l.name}: its next run starts with your note` : `Sent to ${l.name}: it reads it after this step`);
+}
+function chatKey(k) {
+  if (k === 'enter') { const t = S.chatTyped.trim(); S.chatTyped = ''; if (/^\/loops?$/i.test(t)) go(S.lastDesign); else if (t) toast('In this preview only /loops does something here', 'd'); }
+  else if (k === 'backspace') S.chatTyped = [...S.chatTyped].slice(0, -1).join('');
+  else if (k === '^U') S.chatTyped = '';
+  else if (k.length === 1) S.chatTyped += k;
+}
+function press(k) {
+  if (S.tab === 'setup') setupKey(k);
+  else if (S.tab === 'chat') chatKey(k);
+  else if (S.tab === 'compare') { if (/^[1-4]$/.test(k)) go(DESIGNS[Number(k) - 1]); else boardKey(k); }
+  else boardKey(k);
+  draw();
+}
+
+// ---- the page ----
+const VIEWS = { cards: cardsView, live: liveView, track: trackView, messages: messagesView, setup: setupView, chat: chatView };
+const frame = (view, now) => VIEWS[view](now);
+function esc(t) {
+  let o = '';
+  for (const ch of t) {
+    const cp = ch.codePointAt(0);
+    if (ch === '<') o += '&lt;'; else if (ch === '>') o += '&gt;'; else if (ch === '&') o += '&amp;';
+    else if (cp > 127 && !(cp >= 0x2500 && cp <= 0x257f)) o += `<b class="g">${ch}</b>`;
+    else o += ch;
+  }
+  return o;
+}
+const html = (rows) => rows.map((row) => row.map(([t, c]) => `<span class="${c}">${esc(t)}</span>`).join('')).join('\n');
+function go(tab) {
+  if (DESIGNS.includes(tab)) S.lastDesign = tab;
+  if (tab === 'setup' && S.tab !== 'setup' && !S.setup) S.setup = SETUP0();
+  S.tab = tab;
+  S.confirm = null;
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('#side .card').forEach((c) => { c.style.display = c.dataset.for.split(' ').includes(tab) ? '' : 'none'; });
+  document.getElementById('stage').style.display = tab === 'compare' ? 'none' : '';
+  document.getElementById('minis').classList.toggle('on', tab === 'compare');
+  if (tab === 'compare') document.getElementById('minis').after(document.getElementById('side'));
+  else document.querySelector('#stage .left').after(document.getElementById('side'));
+  document.getElementById('scenes').style.display = tab === 'setup' ? 'none' : '';
+  document.getElementById('keys').style.display = tab === 'setup' || tab === 'chat' ? 'none' : '';
+  draw();
+}
+function draw() {
+  if (typeof document === 'undefined') return;
+  const now = clock();
+  tick(now);
+  if (S.tab === 'compare') document.querySelectorAll('[data-mini]').forEach((el) => { el.innerHTML = html(frame(el.dataset.mini, now)); });
+  else document.getElementById('screen').innerHTML = html(frame(S.tab, now));
+}
+function init() {
+  setScene('running');
+  document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab === 'setup') S.setup = SETUP0(); go(b.dataset.tab); }));
+  document.querySelectorAll('#scenes [data-scene]').forEach((b) => b.addEventListener('click', () => { setScene(b.dataset.scene); document.querySelectorAll('#scenes [data-scene]').forEach((x) => x.classList.toggle('on', x === b)); draw(); }));
+  document.querySelector('#scenes [data-scene="running"]').classList.add('on');
+  const speed = document.getElementById('speed');
+  speed.addEventListener('click', () => { const x = S.speed === 1 ? 10 : 1; S.base = clock(); S.t0 = real(); S.speed = x; speed.textContent = `Time ×${x}`; speed.classList.toggle('on', x !== 1); });
+  document.querySelectorAll('#keys [data-k]').forEach((b) => b.addEventListener('click', () => press(b.dataset.k)));
+  document.querySelectorAll('[data-open]').forEach((m) => m.addEventListener('click', () => go(m.dataset.open)));
+  document.querySelectorAll('[data-demo]').forEach((b) => b.addEventListener('click', () => {
+    S.setup = SETUP0();
+    S.setup.text = { test5m: 'test5m', word: 'check', full: 'read the Bun releases page and tell me when there is a new version' }[b.dataset.demo];
+    go('setup');
+    setupKey('enter');
+    draw();
+  }));
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.altKey) return;
+    let k = null;
+    if (e.ctrlKey) { if (/^[a-z]$/i.test(e.key)) k = `^${e.key.toUpperCase()}`; else return; }
+    else k = { Enter: 'enter', Escape: 'esc', Backspace: 'backspace', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Tab: 'tab' }[e.key] ?? (e.key.length === 1 ? e.key : null);
+    if (!k) return;
+    e.preventDefault();
+    press(k);
+  });
+  go('cards');
+  setInterval(draw, 120);
+}
+if (typeof document !== 'undefined') init();
+else globalThis.LOOPS = { S, setScene, frame, clock, tick, press, go, SETUP0, COLS, ROWS, W };
+</script>
+</body></html>

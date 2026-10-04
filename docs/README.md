@@ -8,7 +8,10 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 131 KB | 2026-10-04 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 158 KB | 2026-10-04 |
+| [design rounds/agentic-coder-loops-4-designs-2026-10-04.html](design%20rounds/agentic-coder-loops-4-designs-2026-10-04.html) | page | /loops · round three | 78 KB | 2026-10-04 |
+| [design rounds/agentic-coder-remote-connect-2-designs-2026-10-03.html](design%20rounds/agentic-coder-remote-connect-2-designs-2026-10-03.html) | page | Remote connect designs | 444 KB | 2026-10-04 |
+| [design rounds/agentic-coder-jumptomac-saved-macs-2-designs-2026-10-03.html](design%20rounds/agentic-coder-jumptomac-saved-macs-2-designs-2026-10-03.html) | page | Jump to a Mac designs | 233 KB | 2026-10-04 |
 | [tests/agentic-coder-mcp-check-remote-Qwen3.6-35B-A3B-2026-10-03-2008.html](tests/agentic-coder-mcp-check-remote-Qwen3.6-35B-A3B-2026-10-03-2008.html) | page | MCP check · Qwen3.6:35B-A3B (a service) | 12 KB | 2026-10-04 |
 | [tests/agentic-coder-mcp-check-remote-Qwen3.6-35B-A3B-2026-10-03-2003.html](tests/agentic-coder-mcp-check-remote-Qwen3.6-35B-A3B-2026-10-03-2003.html) | page | MCP check · Qwen3.6:35B-A3B (a service) | 12 KB | 2026-10-04 |
 | [tests/agentic-coder-mcp-check-remote-Qwen3.6-35B-A3B-2026-10-03-1648.html](tests/agentic-coder-mcp-check-remote-Qwen3.6-35B-A3B-2026-10-03-1648.html) | page | MCP check · Qwen3.6:35B-A3B (a service) | 12 KB | 2026-10-03 |
