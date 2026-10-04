@@ -64,8 +64,35 @@ export function parseLoop(text, { min = minSecs() } = {}) {
   return { kind, every, until: kind === 'debug' && every === null, message, name: name ?? nameOf(message), note };
 }
 
+// A task the rules cannot read well, asked about before the loop starts (4 Oct 2026, the owner's
+// pick after "/loop test5m" made a loop whose whole task was the word "test5m"): a kind and a time
+// typed together, or a single word. No model is asked. Answers null, or { why, options } for the
+// board's setup: use (the kind and time it looks like), keep (the words as they are), again.
+const GLUED = /^(tests?|debug|fix|web)(\d+(?:\.\d+)?)(s|m|h|mins?|hrs?)$/i;
+export function unclearOf(text) {
+  const t = String(text ?? '').trim();
+  if (isLoopCommand(t)) return null; // "/loop 2 every 7m" changes a loop that is there
+  const g = GLUED.exec(t);
+  if (g) {
+    const kind = /^t/i.test(g[1]) ? 'test' : /^web$/i.test(g[1]) ? 'web' : 'debug';
+    const secs = Math.round(Number(g[2]) * UNIT[g[3][0].toLowerCase()]);
+    const what = { test: 'Run the tests', debug: 'Fix the failing tests', web: 'Read a web page' }[kind];
+    return { why: `"${t}" looks like two things typed together: "${g[1]}" and "${g[2]}${g[3]}".`, options: [
+      { act: 'use', kind, every: everyWord(secs), label: `${what}, every ${everyWord(secs)}`, note: { test: 'runs them and says what fails; changes no file', debug: 'fixes the code until every test passes', web: 'you say which page next' }[kind] },
+      { act: 'keep', label: `Keep "${t}" as what each run does`, note: 'the model gets only this word' },
+      { act: 'again', label: 'Type it again', note: '' },
+    ] };
+  }
+  const p = parseLoop(t);
+  if (p.error || PRESET[p.kind] === p.message || /\s/.test(p.message) || [...p.message].length >= 16 || /^https?:/i.test(p.message)) return null;
+  return { why: `"${p.message}" is one word. Each run gets only these words, so say what it should do.`, options: [
+    { act: 'again', label: 'Type it again', note: 'e.g. "run the tests and say what fails"' },
+    { act: 'keep', label: `Keep "${p.message}" as what each run does`, note: 'the model gets only this word' },
+  ] };
+}
+
 // ---- a loop's own rules (4 Oct 2026, the owner's ask: "i want to be able to control it more") ----
-// Set in the board's form (+ makes a loop, e changes one) or with /loop <n> <rule>. Their picks: a
+// Set in the board's setup and form (^N makes a loop, ^O changes one) or with /loop <n> <rule>. Their picks: a
 // loop can stop after a number of runs or at a time, have a spending cap of its own, and wait for
 // your go before each run; it also has its own mode and the steps a run may take. Empty = no limit.
 export const LOOP_MODES = ['ask', 'edits', 'auto', 'plan'];
@@ -323,7 +350,7 @@ export class Loops {
   add(parsed, { folder = this.folder, mode = 'ask' } = {}) {
     const t = this.now();
     const l = { id: this.nextId++, kind: parsed.kind, name: parsed.name, message: parsed.message, every: parsed.every, until: parsed.until, folder, mode: parsed.mode ?? mode, state: 'waiting', nextAt: t + 1000, endsAt: t + this.maxHours * 3_600_000, created: t, runs: [], current: null, note: null, queued: false, pauseAfter: false, allowed: [], doneWhy: null, gap: null, stuck: null,
-      maxRuns: parsed.maxRuns ?? null, stopAt: parsed.stopAt ?? null, usdCap: parsed.usdCap ?? null, steps: parsed.steps ?? null, askFirst: Boolean(parsed.askFirst), counted: 0, spent: 0, ready: null, go: false };
+      maxRuns: parsed.maxRuns ?? null, stopAt: parsed.stopAt ?? null, usdCap: parsed.usdCap ?? null, steps: parsed.steps ?? null, askFirst: Boolean(parsed.askFirst), counted: 0, spent: 0, ready: null, go: false, lastNote: null };
     this.loops.push(l);
     this.say(l, 'new', parsed.message);
     this.changed();
@@ -372,7 +399,12 @@ export class Loops {
     this.line(l, run, 'user', l.message);
     this.line(l, run, 'loopnote', note);
     let prompt = `${l.message}\n\n${note}`;
-    if (l.note) { this.line(l, run, 'you', l.note); prompt = `${l.message}\n\n(A note from the user for this run: ${l.note})\n\n${note}`; l.note = null; }
+    if (l.note) {
+      this.line(l, run, 'you', l.note);
+      prompt = `${l.message}\n\n(A note from the user for this run: ${l.note})\n\n${note}`;
+      l.note = null;
+      if (l.lastNote && !l.lastNote.read) l.lastNote.read = { start: run.n };
+    }
     this.say(l, 'start', `run ${run.n}`, { n: run.n });
     let h;
     try { h = this.start({ folder: l.folder, prompt, mode: l.mode, url: st.url ?? null, slots: st.slots ?? 1, local: Boolean(st.local), flows: st.flows, allow: l.allowed, owner: this.pid, steps: l.steps, rewind: sessionOf(this.pid, l.id) }); }
@@ -389,7 +421,11 @@ export class Loops {
     if (ev.t === 'tool') { const failed = ev.test && ev.failed !== undefined ? Boolean(ev.failed) : Boolean(ev.error); this.line(l, run, failed ? 'fail' : 'tool', `${ev.label}(${ev.arg ?? ''})`, { test: Boolean(ev.test) }); if (ev.test && ev.failed !== undefined) run.tests = { ok: !failed }; }
     else if (ev.t === 'note') this.line(l, run, 'note', ev.text);
     // A note you typed reached the model with a step's result (loop-run.mjs heard).
-    else if (ev.t === 'heard') { this.line(l, run, 'heard', ev.text, { after: ev.after ?? null }); this.say(l, 'heard', ev.after ? `read your note after ${ev.after}` : 'read your note'); }
+    else if (ev.t === 'heard') {
+      this.line(l, run, 'heard', ev.text, { after: ev.after ?? null });
+      this.say(l, 'heard', ev.after ? `read your note after ${ev.after}` : 'read your note');
+      if (l.lastNote && !l.lastNote.read) l.lastNote.read = { after: ev.after ?? null, n: run.n };
+    }
     else if (ev.t === 'text') this.line(l, run, 'text', ev.text);
     else if (ev.t === 'ask') {
       run.needs = { id: ev.id, kind: ev.kind, name: ev.name, text: ev.text, options: ev.options ?? [], always: ev.always ?? null, sig: ev.sig ?? null, since: this.now() };
@@ -411,6 +447,8 @@ export class Loops {
     run.summary = run.redo ? 'stopped to start over' : run.stopped ? 'stopped by you' : summaryOf(end.said, ev.reason);
     run.said = end.said.slice(0, 600);
     run.needs = null;
+    // A note that came as the answer was given is the run's next message (loop-run.mjs more): read, with no step after it.
+    if (l.lastNote && !l.lastNote.read && l.lastNote.n === run.n && !run.redo && !run.stopped) l.lastNote.read = { late: true, n: run.n };
     const usd = Number(ev.usd) || 0;
     l.spent = (l.spent ?? 0) + usd;
     if (!run.redo) l.counted = (l.counted ?? 0) + 1;
@@ -458,7 +496,15 @@ export class Loops {
     const note = String(text ?? '').trim();
     if (!l || !note) return null;
     this.say(l, 'you', note);
-    if (['done', 'stopped'].includes(l.state)) { this.changed(); return `${l.name} has ended: nothing will read the note`; }
+    // The last note, for the board: sent, then read after a step or at the start of a run.
+    l.lastNote = { text: note, at: this.now(), n: l.current?.n ?? null, read: null };
+    // A loop that ended starts again with the note (its rules as they were, its counts from nothing).
+    if (['done', 'stopped'].includes(l.state)) {
+      this.edit(id, {}, { again: true });
+      l.note = note;
+      this.changed();
+      return `${l.name} starts again, with your note`;
+    }
     if (l.current) {
       this.line(l, l.current, 'you', note);
       this.handles.get(id)?.send({ t: 'note', text: note });
@@ -580,7 +626,7 @@ export class Loops {
     return { text: `${l.name}: ${ended ? 'starts again' : 'saved'} · ${describe(l, t)}` };
   }
 
-  // Stop the run under way and start it over with your note (x on the board). putBack: what it
+  // Stop the run under way and start it over with your note (^X on the board). putBack: what it
   // changed goes back first (undo), else the new run starts from where it left the files.
   // Between runs: the last run's changes go back if you said so, and a run starts now with the note.
   redo(id, note, { putBack = true } = {}) {
@@ -589,6 +635,7 @@ export class Loops {
     if (!l || ['done', 'stopped'].includes(l.state)) return { error: l ? `${l.name} has ended` : 'No such loop here' };
     if (l.state === 'redoing') return { error: `${l.name} is already starting over` };
     this.say(l, 'you', text ? `start over: ${text}` : 'start over');
+    if (text) l.lastNote = { text, at: this.now(), n: null, read: null };
     const run = l.current;
     if (run) {
       run.redo = { note: text || null, putBack: Boolean(putBack) };
@@ -631,13 +678,13 @@ export class Loops {
     this.tick();
   }
 
-  // Put back what run n changed (u on the board, /loop <n> undo): the files its edits and commands
+  // Put back what run n changed (^B on the board, /loop <n> undo): the files its edits and commands
   // changed, from the copy kept before it ran (rewind.mjs, that run only). A file changed since (by
   // you, another run, another loop) is left alone and named.
   async undo(id, n = null, { during = false } = {}) {
     const l = this.loop(id);
     if (!l) return { error: 'No such loop here' };
-    if (l.current && !during) return { error: `${l.name} is running: wait for run ${l.current.n} to end, or start it over (x)` };
+    if (l.current && !during) return { error: `${l.name} is running: wait for run ${l.current.n} to end, or start it over (^X)` };
     const rec = n ? l.runs.find((r) => r.n === n) : [...l.runs].reverse().find((r) => r.point != null && !r.undone);
     if (!rec) return { error: n ? `${l.name} has no run ${n}` : `${l.name} has no run to put back` };
     if (rec.undone) return { error: `Run ${rec.n} was already put back` };
@@ -682,6 +729,30 @@ export class Loops {
   }
 
   // ---- the board ----
+  // One thing the board sent (a key, a typed line, the form): done here, and what to say back, or
+  // a promise of it (undo). The board in another terminal sends it as a file (readCommands); the loop
+  // screen in this window calls it directly.
+  apply(c) {
+    // The form or the setup: a new loop (add) or new rules (edit); both checked here again, as typed.
+    if (c.op === 'add' || c.op === 'edit') {
+      const read = rulesOf(c.fields ?? {}, { now: this.now() });
+      if (read.error) return { text: read.error, warn: true };
+      if (c.op === 'add') { const l = this.add(read.rules, { mode: read.rules.mode }); return { made: l.id, text: `Loop ${l.id} started: ${describe(l, this.now())}${read.note}` }; }
+      const e = this.edit(c.id, read.rules, { again: Boolean(c.again) });
+      return e.error ? { text: e.error, warn: true } : `${e.text}${read.note}`;
+    }
+    if (c.op === 'undo') return this.undo(c.id, c.n ?? null).then((u) => ({ text: u.error ?? u.text, warn: Boolean(u.error) }));
+    if (c.op === 'redo') { const d = this.redo(c.id, c.text, { putBack: c.putBack !== false }); return d.error ? { text: d.error, warn: true } : d.text; }
+    if (c.op === 'go') this.go(c.id);
+    else if (c.op === 'skip') this.notNow(c.id);
+    else if (c.op === 'answer') this.answer(c.id, c.choice, c.text ?? null);
+    else if (c.op === 'typed') return this.typed(c.text, c.id);
+    else if (c.op === 'run') this.runNow(c.id);
+    else if (c.op === 'pause') this.pause(c.id);
+    else if (c.op === 'stop') this.stop(c.id);
+    else if (c.op === 'every') this.setEvery(c.id, c.secs);
+    return null;
+  }
   readCommands() {
     let files = [];
     try { files = readdirSync(cmdDir(this.home, this.pid)).filter((f) => f.endsWith('.json')).sort(); } catch { return; }
@@ -691,26 +762,11 @@ export class Loops {
       try { c = JSON.parse(readFileSync(p, 'utf8')); } catch {}
       try { rmSync(p, { force: true }); } catch {}
       if (!c) continue;
-      let r = null;
-      // The form: a new loop (add) or new rules (edit); both checked here again, as typed.
-      if (c.op === 'add' || c.op === 'edit') {
-        const read = rulesOf(c.fields ?? {}, { now: this.now() });
-        if (read.error) r = { text: read.error, warn: true };
-        else if (c.op === 'add') { const l = this.add(read.rules, { mode: read.rules.mode }); r = { made: l.id, text: `Loop ${l.id} started: ${describe(l, this.now())}${read.note}` }; }
-        else { const e = this.edit(c.id, read.rules, { again: Boolean(c.again) }); r = e.error ? { text: e.error, warn: true } : `${e.text}${read.note}`; }
-      } else if (c.op === 'undo') { this.undo(c.id, c.n ?? null).then((u) => { this.reply = { at: this.now(), stamp: c.stamp ?? null, text: u.error ?? u.text, made: null, warn: Boolean(u.error) }; this.changed(); }); continue; }
-      else if (c.op === 'redo') { const d = this.redo(c.id, c.text, { putBack: c.putBack !== false }); r = d.error ? { text: d.error, warn: true } : d.text; }
-      else if (c.op === 'go') this.go(c.id);
-      else if (c.op === 'skip') this.notNow(c.id);
-      else if (c.op === 'answer') this.answer(c.id, c.choice, c.text ?? null);
-      else if (c.op === 'typed') r = this.typed(c.text, c.id);
-      else if (c.op === 'run') this.runNow(c.id);
-      else if (c.op === 'pause') this.pause(c.id);
-      else if (c.op === 'stop') this.stop(c.id);
-      else if (c.op === 'every') this.setEvery(c.id, c.secs);
+      const r = this.apply(c);
       // What the window says back, for the board's own line (said: the command's stamp).
-      if (r?.then) { r.then((u) => { this.reply = { at: this.now(), stamp: c.stamp ?? null, text: typeof u === 'object' ? u.text : u, made: null, warn: typeof u === 'object' && Boolean(u.warn) }; this.changed(); }); continue; }
-      if (r) { this.reply = { at: this.now(), stamp: c.stamp ?? null, text: typeof r === 'object' ? r.text : r, made: typeof r === 'object' ? r.made ?? null : null, warn: typeof r === 'object' && Boolean(r.warn) }; this.changed(); }
+      const reply = (u) => { this.reply = { at: this.now(), stamp: c.stamp ?? null, text: typeof u === 'object' ? u.text : u, made: typeof u === 'object' ? u.made ?? null : null, warn: typeof u === 'object' && Boolean(u.warn) }; this.changed(); };
+      if (r?.then) r.then(reply);
+      else if (r) reply(r);
     }
   }
   snapshot() {

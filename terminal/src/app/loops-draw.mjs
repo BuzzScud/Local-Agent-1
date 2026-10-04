@@ -1,11 +1,13 @@
-// The loop board's screen (`coding loops`, /loops): the Tree, the owner's pick of 3 Oct 2026 (design
-// round: docs/design rounds/agentic-coder-loop-board-3-designs-2026-10-03-v2.html), in the look of
-// the /agents screen. This window on top, a box per loop under it with the four steps of a run
-// and the step it is on, a log, then one line for a question, the chat box, a status line and the
-// keys. enter opens one run full size with the chat box under it.
+// The loop board's screen (/loops in the coding window, `coding loops` in another terminal): the
+// Cards, the owner's pick of 4 Oct 2026 (design round: docs/design rounds/
+// agentic-coder-loops-4-designs-2026-10-04.html). A card per loop says in four plain lines what it
+// is doing now, how its last run ended, when it runs next and what became of your last note; under
+// the cards, what happened, newest first; then a line for what waits for you, the box (typing
+// always goes in it) and the keys, which are ctrl keys. ^G opens one run full size, ^O a loop's
+// rules (the form), ^N a new loop a step at a time (the setup).
 // drawBoard(state, ui, { cols, rows, now, linesOf }) → rows of [text, style] pieces, each row exactly
 // `cols` wide. state: what the window wrote (loops.mjs snapshot). linesOf(loop, n) → that run's lines.
-// Plain data in, rows out: tested on its own (loops-draw.test.mjs).
+// Plain data in, rows out: tested on its own (loops.test.mjs).
 import { everyWord as secsWord, limitWords, modeName, kindWord, guessKind } from './loops.mjs';
 
 // Styles: a foreground (xterm-256, the app's own colours in ui/theme.mjs), "b" for bold, "on <bg>".
@@ -14,12 +16,11 @@ export const STYLE = {
   debug: 209, test: 111, web: 73, task: 141, okDim: 65, badDim: 131,
 };
 export const BG = { sel: 236, user: 237, needs: 58, chipDebug: 52, chipTest: 17, chipWeb: 23, chipTask: 53 };
-const KIND = { debug: ['DEBUG', 'chipDebug'], test: ['TEST', 'chipTest'], web: ['WEB', 'chipWeb'], task: ['TASK', 'chipTask'] };
+const KIND = { debug: ['FIX', 'chipDebug'], test: ['TEST', 'chipTest'], web: ['WEB', 'chipWeb'], task: ['TASK', 'chipTask'] };
 const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-const HALF = ['◐', '◓', '◑', '◒'];
 export const MIN_COLS = 96;
 export const MIN_ROWS = 30;
-const BOTTOM = 6; // a question, the chat box (3), the status, the keys (a question with choices: one more)
+const CARD_H = 10;
 
 // ---- pieces ----
 const p = (t, s = 'text') => [String(t), s];
@@ -50,13 +51,34 @@ export function dur(ms) {
 }
 const countdown = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return s >= 3600 ? `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const spin = (now) => SPIN[Math.floor(now / 120) % SPIN.length];
-const half = (now) => HALF[Math.floor(now / 220) % 4];
-const chip = (kind) => [` ${(KIND[kind] ?? KIND.task)[0]} `, `${KIND[kind] ? kind : 'task'} b on ${(KIND[kind] ?? KIND.task)[1]}`];
+const chip = (kind) => [` ${(KIND[kind] ?? KIND.task)[0]} `, `white b on ${(KIND[kind] ?? KIND.task)[1]}`];
 const chipW = (kind) => (KIND[kind] ?? KIND.task)[0].length + 2;
-const over = (l) => l.state === 'done' || l.state === 'stopped';
+const over = (l) => Boolean(l) && (l.state === 'done' || l.state === 'stopped');
 const paceWord = (l) => (l.until ? 'until done' : l.every ? `every ${secsWord(l.every)}` : 'its own pace');
+// Words wrapped to w cells; a word longer than w is cut where it must.
+function wrapWords(text, w) {
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    let line = '';
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      if ([...`${line} ${word}`.trim()].length <= w) { line = `${line} ${word}`.trim(); continue; }
+      if (line) out.push(line);
+      line = word;
+      while ([...line].length > w) { out.push([...line].slice(0, w).join('')); line = [...line].slice(w).join(''); }
+    }
+    if (line) out.push(line);
+  }
+  return out;
+}
+// At most two lines, the second ending in … when there is more.
+const twoLines = (text, w) => { const ls = wrapWords(text, w); return ls.length <= 2 ? [ls[0] ?? '', ls[1] ?? ''] : [ls[0], cut(ls.slice(1).join(' '), w)]; };
+const rule = (cols) => fit([p('─'.repeat(cols), 'faint')], cols);
+const blank = (cols) => fit([], cols);
+// The loop the box talks to: the run you watch, else the picked card.
+const pickedOf = (state, ui) => (ui.view === 'watch' || ui.confirm?.back === 'watch' ? state.loops.find((x) => x.id === ui.watch?.id) : null) ?? state.loops[ui.sel] ?? null;
+const waitsForYou = (l) => Boolean(l.current?.needs || (l.stuck && !l.current) || (l.ready && !l.current));
 
-// What a loop is doing, in a word or two, and its colour.
+// What a loop is doing, in a word or two, and its colour (the window's /loop list, the chat's line).
 export function stateOf(l, now) {
   if (l.current?.needs) return ['! needs you', 'warn b'];
   if (l.ready && !l.current) return [`! run ${l.ready.n} waits for your go`, 'warn b'];
@@ -71,30 +93,16 @@ export function stateOf(l, now) {
   if (l.queued) return ['… next in line', 'dim'];
   return [`in ${countdown(l.nextAt - now)}`, 'dim'];
 }
-// The last runs as marks: green passed, red missed, yellow asking, a spinner while it runs.
-function marks(l, n, now) {
-  // A run put back is ↶, one stopped to start over a faint ■.
-  const out = l.runs.slice(-(l.current ? n - 1 : n)).map((r) => (r.undone ? p('↶', 'dim') : r.redo ? p('■', 'faint') : p('■', r.ok ? 'ok' : 'bad')));
-  if (l.current) out.push(p(l.current.needs ? '■' : spin(now), l.current.needs ? 'warn' : 'accent'));
-  return out.flatMap((m) => [m, p(' ')]);
-}
-function lastWords(l) {
-  const r = l.runs.at(-1);
-  if (!r) return [l.state === 'off' ? 'waits for the model' : 'no run yet', 'faint'];
-  if (r.undone) return [`↶ run ${r.n} put back${r.undone.put?.length ? `: ${r.undone.put.join(', ')}` : ''}`, 'dim'];
-  if (r.redo) return [`↺ run ${r.n} ${r.summary}`, 'dim'];
-  return [`${r.ok ? '✓' : '✗'} ${r.summary}`, r.ok ? 'ok' : 'bad'];
-}
-const rule = (cols) => fit([p('─'.repeat(cols), 'faint')], cols);
-const blank = (cols) => fit([], cols);
 
-function header(state, now, cols, title) {
+function header(state, ui, now, cols, title) {
   const run = state.loops.filter((l) => l.current && !l.current.needs).length;
-  const need = state.loops.filter((l) => l.current?.needs || (l.stuck && !l.current)).length;
+  const need = state.loops.filter(waitsForYou).length;
   const m = state.model;
+  // In the coding window, esc goes back to the chat; in a terminal of its own, it closes the board.
+  const crumb = ui?.inApp ? [p(' esc ', 'white on user'), p(' chat ', 'dim'), p('› ', 'faint')] : [p(' ')];
   const right = [p(`${run} running`, run ? 'accent' : 'dim'), ...(need ? [p(' · ', 'faint'), p(`${need} needs you`, 'warn b')] : []), p('   '), p(m.on ? '● ' : '○ ', m.on ? 'accent' : 'faint'), p(cut(`${m.name} ${m.on ? (m.where === 'this Mac' ? 'loaded' : `on ${m.where}`) : 'off'}`, 34), m.on ? 'dim' : 'faint'), p(`   ${clock(now)} `, 'dim')];
-  let left = [p(' ↻ ', 'accent b'), p(title, 'white b'), p(`  ·  ${state.name} · ${state.folder}`, 'dim')];
-  if (rowWidth(left) + rowWidth(right) + 1 > cols) left = [p(' ↻ ', 'accent b'), p(title, 'white b'), p(`  ·  ${cut(state.name, Math.max(4, cols - rowWidth(right) - title.length - 10))}`, 'dim')];
+  let left = [...crumb, p('↻ ', 'accent b'), p(title, 'white b'), p(`  ·  ${state.name} · ${state.folder}`, 'dim')];
+  if (rowWidth(left) + rowWidth(right) + 1 > cols) left = [...crumb, p('↻ ', 'accent b'), p(title, 'white b'), p(`  ·  ${cut(state.name, Math.max(4, cols - rowWidth(right) - rowWidth(crumb) - title.length - 8))}`, 'dim')];
   return fit([...left, p(' '.repeat(Math.max(1, cols - rowWidth(left) - rowWidth(right)))), ...right], cols);
 }
 // keys: [key, word, a shorter word for a narrow window].
@@ -130,109 +138,101 @@ function runLines(l, run, lines, cols, now, { tail = null, full = false } = {}) 
     if (x.kind === 'answer') { out.push(fit([p('   ⎿ ', 'faint'), p(cut(`you: ${x.text}`, w - 6), 'dim')], w)); continue; }
     if (x.kind === 'text') {
       // The model's words, wrapped at words.
-      const rowsOf = [];
-      for (const para of String(x.text).replace(/[*`]/g, '').split('\n')) {
-        let line = '';
-        for (const word of para.split(/\s+/).filter(Boolean)) { if ([...`${line} ${word}`.trim()].length > w - 4) { rowsOf.push(line.trim()); line = word; } else line += ` ${word}`; }
-        if (line.trim()) rowsOf.push(line.trim());
-      }
-      rowsOf.slice(0, full ? 400 : 8).forEach((t, i) => out.push(fit([p(i ? '   ' : ' ● ', 'white'), p(cut(t, w - 4), 'text')], w)));
+      wrapWords(String(x.text).replace(/[*`]/g, ''), w - 4).slice(0, full ? 400 : 8).forEach((t, i) => out.push(fit([p(i ? '   ' : ' ● ', 'white'), p(cut(t, w - 4), 'text')], w)));
     }
   }
   if (live && !l.current.needs) out.push(fit([p(` ${spin(now)} `, 'accent'), p(`Working… ${dur(now - run.startedAt)}`, 'dim')], w));
   return tail ? out.slice(-tail) : out;
 }
-
-// ---- where a loop is in its cycle: four steps, read off the lines its run wrote ----
-const LOOKS = new Set(['Read', 'Search', 'List', 'Map', 'CodeSearch', 'Explore', 'Screen']);
-const CHANGES = new Set(['Update', 'Write', 'Rename']);
-const WEB = new Set(['Fetch', 'Web Search']);
 const labelOf = (x) => String(x.text ?? '').split('(')[0];
 // A run of the tests, as the run said (loop-run.mjs); a line written without that word is read by its command.
 const isTest = (x) => (typeof x.test === 'boolean' ? x.test : labelOf(x) === 'Bash' && /\b(test|tests|pytest|jest|vitest|mocha|unittest|rspec)\b/.test(x.text));
-function cycleOf(l, lines, now) {
-  const st = (name, state, note = '', frac = null, tone = null) => ({ name, state, note, frac, tone });
-  const run = l.current;
-  const last = l.runs.at(-1);
-  const steps = lines.filter((x) => x.kind === 'tool' || x.kind === 'fail');
-  const said = lines.some((x) => x.kind === 'text');
-  const waiting = !run && !over(l);
-  const span = (l.every ?? (l.until ? 15 : l.gap ?? 600)) * 1000;
-  const waitNote = l.stuck ? 'stuck: needs you' : l.ready ? 'waits for your go' : l.state === 'redoing' ? 'starting over' : l.state === 'paused' ? 'paused' : l.state === 'off' ? 'model off' : l.queued ? 'next in line' : `in ${countdown(l.nextAt - now)}`;
-  const waitFrac = waiting && l.state !== 'paused' && l.state !== 'off' && !l.queued && !l.ready ? Math.min(1, Math.max(0, 1 - (l.nextAt - now) / span)) : 0;
-  const wait = st('WAIT', waiting ? 'active' : 'todo', run ? `then ${l.every ? secsWord(l.every) : 'its own pace'}` : over(l) ? '' : waitNote, run ? 0 : waitFrac);
-  const back = over(l) ? (l.state === 'done' ? `✓ ${l.doneWhy ?? 'ended'}` : 'stopped by you') : l.until ? 'pass: done · miss: a new try' : `again ${paceWord(l)}`;
-  const backTone = l.state === 'done' ? 'ok' : null;
-  const ask = run?.needs ? st('', 'ask', 'needs you') : null;
-  // done / active / todo for step i when the run has reached step `at`; a run that ended has done them all.
-  const mark = (i, at) => (!run ? (last ? 'done' : 'todo') : i < at ? 'done' : i === at ? 'active' : 'todo');
-  if (l.kind === 'debug') {
-    const tests = steps.filter(isTest);
-    const change = steps.find((x) => x.kind === 'tool' && CHANGES.has(labelOf(x)));
-    const afterChange = change ? tests.filter((x) => lines.indexOf(x) > lines.indexOf(change)) : [];
-    const at = !tests.length ? 0 : !change ? 1 : !afterChange.length ? 2 : 3;
-    const first = tests[0], lastT = afterChange.at(-1);
-    const file = change ? cut(/\((.*)\)$/s.exec(change.text)?.[1] ?? '', 24) : 'the change';
-    const s = [
-      st('TESTS', mark(0, at), first ? (first.kind === 'fail' ? 'some fail' : 'they pass') : 'what fails', null, first ? (first.kind === 'fail' ? 'bad' : 'ok') : null),
-      st('FIND', mark(1, at), run && at === 1 ? 'reading' : 'the cause'),
-      st('FIX', mark(2, at), change ? file : 'the change'),
-      st('TESTS', run && at === 3 && lastT ? 'done' : mark(3, at), lastT ? (lastT.kind === 'fail' ? 'some still fail' : 'they pass') : run && at === 3 ? 'running' : 'run again', null, lastT ? (lastT.kind === 'fail' ? 'bad' : 'ok') : null),
-    ];
-    if (ask) { const i = Math.min(3, at); s[i] = { ...s[i], state: 'ask', note: 'needs you' }; }
-    return { steps: s, back, backTone };
+
+// ---- a card: Now, Last, Next and You, in words ----
+// What the run is doing now: the step it is on, read off its lines.
+export function nowWords(l, lines, now) {
+  const q = l.current?.needs;
+  if (q) return [`! asks you: ${q.text}`, 'warn'];
+  if (l.ready && !l.current) return [`! run ${l.ready.n} waits for your go`, 'warn'];
+  if (l.state === 'redoing') return [`${spin(now)} starting over`, 'accent'];
+  if (l.current) {
+    const took = dur(now - l.current.startedAt);
+    const steps = lines.filter((x) => x.kind === 'tool' || x.kind === 'fail');
+    const x = [...lines].reverse().find((y) => y.kind === 'tool' || y.kind === 'fail' || y.kind === 'text');
+    if (!x) return [`${spin(now)} starting · ${took}`, 'accent'];
+    if (x.kind === 'text') return [`${spin(now)} writing its answer · ${took}`, 'accent'];
+    const m = /^([^(]+)\((.*)\)$/s.exec(x.text);
+    const what = m ? `${m[1]} ${m[2].replace(/\s+/g, ' ')}` : x.text;
+    return [`${spin(now)} step ${steps.length} · ${took} · ${what}${x.kind === 'fail' ? (isTest(x) ? ': the tests fail' : ': did not work') : ''}`, 'accent'];
   }
-  if (l.kind === 'test') {
-    const t = steps.filter(isTest).at(-1);
-    const at = !t ? 0 : !said ? 1 : 2;
-    const s = [
-      st('RUN', mark(0, at), t ? (t.kind === 'fail' ? 'some fail' : 'all pass') : 'the tests', null, t ? (t.kind === 'fail' ? 'bad' : 'ok') : null),
-      st('COMPARE', mark(1, at), 'with the last run'),
-      st('REPORT', run && said ? 'active' : mark(2, at), last && !run ? cut(last.summary, 40) : 'what changed', null, last && !run ? (last.ok ? 'ok' : 'bad') : null),
-      wait,
-    ];
-    if (ask) { const i = Math.min(2, at); s[i] = { ...s[i], state: 'ask', note: 'needs you' }; }
-    return { steps: s, back, backTone };
-  }
-  if (l.kind === 'web') {
-    const reads = steps.filter((x) => WEB.has(labelOf(x)));
-    const asked = lines.some((x) => x.kind === 'ask' || x.kind === 'answer') || (l.allowed ?? []).some((a) => /^Web/.test(a));
-    const at = !reads.length && !said ? (asked ? 1 : 0) : !said ? 1 : 2;
-    const s = [
-      st('ASK', run?.needs ? 'ask' : !run && !last ? 'todo' : 'done', run?.needs ? 'needs you' : (l.allowed ?? []).some((a) => /^Web/.test(a)) ? 'allowed: always' : asked ? 'you answered' : 'each site asks'),
-      st('READ', mark(1, run?.needs ? 0 : Math.max(1, at)), reads.length ? `${reads.length} read` : 'the pages', null, reads.some((x) => x.kind === 'fail') ? 'bad' : null),
-      st('REPORT', run && said ? 'active' : mark(2, run?.needs ? 0 : at), last && !run ? cut(last.summary, 40) : 'anything new?', null, last && !run ? (last.ok ? 'ok' : 'bad') : null),
-      wait,
-    ];
-    return { steps: s, back, backTone };
-  }
-  const looks = steps.filter((x) => LOOKS.has(labelOf(x))).length;
-  const work = steps.filter((x) => !LOOKS.has(labelOf(x)) && labelOf(x) !== 'Ask').length;
-  const at = said ? 2 : work ? 1 : 0;
-  const s = [
-    st('LOOK', mark(0, at), looks ? `${looks} looked at` : 'reads first'),
-    st('WORK', mark(1, at), work ? `${work} step${work === 1 ? '' : 's'}` : 'does the job'),
-    st('REPORT', run && said ? 'active' : mark(2, at), last && !run ? cut(last.summary, 40) : 'says what it did', null, last && !run ? (last.ok ? 'ok' : 'bad') : null),
-    wait,
+  if (l.stuck) return [`! stuck: ${l.stuck}`, 'warn'];
+  if (l.state === 'paused') return ['‖ paused', 'dim'];
+  if (l.state === 'done') return [`✓ ended: ${l.doneWhy ?? 'its job is done'}`, 'ok'];
+  if (l.state === 'stopped') return ['■ stopped by you', 'faint'];
+  if (l.state === 'off') return [`○ waits: ${l.offWhy ?? 'the model is off'}`, 'faint'];
+  if (l.queued) return ['… next in line', 'dim'];
+  return ['○ waiting for its next run', 'dim'];
+}
+// How its last run ended.
+export function lastWords(l) {
+  const r = l.runs.at(-1);
+  if (!r) return ['no run yet', 'faint'];
+  if (r.undone) return [`↶ run ${r.n} put back${r.undone.put?.length ? `: ${r.undone.put.join(', ')}` : ''}`, 'dim'];
+  if (r.redo) return [`↺ run ${r.n}: ${r.summary}`, 'dim'];
+  return [`${r.ok ? '✓' : '✗'} run ${r.n}: ${r.summary}`, r.ok ? 'ok' : 'bad'];
+}
+// When it runs next, or what it waits for.
+export function nextWords(l, now) {
+  if (over(l)) return ['type a note: enter starts it again', 'faint'];
+  if (l.current) return [l.pauseAfter ? 'it pauses after this run' : l.until ? 'until done: again 15 s after a miss' : `after this run, ${paceWord(l)}`, 'dim'];
+  if (l.ready) return ['type y to start it, n to leave it out', 'warn'];
+  if (l.stuck) return ['type a hint · ^R tries again as it is', 'warn'];
+  if (l.state === 'redoing') return ['as soon as its changes are back', 'dim'];
+  if (l.state === 'paused') return ['nothing until ^P', 'faint'];
+  if (l.state === 'off') return ['when the model is on again', 'faint'];
+  if (l.queued) return ['when the run before it ends', 'dim'];
+  return [`run ${(l.runs.at(-1)?.n ?? 0) + 1} at ${clock(l.nextAt)} · in ${countdown(l.nextAt - now)}`, 'text'];
+}
+// Your last note, and what became of it: [the note, what became of it, its colour].
+export function youWords(l) {
+  const n = l.lastNote;
+  if (!n) return ['nothing yet: type below', '', 'faint'];
+  const said = `“${String(n.text).replace(/\s+/g, ' ')}”`;
+  if (n.read?.after) return [said, `✓ read after ${n.read.after}`, 'accentDim'];
+  if (n.read?.start) return [said, `✓ read at the start of run ${n.read.start}`, 'accentDim'];
+  if (n.read?.late) return [said, '✓ read as it gave its answer', 'accentDim'];
+  if (l.note) return [said, 'its next run starts with it', 'dim'];
+  return [said, 'sent: it reads it at its next step', 'dim'];
+}
+function card(l, lines, sel, w, now) {
+  const bs = waitsForYou(l) ? 'warn' : sel ? 'white' : 'border';
+  const inner = w - 4;
+  const side = (row) => fit([p('│ ', bs), ...fit(row, inner), p(' │', bs)], w);
+  const lab = (t) => p(pad(t, 6), 'faint');
+  const tw = inner - 6;
+  const name = ` ${cut(l.name, inner - chipW(l.kind) - 2)} `;
+  const n = l.current?.n ?? l.runs.at(-1)?.n ?? 0;
+  const info = [paceWord(l), n ? `run ${n}${l.maxRuns ? ` of ${l.maxRuns}` : ''}` : 'no run yet', ...limitWords(l, { short: true }).filter((x) => !/runs$/.test(x)), modeName(l.mode), ...(l.askFirst ? ['asks first'] : [])].join(' · ');
+  const nw = nowWords(l, lines, now), lw = lastWords(l), xw = nextWords(l, now), yw = youWords(l);
+  const now2 = twoLines(nw[0], tw), last2 = twoLines(lw[0], tw);
+  return [
+    fit([p('┌─', bs), chip(l.kind), p(name, sel ? 'white b' : 'text'), p('─'.repeat(Math.max(0, w - 3 - chipW(l.kind) - [...name].length)), bs), p('┐', bs)], w),
+    side([p(cut(info, inner), 'dim')]),
+    side([lab('Now'), p(now2[0], nw[1])]),
+    side([lab(''), p(now2[1], nw[1])]),
+    side([lab('Last'), p(last2[0], lw[1])]),
+    side([lab(''), p(last2[1], lw[1])]),
+    side([lab('Next'), p(cut(xw[0], tw), xw[1])]),
+    side([lab('You'), p(cut(yw[0], tw), yw[1] ? 'white' : yw[2])]),
+    side([lab(''), p(cut(yw[1], tw), yw[2])]),
+    fit([p('└', bs), p('─'.repeat(w - 2), bs), p('┘', bs)], w),
   ];
-  if (ask) { const i = Math.min(2, at); s[i] = { ...s[i], state: 'ask', note: 'needs you' }; }
-  return { steps: s, back, backTone };
 }
-const stepGlyph = (s, now) => (s.state === 'done' ? p('●', s.tone === 'bad' ? 'bad' : 'ok') : s.state === 'active' ? p(half(now), 'accent') : s.state === 'ask' ? p('!', 'warn b') : p('○', 'faint'));
-function stepBar(s, w, now) {
-  if (s.state === 'done') return [p('▮'.repeat(w), s.tone === 'bad' ? 'badDim' : 'okDim')];
-  if (s.state === 'ask') return [p('▯'.repeat(w), Math.floor(now / 500) % 2 ? 'warn' : 'faint')];
-  if (s.state === 'todo') return [p('░'.repeat(w), 'faint')];
-  if (s.frac === null) { const at = Math.floor(now / 140) % (w + 3); return Array.from({ length: w }, (_, i) => p(i <= at && i > at - 3 ? '▮' : '▯', i <= at && i > at - 3 ? 'accent' : 'faint')); }
-  const k = Math.round(w * s.frac);
-  return [p('▮'.repeat(k), 'accent'), p('▯'.repeat(w - k), 'faint')];
-}
-const noteStyle = (s) => (s.state === 'todo' ? 'faint' : s.tone === 'bad' ? 'bad' : s.tone === 'ok' ? 'ok' : s.state === 'ask' ? 'warn' : 'dim');
 
 // ---- the lines every screen ends with ----
 function logPieces(state, e, w) {
   const l = e.id ? state.loops.find((x) => x.id === e.id) : null;
-  const head = [p(`${clock(e.at)} `, 'dim'), ...(e.kind === 'you' ? [p(' YOU ', 'white b on user')] : l ? [chip(l.kind)] : [p('  ·  ', 'faint')]), p(' ')];
+  const head = [p(`${clock(e.at)} `, 'dim'), ...(e.kind === 'you' ? [p(' YOU ', 'white b on user')] : l ? [chip(l.kind)] : [p('  ·  ', 'faint')]), p(' '.repeat(Math.max(1, 7 - (e.kind === 'you' ? 5 : l ? chipW(l.kind) : 5))))];
   const name = l ? cut(l.name, 20) : '';
   const room = w - rowWidth(head) - 2;
   if (e.kind === 'end') return [...head, p(`${name} · run ${e.n}  `, 'dim'), p(cut(`${e.ok ? '✓' : '✗'} ${e.text}`, room - name.length - 18), e.ok ? 'ok' : 'bad'), p(`  ${dur(e.ms)}`, 'faint')];
@@ -248,29 +248,69 @@ const stuckOf = (state) => state.loops.find((l) => l.stuck && !l.current) ?? nul
 // The loop whose next run waits longest for your go (Ask first).
 export const readyOf = (state) => state.loops.filter((l) => l.ready && !l.current).sort((a, b) => a.ready.since - b.ready.since)[0] ?? null;
 export const askingOf = (state) => state.loops.filter((l) => l.current?.needs).sort((a, b) => a.current.needs.since - b.current.needs.since)[0] ?? null;
-function chatBox(state, ui, cols, now) {
-  const l = state.loops[ui.sel];
-  const on = ui.chat?.on;
-  const bs = on ? 'accent' : 'border';
-  const w = cols - 2;
-  const answers = l?.current?.needs?.kind === 'question';
-  // What enter does with the text: a note it reads at its next step, or the run started over with it (x, tab).
-  const as = on && l && !over(l) && !/^\//.test(ui.chat?.text ?? '') ? ui.chat?.as ?? 'note' : 'note';
-  const title = !l ? ' new loop ' : as === 'redo' ? ` start ${cut(l.name, 26)} over with this · its changes go back first ` : as === 'redoKeep' ? ` start ${cut(l.name, 26)} over with this · its changes stay ` : answers ? ` your answer to ${cut(l.name, 30)} ` : on && l.current ? ` to ${cut(l.name, 30)} · it reads it at its next step ` : ` to ${cut(l.name, 30)} `;
-  const noteLeft = l?.note ? ` its next run starts with: “${cut(l.note.replace(/\s+/g, ' '), 40)}” ` : '';
-  const top = [p(' ╭─', bs), p(title, on ? 'white b' : 'dim'), p(noteLeft, 'dim'), p('─'.repeat(Math.max(0, w - 3 - [...title].length - [...noteLeft].length)), bs), p('╮', bs)];
+// What waits for you: the picked loop's question (its choices on a row of their own), its go, its
+// hint; else a line naming another loop that waits, and how to pick it.
+function needRows(state, ui, cols) {
+  const l = pickedOf(state, ui);
+  const row = (pieces) => fit(pieces, cols, 'needs');
+  const keys = (list) => list.flatMap(([k, w], i) => [...(i ? [p(' · ', 'dim')] : []), p(k, 'white b'), p(` ${w}`, 'dim')]);
+  const q = l?.current?.needs;
+  if (q) {
+    const head = [p(' ! ', 'warn b'), chip(l.kind), p(` ${cut(l.name, 22)} asks: `, 'white')];
+    if (q.kind === 'question') {
+      const opts = (q.options ?? []).slice(0, 9);
+      const out = [row([...head, p(cut(q.text, cols - rowWidth(head) - 2), 'white b')])];
+      if (opts.length) { const each = Math.max(8, Math.floor((cols - 6) / opts.length) - 6); out.push(row([p('   '), ...opts.flatMap((o, i) => [p(`${i + 1}`, 'white b on needs'), p(` ${cut(o, each)}   `, 'white')]), p('or type your own answer', 'dim')])); }
+      return out;
+    }
+    const how = [p('type ', 'dim'), ...keys([['y', 'yes'], ...(q.always ? [['a', cols >= 110 ? `yes, always (${cut(q.always, 20)})` : 'always']] : []), ['n', 'no']])];
+    return [row([...head, p(cut(q.text, Math.max(10, cols - rowWidth(head) - rowWidth(how) - 4)), 'white b'), p(' '.repeat(Math.max(2, cols - rowWidth(head) - [...cut(q.text, Math.max(10, cols - rowWidth(head) - rowWidth(how) - 4))].length - rowWidth(how) - 1))), ...how])];
+  }
+  if (l?.ready && !l.current) {
+    const how = [p('type ', 'dim'), ...keys([['y', 'go'], ['n', l.every ? 'skip this one' : 'not now (pause)'], ['^O', 'edit first']])];
+    const head = [p(' ! ', 'warn b'), chip(l.kind), p(` ${cut(l.name, 26)} · run ${l.ready.n} is ready and waits for your go`, 'white b')];
+    return [row([...head, p(' '.repeat(Math.max(2, cols - rowWidth(head) - rowWidth(how) - 1))), ...how])];
+  }
+  if (l?.stuck && !l.current) {
+    const how = keys([['type', 'a hint'], ['^R', 'try again'], ['^S', 'stop']]);
+    const head = [p(' ! ', 'warn b'), chip(l.kind), p(` ${cut(l.name, 22)} is stuck: `, 'white')];
+    const why = cut(l.stuck.split(':')[0], Math.max(10, cols - rowWidth(head) - rowWidth(how) - 4));
+    return [row([...head, p(why, 'white b'), p(' '.repeat(Math.max(2, cols - rowWidth(head) - [...why].length - rowWidth(how) - 1))), ...how])];
+  }
+  const other = state.loops.find((x) => x !== l && waitsForYou(x));
+  if (other) {
+    const up = state.loops.indexOf(other) < state.loops.indexOf(l);
+    return [row([p(' ! ', 'warn b'), chip(other.kind), p(` ${cut(other.name, 30)} ${other.current?.needs ? 'asks you something' : other.stuck ? 'is stuck' : 'waits for your go'}`, 'white'), p(`  ·  ${up ? '↑' : '↓'} picks it`, 'dim')])];
+  }
+  return [blank(cols)];
+}
+// The box: typing always goes in it. Its title says what enter does with the words.
+function inputBox(state, ui, cols, now) {
+  const l = pickedOf(state, ui);
   const text = ui.chat?.text ?? '';
+  const slash = /^\//.test(text);
+  const as = l && !over(l) && !slash ? ui.chat?.as ?? 'note' : 'note';
+  const q = l?.current?.needs;
+  const ready = l?.ready && !l.current;
+  const name = l ? cut(l.name, 30) : '';
+  const title = slash ? ' a /loop line ' : !l ? ' a new loop ' : as === 'redo' ? ` start ${name} over with this · its changes go back first ` : as === 'redoKeep' ? ` start ${name} over with this · its changes stay ` : q ? (q.kind === 'question' ? ` your answer to ${name} ` : ` ${name} asks: y, ${q.always ? 'a, ' : ''}n, or a note `) : ready ? ` ${name}: y starts run ${l.ready.n}, n leaves it out, or a note ` : over(l) ? ` ${name} has ended · enter starts it again with this ` : l.stuck ? ` a hint for ${name} · enter sends it on with it ` : l.current ? ` to ${name} · it reads it at its next step ` : ` to ${name} · its next run starts with it `;
+  const bs = q || ready || l?.stuck ? 'warn' : 'accent';
+  const w = cols - 2;
   const room = w - 6;
   const shown = [...text].length > room ? `…${[...text].slice(-(room - 1)).join('')}` : text;
-  const hintText = !state.loops.length ? ' to type /loop 10m <message> and make the first loop' : ' to type a note to this loop · or /loop 5m <message> to make a new one';
-  const inner = on ? [p(' › ', 'accent b'), p(shown, 'white'), p(Math.floor(now / 500) % 2 ? '▏' : ' ', 'accent')] : [p(' › ', 'faint'), p(text ? shown : 't', text ? 'dim' : 'white'), p(text ? '' : hintText, 'faint')];
-  const hint = on ? (l && !over(l) ? ` enter ${as === 'note' ? 'send' : 'start over'} · tab ${as === 'note' ? 'start over instead' : as === 'redo' ? 'keep its changes' : 'just a note'} · esc leave the box ` : ' enter send · esc leave the box ') : '';
-  return [fit(top, cols), fit([p(' │', bs), ...fit(inner, w - 2), p('│', bs)], cols), fit([p(' ╰', bs), p('─'.repeat(Math.max(0, w - 3 - hint.length)), bs), p(hint, 'dim'), p('─╯', bs)], cols)];
+  const ph = !l ? 'type /loop 5m <message> and enter, or ^N for a new loop a step at a time' : q?.kind === 'question' ? (q.options?.length ? `type 1–${Math.min(9, q.options.length)}, or your own answer` : 'type your answer') : q ? 'type y, a or n and enter (anything else goes to it as a note)' : `type to tell ${l.name} what to do`;
+  const inner = [p(' › ', 'accent b'), p(shown, 'white'), p(Math.floor(now / 500) % 2 ? '▏' : ' ', 'accent'), ...(text ? [] : [p(ph, 'faint')])];
+  const hint = ` enter ${slash ? 'sends the line' : as !== 'note' ? 'starts over' : q ? 'answers' : over(l) ? 'starts it again' : 'sends'}${state.loops.length > 1 ? ' · ↑↓ another loop' : ''} `;
+  return [
+    fit([p(' ╭─', bs), p(title, 'white b'), p('─'.repeat(Math.max(0, w - 3 - [...title].length)), bs), p('╮', bs)], cols),
+    fit([p(' │', bs), ...fit(inner, w - 2), p('│', bs)], cols),
+    fit([p(' ╰', bs), p('─'.repeat(Math.max(0, w - 3 - hint.length)), bs), p(hint, 'dim'), p('─╯', bs)], cols),
+  ];
 }
 function statusLine(state, cols) {
   const run = state.loops.filter((l) => l.current && !l.current.needs);
   const line = state.loops.filter((l) => l.queued).length;
-  const need = state.loops.filter((l) => l.current?.needs || (l.stuck && !l.current)).length;
+  const need = state.loops.filter(waitsForYou).length;
   const m = state.model;
   const b = (label, value, style = 'text') => [p(` ${label} `, 'faint'), p('[', 'faint'), p(value, style), p(']', 'faint'), p(' ')];
   const parts = [b('loops', String(state.loops.length)), b('running', run.length ? cut(run.map((l) => l.name).join(', '), 20) : '0', run.length ? 'accent' : 'dim'), b('needs you', String(need), need ? 'warn b' : 'dim'), b('in line', String(line), line ? 'text' : 'dim'), b('model', cut(m.on ? `${m.name} ${m.where === 'this Mac' ? 'loaded' : `on ${m.where}`}` : `${m.name} off`, 30), m.on ? 'accent' : 'faint'), b('end', `window closes · ${state.maxHours ?? 24} h`, 'dim')];
@@ -280,173 +320,73 @@ function statusLine(state, cols) {
   return fit(row, cols);
 }
 function bottomBlock(state, ui, cols, now, keys) {
-  const out = [];
-  const a = askingOf(state);
-  if (a) {
-    const q = a.current.needs;
-    // A narrow window says the keys shortly, so the question itself is never the part cut.
-    const wide = cols >= 110;
-    const how = q.kind === 'question'
-      ? [p('t', 'white b'), p(wide ? ' type an answer · ' : ' answer · ', 'dim'), p('y', 'white b'), p(' yes · ', 'dim'), p('n', 'white b'), p(wide ? ' no, stop' : ' no', 'dim')]
-      : [p('y', 'white b'), p(wide ? ' yes, this time · ' : ' yes · ', 'dim'), ...(q.always ? [p('a', 'white b'), p(wide ? ' yes, always · ' : ' always · ', 'dim')] : []), p('n', 'white b'), p(' no', 'dim')];
-    const howW = rowWidth(how) + 4;
-    out.push(fit([p(' ! ', 'warn b'), chip(a.kind), p(` ${cut(a.name, 22)} asks: `, 'white'), p(cut(q.text, Math.max(10, cols - howW - 34 - chipW(a.kind))), 'white b'), p('    '), ...how], cols, 'needs'));
-    // The choices it gave, numbered: 1–9 picks one.
-    const opts = q.kind === 'question' ? (q.options ?? []).slice(0, 9) : [];
-    if (opts.length) {
-      const each = Math.max(8, Math.floor((cols - 6) / opts.length) - 6);
-      out.push(fit([p('   '), ...opts.flatMap((o, i) => [p(`${i + 1}`, 'white b on needs'), p(` ${cut(o, each)}   `, 'white')])], cols, 'needs'));
-    }
-  } else if (readyOf(state)) {
-    const r = readyOf(state);
-    const how = [p('y', 'white b'), p(' go · ', 'dim'), p('n', 'white b'), p(r.every ? ' skip this one · ' : ' not now (pause) · ', 'dim'), p('e', 'white b'), p(' edit first', 'dim')];
-    const head = [p(' ! ', 'warn b'), chip(r.kind), p(` ${cut(r.name, 26)} · run ${r.ready.n} is ready and waits for your go`, 'white b')];
-    out.push(fit([...head, p(' '.repeat(Math.max(4, cols - rowWidth(head) - rowWidth(how) - 1))), ...how], cols, 'needs'));
-  } else if (stuckOf(state)) {
-    const s = stuckOf(state);
-    // The keys act on the picked loop, as everywhere on the board but y / a / n.
-    const how = [p('pick it: ', 'dim'), p('t', 'white b'), p(' a hint · ', 'dim'), p('r', 'white b'), p(' try again · ', 'dim'), p('s', 'white b'), p(' stop', 'dim')];
-    const head = [p(' ! ', 'warn b'), chip(s.kind), p(` ${cut(s.name, 22)} is stuck: `, 'white')];
-    out.push(fit([...head, p(cut(s.stuck.split(':')[0], Math.max(10, cols - rowWidth(head) - rowWidth(how) - 4)), 'white b'), p('    '), ...how], cols, 'needs'));
-  } else out.push(blank(cols));
-  out.push(...chatBox(state, ui, cols, now));
-  out.push(statusLine(state, cols));
-  if (ui.view === 'confirm') out.push(fit([p(' '), p(cut(ui.confirm.text, cols - 18), 'warn b'), p('   y', 'white b'), p(' yes  ', 'dim'), p('n', 'white b'), p(' no', 'dim')], cols));
-  else out.push(keysLine(cols, ui.chat?.on ? [['enter', 'send'], ['tab', 'note or start over'], ['esc', 'leave the box'], ['/loop 5m <message>', 'makes a loop']] : keys, ui.toast, now));
+  const out = [...needRows(state, ui, cols), ...inputBox(state, ui, cols, now)];
+  if (ui.view === 'confirm') out.push(fit([p(' '), p(cut(ui.confirm.text, cols - 40), 'warn b'), p('   y', 'white b'), p(' yes   ', 'dim'), p('n', 'white b'), p(' no', 'dim'), p('   (enter does nothing here)', 'faint')], cols));
+  else out.push(keysLine(cols, keys, ui.toast, now));
   return out;
 }
-const KEYS_TAIL = [['t', 'type'], ['x', 'start over', 'redo'], ['r', 'run now', 'run'], ['p', 'pause'], ['e', 'edit'], ['u', 'undo'], ['s', 'stop'], ['+', 'new loop', 'new'], ['q', 'close']];
+const mainKeys = (ui) => [['^N', 'new loop', 'new'], ['^R', 'run now', 'run'], ['^P', 'pause'], ['^S', 'stop'], ['^O', 'rules'], ['^X', 'start over', 'redo'], ['^B', 'undo'], ['^G', 'whole run', 'whole'], ['↑↓', 'pick'], ['esc', ui.inApp ? 'chat' : 'close']];
 
-// ---- the tree ----
-function loopBox(l, lines, sel, w, now) {
-  const bs = l.current?.needs ? 'warn' : sel ? 'white' : 'border';
-  const inner = w - 4;
-  const side = (row) => fit([p('│ ', bs), ...fit(row, inner), p(' │', bs)], w);
-  const dash = fit([p('├', bs), p('┄'.repeat(w - 2), 'faint'), p('┤', bs)], w);
-  const out = [];
-  // The top edge says how its runs may work: the mode, and whether each waits for your go.
-  const room = w - 7 - chipW(l.kind);
-  const how = ` ${modeName(l.mode)}${l.askFirst ? ' · asks first' : ''}${l.steps ? ` · ${l.steps} steps` : ''}`;
-  const howW = Math.max(0, Math.min([...how].length + 1, room));
-  out.push(fit([p('┌─ ', bs), chip(l.kind), p([...how].length < howW ? `${how} ` : cut(how, howW), 'faint'), p('─'.repeat(Math.max(0, w - 4 - chipW(l.kind) - howW)), bs), p('┐', bs)], w));
-  out.push(side([p(cut(l.name, inner), sel ? 'white b' : 'text')]));
-  const n = l.current ? l.current.n : l.runs.at(-1)?.n ?? 0;
-  out.push(side([p(paceWord(l), 'dim'), p(` · run ${n || '—'}`, 'faint')]));
-  out.push(dash);
-  const c = cycleOf(l, lines, now);
-  // A narrow box has no room for the bars: the step's mark and its note stay.
-  const barW = inner >= 44 ? 8 : inner >= 30 ? 6 : 0;
-  c.steps.forEach((s, i) => out.push(side([p(`${i + 1} `, 'faint'), p(pad(s.name, 8), s.state === 'active' || s.state === 'ask' ? 'white b' : s.state === 'done' ? 'text' : 'faint'), ...(barW ? [...stepBar(s, barW, now), p(' ')] : []), stepGlyph(s, now), p(' '), p(cut(s.note, inner - 12 - barW - (barW ? 1 : 0)), noteStyle(s))])));
-  // Then: again, or its end. A loop with limits says them here (2/5 runs · till 18:30 · $0.40/$1.00).
-  const lim = over(l) ? [] : limitWords(l, { short: true });
-  const back = lim.length ? (l.until ? `pass: done · ${lim.join(' · ')}` : lim.join(' · ')) : c.back ?? '';
-  out.push(side([p(l.until || over(l) ? '  ' : '↺ ', 'faint'), p(cut(back, inner - 2), lim.length ? 'dim' : c.backTone ?? 'faint')]));
-  out.push(dash);
-  const [sw, ss] = stateOf(l, now);
-  // Its last runs as marks, on the right of what it is doing.
-  const mk = marks(l, Math.max(2, Math.min(8, Math.floor((inner - [...sw].length - 2) / 2))), now);
-  out.push(side([p(cut(sw, inner - rowWidth(mk) - 1), ss), p(' '.repeat(Math.max(1, inner - Math.min([...sw].length, inner - rowWidth(mk) - 1) - rowWidth(mk)))), ...mk]));
-  const lw = lastWords(l);
-  out.push(side([p(cut(lw[0], inner), lw[1])]));
-  out.push(fit([p('└', bs), p('─'.repeat(w - 2), bs), p('┘', bs)], w));
-  return out; // 13 rows
-}
-// A row from a map of column → [char, style]; the rest is spaces.
-function plot(cols, cells) {
-  const row = [];
-  let x = 0;
-  for (const c of [...cells.keys()].sort((a, b) => a - b)) {
-    if (c < x || c >= cols) continue;
-    if (c > x) row.push(p(' '.repeat(c - x)));
-    row.push(p(cells.get(c)[0], cells.get(c)[1]));
-    x = c + [...cells.get(c)[0]].length;
-  }
-  return fit(row, cols);
-}
-function drawTree(state, ui, { cols, rows, now, linesOf }) {
-  const out = [header(state, now, cols, 'Loops')];
-  out.push(rule(cols));
-  const bottom = bottomBlock(state, ui, cols, now, [['←→', 'pick'], ['enter', 'watch'], ...KEYS_TAIL]);
+// ---- the cards ----
+function drawCards(state, ui, { cols, rows, now, linesOf }) {
+  const out = [header(state, ui, now, cols, 'Loops'), rule(cols)];
+  const bottom = bottomBlock(state, ui, cols, now, mainKeys(ui));
   const body = rows - out.length - bottom.length;
   const lines = [];
-  lines.push(fit([p('   '), p('■', 'white'), p(' this window   ', 'faint'), p('■', 'debug'), p(' debugging   ', 'faint'), p('■', 'test'), p(' testing   ', 'faint'), p('■', 'web'), p(' the web   ', 'faint'), p('■', 'task'), p(' any other job   ', 'faint'), p('■', 'warn'), p(' needs you   ', 'faint'), p('▮▮▯', 'accent'), p(' the step a run is on', 'faint')], cols));
-  const ww = Math.min(64, cols - 8);
-  const wx = Math.floor((cols - ww) / 2);
-  const cx = wx + Math.floor(ww / 2);
-  const m = state.model;
-  const run = state.loops.filter((l) => l.current && !l.current.needs);
-  const inLine = state.loops.filter((l) => l.queued);
-  const wrow = (row) => fit([p(' '.repeat(wx)), p('│ ', 'white'), ...fit(row, ww - 4), p(' │', 'white')], cols);
-  lines.push(fit([p(' '.repeat(wx)), p('┌─ ', 'white'), p('this window', 'white b'), p(` ${'─'.repeat(ww - 16)}┐`, 'white')], cols));
-  lines.push(wrow([p(cut(`${state.name} · ${state.folder}`, ww - 4), 'text')]));
-  lines.push(wrow([p(m.on ? '● ' : '○ ', m.on ? 'accent' : 'faint'), p(cut(m.on ? `${m.name} ${m.where === 'this Mac' ? 'loaded' : `on ${m.where}`}` : `${m.why || `${m.name} is off`}: the loops wait`, ww - 28), m.on ? 'dim' : 'faint'), p(m.on ? (m.limit > 1 ? ` · up to ${m.limit} runs at once` : ' · one run at a time') : '', 'faint')]));
-  lines.push(wrow([p('now ', 'faint'), p(run.length ? cut(run.map((l) => l.name).join(', '), 24) : 'nothing runs', run.length ? 'accent' : 'dim'), p('   in line ', 'faint'), p(inLine.length ? cut(inLine.map((l) => l.name).join(', '), ww - 46) : 'nobody', inLine.length ? 'text' : 'dim')]));
-  lines.push(fit([p(' '.repeat(wx)), p(`└${'─'.repeat(ww - 2)}┘`, 'white')], cols));
   const n = state.loops.length;
   if (!n) {
-    lines.push(plot(cols, new Map([[cx, ['│', 'border']]])));
-    lines.push(plot(cols, new Map([[cx, ['▼', 'border']]])));
-    const w = Math.min(70, cols - 8);
+    const w = Math.min(78, cols - 8);
     const x = Math.floor((cols - w) / 2);
     const boxRow = (row) => fit([p(' '.repeat(x)), p('│ ', 'border'), ...fit(row, w - 4), p(' │', 'border')], cols);
+    lines.push(blank(cols));
     lines.push(fit([p(' '.repeat(x)), p(`┌${'─'.repeat(w - 2)}┐`, 'border')], cols));
-    lines.push(boxRow([p('No loop yet in this window.', 'text')]));
-    lines.push(boxRow([p('Press ', 'dim'), p('+', 'white b'), p(' or ', 'dim'), p('t', 'white b'), p(' and type one of these, then enter:', 'dim')]));
-    lines.push(boxRow([p('  /loop test 5m', 'white'), p('                 runs the tests every 5 minutes', 'faint')]));
-    lines.push(boxRow([p('  /loop debug', 'white'), p('                   fixes failing tests until they pass', 'faint')]));
-    lines.push(boxRow([p('  /loop web 30m <what to read>', 'white'), p('  reads pages and says what is new', 'faint')]));
-    lines.push(boxRow([p('  /loop 10m <any message>', 'white'), p('       sends your message every 10 minutes', 'faint')]));
+    lines.push(boxRow([p('No loop yet in this window.', 'white b')]));
+    lines.push(boxRow([]));
+    lines.push(boxRow([p('^N', 'white b'), p(' makes one a step at a time: what each run does, how often', 'dim')]));
+    lines.push(boxRow([p('   it runs, and when it stops.', 'dim')]));
+    lines.push(boxRow([]));
+    lines.push(boxRow([p('Or type one of these in the box below, then enter:', 'dim')]));
+    lines.push(boxRow([p('  /loop test 5m', 'white'), p('                  runs the tests every 5 minutes', 'faint')]));
+    lines.push(boxRow([p('  /loop debug', 'white'), p('                    fixes failing tests until they pass', 'faint')]));
+    lines.push(boxRow([p('  /loop web 30m <what to read>', 'white'), p('   reads pages and says what is new', 'faint')]));
+    lines.push(boxRow([p('  /loop 10m <message>', 'white'), p('            sends your message every 10 minutes', 'faint')]));
     lines.push(fit([p(' '.repeat(x)), p(`└${'─'.repeat(w - 2)}┘`, 'border')], cols));
   } else {
-    // Up to four boxes across, the picked one among them.
-    const show = Math.min(n, cols >= 150 ? 5 : cols >= 110 ? 4 : 3);
-    const first = Math.max(0, Math.min(ui.sel - Math.floor(show / 2), n - show));
-    const vis = state.loops.slice(first, first + show);
+    // Three cards across in a wide window (two in a narrow one), the picked one among them.
+    const show = Math.min(n, cols >= 118 ? 3 : 2);
     const gap = 2;
-    const bw = Math.min(40, Math.floor((cols - 4 - (show - 1) * gap) / show));
+    const bw = Math.min(44, Math.floor((cols - 2 - (show - 1) * gap) / show));
+    const first = Math.max(0, Math.min(ui.sel - Math.floor((show - 1) / 2), n - show));
+    const vis = state.loops.slice(first, first + show);
     const x0 = Math.floor((cols - (show * bw + (show - 1) * gap)) / 2);
-    const centres = vis.map((_, i) => x0 + i * (bw + gap) + Math.floor(bw / 2));
-    const lo = Math.min(cx, ...centres), hi = Math.max(cx, ...centres);
-    const branch = (up) => {
-      const cells = new Map();
-      for (let c = lo; c <= hi; c++) cells.set(c, ['─', 'border']);
-      centres.forEach((c) => cells.set(c, [c === lo ? (up ? '└' : '┌') : c === hi ? (up ? '┘' : '┐') : (up ? '┴' : '┬'), 'border']));
-      const at = cells.get(cx)?.[0];
-      cells.set(cx, [lo === hi ? '│' : at === '─' ? (up ? '┬' : '┴') : '┼', 'border']);
-      if (!up && first > 0) { const t = `‹ ${first} more `; if (lo - t.length - 1 > 0) cells.set(lo - t.length - 1, [t, 'faint']); }
-      if (!up && first + show < n) cells.set(hi + 2, [`${n - first - show} more ›`, 'faint']);
-      return plot(cols, cells);
-    };
-    lines.push(branch(false));
-    lines.push(plot(cols, new Map(centres.map((c, i) => [c, ['▼', vis[i].current?.needs ? 'warn' : vis[i].current ? 'accent' : 'border']]))));
-    const boxes = vis.map((l, i) => loopBox(l, linesOf(l, l.current?.n ?? l.runs.at(-1)?.n ?? 0), first + i === ui.sel, bw, now));
-    for (let y = 0; y < 13; y++) lines.push(fit([p(' '.repeat(x0)), ...boxes.flatMap((b, i) => [...(i ? [p(' '.repeat(gap))] : []), ...b[y]])], cols));
-    lines.push(branch(true));
+    const cards = vis.map((l, i) => card(l, linesOf(l, l.current?.n ?? l.runs.at(-1)?.n ?? 0), first + i === ui.sel, bw, now));
+    for (let y = 0; y < CARD_H; y++) lines.push(fit([p(' '.repeat(x0)), ...cards.flatMap((c, i) => [...(i ? [p(' '.repeat(gap))] : []), ...c[y]])], cols));
+    const less = first > 0 ? `  ‹ ${first} more` : '';
+    const more = first + show < n ? `${n - first - show} more ›  ` : '';
+    lines.push(fit([p(less, 'faint'), p(' '.repeat(Math.max(0, cols - less.length - more.length))), p(more, 'faint')], cols));
   }
-  // What the loops said, newest last: it takes the rows that are left.
+  // What happened, newest first: it takes the rows that are left.
   const logH = body - lines.length;
-  if (logH >= 3) {
-    const events = state.log.filter((e) => e.kind !== 'start').slice(-(logH - 2));
-    lines.push(fit([p('  ┌── ', 'border'), p('loop log', 'dim'), p(` ${'─'.repeat(cols - 18)}┐`, 'border')], cols));
-    for (let i = 0; i < logH - 2; i++) lines.push(fit([p('  │ ', 'border'), ...fit(events[i] ? logPieces(state, events[i], cols - 8) : (i === 0 && !events.length ? [p('nothing yet', 'faint')] : []), cols - 8), p(' │', 'border')], cols));
-    lines.push(fit([p(`  └${'─'.repeat(cols - 6)}┘`, 'border')], cols));
+  if (logH >= 2) {
+    const events = state.log.filter((e) => e.kind !== 'start').slice(-(logH - 1)).reverse();
+    lines.push(fit([p('  What happened', 'white b'), p('   newest first', 'faint')], cols));
+    for (let i = 0; i < logH - 1; i++) lines.push(events[i] ? fit([p('  '), ...fit(logPieces(state, events[i], cols - 4), cols - 4)], cols) : i === 0 ? fit([p('  nothing yet', 'faint')], cols) : blank(cols));
   }
   for (let i = 0; i < body; i++) out.push(lines[i] ?? blank(cols));
-  out.push(...bottom);
-  return out;
+  return [...out, ...bottom];
 }
 
-// ---- one run full size (enter), the chat box under it ----
+// ---- one run full size (^G), the box under it ----
 function drawWatch(state, ui, { cols, rows, now, linesOf }) {
   const l = state.loops.find((x) => x.id === ui.watch.id) ?? state.loops[ui.sel];
-  const out = [header(state, now, cols, 'Loops')];
+  const out = [header(state, ui, now, cols, 'Loops')];
   if (!l) { while (out.length < rows) out.push(blank(cols)); return out; }
   const run = ui.watch.n ? [...l.runs, ...(l.current ? [l.current] : [])].find((r) => r.n === ui.watch.n) : (l.current ?? l.runs.at(-1));
   const live = run && l.current && run.n === l.current.n;
   const said = !run || live ? null : run.undone ? [`↶ put back${run.undone.put?.length ? `: ${run.undone.put.join(', ')}` : ''}`, 'dim'] : run.redo ? [`↺ ${run.summary}`, 'dim'] : [`${run.ok ? '✓' : '✗'} ${run.summary}`, run.ok ? 'ok' : 'bad'];
   out.push(fit([p('  '), chip(l.kind), p(' '), p(l.name, 'white b'), p(run ? `  ·  run ${run.n}  ·  ${live ? `live, ${dur(now - run.startedAt)}` : `${hm(run.startedAt)}, took ${dur(run.endedAt - run.startedAt)}  ·  `}` : '  ·  no run yet', 'dim'), ...(said ? [p(cut(said[0], 60), said[1])] : [])], cols));
   out.push(rule(cols));
-  const bottom = bottomBlock(state, ui, cols, now, [['esc', 'back to the loops', 'back'], ['↑↓', 'scroll'], ['←→', 'older / newer run', 'other runs'], ['t', 'type'], ['x', 'start over', 'redo'], ['u', 'undo it', 'undo'], ['r', 'run now', 'run'], ['p', 'pause'], ['s', 'stop']]);
+  const bottom = bottomBlock(state, ui, cols, now, [['esc', 'back to the cards', 'back'], ['↑↓', 'scroll'], ['←→', 'older / newer run', 'other runs'], ['^X', 'start over', 'redo'], ['^B', 'undo it', 'undo'], ['^R', 'run now', 'run'], ['^P', 'pause'], ['^S', 'stop']]);
   const body = rows - out.length - bottom.length;
   const lines = runLines(l, run, run ? linesOf(l, run.n) : [], cols - 2, now, { full: true });
   const scroll = Math.max(0, Math.min(ui.watch.scroll ?? 0, lines.length - body));
@@ -456,22 +396,22 @@ function drawWatch(state, ui, { cols, rows, now, linesOf }) {
   return out;
 }
 
-// ---- the form: a new loop (+) or a loop's rules (e) ----
+// ---- the form: every rule of a new loop or of one loop (^O) ----
 const ROW_WORD = { message: 'What each run does', kind: 'Kind', every: 'How often', runs: 'Stop after', stopAt: 'Stop at', cap: 'Spending cap', mode: 'Mode', steps: 'Steps a run', askFirst: 'Ask first' };
 const ROW_HELP = {
-  kind: (f) => (f.kindSet ? 'sets the four steps its box shows' : 'guessed from the message · ←→ to change'),
+  kind: (f) => (f.kindSet ? 'what its runs are told to do' : 'guessed from the message · ←→ to change'),
   every: (f, kind) => (kind === 'debug' ? 'until done: again 15 s after a miss' : 'type 7m, 90s or 2h · own pace ≈ every 10m'),
   runs: () => 'then it ends · start-overs do not count',
   stopAt: () => 'a time like 18:30 or 6pm, or a while like 2h',
   cap: () => 'on a paid service · the window\'s $5 still holds',
   mode: () => 'what a run may do without asking you',
   steps: () => 'a run stops after this many tool steps',
-  askFirst: () => 'each run waits for your y on the board',
+  askFirst: () => 'each run waits for your y',
 };
 const valueWord = (row, v) => (row === 'kind' ? kindWord(v) : row === 'mode' ? modeName(v) : row === 'askFirst' ? (v ? 'on' : 'off') : row === 'every' && /^\d/.test(String(v)) ? `every ${v}` : row === 'runs' && /^\d+$/.test(String(v)) ? `${v} run${v === '1' ? '' : 's'}` : row === 'steps' && /^\d+$/.test(String(v)) ? `${v} steps` : String(v));
 function drawForm(state, ui, { cols, rows, now }) {
   const f = ui.form;
-  const out = [header(state, now, cols, 'Loops')];
+  const out = [header(state, ui, now, cols, 'Loops')];
   out.push(rule(cols));
   const w = Math.min(100, cols - 6);
   const x = Math.floor((cols - w) / 2);
@@ -480,7 +420,7 @@ function drawForm(state, ui, { cols, rows, now }) {
   const edge = (t) => fit([p(' '.repeat(x)), p(t, 'accent')], cols);
   const side = (row, bg = null) => fit([p(' '.repeat(x)), p('│ ', 'accent'), ...fit(row, inner, bg), p(' │', 'accent')], cols);
   const l = f.id ? state.loops.find((y) => y.id === f.id) : null;
-  const title = f.id ? ` Loop ${f.id} · ${cut(f.name ?? l?.name ?? '', 40)}${f.again ? ' · ended: saving starts it again' : ''} ` : ' New loop ';
+  const title = f.id ? ` Loop ${f.id} · ${cut(f.name ?? l?.name ?? '', 40)}${f.again ? ' · ended: saving starts it again' : ''} ` : ' New loop · every rule ';
   lines.push(edge(`┌─${title}${'─'.repeat(Math.max(0, w - 3 - [...title].length))}┐`));
   lines.push(side([]));
   const v = f.fields;
@@ -508,7 +448,7 @@ function drawForm(state, ui, { cols, rows, now }) {
   if (f.error) lines.push(side([p('  ! ', 'warn b'), p(cut(f.error, inner - 4), 'warn')]));
   else {
     lines.push(side([p('  '), p(cut(`Its runs work right in ${state.folder}, one at a time on ${state.model?.where ?? 'this Mac'}.`, inner - 2), 'faint')]));
-    lines.push(side([p('  '), p(cut(`It ends when this window closes, or after ${state.maxHours ?? 24} hours. Each run keeps a copy, so u can undo it.`, inner - 2), 'faint')]));
+    lines.push(side([p('  '), p(cut(`It ends when this window closes, or after ${state.maxHours ?? 24} hours. Each run keeps a copy, so ^B can undo it.`, inner - 2), 'faint')]));
   }
   lines.push(side([]));
   const go = f.id ? (f.again ? ' enter  Save and start again ' : ' enter  Save ') : ' enter  Start the loop ';
@@ -523,16 +463,121 @@ function drawForm(state, ui, { cols, rows, now }) {
 }
 const FORM_ROW_LIST = ['message', 'kind', 'every', 'runs', 'stopAt', 'cap', 'mode', 'steps', 'askFirst'];
 
+// ---- the setup: a new loop a step at a time (^N; /loops with no loop yet) ----
+// What each run does → how often → when it stops → a read-back, then enter starts it. The rows'
+// values are the form's words (loops.mjs rulesOf reads them).
+export const SETUP_EXAMPLES = ['run the tests and say what fails', 'fix the failing tests until they all pass', 'read the Bun releases page and tell me when there is a new version', 'check the build and the lint, change nothing'];
+export function setupChoices(step, kind, now = Date.now()) {
+  if (step === 'often') return [
+    ...(kind === 'debug' ? [{ w: 'until the tests pass', note: 'again 15 s after a miss', every: 'until done' }] : []),
+    { w: 'every 5 minutes', every: '5m' }, { w: 'every 10 minutes', every: '10m' }, { w: 'every 30 minutes', every: '30m' }, { w: 'every hour', every: '1h' },
+    { w: 'at its own pace', note: 'it decides; about every 10 minutes', every: 'own pace' },
+  ];
+  return [
+    { w: 'never', note: 'it ends when this window closes, or after 24 hours', runs: 'no limit', stopAt: 'none' },
+    { w: 'after 5 runs', runs: '5', stopAt: 'none' }, { w: 'after 10 runs', runs: '10', stopAt: 'none' }, { w: 'after 20 runs', runs: '20', stopAt: 'none' },
+    { w: 'in 2 hours', note: `at ${hm(now + 7_200_000)}`, runs: 'no limit', stopAt: '2h' },
+  ];
+}
+const SETUP_STEPS = ['What it does', 'How often', 'When it stops', 'Start'];
+function drawSetup(state, ui, { cols, rows, now }) {
+  const su = ui.setup;
+  const out = [header(state, ui, now, cols, 'New loop'), rule(cols), blank(cols)];
+  const WD = Math.min(100, cols - 6);
+  const X = Math.floor((cols - WD) / 2);
+  const at = { task: 0, unclear: 0, often: 1, stop: 2, ready: 3 }[su.step];
+  const row = (pieces, bg = null) => out.push(fit([p(' '.repeat(X)), ...fit(pieces, WD, bg)], cols));
+  const prog = [];
+  SETUP_STEPS.forEach((name, i) => { if (i) prog.push(p('  ──  ', 'faint')); prog.push(p(i < at ? '● ' : i === at ? '◉ ' : '○ ', i < at ? 'ok' : i === at ? 'accent' : 'faint'), p(name, i === at ? 'white b' : i < at ? 'text' : 'faint')); });
+  row(prog);
+  row([p('  '), p([at > 0 ? cut(su.name ?? '', 40) : '', at > 1 ? su.words?.every : '', at > 2 ? su.words?.stop : ''].filter(Boolean).join('  ·  '), 'faint')]);
+  out.push(blank(cols));
+  const box = (text, ph, bs, title, live) => {
+    const room = WD - 8;
+    const shown = [...text].length > room ? `…${[...text].slice(-(room - 1)).join('')}` : text;
+    row([p('╭─', bs), p(title, 'white b'), p('─'.repeat(Math.max(0, WD - 3 - [...title].length)), bs), p('╮', bs)]);
+    row([p('│', bs), ...fit([p(' › ', 'accent b'), p(shown, 'white'), p(live && Math.floor(now / 500) % 2 ? '▏' : ' ', 'accent'), ...(text ? [] : [p(ph, 'faint')])], WD - 2), p('│', bs)]);
+    row([p(`╰${'─'.repeat(WD - 2)}╯`, bs)]);
+  };
+  // numbered: the question about an unclear task, where 1–3 pick; the other steps take typed words.
+  const list = (choices, numbered = false) => choices.forEach((c, i) => row([p(i === su.pick ? ' ▸ ' : '   ', 'accent b'), p(numbered ? `${i + 1}  ` : '', 'faint'), p(pad(c.w ?? c.label, 44), i === su.pick ? 'white b' : 'text'), p(c.note ?? '', 'faint')], i === su.pick ? 'sel' : null));
+  const error = () => out.push(su.error ? fit([p(' '.repeat(X)), p('! ', 'warn b'), p(su.error, 'warn')], cols) : blank(cols));
+  if (su.step === 'task' || su.step === 'unclear') {
+    row([p('What should each run do?', 'white b')]);
+    row([p('Say it the way you would ask in the chat. Each run is a fresh conversation that gets these words.', 'dim')]);
+    out.push(blank(cols));
+    box(su.text, SETUP_EXAMPLES[0], su.step === 'unclear' ? 'warn' : 'accent', ' each run does ', su.step === 'task');
+    error();
+    if (su.step === 'unclear') {
+      row([p('! ', 'warn b'), p(su.unclear.why, 'warn')]);
+      out.push(blank(cols));
+      list(su.unclear.options, true);
+    } else {
+      out.push(blank(cols));
+      row([p('For example', 'faint'), p('   tab puts one in', 'faint')]);
+      SETUP_EXAMPLES.forEach((e, i) => row([p(i === su.ex ? ' › ' : '   ', 'accent'), p(e, i === su.ex ? 'text' : 'dim')]));
+    }
+  } else if (su.step === 'often' || su.step === 'stop') {
+    const often = su.step === 'often';
+    row([p(often ? 'How often should it run?' : 'When should it stop?', 'white b')]);
+    row([p(often ? `${kindWord(su.fields.kind)}. The next run counts from the end of the last one.` : 'It also stops when this window closes, after 24 hours at most, or when a run says its job is done.', 'dim')]);
+    out.push(blank(cols));
+    list(setupChoices(su.step, su.fields.kind, now));
+    out.push(blank(cols));
+    row([p('or type your own: ', 'dim'), p(su.custom, 'white'), p(Math.floor(now / 500) % 2 ? '▏' : ' ', 'accent'), ...(su.custom ? [] : [p(often ? '7m, 90s, 2h' : 'a number of runs (20), or a time (18:30, 2h)', 'faint')])]);
+    error();
+  } else {
+    row([p('Ready to start', 'white b')]);
+    row([p('Read it once more: enter starts the loop, and its first run starts right away.', 'dim')]);
+    out.push(blank(cols));
+    const lab = (t) => p(pad(t, 12), 'faint');
+    const side = (pieces) => row([p('│ ', 'accent'), ...fit(pieces, WD - 4), p(' │', 'accent')]);
+    row([p(`┌${'─'.repeat(WD - 2)}┐`, 'accent')]);
+    wrapWords(su.fields.message, WD - 18).slice(0, 2).forEach((t, i) => side([lab(i ? '' : 'Each run'), p(t, 'white')]));
+    side([lab('How often'), p(`${su.words.every} · the first run starts now`, 'text')]);
+    side([lab('Stops'), p(su.words.stop === 'never' ? 'when this window closes, or after 24 hours' : `${su.words.stop}, or when this window closes`, 'text')]);
+    side([lab('Works in'), p(cut(`${state.folder} · ${modeName(su.fields.mode)}, this window's mode`, WD - 18), 'text')]);
+    side([lab('Undo'), p('each run keeps a copy, so ^B puts back what it changed', 'text')]);
+    row([p(`└${'─'.repeat(WD - 2)}┘`, 'accent')]);
+    out.push(blank(cols));
+    row([p(' enter ', 'white b on sel'), p('  Start the loop', 'white'), p('     ← back     esc cancel     ^O more rules: mode, cap, steps, ask first', 'dim')]);
+  }
+  while (out.length < rows - 1) out.push(blank(cols));
+  const keys = su.step === 'task' ? [['enter', 'next'], ['tab', 'an example'], ['^O', 'every rule at once', 'all rules'], ['esc', 'cancel']]
+    : su.step === 'unclear' ? [['1–3', 'pick'], ['↑↓', 'move'], ['enter', 'this one'], ['←', 'change the words'], ['esc', 'cancel']]
+    : su.step === 'ready' ? [['enter', 'start'], ['←', 'back'], ['^O', 'more rules'], ['esc', 'cancel']]
+    : [['enter', 'next'], ['↑↓', 'pick'], ['type', 'your own'], ['←', 'back'], ['esc', 'cancel']];
+  return [...out.slice(0, rows - 1), keysLine(cols, keys, ui.toast, now)];
+}
+
+// ---- the coding window's line above the prompt: each open loop in a few words ----
+export function loopsLine(state, now) {
+  const open = state.loops.filter((l) => !over(l));
+  if (!open.length) return null;
+  const segs = [p(' ↻ ', 'accent b')];
+  open.forEach((l, i) => {
+    if (i) segs.push(p('  ·  ', 'faint'));
+    const needs = waitsForYou(l);
+    const [g, gs] = needs ? ['!', 'warn b'] : l.current ? [spin(now), 'accent'] : l.state === 'paused' ? ['‖', 'dim'] : ['○', 'dim'];
+    const what = l.current?.needs ? 'asks you' : l.stuck && !l.current ? 'is stuck' : l.ready && !l.current ? 'waits for your go' : l.current ? dur(now - l.current.startedAt) : l.state === 'paused' ? 'paused' : l.state === 'off' ? 'waits' : l.queued ? 'next in line' : `at ${hm(l.nextAt)}`;
+    segs.push(p(g, gs), p(` ${cut(l.name, open.length > 2 ? 20 : 30)} `, 'text'), p(what, needs ? 'warn' : 'dim'));
+  });
+  segs.push(p('   /loops opens them', 'faint'));
+  return segs;
+}
+
 export function drawBoard(state, ui, size) {
   const { cols, rows } = size;
   if (cols < MIN_COLS || rows < MIN_ROWS) {
     const out = [fit([p(`  This window is ${cols} × ${rows}. The loop board needs ${MIN_COLS} × ${MIN_ROWS} or more: make it bigger.`, 'warn')], cols)];
+    if (ui.inApp) out.push(fit([p('  esc goes back to the chat.', 'dim')], cols));
     while (out.length < rows) out.push(blank(cols));
     return out;
   }
   if (ui.view === 'form' && ui.form) return drawForm(state, ui, size);
+  if (ui.view === 'setup' && ui.setup) return drawSetup(state, ui, size);
   const watching = ui.view === 'watch' || (ui.view === 'confirm' && ui.confirm?.back === 'watch');
-  return (watching ? drawWatch(state, ui, size) : drawTree(state, ui, size)).slice(0, rows);
+  return (watching ? drawWatch(state, ui, size) : drawCards(state, ui, size)).slice(0, rows);
 }
 
 // A row as terminal colours.

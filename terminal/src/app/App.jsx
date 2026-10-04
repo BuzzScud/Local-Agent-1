@@ -57,8 +57,9 @@ import { studioSummary } from '../agent/studio.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory, firstMode, keepsLastMode } from './store.mjs';
 import { readRecord as sessionRecord, askJump, DETACH_LABEL } from './sessions.mjs';
 import { openJumpBox as jumpBox, jumpKey, MAC_NAME } from './jump-box.mjs';
-import { Loops, parseLoop, describe as describeLoop, LOOP_HELP, isLoopCommand } from './loops.mjs';
-import { openBoardWindow } from './loops-board.mjs';
+import { Loops, parseLoop, describe as describeLoop, LOOP_HELP, isLoopCommand, unclearOf } from './loops.mjs';
+import { newUi as newLoopsUi, handleKey as loopsHandleKey, showReply as loopsReply, openSetup as openLoopsSetup, runReader } from './loops-board.mjs';
+import { drawBoard as drawLoops, loopsLine } from './loops-draw.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
 import { rulesFor, addRule, startModeFor } from './perm-store.mjs';
@@ -248,6 +249,12 @@ export function App({ opts, win, onRestart }) {
   const [agentsView, setAgentsView] = useState(null);
   const [agentsNow, setAgentsNow] = useState(() => Date.now());
   const agentsSize = useRef(null); // the window's size before /agents grew it
+  // /loops: the loop board as this window's own screen (loops-board.mjs keys, loops-draw.mjs rows),
+  // shown over the chat while loopsOn; loopsTick draws it again (its spinners, a key pressed).
+  const [loopsOn, setLoopsOn] = useState(false);
+  const [, setLoopsTick] = useState(0);
+  const loopsUi = useRef(null);
+  const loopsSize = useRef(null); // the window's size before /loops grew it
   // /model's Effort row is the highlighted model's own levels (1 Oct 2026: K2 Horizon and Bonsai have Medium, Gemma
   // and Qwen do not). The level you chose is kept by name (levelId, on), so moving the cursor never changes it; a model
   // without it shows its nearest (thinkingLevel: Medium is High there). A remote's row has no levels: the model in use's.
@@ -590,7 +597,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, model, catalog };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
@@ -1044,10 +1051,13 @@ export function App({ opts, win, onRestart }) {
   const busyNow = () => S.current.live !== IDLE || agent.busy || S.current.starting;
 
   // Loops (/loop, loops.mjs): made in this window and ended with it. Each run is a process of its
-  // own; the board (/loops) is a Terminal window of its own.
+  // own; the board (/loops) is this window's own screen, and a line above the prompt keeps them in sight.
   const loopsRef = useRef(null);
-  const loopsSeen = useRef({ board: false, asked: new Set(), ended: new Set() });
+  const loopsSeen = useRef({ asked: new Set(), ended: new Set() });
   const [loopsBadge, setLoopsBadge] = useState(null);
+  const [loopsSegs, setLoopsSegs] = useState(null);
+  const loopsSegsKey = useRef('');
+  const loopsLines = useRef(null);
   // The footer's count: the loops still open, and whether one waits for you.
   const loopsBadgeOf = (m) => { const open = m.open.length, need = m.needsYou.length + m.stuck.length + m.ready.length; return open ? `↻ ${open} loop${open === 1 ? '' : 's'}${need ? ` · ${need} needs you` : ''}` : null; };
   const loopsOf = () => {
@@ -1077,27 +1087,31 @@ export function App({ opts, win, onRestart }) {
       if (!m) return;
       m.tick();
       setLoopsBadge(loopsBadgeOf(m));
+      // The line above the prompt, drawn again only when it changed.
+      const segs = loopsLine({ loops: m.loops }, Date.now());
+      const key = JSON.stringify(segs);
+      if (key !== loopsSegsKey.current) { loopsSegsKey.current = key; setLoopsSegs(segs); }
       // A loop that needs you, and one that ended by itself, each say so here once.
       const seen = loopsSeen.current;
       for (const l of m.needsYou) {
         const key = `${l.id}-${l.current.n}-${l.current.needs.id}`;
         if (seen.asked.has(key)) continue;
         seen.asked.add(key);
-        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.current.needs.text} Answer on the loop board (/loops).`, tone: 'warn' });
+        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.current.needs.text} /loops to answer it.`, tone: 'warn' });
       }
       // A debugging loop that stopped getting closer waits for a hint (loops.mjs stuckWhy).
       for (const l of m.stuck) {
         const key = `${l.id}-${l.runs.at(-1)?.n}-stuck`;
         if (seen.asked.has(key)) continue;
         seen.asked.add(key);
-        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.stuck}. On the loop board (/loops), type a hint to send it on with, r tries again as it is, s stops it.`, tone: 'warn' });
+        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.stuck}. In /loops, type a hint to send it on with; ^R tries again as it is, ^S stops it.`, tone: 'warn' });
       }
       // Ask first: a run that waits for your go says so once.
       for (const l of m.ready) {
         const key = `${l.id}-${l.ready.n}-ready`;
         if (seen.asked.has(key)) continue;
         seen.asked.add(key);
-        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}): run ${l.ready.n} is ready and waits for your go. y on the loop board (/loops), or /loop ${l.id} go · /loop ${l.id} skip.`, tone: 'warn' });
+        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}): run ${l.ready.n} is ready and waits for your go. In /loops, type y; or /loop ${l.id} go · /loop ${l.id} skip.`, tone: 'warn' });
       }
       for (const l of m.loops) {
         if (l.state !== 'done' || seen.ended.has(l.id)) continue;
@@ -3033,6 +3047,45 @@ export function App({ opts, win, onRestart }) {
     try { process.stdout.write(resizeSeq(was.columns, was.rows)); } catch { /* it stays big */ }
   };
   const openAgentsTree = () => { setAgentsView('tree'); agentsGrow(); };
+  // /loops: the board takes this window, grown to fit three cards where the terminal follows that
+  // (as /agents does), and esc gives the window back. setup: an unclear /loop line to ask about.
+  const openLoops = ({ setup = null } = {}) => {
+    const m = loopsOf();
+    if (!loopsUi.current) loopsUi.current = newLoopsUi({ inApp: true });
+    const ui = loopsUi.current;
+    if (setup || (!m.loops.length && ui.view !== 'setup' && ui.view !== 'form')) openLoopsSetup(ui, { mode: agent.mode, ...(setup ?? {}) });
+    if (canResize() && !loopsSize.current) {
+      const cur = { columns: process.stdout.columns, rows: process.stdout.rows };
+      const to = growTo(cur, [120, 36]);
+      if (to) { loopsSize.current = cur; try { process.stdout.write(resizeSeq(to[0], to[1])); } catch { /* the window stays as it is */ } }
+    }
+    setLoopsOn(true);
+  };
+  const closeLoops = () => {
+    setLoopsOn(false);
+    const was = loopsSize.current;
+    loopsSize.current = null;
+    if (was && canResize()) { try { process.stdout.write(resizeSeq(was.columns, was.rows)); } catch { /* it stays big */ } }
+  };
+  // A key while /loops has the window, as the board's own key names (loops-board.mjs keysOf).
+  const loopsKey = (ch, key) => {
+    const m = loopsRef.current, ui = loopsUi.current;
+    if (!m || !ui) { closeLoops(); return; }
+    const keys = key.return ? ['enter'] : key.escape ? ['esc'] : key.backspace || key.delete ? ['backspace'] : key.upArrow ? ['up'] : key.downArrow ? ['down'] : key.leftArrow ? ['left'] : key.rightArrow ? ['right']
+      : key.tab ? [key.shift ? 'shiftTab' : 'tab'] : key.ctrl && /^[a-z]$/i.test(ch) ? [`^${ch.toUpperCase()}`] : key.meta ? [] : [...String(ch ?? '')].filter((c) => c >= ' ');
+    const b = {
+      state: m.snapshot(), ui, quit: closeLoops,
+      // What the board sends goes straight to the loops here (the board in another terminal sends a file).
+      send: (cmd) => {
+        const r = m.apply(cmd);
+        if (r?.then) r.then((u) => { loopsReply(ui, m.loops, u); setLoopsTick((x) => x + 1); });
+        else loopsReply(ui, m.loops, r);
+        setLoopsBadge(loopsBadgeOf(m));
+      },
+    };
+    for (const k of keys) { loopsHandleKey(b, k); b.state = m.snapshot(); }
+    setLoopsTick((x) => x + 1);
+  };
   const closeAgents = () => { setAgentsView(null); agentsGiveBack(); };
   const startAgents = (request, { demo = false, saved = null } = {}) => {
     const driver = demo ? demoDriver() : agentDriver(agent);
@@ -3185,16 +3238,13 @@ export function App({ opts, win, onRestart }) {
       }
       case 'loop':
       case 'loops': {
-        // /loop [debug|test|web] [10m] [message]: a message sent again by itself (loops.mjs). /loops: its board.
+        // /loop [debug|test|web] [10m] [message]: a message sent again by itself (loops.mjs). /loops: its
+        // board, as this window's screen; with no loop yet, the setup that makes one a step at a time.
         const m = loopsOf();
         const a = arg.trim();
-        const board = () => { m.save(); loopsSeen.current.board = true; return openBoardWindow(m.pid); };
-        if (cmd === 'loops' || /^(board|open)$/i.test(a)) {
-          push({ type: 'note', text: board() ? 'The loop board opened in a Terminal window of its own. q closes it; the loops stay with this window.' : 'Open the loop board from another terminal window: coding loops', tone: 'dim' });
-          break;
-        }
+        if (cmd === 'loops' || /^(board|open)$/i.test(a) || (!a && !m.loops.length)) { openLoops(); break; }
         if (!a || /^list$/i.test(a)) {
-          push({ type: 'note', text: m.loops.length ? ['Loops of this window (they end when it closes) · /loops opens the board:', ...m.loops.map((l) => `  ${l.id}. ${l.name} · ${describeLoop(l)}`), `Change one: ${LOOP_HELP}`].join('\n') : '/loop 10m <message> sends a message again every 10 minutes. /loop test 5m runs the tests, /loop debug fixes failing tests until they pass, /loop web 30m <what to read> reads pages. /loops opens the board, where + makes a loop with all its rules; /loop stop ends them.', tone: 'dim' });
+          push({ type: 'note', text: m.loops.length ? ['Loops of this window (they end when it closes) · /loops opens the board:', ...m.loops.map((l) => `  ${l.id}. ${l.name} · ${describeLoop(l)}`), `Change one: ${LOOP_HELP}`].join('\n') : '/loop 10m <message> sends a message again every 10 minutes. /loop test 5m runs the tests, /loop debug fixes failing tests until they pass, /loop web 30m <what to read> reads pages. /loops opens the board, where ^N makes a loop a step at a time; /loop stop ends them.', tone: 'dim' });
           break;
         }
         const sub = /^(stop|pause|run)\s*(all|\d+)?$/i.exec(a);
@@ -3213,12 +3263,14 @@ export function App({ opts, win, onRestart }) {
           if (r?.then) r.then(said); else said(r);
           break;
         }
+        // A task the rules cannot read well ("test5m", a single word) is asked about first, in the board's setup.
+        const unclear = unclearOf(a);
+        if (unclear) { openLoops({ setup: { text: a, unclear } }); break; }
         const p = parseLoop(a);
         if (p.error) { push({ type: 'note', text: p.error, tone: 'warn' }); break; }
         const l = m.add(p, { folder: agent.cwd, mode: agent.mode });
         setLoopsBadge(loopsBadgeOf(m));
-        const opened = !loopsSeen.current.board && board();
-        push({ type: 'note', text: `↻ Loop ${l.id} started: ${l.name} · ${describeLoop(l)}${p.note}. Its runs work in this folder, in ${modeWord(agent.mode)}, and it ends when this window closes. ${opened ? 'The loop board opened in a Terminal window of its own.' : '/loops opens the board.'}`, tone: 'dim' });
+        push({ type: 'note', text: `↻ Loop ${l.id} started: ${l.name} · ${describeLoop(l)}${p.note}. Its runs work in this folder, in ${modeWord(agent.mode)}, and it ends when this window closes. /loops shows it.`, tone: 'dim' });
         break;
       }
       case 'jumptomac': {
@@ -3976,7 +4028,7 @@ export function App({ opts, win, onRestart }) {
     if (isMouseText(ch)) return; // the mouse's reports are handled above, never typed
     const cur = S.current;
     const arrow = (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) && !key.shift && !key.meta && !key.ctrl;
-    if (arrow && !cur.tooSmall && !cur.perm && !cur.picker && !(cur.btw && !cur.answerWait) && !waitRef.current) {
+    if (arrow && !cur.tooSmall && !cur.perm && !cur.picker && !(cur.btw && !cur.answerWait) && !waitRef.current && !cur.loopsOn) {
       arrowsRef.current.push(key);
       if (arrowsRef.current.length === 1) queueMicrotask(flushArrows);
       return;
@@ -3997,6 +4049,8 @@ export function App({ opts, win, onRestart }) {
       setPopup(null);
       if (key.escape || key.return || (key.ctrl && ch === 'c')) return;
     }
+    // /loops has the window: every key is the board's (typing goes in its box), but ctrl+c.
+    if (cur.loopsOn && !cur.perm && !cur.picker && !cur.answerWait && !(key.ctrl && ch === 'c')) { loopsKey(ch, key); return; }
     // /agents' tree has the window: its keys first (a permission prompt or a question shows over it).
     if (cur.agentsView === 'tree' && agentsRef.current && !cur.perm && !cur.picker && !cur.answerWait) {
       if (agentsKey(ch, key)) return;
@@ -4499,9 +4553,26 @@ export function App({ opts, win, onRestart }) {
     return () => clearInterval(id);
   }, [agentsMoving, agentsView, agentsShown]);
   const agentsLiveLine = agentsState && !agentsShown && agentsView === 'chat' ? agentsLine(agentsState, agentsNow) : null;
+  // /loops: the board has the window (a question of the window's own shows over it, in the chat), and
+  // each switch draws the window again, as /agents' does. It is drawn about 7 times a second while shown.
+  const loopsShown = loopsOn && Boolean(loopsRef.current) && !perm && !picker && !answerWait && !popup && !agentsShown;
+  const loopsWas = useRef(false);
+  useEffect(() => {
+    if (loopsWas.current === loopsShown) return;
+    loopsWas.current = loopsShown;
+    win?.clear();
+  }, [loopsShown]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!loopsShown) return undefined;
+    const id = setInterval(() => setLoopsTick((x) => x + 1), 150);
+    return () => clearInterval(id);
+  }, [loopsShown]);
+  if (loopsShown && !loopsLines.current) loopsLines.current = runReader(loopsRef.current.home, loopsRef.current.pid);
+  const loopsFrame = loopsShown ? drawLoops(loopsRef.current.snapshot(), loopsUi.current, { cols: columns ?? 100, rows: Math.max(10, (rows ?? 40) - 1), now: Date.now(), linesOf: loopsLines.current }) : null;
   const app = {
     sessionTokens: sessionTokens.current,
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
+    loopsFrame, loopsLine: loopsShown ? null : loopsSegs,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip: tipOnPage ? null : tip,
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,

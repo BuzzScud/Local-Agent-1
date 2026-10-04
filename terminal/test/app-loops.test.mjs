@@ -1,6 +1,6 @@
 // Loops end to end (src/app/loops.mjs, loop-run.mjs, loops-board.mjs), with a stand-in model:
 // one run as its window starts it (it asks, takes a note, ends the loop), the half-fix a run may
-// keep, and the app itself in a pseudo-terminal with its board in a second one.
+// keep, and the app itself in a pseudo-terminal with its board in its own window (and in a second one).
 // What a loop is and when it runs, without the app: loops.test.mjs.
 import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, realpathSync } from 'node:fs';
@@ -175,8 +175,8 @@ test('a loop\'s run keeps a half-fix when fewer tests fail and none fails newly;
   }
 }, T * 2);
 
-// ---- the app, and its board in a second terminal ----
-test('/loop in the app: the loop starts and the footer counts it; its run asks on the board, a note and "always" reach it, the next run is not asked; /loop lists and stops; quitting ends the loops and removes their folder', async () => {
+// ---- the app, and its board in its own window (/loops) ----
+test('/loop in the app: the setup with no loop yet, test5m asked about, a loop and its line above the prompt; /loops in this window answers it, a note and "always" reach it, ^G shows its run; /loop lists and stops; quitting ends the loops and removes their folder', async () => {
   const { cwd, env } = setup();
   const E = { ...env, AGENTIC_LOOP_MIN_SECS: '1' };
   // Every run wants to make a file (which asks in Manual mode), then says so; a note gets "Noted."
@@ -191,48 +191,65 @@ test('/loop in the app: the loop starts and the footer counts it; its run asks o
   const dir = join(env.AGENTIC_HOME, 'loops');
   let whileOpen = [];
   try {
-    const app = runInPty({ cwd, env: E, args: ['--url', fake.url, '--no-flows'], cols: 120, rows: 40, timeoutMs: 110_000, steps: [
+    const app = runInPty({ cwd, env: E, args: ['--url', fake.url, '--no-flows'], cols: 124, rows: 40, timeoutMs: 120_000, steps: [
       { wait: '? for shortcuts' },
-      { type: '/loop' }, { key: 'enter' }, { wait: '/loop 10m <message> sends a message again' },
-      { type: '/loop 3s make a file called made.txt' }, { key: 'enter' }, { wait: 'Loop 1 started' }, { sleep: 300 }, { snapshot: 'started' },
-      { wait: 'needs you: May it run: touch made.txt', ms: 25_000 }, { sleep: 300 }, { snapshot: 'needs' },
-      // The board, in its own terminal, answers; the second run is then not asked and ends by itself.
-      { waitGone: '1 needs you', ms: 30_000 },
-      { sleep: 9000 },
+      // /loop with no loop yet: the setup, in this window; an unclear task is asked about; esc twice is the chat again.
+      { type: '/loop' }, { key: 'enter' }, { wait: 'What should each run do?' }, { sleep: 300 }, { snapshot: 'setup' },
+      { type: 'test5m' }, { key: 'enter' }, { wait: 'looks like two things typed together' }, { sleep: 300 }, { snapshot: 'unclear' },
+      { key: 'esc' }, { wait: 'No loop yet in this window' }, { key: 'esc' }, { sleep: 600 },
+      // A loop from the chat: it starts, the footer counts it, and its line sits above the prompt.
+      { type: '/loop 3s make a file called made.txt' }, { key: 'enter' }, { wait: 'Loop 1 started' }, { sleep: 300 }, { snapshot: 'started', has: ['/loops opens them'] },
+      { wait: 'needs you: May it run: touch made.txt', ms: 25_000 }, { sleep: 300 }, { snapshot: 'needs', has: ['asks you'] },
+      // /loops: the board takes this window. Words typed go to it as a note, and it still asks; a and enter answer.
+      { sleep: 2500 }, // the board in another terminal (below) looks first
+      { type: '/loops' }, { key: 'enter' }, { wait: 'asks: May it run: touch made.txt', ms: 10_000 }, { sleep: 300 }, { snapshot: 'asks' },
+      { type: 'also say nothing more' }, { sleep: 200 }, { snapshot: 'typing' }, { key: 'enter' }, { wait: 'Sent as a note: it still asks', ms: 5000 },
+      { type: 'a' }, { key: 'enter' }, { wait: 'will not ask this again', ms: 5000 },
+      { wait: '✓ run 1: Noted.', ms: 20_000 }, { sleep: 300 }, { snapshot: 'answered' },
+      // ^G: the run in full, before the next one starts; esc back to the cards, esc back to the chat.
+      { key: '\x07' }, { wait: 'back to the cards' }, { sleep: 300 }, { snapshot: 'watch' }, { key: 'esc' }, { sleep: 300 }, { key: 'esc' }, { sleep: 600 },
+      { sleep: 8000 },
       { type: '/loop' }, { key: 'enter' }, { wait: 'Loops of this window' }, { sleep: 300 }, { snapshot: 'list' },
       { type: '/loop 1 runs 50' }, { key: 'enter' }, { wait: 'make a file called made.txt: saved' }, { sleep: 300 }, { snapshot: 'rule' },
       { fn: () => { whileOpen = readdirSync(dir); } },
       { type: '/loop stop' }, { key: 'enter' }, { wait: 'Stopped: make a file called made.txt' }, { sleep: 400 }, { snapshot: 'stopped' },
       ...quit,
     ] });
-    // Wait until the window's loop has asked, then open its board.
-    for (let i = 0; i < 300 && !(L.listBoards(dir)[0]?.loops ?? []).some((l) => l.current?.needs); i++) await new Promise((r) => setTimeout(r, 100));
-    const board = await runInPty({ cwd, env: E, args: ['loops'], cols: 124, rows: 38, timeoutMs: 40_000, steps: [
-      { wait: 'asks: May it run: touch made.txt', ms: 10_000 }, { sleep: 300 }, { snapshot: 'asks' },
-      { key: 't' }, { type: 'also say nothing more' }, { sleep: 200 }, { snapshot: 'typing' }, { key: 'enter' }, { wait: 'it reads it at its next step', ms: 5000 },
-      { key: 'a' }, { wait: 'will not ask this again', ms: 5000 },
-      { wait: '✓ Noted.', ms: 15_000 }, { sleep: 300 }, { snapshot: 'answered' },
-      // The first run: it stays on the screen when the second starts.
-      { key: 'enter' }, { wait: 'back to the loops' }, { sleep: 300 }, { snapshot: 'watch' }, { key: 'esc' }, { sleep: 300 },
-      { key: 'q' },
+    // `coding loops` in another terminal still shows the same board, and esc closes it.
+    for (let i = 0; i < 300 && !(L.listBoards(env.AGENTIC_HOME)[0]?.loops ?? []).some((l) => l.current?.needs); i++) await new Promise((r) => setTimeout(r, 100));
+    const board = await runInPty({ cwd, env: E, args: ['loops'], cols: 124, rows: 38, timeoutMs: 30_000, steps: [
+      { wait: 'TASK  make a file called made.txt', ms: 10_000 }, { sleep: 300 }, { snapshot: 'cards' }, { key: 'esc' },
     ] });
     const r = await app;
-    // The board: the question above the chat box, the note typed as text, the run's steps after the yes.
-    expect(board.snapshots.asks).toMatch(/this window[\s\S]*TASK[\s\S]*make a file called made\.txt/);
-    expect(board.snapshots.asks).toMatch(/1 LOOK\s+▯+ ! needs you/);
-    expect(board.snapshots.asks).toMatch(/! {2}TASK {2}make a file called ma… asks: May it run: touch made\.txt\s+y yes, this time · a yes, always · n no/);
-    expect(board.snapshots.typing).toMatch(/› also say nothing more/);
-    expect(board.snapshots.answered).toMatch(/YOU {2}to make a file called …: “also say nothing more”/);
-    expect(board.snapshots.answered).toMatch(/you answered “Yes, always \(this command\)”/);
-    expect(board.snapshots.answered).toMatch(/3 REPORT\s+▮+ ● Noted\./);
-    expect(board.snapshots.watch).toMatch(/> make a file called made\.txt[\s\S]*\? May it run: touch made\.txt[\s\S]*> also say nothing more[\s\S]*⏺ Bash\(touch made\.txt\)\s+⎿ it read your note with the result of Bash\(touch made\.txt\)[\s\S]*● Noted\./);
+    expect(board.snapshots.cards).toMatch(/↻ Loops {2}· {2}\S+[\s\S]*TASK {2}make a file called made\.txt/);
+    expect(board.snapshots.cards).toMatch(/esc close/);
     expect(board.code).toBe(0);
     expect(board.text).toMatch(/The loop board is closed\. The loops go on in their window/);
-    // The app: what /loop said, the footer's count, the list, the stop.
+    // The setup, here in this window, and test5m asked about.
+    expect(r.snapshots.setup).toMatch(/esc {2}chat › ↻ New loop/);
+    expect(r.snapshots.setup).toMatch(/◉ What it does {2}── {2}○ How often {2}── {2}○ When it stops {2}── {2}○ Start/);
+    expect(r.snapshots.unclear).toMatch(/"test5m" looks like two things typed together: "test" and "5m"\./);
+    expect(r.snapshots.unclear).toMatch(/▸ 1 {2}Run the tests, every 5m/);
+    // The app: what /loop said, the footer's count, the line above the prompt.
     expect(r.snapshots.started).toMatch(/↻ Loop 1 started: make a file called made\.txt · task · every 3s/);
-    expect(r.snapshots.started).toMatch(/it ends when this window closes/);
+    expect(r.snapshots.started).toMatch(/it ends when this window closes\. \/loops shows it\./);
     expect(r.snapshots.started).toMatch(/↻ 1 loop/);
+    expect(r.snapshots.started).toMatch(/↻ \S make a file called made\.txt .*\/loops opens them/);
     expect(r.snapshots.needs).toMatch(/↻ 1 loop · 1 needs you/);
+    expect(r.snapshots.needs).toMatch(/↻ ! make a file called made\.txt asks you/);
+    expect(r.snapshots.needs).toMatch(/needs you: May it run: touch made\.txt \/loops to answer it\./);
+    // The board in this window: the card says it asks, and the line above the box how to answer.
+    expect(r.snapshots.asks).toMatch(/esc {2}chat › ↻ Loops/);
+    expect(r.snapshots.asks).toMatch(/TASK {2}make a file called made\.txt/);
+    expect(r.snapshots.asks).toMatch(/Now {3}! asks you: May it run: touch/);
+    expect(r.snapshots.asks).toMatch(/asks: May it run: touch made\.txt\s+type y yes · a yes, always \(this command\) · n no/);
+    expect(r.snapshots.typing).toMatch(/› also say nothing more/);
+    expect(r.snapshots.answered).toMatch(/You {3}“also say nothing more”\s+│[\s\S]*✓ read after Bash\(touch made\.txt\)/);
+    expect(r.snapshots.answered).toMatch(/you answered “Yes, always \(this command\)”/);
+    expect(r.snapshots.answered).toMatch(/Last {2}✓ run 1: Noted\./);
+    expect(r.snapshots.watch).toMatch(/> make a file called made\.txt[\s\S]*\? May it run: touch made\.txt[\s\S]*> also say nothing more[\s\S]*⏺ Bash\(touch made\.txt\)\s+⎿ it read your note with the result of Bash\(touch made\.txt\)[\s\S]*● Noted\./);
+    expect(r.snapshots.watch).toMatch(/esc back to the cards/);
+    // The list, a rule, the stop.
     expect(r.snapshots.list).toMatch(/1\. make a file called made\.txt · task · every 3s · /);
     expect(r.snapshots.list).toMatch(/Change one: \/loop <n> every 7m · runs 5/);
     expect(r.snapshots.rule).toMatch(/make a file called made\.txt: saved · task · every 3s · \d+ of 50 runs/);
@@ -244,7 +261,7 @@ test('/loop in the app: the loop starts and the footer counts it; its run asks o
     expect(r.code).toBe(0);
     expect(readdirSync(dir)).toEqual([]); // gone with the window
   } finally { await fake.close(); }
-}, 150_000);
+}, 160_000);
 
 test('coding loops with no loop anywhere says how to make one', async () => {
   const { cwd, env } = setup();

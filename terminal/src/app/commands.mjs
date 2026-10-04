@@ -27,7 +27,7 @@ export const COMMANDS = [
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
   { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone: a box of your saved Macs, online or not)', arg: '[mac]', picker: true },
   { name: 'loop', desc: 'Send a message again by itself, every so often or until its job is done: /loop test 5m, /loop debug, /loop web 30m <what to read>, /loop 10m <message>; alone: this window’s loops', arg: '[debug|test|web] [10m] [message]' },
-  { name: 'loops', desc: 'Open the loop board in a window of its own: each loop, the step its run is on, and a chat box to steer it' },
+  { name: 'loops', desc: 'Open the loop board in this window: a card per loop that says what it is doing, and a box to tell it what to do' },
   { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'mcp', desc: 'Your MCP servers: tools from programs on this Mac and services on the internet (GitHub, a database, your own scripts); add one, Test it, switch its tools on or off and mark the ones that only read; each tool asks before its first use' },
   { name: 'jobs', desc: 'The commands the model runs in the background (a dev server, a long test run): each one, how long it has run, its last lines; /jobs stop <id|all> stops them', arg: '[stop <id|all>]' },

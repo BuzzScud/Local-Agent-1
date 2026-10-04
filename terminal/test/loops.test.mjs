@@ -1,6 +1,6 @@
 // Loops (/loop, src/app/loops.mjs) and their board (loops-draw.mjs, loops-board.mjs), without a
 // model: what /loop reads, when a loop runs, what a question and a note do, when a loop ends, the
-// files the board reads and the keys it sends back, and the Tree drawn at the sizes it meets.
+// files the board reads and the keys it sends back, and the Cards drawn at the sizes they meet.
 // End to end with the app and a stand-in model: app-loops.test.mjs.
 import { test, expect } from 'bun:test';
 import { mkdtempSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
@@ -224,10 +224,12 @@ test('a fixing loop that is not getting closer waits for you; a note, r or p sen
   expect(L.describe(a, m.now())).toBe('debug · until its job is done · needs you: 2 tests still fail after runs 1 and 2: it is not getting closer');
   expect(D.stateOf(a, m.now())).toEqual(['! needs you · stuck', 'warn b']);
   expect(m.log.at(-1)).toMatchObject({ kind: 'stuck', id: a.id });
-  // The board says so above the chat box, and counts it as needing you.
+  // The board says so above the box and on its card, counts it as needing you, and the box takes a hint.
   const board = text(D.drawBoard(m.snapshot(), B.newUi(), { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));
-  expect(board).toContain('Fix the failing tests is stuck: 2 tests still fail after runs 1 and 2');
-  expect(board).toMatch(/needs you \[1\]/);
+  expect(board).toMatch(/FIX {2}Fix the failing tests is stuck: 2 tests still fail after runs 1 and 2\s+type a hint · \^R try again · \^S stop/);
+  expect(board).toMatch(/Now {3}! stuck: 2 tests still fail/);
+  expect(board).toMatch(/1 needs you/);
+  expect(board).toMatch(/a hint for Fix the failing tests · enter sends it on with it/);
   for (const r of D.drawBoard(m.snapshot(), B.newUi(), { cols: 80, rows: 24, now: m.now(), linesOf: () => [] })) expect(D.rowWidth(r)).toBe(80);
   pass(60_000);
   expect(runs).toHaveLength(2); // it waits
@@ -380,7 +382,7 @@ function board() {
   return { ...w, state, linesOf };
 }
 
-test('the tree at every size: each row exactly the window, the window on top, a box per loop with its four steps, the question above the chat box', () => {
+test('the cards at every size: each row exactly the window, a card per loop in plain words, what waits for you above the box', () => {
   const b = board();
   const state = b.state();
   for (const [cols, rows] of [[124, 38], [96, 30], [100, 30], [112, 59], [160, 50], [200, 60]]) {
@@ -388,20 +390,28 @@ test('the tree at every size: each row exactly the window, the window on top, a 
     expect(frame).toHaveLength(rows);
     for (const r of frame) expect(D.rowWidth(r)).toBe(cols);
     const t = text(frame);
-    expect(t).toContain('this window');
-    expect(t).toContain('Stand-in loaded · one run at a time');
-    for (const part of ['DEBUG', 'TEST', 'WEB', 'Fix the failing tests', '1 TESTS', '2 FIND', '3 FIX', '4 TESTS', '1 RUN', '2 COMPARE', '1 ASK', '2 READ', '4 WAIT', 'again every 5m']) expect(t).toContain(part);
-    if (cols >= 124) expect(t).toContain('pass: done · miss: a new try'); // a narrow box cuts its longest line
-    expect(t).toMatch(/1 TESTS\s+(▮+ )?● some fail/); // the first test run failed: a red, finished step (a narrow box drops the bars)
-    expect(t).toMatch(/2 FIND\s+(▯+ )?! needs you/); // the step the run is on is the one that asks
-    expect(t).toMatch(cols >= 110 ? /! {2}DEBUG {2}Fix the failing tests asks: May it change export\.mjs\?\s+y yes, this time · a yes, always · n no/ : /! {2}DEBUG {2}Fix the failing tests asks: May it change export\.mjs\?\s+y yes · a always · n no/);
-    expect(t).toMatch(/to Fix the failing tests/); // the chat box names the picked loop
-    expect(t).toMatch(/loops \[3\]\s+running \[Run the tests\]\s+needs you \[1\]\s+in line \[1\]/);
-    // A narrow window says the keys in shorter words (x redo, + new), so q close is never cut.
-    expect(t).toMatch(/←→ pick .* t type .* x (start over|redo) .* e edit .* u undo .* \+ new( loop)? .* q close/);
-    if (cols >= 124) expect(t).toMatch(/x start over · r run now · p pause · e edit · u undo · s stop · \+ new loop · q close/);
-    if (rows >= 38) expect(t).toMatch(/loop log[\s\S]*asks: May it change export\.mjs\?/);
+    expect(t).toContain('Stand-in loaded');
+    expect(t).toMatch(/1 running · 1 needs you/);
+    for (const part of ['FIX', 'TEST', 'Fix the failing tests', 'Run the tests', 'until done · run 1 · Manual', 'every 5m · run 1 · Manual']) expect(t).toContain(part);
+    // Three cards across where they fit, else two, with the others a key away.
+    if (cols >= 118) expect(t).toContain('WEB'); else expect(t).toContain('1 more ›');
+    // Each card in words: the run that asks says so; the one under way, how long it has worked; then its last run, its next, your note.
+    expect(t).toMatch(/Now {3}! asks you: May it change/);
+    expect(t).toMatch(/Now {3}. starting · 2s/);
+    expect(t).toMatch(/Last {2}no run yet/);
+    expect(t).toMatch(/Next {2}after this run, every 5m/);
+    expect(t).toMatch(/You {3}nothing yet: type below/);
+    // The picked loop asks: the line above the box says how to answer it, and the box takes the answer.
+    expect(t).toMatch(cols >= 110 ? /! {2}FIX {2}Fix the failing tests asks: May it change export\.mjs\?\s+type y yes · a yes, always \(every edit\) · n no/ : /! {2}FIX {2}Fix the failing tests asks: May it change export\.mjs\?\s+type y yes · a always · n no/);
+    expect(t).toMatch(/Fix the failing tests asks: y, a, n, or a note/);
+    expect(t).toMatch(/type y, a or n and enter \(anything else goes to it as a note\)/);
+    // The keys are ctrl keys, said in shorter words in a narrow window, so esc is never cut.
+    expect(t).toMatch(/\^N new.* \^R run.* \^P pause.* \^S stop.* \^O rules.* \^X (start over|redo).* \^B undo.* \^G whole.* ↑↓ pick.* esc close/);
+    if (cols >= 124) expect(t).toMatch(/\^N new loop · \^R run now · \^P pause · \^S stop · \^O rules · \^X start over · \^B undo · \^G whole run · ↑↓ pick · esc close/);
+    if (rows >= 38) expect(t).toMatch(/What happened {3}newest first\s+\S+ {2}FIX {3}Fix the failing tes… asks: May it change export\.mjs\?/);
   }
+  // In the coding window, esc goes back to the chat.
+  expect(text(D.drawBoard(state, B.newUi({ inApp: true }), { cols: 124, rows: 38, now: b.m.now(), linesOf: b.linesOf }))).toMatch(/^ esc {2}chat › ↻ Loops[\s\S]*↑↓ pick · esc chat/);
   // A window too small says so, and how big it must be.
   const small = D.drawBoard(state, B.newUi(), { cols: 80, rows: 24, now: b.m.now(), linesOf: b.linesOf });
   expect(small).toHaveLength(24);
@@ -415,63 +425,77 @@ test('more loops than fit move sideways with the picked one; no loop yet shows h
   m.save();
   const none = text(D.drawBoard(empty(), B.newUi(), { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));
   expect(none).toMatch(/No loop yet in this window\./);
+  expect(none).toMatch(/\^N makes one a step at a time: what each run does, how often/);
   expect(none).toMatch(/\/loop test 5m\s+runs the tests every 5 minutes/);
-  expect(none).toMatch(/to type \/loop 10m <message> and make the first loop/);
+  expect(none).toMatch(/type \/loop 5m <message> and enter, or \^N for a new loop a step at a time/);
   for (let i = 1; i <= 6; i++) m.add(L.parseLoop(`${i}h tidy folder number ${i}`));
   pass(1000);
   const s = L.readState(dir, process.pid);
   const first = text(D.drawBoard(s, { ...B.newUi(), sel: 0 }, { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));
-  expect(first).toContain('│ tidy folder number 1');
-  expect(first).toContain('2 more ›');
-  expect(first.match(/┌─ {2}TASK {2}Manual ─/g)).toHaveLength(4); // four boxes across at 124, each with its mode
-  expect(first).not.toContain('│ tidy folder number 5');
+  expect(first.match(/┌─ TASK {2}tidy folder number \d/g)).toEqual(['┌─ TASK  tidy folder number 1', '┌─ TASK  tidy folder number 2', '┌─ TASK  tidy folder number 3']); // three cards across at 124
+  expect(first).toContain('3 more ›');
+  expect(first).toContain('every 1h · run 1 · Manual');
   const last = D.drawBoard(s, { ...B.newUi(), sel: 5 }, { cols: 124, rows: 38, now: m.now(), linesOf: () => [] });
   for (const r of last) expect(D.rowWidth(r)).toBe(124);
-  expect(text(last)).toContain('│ tidy folder number 6');
-  expect(text(last)).toContain('‹ 2 more');
+  expect(text(last)).toContain('┌─ TASK  tidy folder number 6');
+  expect(text(last)).toContain('‹ 3 more');
   m.close();
 });
 
-test('the board\'s keys: letters are commands, except in the chat box where they are text', () => {
+test('the board\'s keys: typing always goes in the box, the commands are ctrl keys, and a stop needs y', () => {
   const b = board();
   const sent = [];
   let quits = 0;
   const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => { quits++; } };
   const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
-  expect(B.keysOf('a\x1b[C\r\x7f\x1b')).toEqual(['a', 'right', 'enter', 'backspace', 'esc']);
-  // y / a / n answer the oldest question, whichever loop is picked.
-  press('right');
-  expect(bd.ui.sel).toBe(1);
-  press('a');
-  expect(sent.pop()).toEqual({ op: 'answer', id: 1, choice: 'always' });
-  // r p e s act on the picked loop; s asks first; e opens its rules in the form (esc leaves it unchanged).
-  press('p'); expect(sent.pop()).toEqual({ op: 'pause', id: 2 });
-  press('e'); expect(bd.ui.view).toBe('form'); expect(bd.ui.form).toMatchObject({ id: 2, fields: { message: L.PRESET.test, every: '5m', runs: 'no limit' } });
-  press('esc'); expect(bd.ui.view).toBe('main'); expect(sent).toEqual([]);
-  press('s'); expect(bd.ui.view).toBe('confirm'); expect(sent).toEqual([]);
-  press('n'); expect(bd.ui.view).toBe('main');
-  press('s', 'y'); expect(sent.pop()).toEqual({ op: 'stop', id: 2 });
-  // t opens the chat box: now q, r, s and digits are text. enter sends it to the picked loop; esc leaves.
-  press('left', 't', ...'quit rs 12');
-  expect(bd.ui.chat).toEqual({ on: true, text: 'quit rs 12', as: 'note' });
+  expect(B.keysOf('a\x1b[C\r\x7f\x1b\x13\x0e\x15')).toEqual(['a', 'right', 'enter', 'backspace', 'esc', '^S', '^N', '^U']);
+  // The letters that were commands are text now (4 Oct 2026: an s and an enter once stopped a loop).
+  press(...'stop quit rs');
+  expect(bd.ui.chat.text).toBe('stop quit rs');
+  expect(sent).toEqual([]);
   expect(quits).toBe(0);
-  press('backspace', 'enter');
-  expect(sent.pop()).toMatchObject({ op: 'typed', id: 1, text: 'quit rs 1' });
-  expect(bd.ui.chat).toEqual({ on: false, text: '', as: 'note' });
-  press('/', ...'loop test 5m');
-  expect(bd.ui.chat.text).toBe('/loop test 5m'); // / starts a /loop line in the box
+  expect(bd.ui.view).toBe('main');
+  press('^U');
+  expect(bd.ui.chat.text).toBe('');
+  // The picked loop asks to change a file: y, a or n, typed and sent, answers it.
+  press('a', 'enter');
+  expect(sent.pop()).toEqual({ op: 'answer', id: 1, choice: 'always' });
+  // Other words go to it as a note, and it still asks.
+  press(...'start with the header', 'enter');
+  expect(sent.pop()).toMatchObject({ op: 'typed', id: 1, text: 'start with the header' });
+  expect(bd.ui.toast.text).toMatch(/Sent as a note: it still asks/);
+  // ↑↓ pick a loop; ^P pauses it; ^O opens its rules in the form (esc leaves them unchanged).
+  press('down');
+  expect(bd.ui.sel).toBe(1);
+  press('^P'); expect(sent.pop()).toEqual({ op: 'pause', id: 2 });
+  press('^O'); expect(bd.ui.view).toBe('form'); expect(bd.ui.form).toMatchObject({ id: 2, fields: { message: L.PRESET.test, every: '5m', runs: 'no limit' } });
+  press('esc'); expect(bd.ui.view).toBe('main'); expect(sent).toEqual([]);
+  // ^S asks first; enter does nothing there; n keeps it, y stops it.
+  press('^S'); expect(bd.ui.view).toBe('confirm');
+  press('enter'); expect(bd.ui.view).toBe('confirm'); expect(sent).toEqual([]);
+  const asked = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: b.linesOf }));
+  expect(asked).toMatch(/Stop "Run the tests"\? Its runs so far stay\.\s+y yes {3}n no {3}\(enter does nothing here\)/);
+  press('n'); expect(bd.ui.view).toBe('main');
+  press('^S', 'y'); expect(sent.pop()).toEqual({ op: 'stop', id: 2 });
+  // enter sends what was typed to the picked loop; esc empties the box first.
+  press('down', ...'quit rs 12', 'backspace', 'enter');
+  expect(sent.pop()).toMatchObject({ op: 'typed', id: 3, text: 'quit rs 1' });
+  expect(bd.ui.chat).toEqual({ text: '', as: 'note' });
+  press(...'/loop test 5m');
+  expect(bd.ui.chat.text).toBe('/loop test 5m');
   press('esc');
-  expect(bd.ui.chat).toEqual({ on: false, text: '/loop test 5m', as: 'note' }); // kept for when you come back
-  // enter opens one run with its lines; esc comes back; q closes the board.
-  press('enter');
+  expect(bd.ui.chat.text).toBe('');
+  expect(quits).toBe(0);
+  // ^G opens one run with its lines; esc comes back; esc again leaves the board.
+  press('up', 'up', '^G');
   expect(bd.ui.view).toBe('watch');
   const watch = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: b.linesOf }));
   expect(watch).toMatch(/Fix the failing tests {2}· {2}run 1 {2}· {2}live/);
   expect(watch).toMatch(/> Some tests in this folder fail\./);
   expect(watch).toMatch(/⏺ Bash\(node --test\)\s+⎿ the tests fail\s+⏺ Read\(export\.mjs\)/);
-  expect(watch).toMatch(/esc back to the loops/);
-  press('q'); expect(bd.ui.view).toBe('main'); expect(quits).toBe(0); // q in a run only goes back
-  press('q'); expect(quits).toBe(1);
+  expect(watch).toMatch(/esc back to the cards/);
+  press('esc'); expect(bd.ui.view).toBe('main'); expect(quits).toBe(0);
+  press('esc'); expect(quits).toBe(1);
   b.m.close();
 });
 
@@ -691,15 +715,20 @@ test('ask first: a run that is due waits for your go; go starts it, not now leav
   expect(t.nextAt).toBe(m.now() + 300_000);
   expect(m.notNow(d.id)).toBe(true);
   expect(d.state).toBe('paused'); // runs until done: not now means pause
-  // On the board: y and n go to the run that waits, when no question does.
+  // On the board: y typed to the picked loop starts its waiting run, n leaves it out.
   const s = (m.save(), L.readState(m.home, process.pid));
   const sent = [];
-  const bd = { state: { ...s, loops: s.loops.map((l) => (l.id === 2 ? { ...l, ready: { n: 1, since: 1 } } : l)) }, ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
+  const bd = { state: { ...s, loops: s.loops.map((l) => (l.id === 2 ? { ...l, ready: { n: 1, since: 1 } } : l)) }, ui: { ...B.newUi(), sel: 1 }, send: (c) => sent.push(c), quit: () => {} };
   B.handleKey(bd, 'y');
+  B.handleKey(bd, 'enter');
   expect(sent.pop()).toEqual({ op: 'go', id: 2 });
+  B.handleKey(bd, 'n');
+  B.handleKey(bd, 'enter');
+  expect(sent.pop()).toEqual({ op: 'skip', id: 2 });
   const frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));
-  expect(frame).toMatch(/! {2}DEBUG {2}Fix the failing tests · run 1 is ready and waits for your go\s+y go · n not now \(pause\) · e edit first/);
+  expect(frame).toMatch(/! {2}FIX {2}Fix the failing tests · run 1 is ready and waits for your go\s+type y go · n not now \(pause\) · \^O edit first/);
   expect(frame).toMatch(/Manual · asks first/);
+  expect(frame).toMatch(/Next {2}type y to start it, n to leave it/);
   m.close();
 });
 
@@ -801,13 +830,15 @@ test('undo puts back what one run changed, from the app\'s own rewind store; a f
   m.close();
 });
 
-test('the board\'s new keys: + and e open the form, x starts over (tab keeps the changes), u undoes after a yes, 1–9 pick a choice', () => {
+test('the board\'s other keys: ^N then ^O every rule in the form, ^X starts over (again keeps the changes), ^B undoes after a y, a number answers a question', () => {
   const b = board();
   const sent = [];
   const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
   const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
-  // + : a new loop in the form. The kind is guessed from the message; ←→ step through a row's choices; a typed row takes keys.
-  press('+');
+  // ^N opens the setup; ^O there is every rule at once. The kind is guessed from the message; ←→ step through a row's choices; a typed row takes keys.
+  press('^N');
+  expect(bd.ui.view).toBe('setup');
+  press('^O');
   expect(bd.ui.view).toBe('form');
   press(...'Run the tests every morning');
   press('down', 'right'); // kind: guessed test → web
@@ -817,42 +848,152 @@ test('the board\'s new keys: + and e open the form, x starts over (tab keeps the
   expect(bd.ui.form.fields).toMatchObject({ message: 'Run the tests every morning', kind: 'test', every: '30m', runs: '5', cap: '$0.50' });
   expect(bd.ui.form.fields.stopAt).toMatch(/^\d\d:\d\d$/);
   let frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
-  expect(frame).toMatch(/New loop/);
+  expect(frame).toMatch(/New loop · every rule/);
   expect(frame).toMatch(/Kind\s+Run the tests/);
   expect(frame).toMatch(/How often\s+every 30m/);
   expect(frame).toMatch(/Spending cap\s+‹ \$0\.50/);
   expect(frame).toMatch(/enter {2}Start the loop/);
   for (const [cols, rows] of [[96, 30], [124, 38], [200, 60]]) for (const r of D.drawBoard(bd.state, bd.ui, { cols, rows, now: b.m.now(), linesOf: () => [] })) expect(D.rowWidth(r)).toBe(cols);
   // A wrong row: the form says why, goes to it, and sends nothing.
-  press('up', 'up', 'up', 'ctrlU', ...'soon', 'enter');
+  press('up', 'up', 'up', '^U', ...'soon', 'enter');
   expect(sent).toEqual([]);
   expect(bd.ui.form).toMatchObject({ field: 'every', error: expect.stringMatching(/How often/) });
-  press('ctrlU', ...'1h', 'enter');
+  press('^U', ...'1h', 'enter');
   expect(sent.pop()).toMatchObject({ op: 'add', id: null, fields: { message: 'Run the tests every morning', kind: 'test', every: '1h', runs: '5', cap: '$0.50' } });
   expect(bd.ui.view).toBe('main');
-  // x: the chat box set to start the picked loop over; tab keeps its changes, then a plain note.
-  press('right', 'x', ...'only the quoting test');
-  expect(bd.ui.chat).toMatchObject({ on: true, as: 'redo' });
+  // ^X: the box starts the picked loop over with your words; ^X again keeps its changes.
+  press('right', '^X', ...'only the quoting test');
+  expect(bd.ui.chat).toMatchObject({ as: 'redo', text: 'only the quoting test' });
   frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
   expect(frame).toMatch(/start Run the tests over with this · its changes go back first/);
-  press('tab');
+  press('^X');
   expect(bd.ui.chat.as).toBe('redoKeep');
   press('enter');
   expect(sent.pop()).toMatchObject({ op: 'redo', id: 2, text: 'only the quoting test', putBack: false });
-  // u: the last run with a copy, after a yes.
+  // ^B: the last run with a copy, after a y.
   bd.state = { ...bd.state, loops: bd.state.loops.map((l) => (l.id === 2 ? { ...l, current: null, runs: [{ n: 1, ok: true, point: 4, files: [{ path: 'export.mjs', by: 'edit' }], summary: 'All pass' }] } : l)) };
-  press('u');
+  press('^B');
   expect(bd.ui.view).toBe('confirm');
   expect(bd.ui.confirm.text).toBe('Put back what run 1 changed? export.mjs. A file changed since stays as it is.');
+  press('enter');
+  expect(bd.ui.view).toBe('confirm'); // enter does nothing here
   press('y');
   expect(sent.pop()).toMatchObject({ op: 'undo', id: 2, n: 1 });
-  // 1–9: a question's choices.
+  // A question's choices: a number typed and sent picks one.
   bd.state = { ...bd.state, loops: bd.state.loops.map((l) => (l.id === 1 ? { ...l, current: { ...l.current, needs: { id: 5, kind: 'question', text: 'Which header style?', options: ['snake_case', 'Title Case', 'Keep them'], since: 1 } } } : l)) };
+  press('left');
   frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
-  expect(frame).toMatch(/1 snake_case {3}2 Title Case {3}3 Keep them/);
-  press('2');
+  expect(frame).toMatch(/Fix the failing tests asks: Which header style\?/);
+  expect(frame).toMatch(/1 snake_case {3}2 Title Case {3}3 Keep them {3}or type your own answer/);
+  expect(frame).toMatch(/your answer to Fix the failing tests/);
+  press('4', 'enter');
+  expect(sent).toEqual([]); // it gave three
+  expect(bd.ui.chat.text).toBe('4');
+  press('backspace', '2', 'enter');
   expect(sent.pop()).toEqual({ op: 'answer', id: 1, choice: 'yes', text: 'Title Case' });
+  press(...'keep the order they came in', 'enter');
+  expect(sent.pop()).toEqual({ op: 'answer', id: 1, choice: 'yes', text: 'keep the order they came in' });
   b.m.close();
+});
+
+test('an unclear task is asked about before the loop starts: a kind and a time typed together, or a single word', () => {
+  const u = L.unclearOf('test5m');
+  expect(u.why).toBe('"test5m" looks like two things typed together: "test" and "5m".');
+  expect(u.options.map((o) => o.label)).toEqual(['Run the tests, every 5m', 'Keep "test5m" as what each run does', 'Type it again']);
+  expect(u.options[0]).toMatchObject({ act: 'use', kind: 'test', every: '5m' });
+  expect(L.unclearOf('debug10m').options[0]).toMatchObject({ kind: 'debug', every: '10m', label: 'Fix the failing tests, every 10m' });
+  expect(L.unclearOf('fix2h').options[0]).toMatchObject({ kind: 'debug', every: '2h' });
+  expect(L.unclearOf('5m check').why).toBe('"check" is one word. Each run gets only these words, so say what it should do.');
+  expect(L.unclearOf('check').options.map((o) => o.act)).toEqual(['again', 'keep']);
+  // A kind alone, a whole sentence, a page's address, and a change to a loop that is there are clear.
+  for (const ok of ['test 5m', 'test', 'debug', '10m run the tests and say what fails', 'web 30m https://bun.sh/blog', 'web 30m read the Bun releases page', '1 every 7m', '2 stop']) expect(L.unclearOf(ok)).toBe(null);
+});
+
+test('the setup: a new loop a step at a time, test5m caught, a read-back, then the form\'s add; the window makes it', () => {
+  const b = board();
+  const sent = [];
+  const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
+  const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
+  const frame = (cols = 124, rows = 38) => { const f = D.drawBoard(bd.state, bd.ui, { cols, rows, now: b.m.now(), linesOf: () => [] }); for (const r of f) expect(D.rowWidth(r)).toBe(cols); return text(f); };
+  // An unclear /loop line typed in the box goes to the setup's question; nothing is sent.
+  press(...'/loop test5m', 'enter');
+  expect(sent).toEqual([]);
+  expect(bd.ui.setup).toMatchObject({ step: 'unclear', text: 'test5m' });
+  expect(frame()).toMatch(/! "test5m" looks like two things typed together: "test" and "5m"\./);
+  expect(frame(96, 30)).toMatch(/▸ 1 {2}Run the tests, every 5m/);
+  press('1');
+  expect(bd.ui.setup).toMatchObject({ step: 'often', name: 'Run the tests', fields: { message: L.PRESET.test, kind: 'test' } });
+  expect(frame()).toMatch(/● What it does {2}── {2}◉ How often/);
+  expect(frame()).toMatch(/How often should it run\?/);
+  expect(frame()).toMatch(/▸ every 5 minutes/);
+  press('enter');
+  expect(frame()).toMatch(/When should it stop\?/);
+  press('down', 'down', 'enter'); // after 10 runs
+  const ready = frame();
+  expect(ready).toMatch(/Ready to start/);
+  expect(ready).toMatch(/Each run {4}Run the tests\. Say which fail and why\./);
+  expect(ready).toMatch(/How often {3}every 5 minutes · the first run starts now/);
+  expect(ready).toMatch(/Stops {7}after 10 runs, or when this window closes/);
+  expect(ready).toMatch(/Run the tests {2}· {2}every 5 minutes {2}· {2}after 10 runs/);
+  press('enter');
+  const add = sent.pop();
+  expect(add).toMatchObject({ op: 'add', fields: { message: L.PRESET.test, kind: 'test', every: '5m', runs: '10', stopAt: 'none', mode: 'ask' } });
+  expect(bd.ui.view).toBe('main');
+  // The window makes it as the form's add: a test loop every 5 minutes that stops after 10 runs.
+  const r = b.m.apply(add);
+  expect(r).toMatchObject({ made: 4, text: expect.stringMatching(/^Loop 4 started: test · every 5m · 0 of 10 runs/) });
+  expect(b.m.loop(4)).toMatchObject({ kind: 'test', every: 300, maxRuns: 10, name: 'Run the tests' });
+  // Words of your own: a time at their end is offered as the pace; a stop time typed is taken as one.
+  press('^N', ...'tidy the notes folder every 7m', 'enter');
+  expect(bd.ui.setup).toMatchObject({ step: 'often', custom: '7m', fields: { message: 'tidy the notes folder' } });
+  press('enter', ...'18:30', 'enter');
+  expect(frame()).toMatch(/Stops {7}at 18:30, or when this window closes/);
+  press('left');
+  expect(bd.ui.setup.step).toBe('stop');
+  press(...'soon', 'enter');
+  expect(frame()).toMatch(/! Stop at: a time like 18:30 or 6pm, or a while like 2h/);
+  press('^U', 'down', 'down', 'down', 'down', 'enter'); // the fifth choice: in 2 hours
+  expect(frame()).toMatch(/Stops {7}in 2 hours \(\d\d:\d\d\), or when this window closes/);
+  press('enter');
+  expect(sent.pop()).toMatchObject({ op: 'add', fields: { message: 'tidy the notes folder', kind: 'task', every: '7m', runs: 'no limit', stopAt: '2h' } });
+  // One word is asked about; keeping it goes on; esc leaves the setup and sends nothing.
+  press('^N', ...'check', 'enter');
+  expect(bd.ui.setup.step).toBe('unclear');
+  expect(frame()).toMatch(/"check" is one word/);
+  press('2');
+  expect(bd.ui.setup).toMatchObject({ step: 'often', fields: { message: 'check', kind: 'test' } });
+  press('esc');
+  expect(bd.ui.view).toBe('main');
+  expect(sent).toEqual([]);
+  b.m.close();
+});
+
+test('a note to a loop that ended starts it again with the note; its card says what became of your last note', () => {
+  const { m, runs, pass } = window();
+  const l = m.add({ ...L.parseLoop('test 5m'), maxRuns: 1 });
+  pass(1000);
+  // A note while a run works: sent, then read after the step it went with.
+  m.steer(l.id, 'only the unit tests');
+  expect(D.youWords(l)).toEqual(['“only the unit tests”', 'sent: it reads it at its next step', 'dim']);
+  runs[0].emit({ t: 'heard', text: 'only the unit tests', after: 'Bash(node --test)' });
+  expect(D.youWords(l)).toEqual(['“only the unit tests”', '✓ read after Bash(node --test)', 'accentDim']);
+  runs[0].emit({ t: 'end', reason: 'done', final: 'All pass.' });
+  expect(l).toMatchObject({ state: 'done', doneWhy: 'ran its 1 run' });
+  expect(D.nextWords(l, m.now())).toEqual(['type a note: enter starts it again', 'faint']);
+  // Ended: a note starts it again (its counts from nothing), and its next run starts with the note.
+  expect(m.steer(l.id, 'now the slow ones too')).toBe('Run the tests starts again, with your note');
+  expect(l).toMatchObject({ state: 'waiting', counted: 0, note: 'now the slow ones too' });
+  expect(D.youWords(l)[1]).toBe('its next run starts with it');
+  pass(1000);
+  expect(runs).toHaveLength(2);
+  expect(runs[1].spec.prompt).toContain('(A note from the user for this run: now the slow ones too)');
+  expect(D.youWords(l)[1]).toBe('✓ read at the start of run 2');
+  // A note that came as the answer was given was its next message: read, with no step after it.
+  m.steer(l.id, 'and say how long they took');
+  runs[1].emit({ t: 'end', reason: 'done', final: 'All pass; it took 3 s.' });
+  expect(D.youWords(l)[1]).toBe('✓ read as it gave its answer');
+  expect(m.log.filter((e) => e.kind === 'state').map((e) => e.text)).toContain('started again');
+  m.close();
 });
 
 test('a note typed to a run is read with its next step\'s result, and the board is told after which step', () => {
