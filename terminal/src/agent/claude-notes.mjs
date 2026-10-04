@@ -13,12 +13,13 @@
 //                         does not have, and may be out of date
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { HOME } from '../../../models/index.mjs';
 import { looksSecret } from './facts.mjs';
 import { wordsOf } from './recall.mjs';
 import { choose } from './search.mjs';
+import { packDir, sameProject } from './claude-pack.mjs';
 
 // At most this many notes travel with a request (2 until 1 Oct 2026, the user's pick "keep more notes": on
 // their recent requests it added a note to 6 of 13, about 300–630 tokens). CUT and MARGIN decide first.
@@ -39,6 +40,7 @@ export const MARGIN = 0.04;
 // and so does a note on how the user likes things done: it holds for every
 // project, where a note about one design round holds for that round.
 const HERE = 0.02;
+const WORDS_CAP = 100; // by words: the cut stops growing at 300 notes (recallClaude)
 const ABOUT_THEM = 0.03;
 
 // Whether Claude's notes are used at all: "claudeNotes": false in
@@ -47,12 +49,15 @@ const ABOUT_THEM = 0.03;
 export const claudeOn = (settings = {}) => settings.claudeNotes !== false && !['off', ''].includes(process.env.AGENTIC_CLAUDE_NOTES ?? 'on');
 
 // Where the notes are: AGENTIC_CLAUDE_NOTES or the setting "claudeNotes" names
-// the folder ("off" or false: none); otherwise Claude Code's memory folder
-// for your home folder, the one it writes to from any folder on this Mac.
-export function notesDir({ home = homedir(), setting } = {}) {
+// the folder ("off" or false: none; a pack's folder means its notes/); otherwise
+// the pack of Claude's notes when one is built (claude-pack.mjs, `bun run pack`:
+// every memory folder and the copies, 3 Oct 2026), else Claude Code's memory
+// folder for your home folder, the one it writes to from any folder on this Mac.
+export function notesDir({ home = homedir(), setting, pack = packDir() } = {}) {
   const named = process.env.AGENTIC_CLAUDE_NOTES ?? setting;
   if (named === false || named === 'off' || named === '') return null;
-  if (typeof named === 'string') return existsSync(named) ? named : null;
+  if (typeof named === 'string') return existsSync(join(named, 'pack.json')) && existsSync(join(named, 'notes')) ? join(named, 'notes') : existsSync(named) ? named : null;
+  if (pack && existsSync(join(pack, 'notes', 'MEMORY.md'))) return join(pack, 'notes');
   const slug = home.replace(/[/.]/g, '-');
   for (const base of ['.claude', '.claude-2']) {
     const dir = join(home, base, 'projects', slug, 'memory');
@@ -62,13 +67,14 @@ export function notesDir({ home = homedir(), setting } = {}) {
 }
 
 // "name: x" lines between the two --- lines at the top; the type may sit
-// under "metadata:".
-function parse(raw, file) {
-  const m = /^---\n([\s\S]*?)\n---\n?/.exec(raw);
+// under "metadata:". project: the project a note of the pack belongs to
+// (claude-pack.mjs writes it), empty for a note about the user or any project.
+export function parseNote(raw, file) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
   const head = m?.[1] ?? '';
   const field = (k) => { const x = new RegExp(`^\\s*${k}:\\s*(.*)$`, 'm').exec(head)?.[1]?.trim() ?? ''; return /^".*"$/.test(x) ? x.slice(1, -1).replace(/\\"/g, '"') : x.replace(/^'|'$/g, ''); };
   const id = basename(file, '.md');
-  return { id, file, name: field('name') || id, description: field('description'), type: field('type') || 'project', body: (m ? raw.slice(m[0].length) : raw).trim() };
+  return { id, file, name: field('name') || id, description: field('description'), type: field('type') || 'project', project: field('project'), modified: field('modified'), body: (m ? raw.slice(m[0].length) : raw).trim() };
 }
 
 // What Claude's own list of its notes (MEMORY.md) calls each one: "[Rules app
@@ -114,7 +120,7 @@ export function readNotes(dir) {
     if (had?.stamp !== stamp) {
       let raw;
       try { raw = readFileSync(file, 'utf8'); } catch { continue; }
-      had = { stamp, note: parse(raw, file) };
+      had = { stamp, note: parseNote(raw, file) };
       seen.set(file, had);
     }
     const title = (titles.get(had.note.id) ?? []).join('. ');
@@ -179,6 +185,22 @@ export function bestPart(note, request, maxChars = PART_CHARS) {
   return [summary, body].filter(Boolean).join('\n');
 }
 
+// A note of the pack that was cut to how it stands now keeps its whole text in history/ beside
+// notes/ (claude-pack.mjs). Its part prefers the top: a piece of the history comes too only when it
+// shares two words more with the request than the best piece of the top does (port 5434 of the
+// distribution work sat in an older part of its note, 3 Oct 2026).
+export function historyPiece(note, request, dir) {
+  const file = join(dirname(dir), 'history', `${note.id}.md`);
+  if (!existsSync(file)) return null;
+  const q = new Set(wordsOf(request));
+  const shared = (t) => new Set(wordsOf(t).filter((w) => q.has(w))).size;
+  const top = Math.max(0, ...pieces(note).map(shared));
+  let full;
+  try { full = parseNote(readFileSync(file, 'utf8'), file); } catch { return null; }
+  const best = pieces(full).map((text, i) => ({ text, i, n: shared(text) })).filter((p) => p.n >= top + 2).sort((a, b) => b.n - a.n || b.i - a.i)[0];
+  return best ? `(from the whole note) ${best.text}` : null;
+}
+
 const hash = (text) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 const pack = (v) => Buffer.from(new Float32Array(v).buffer).toString('base64');
 const unpack = (s) => { const b = Buffer.from(s, 'base64'); return new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4); };
@@ -236,7 +258,9 @@ const THROWAWAY = /^\/(private\/)?(tmp|var\/folders)\//;
 export function foldersOf(cwd, home = homedir()) {
   if (THROWAWAY.test(`${cwd}/`) && !cwd.startsWith(`${home}/`)) return []; // a throwaway folder is nobody's project
   const path = cwd.startsWith(`${home}/`) ? cwd.slice(home.length) : cwd;
-  return [...new Set(path.toLowerCase().split('/').filter((p) => p.length >= 4 && !ANY_PROJECT.has(p)))];
+  // A GitHub download's folder ("MAIN2026-main-2") is its project's too ("main2026").
+  const names = path.toLowerCase().split('/').flatMap((p) => [p, p.replace(/-(main|master)(-\d+)?$/, '')]);
+  return [...new Set(names.filter((p) => p.length >= 4 && !ANY_PROJECT.has(p)))];
 }
 
 // The notes that fit a request, best first: { notes: [{ id, name, type,
@@ -250,12 +274,18 @@ export function foldersOf(cwd, home = homedir()) {
 //          on this Mac hold everywhere.
 //   retriever, reranker  /effort's Search rows (search.mjs): which notes come;
 //          how many is still the cut-off's.
-export async function recallClaude(cwd, text, { embedder = null, dir = notesDir(), top = TOP, signal, store, kind = null, retriever = 'meaning', reranker = null } = {}) {
+//   sent   what may go to this model (Memory sent, opening.mjs memorySent): 'all' (a model on this
+//          Mac, or the owner's own machine), 'project' (any other service: only the notes about the
+//          project it works in; notes about the user stay on this Mac) or 'none'.
+export const sentAllows = (sent, cwd, isHere) => (n) => sent !== 'project' || (n.project ? sameProject(n.project, cwd) : n.type === 'project' && isHere(n));
+export async function recallClaude(cwd, text, { embedder = null, dir = notesDir(), top = TOP, signal, store, kind = null, retriever = 'meaning', reranker = null, sent = 'all' } = {}) {
   const t0 = Date.now();
   const folders = foldersOf(cwd);
-  const isHere = (n) => { const t = `${n.id} ${n.title ?? ''} ${n.description}`.toLowerCase(); return folders.some((f) => t.includes(f)); };
+  const isHere = (n) => { const t = `${n.id} ${n.title ?? ''} ${n.description}`.toLowerCase(); return folders.some((f) => t.includes(f)) || Boolean(n.project && sameProject(n.project, cwd)); };
   const onTheCode = ['fix', 'change', 'rename'].includes(kind);
-  const notes = readNotes(dir).filter((n) => !leftOut(n) && n.description && !(onTheCode && n.type === 'project' && !isHere(n)));
+  if (sent === 'none') return { notes: [], how: 'none', ms: 0, of: 0 };
+  const may = sentAllows(sent, cwd, isHere);
+  const notes = readNotes(dir).filter((n) => !leftOut(n) && n.description && may(n) && !(onTheCode && n.type === 'project' && !isHere(n)));
   if (!notes.length || !String(text).trim()) return { notes: [], how: 'none', ms: Date.now() - t0, of: notes.length };
   const about = (n) => (isHere(n) ? HERE : 0);
   let scored = null;
@@ -280,7 +310,10 @@ export async function recallClaude(cwd, text, { embedder = null, dir = notesDir(
     fits = (s) => s.score >= CUT || (s.score >= NEAR && s.words >= WORDS);
   } else {
     scored = notes.map((n) => ({ note: n, close: shared.get(n.id), words: shared.get(n.id), score: shared.get(n.id) }));
-    const cut = 2 * Math.log(1 + notes.length / 3);
+    // Two words found in three notes each, up to 300 notes; past that, two found in 1% of them. With
+    // the pack's ~1,000 notes the uncapped cut (11.6) let 5 of the 16 questions of the maps and notes
+    // check find their note; capped (9.2), 9 of 16, and 1 of 15 requests that need none got one (3 Oct 2026).
+    const cut = 2 * Math.log(1 + Math.min(notes.length / 3, WORDS_CAP));
     fits = (s) => s.score >= cut;
     margin = Infinity;
   }
@@ -292,16 +325,21 @@ export async function recallClaude(cwd, text, { embedder = null, dir = notesDir(
   const chosen = all ? { picked: scored.slice(0, top) } : await choose({ query: text, byMeaning: scored, byWords: wordOrder, n, key: (s) => s.note.id, text: (s) => `${s.note.name.replace(/-/g, ' ')}: ${s.note.description}`, retriever, reranker, signal });
   const picked = chosen.picked;
   return {
-    notes: picked.map((s) => ({ id: s.note.id, name: s.note.name, type: s.note.type, description: s.note.description, part: bestPart(s.note, text), close: Math.round(s.close * 1000) / 1000, words: Math.round(s.words * 10) / 10 })),
+    notes: picked.map((s) => {
+      const extra = historyPiece(s.note, text, dir);
+      const part = bestPart(s.note, text, extra ? PART_CHARS - Math.min(extra.length, 500) - 1 : PART_CHARS);
+      return { id: s.note.id, name: s.note.name, type: s.note.type, ...(s.note.project ? { project: s.note.project } : {}), description: s.note.description, part: extra ? `${part}\n${extra.length > 500 ? `${extra.slice(0, 499)}…` : extra}` : part, close: Math.round(s.close * 1000) / 1000, words: Math.round(s.words * 10) / 10 };
+    }),
     how, ms: Date.now() - t0, of: notes.length, chosen, ...(note || chosen.note ? { note: note ?? chosen.note } : {}),
   };
 }
 
 const KIND = { feedback: 'how the user likes things done', user: 'about the user', project: 'about a project of theirs', reference: 'how something is done on this Mac' };
 // What goes with the request.
-export function claudeText(notes) {
+export function claudeText(notes, { pack = false } = {}) {
   if (!notes.length) return '';
-  const blocks = notes.map((n) => `[${n.name.replace(/-/g, ' ')}] (${KIND[n.type] ?? n.type})\n${n.part}`);
+  // From the pack, a note is named as it opens (NOTES/notes/<id>.md); a project's note says which project.
+  const blocks = notes.map((n) => `[${pack ? n.id : n.name.replace(/-/g, ' ')}] (${n.project ? `about the ${n.project} project` : KIND[n.type] ?? n.type})\n${n.part}`);
   // "Do not go looking": with a note in hand the model went to open the
   // files the note names, which are in other folders, behind the fence, and
   // ran out of time with no answer (3 of 6 questions, 28 Sep 2026).
@@ -310,7 +348,7 @@ export function claudeText(notes) {
   // this folder" (practice task 18, 28 Sep 2026).
   // "Apps": a note that ends "Then `open` it" sent Qwen to run open, which
   // the fence stops (30 Sep 2026).
-  return `From Claude's notes. Claude Code wrote these for itself in earlier conversations with this user. The request above comes first: where it names a place, a file name or a way of doing it, do what it says, whatever a note says. When the notes hold the answer to a question, answer from them now, in your own plain words, and say that it comes from Claude's notes. The files and folders a note names are mostly in other folders, which you cannot open from here: do not go looking for them. A note can name tools you do not have, and it can be out of date: where a file in THIS folder says otherwise, the file is right. You cannot start apps: where a note says to open a file or a page, say where it is, with its full path, instead.\n${blocks.join('\n\n')}`;
+  return `From Claude's notes. Claude Code wrote these for itself in earlier conversations with this user. The request above comes first: where it names a place, a file name or a way of doing it, do what it says, whatever a note says. When the notes hold the answer to a question, answer from them now, in your own plain words, and say that it comes from Claude's notes. The files and folders a note names are mostly in other folders, which you cannot open from here: do not go looking for them. A note can name tools you do not have, and it can be out of date: where a file in THIS folder says otherwise, the file is right. You cannot start apps: where a note says to open a file or a page, say where it is, with its full path, instead.${pack ? ' When the piece here is not enough, Read the whole note at NOTES/notes/<the name in brackets>.md.' : ''}\n${blocks.join('\n\n')}`;
 }
 
 // For the /memory panel and the results page: how many notes there are, how

@@ -8,6 +8,7 @@ The lines under **MCP tools** join them only while an MCP server is on (/mcp).
 ## Tool use
 
 - Find before you read: Search for the names in the request (a function, a message on screen, a setting), then Read the files the search points to. In a long file, pass find with the name to get the lines around it. Use List to see how a folder is laid out.
+- When the conversation has a code map (docs/map), start from it: open the part of the folder the task is in (Map with its part, or Read docs/map/<part>.md), then the files it names, before you Search. Claude's notes open the same way: NOTES/MAP.md, a topic, then NOTES/notes/<name>.md.
 - When a search finds nothing, try a shorter or different word before you conclude it is not there.
 - To change an existing file, use Edit with old_text copied exactly from Read, without line numbers, with enough context to match once. To replace most of a file you have read, Write it whole instead of a long old_text.
 - Use Bash to run the program, the tests and the project's own scripts. Look at files with Read, Search and List, not cat, grep or ls.

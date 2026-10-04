@@ -12,13 +12,14 @@ import { spawnSync } from 'node:child_process';
 import { walk, skipName, byPath } from './fs.mjs';
 import { outline } from './outline.mjs';
 import { HOME } from '../../../models/index.mjs';
+import { readLadder, fitLines } from '../agent/ladder.mjs';
 
 export const CODE_FILE = /\.(m?[jt]sx?|cjs|mts|cts|py|rb|go|rs|java|kt|swift|c|cc|cpp|h|hpp|cs|php|vue|svelte)$/i;
 const MAP_DIR = () => join(HOME, 'maps');
 
 // Code nobody works on: old copies, other people's libraries, test
 // snapshots. Left out while the project has other code.
-const SET_ASIDE = /(^|\/)(archive[sd]?|backups?|vendor|third[_-]party|__snapshots__|older versions)\//i;
+export const SET_ASIDE = /(^|\/)(archive[sd]?|backups?|vendor|third[_-]party|__snapshots__|older versions)\//i;
 const WALK_MAX = 2000; // outside git: the code files looked at, in the folder's order
 const LOG_MAX = 1000; // the newest commits read for how much each file was worked on
 const HALF_LIFE = 100; // commits: a change 100 commits back counts half as much as the newest
@@ -100,9 +101,14 @@ export function codeFiles(cwd, { max = 400 } = {}) {
   return (kept.length ? kept : all).sort((a, b) => b.onDisk - a.onDisk || b.score - a.score || byPath(a.rel, b.rel)).slice(0, max).map((f) => f.rel);
 }
 
-export function repoMap(cwd, { maxFiles = 400, maxChars = 5000 } = {}) {
+// ladder: when the project has a code map (docs/map/MAP.md, tools/codemap.mjs), the text starts with
+// its folder lines (up to 45% of maxChars) and the file list takes the rest (the Map tool's answer).
+export function repoMap(cwd, { maxFiles = 400, maxChars = 5000, ladder = false } = {}) {
   const files = codeFiles(cwd, { max: maxFiles });
   if (!files.length) return { entries: [], files: [], text: '' };
+  const lad = ladder ? readLadder(join(cwd, 'docs', 'map')) : null;
+  const mapLines = lad ? fitLines(lad.text.replace(/^# .*\n+/, ''), Math.round(maxChars * 0.45)) : '';
+  if (lad) maxChars -= mapLines.length + 120;
   const cacheFile = join(MAP_DIR(), `${createHash('sha1').update(cwd).digest('hex').slice(0, 16)}.json`);
   let cache = {};
   try { cache = JSON.parse(readFileSync(cacheFile, 'utf8')); } catch {}
@@ -126,9 +132,10 @@ export function repoMap(cwd, { maxFiles = 400, maxChars = 5000 } = {}) {
   const keep = new Set(files);
   for (const k of Object.keys(cache)) if (!keep.has(k)) { delete cache[k]; changed = true; }
   if (changed) { try { mkdirSync(MAP_DIR(), { recursive: true }); writeFileSync(cacheFile, JSON.stringify(cache)); } catch {} }
-  const text = mapText(entries, maxChars);
+  const list = mapText(entries, maxChars);
+  const text = lad ? `The code map (docs/map/MAP.md; Map with a part opens one):\n${mapLines}\n\nCode files (lines: top-level names):\n${list}` : list;
   entries.sort((a, b) => byPath(a.rel, b.rel));
-  return { entries, files: entries.map((e) => e.rel), text };
+  return { entries, files: entries.map((e) => e.rel), text, ladder: Boolean(lad) };
 }
 
 // One line per file, in the folder's order. Over the budget, names are cut

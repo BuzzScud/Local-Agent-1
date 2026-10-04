@@ -20,15 +20,15 @@ test('only files inside the page groups are published; gemma-docs is one of them
   for (const f of ['private/memory-about-you/index.md', 'private/design examples/opus/a.md', 'private/morning briefs/morning-brief.html', 'private/my-page.html', 'my-page.html', 'README.md', 'tools/sync-docs.mjs', 'tests', 'diagrams']) expect(published(f)).toBe(false);
 });
 
-test('.gitignore lets through exactly the page groups, the index and the tools of docs/', () => {
+test('.gitignore lets through exactly the page groups, the index, the tools and the code map of docs/', () => {
   const lines = readFileSync(join(repo, '.gitignore'), 'utf8').split('\n').map((l) => l.trim());
   expect(lines).toContain('docs/*');
   const allowed = lines.filter((l) => l.startsWith('!docs/')).map((l) => l.slice('!docs/'.length).replace(/\/$/, ''));
-  expect(allowed.sort()).toEqual([...PAGE_GROUPS, 'README.md', 'tools'].sort());
+  expect(allowed.sort()).toEqual([...PAGE_GROUPS, 'README.md', 'tools', 'map'].sort());
   // and git agrees: a private file, a loose page and a new folder are ignored, a group's page is not
   const probe = (f) => spawnSync('git', ['-C', repo, 'check-ignore', '-q', '--no-index', f]).status === 0;
   for (const f of ['docs/private/memory-about-you/index.md', 'docs/loose-page.html', 'docs/some-new-folder/x.html']) expect(probe(f)).toBe(true);
-  for (const f of ['docs/diagrams/x.html', 'docs/gemma-docs/test/x.html', 'docs/README.md', 'docs/tools/sync-docs.mjs']) expect(probe(f)).toBe(false);
+  for (const f of ['docs/diagrams/x.html', 'docs/gemma-docs/test/x.html', 'docs/README.md', 'docs/tools/sync-docs.mjs', 'docs/map/MAP.md']) expect(probe(f)).toBe(false);
 });
 
 test('ownerMarks finds the home folder path, and its folded form in a file name; ~ is fine', () => {

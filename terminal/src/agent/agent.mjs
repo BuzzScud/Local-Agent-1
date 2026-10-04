@@ -45,13 +45,16 @@ import { changedLines } from '../tools/edit.mjs';
 import { changeTrust } from './facts.mjs';
 import { recall, recallNotes, usedFacts } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
+import { packDir, packView } from './claude-pack.mjs';
+import { openPart, readLadder, partsOf } from './ladder.mjs';
+import { MAP_DIR } from '../tools/codemap.mjs';
 import { saveLessons, knownAlready, practiceWork, applySave, saveLine } from './lessons.mjs';
 import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
 import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeindex.mjs';
 import { choose, howChosen } from './search.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { useOf, describePictures, describedNote, reviewChange, checkPagePicture, screenshotPage } from './helper-models.mjs';
-import { openingRead, openingOn, memorySent } from './opening.mjs';
+import { openingRead, openingOn, memorySent, mapsRead } from './opening.mjs';
 import { isMcpCall, MCP_TOOL, mcpPlan, mcpToolDefs, mcpBrief, requestNote, requestHits, callHint, unwrapArgs, gateCall, madeUpCall, mcpCallInText, findEntry, describeEntry, describeServer, argLines, checkArgs, argsPreview, resultParts, resultText, catalogStamp, mcpRule } from './mcp.mjs';
 import { pictureFor } from '../tools/mcp.mjs';
 
@@ -1497,7 +1500,8 @@ export class Agent extends EventEmitter {
     }
     // The opening read (opening.mjs): on the remote set, the memory whole and where the project
     // stands, before the first step of a conversation, on either way; again after it was trimmed away.
-    this.giveOpening();
+    this.giveOpening(text);
+    this.giveMaps(text);
     // A question about code: what it is about is read now, in one go, instead
     // of letting the model find, list and read it a piece at a time.
     // The model that decides looks for itself (Map, CodeSearch, List, Search, Read).
@@ -2016,12 +2020,14 @@ export class Agent extends EventEmitter {
     const dir = c === true ? notesDir() : notesDir({ setting: c.dir ?? c });
     if (!dir) return;
     let r;
-    try { r = await recallClaude(this.cwd, text, { embedder: this.memory.embedder ?? null, dir, store: c.store, kind: routeByRules(text)?.kind ?? null, signal, retriever: this.search.retriever, reranker: this.reranker, top: this.ctx <= 16384 ? SMALL_CTX_NOTES : undefined }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; return; }
+    // A service that is not the owner's own machine gets only the notes about this project (Memory sent).
+    const sent = this.notesSent();
+    try { r = await recallClaude(this.cwd, text, { embedder: this.memory.embedder ?? null, dir, store: c.store, kind: routeByRules(text)?.kind ?? null, signal, retriever: this.search.retriever, reranker: this.reranker, top: this.ctx <= 16384 ? SMALL_CTX_NOTES : undefined, sent }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; return; }
     if (!r.notes.length) return;
-    goesAlong(claudeText(r.notes));
+    goesAlong(claudeText(r.notes, { pack: Boolean(this.notesView()) }));
     if (this.happened) this.happened.claude = r.notes.map((n) => n.id);
     this.claudeCame = true; // for this message: a step that is turned away points back at the note (runTool)
-    this.emit('memory', { claude: r.notes.map((n) => ({ id: n.id, name: n.name, type: n.type, close: n.close, chars: n.part.length })), how: r.how, ms: r.ms, of: r.of });
+    this.emit('memory', { claude: r.notes.map((n) => ({ id: n.id, name: n.name, type: n.type, ...(n.project ? { project: n.project } : {}), close: n.close, chars: n.part.length })), how: r.how, ms: r.ms, of: r.of, sent });
     return r;
   }
 
@@ -2098,19 +2104,58 @@ export class Agent extends EventEmitter {
   // the request instead). A List, not the Bash it stands for: given a Bash, it ran git log and ls -la
   // itself twice more and copied the Bash's "description" into its Reads. A trim, the notes or /rewind
   // can take it away: then it comes again.
-  giveOpening() {
+  giveOpening(text = '') {
     if (this.isHelper || !openingOn() || !this.remoteSet()) return;
     if (this.messages.some((m) => m.opening && !String(m.content).startsWith('[older output removed'))) return;
     let r = null;
     // Facts about the user go in full only to the owner's own other computer (opening.mjs memorySent).
     const sent = memorySent(this.model);
-    try { r = openingRead(this.cwd, { memory: sent === 'none' ? null : this.memory, home: this.memory?.home ?? this.home, you: sent === 'all' }); } catch { return; }
+    // The maps go with it (opening.mjs mapsRead): the code map, and Claude's notes as Memory sent allows.
+    let maps = null;
+    try { maps = mapsRead(this.cwd, { ctx: this.ctx, request: text, notes: this.notesView() }); } catch { /* left out */ }
+    try { r = openingRead(this.cwd, { memory: sent === 'none' ? null : this.memory, home: this.memory?.home ?? this.home, you: sent === 'all', maps }); } catch { return; }
     if (!r) return;
     const id = `opening_${Date.now()}`;
     this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'List', arguments: JSON.stringify({ path: '.' }) } }] });
     this.messages.push({ role: 'tool', tool_call_id: id, content: r.body, opening: true });
     this.ctxUsed += tokensOf(r.body) + 30;
     this.emit('tool', { id, name: 'List', label: r.view.title, arg: r.args.command, view: r.view, given: true });
+  }
+
+  // What of Claude's notes this model may be given: all of them on this Mac and on the owner's own
+  // machine, else only those about this project, or none (opening.mjs memorySent, /remote's Memory sent).
+  notesSent() {
+    return this.model?.remote ? memorySent(this.model) : 'all';
+  }
+
+  // The pack of Claude's notes (claude-pack.mjs) as this model may see it: its map, its topics and
+  // notes under NOTES/. null with the notes off, no pack, or nothing this model may see.
+  notesView() {
+    const c = this.memory?.claude;
+    if (!c) return null;
+    const named = c === true ? null : c.dir ?? c;
+    const dir = typeof named === 'string' ? (existsSync(join(named, 'pack.json')) ? named : existsSync(join(dirname(named), 'pack.json')) ? dirname(named) : null) : packDir();
+    if (!dir) return null;
+    try { return packView(dir, { sent: this.notesSent(), cwd: this.cwd, home: this.home }); } catch { return null; }
+  }
+
+  // The maps for a model of the local set (on this Mac): the code map (docs/map/MAP.md) and Claude's
+  // notes map, as much of each as its context has room for, once a conversation, as a step it did
+  // not have to take, like the opening read (not counted as conversation: said()). A model of the
+  // remote set gets them in its opening read (giveOpening).
+  giveMaps(text = '') {
+    if (this.isHelper || this.remoteSet() || !openingOn()) return;
+    // Once while it is in the conversation; trimmed away or summarized, it comes again.
+    if (this.messages.some((m) => m.maps && !String(m.content).startsWith('[older output removed'))) return;
+    let maps = null;
+    try { maps = mapsRead(this.cwd, { ctx: this.ctx, request: text, notes: this.notesView() }); } catch { return; }
+    if (!maps) return;
+    const body = `Agentic Coder read these for you before your first step; do not read them again.\n\n${maps.parts.join('\n\n')}`;
+    const id = `maps_${Date.now()}`;
+    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'List', arguments: JSON.stringify({ path: MAP_DIR }) } }] });
+    this.messages.push({ role: 'tool', tool_call_id: id, content: body, maps: true });
+    this.ctxUsed += tokensOf(body) + 30;
+    this.emit('tool', { id, name: 'List', label: 'Reading the maps', arg: maps.commands.join('; '), view: { kind: 'opening', title: 'Reading the maps', command: maps.commands.join('; '), lines: maps.lines, content: body }, given: true });
   }
 
   // In a project with several code files, the loop starts from the project
@@ -2683,7 +2728,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -3096,12 +3141,21 @@ export class Agent extends EventEmitter {
     if (this.happened && this.happened.did.length < 60) this.happened.did.push(`${name} ${args.query ?? args.task ?? args.fact ?? (args.from ? `${args.from} ${args.to}` : '')}`.slice(0, 300));
     if (name === 'Map') {
       if (isHomeFolder(this.cwd)) { seen({ kind: 'error', message: 'No map of the home folder' }, true); return { text: 'There is no map of the home folder: it would list whatever code it meets first. List a folder, or work in a project folder.', error: true }; }
+      // A part of the project's code map (docs/map/<part>.md, tools/codemap.mjs).
+      if (args.part) {
+        const ladder = readLadder(join(this.cwd, MAP_DIR));
+        const p = ladder ? openPart(ladder.dir, args.part) : null;
+        if (!p) { const names = ladder ? [...new Set(ladder.parts.map((x) => x.file.replace(/\.md$/, '')))] : []; seen({ kind: 'error', message: 'No such part' }, true); return { text: ladder ? `No part "${args.part}" in docs/map. Its parts: ${names.join(', ')}; a part names the parts inside it with an arrow.` : 'This project has no code map (docs/map). Map without a part lists its code files.', error: true }; }
+        this.mapGiven = true;
+        seen({ kind: 'list', count: partsOf(p.text).length, content: p.text });
+        return { text: `docs/map/${p.file}:\n${p.text}` };
+      }
       let map = null;
-      try { map = repoMap(this.cwd, { maxChars: 4500 }); } catch {}
+      try { map = repoMap(this.cwd, { maxChars: 4500, ladder: true }); } catch {}
       if (!map?.entries?.length) { seen({ kind: 'list', count: 0, content: '' }); return { text: 'No code files here. List shows what the folder holds.' }; }
       this.mapGiven = true;
       seen({ kind: 'list', count: map.entries.length, content: map.text });
-      return { text: `Code files in the project (lines: top-level names):\n${map.text}` };
+      return { text: map.ladder ? map.text : `Code files in the project (lines: top-level names):\n${map.text}` };
     }
     if (name === 'CodeSearch') {
       const off = !this.helpers.has('rag') ? 'the code search helper (Oracle) is off in /helpers' : !this.searchModel() ? "the small model that compares meanings is off (/effort's Embedder)" : isHomeFolder(this.cwd) ? 'there is no code search of the home folder' : null;
@@ -3741,7 +3795,7 @@ export class Agent extends EventEmitter {
   // How many messages you and the model have said. The opening read (giveOpening: two messages the
   // app put in) is not conversation, so on a remote one short exchange is still too short to
   // summarize, as it is on this Mac, where there is no opening read and the count is the same as before.
-  said() { return this.messages.filter((m) => !m.opening && !(m.tool_calls ?? []).some((c) => String(c.id).startsWith('opening_'))).length; }
+  said() { return this.messages.filter((m) => !m.opening && !m.maps && !(m.tool_calls ?? []).some((c) => /^(opening|maps)_/.test(String(c.id)))).length; }
 
   async compact(signal, { instructions } = {}) {
     if (this.said() <= 3) return;

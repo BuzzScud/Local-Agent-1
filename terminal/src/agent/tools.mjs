@@ -89,8 +89,8 @@ export const TOOL_DEFS = [
 export const MODEL_TOOL_DEFS = [
   {
     name: 'Map',
-    description: 'A map of the project: every code file with its line count and the names defined in it (functions, classes, exports), names only. Use it to see how a project you do not know is laid out, instead of List and Read one file at a time.',
-    parameters: { type: 'object', properties: {} },
+    description: 'A map of the project: every code file with its line count and the names defined in it (functions, classes, exports), names only; when the project has a code map (docs/map), its top folders with a plain line each first. part: one part of that code map (the name after an arrow, e.g. "desks"), every folder in it with its main files. Use it to see how a project you do not know is laid out, instead of List and Read one file at a time.',
+    parameters: { type: 'object', properties: { part: { type: 'string', description: 'A part of the code map, by the name after its arrow ("desks", "desks--ladder"); leave it out for the whole map' } } },
   },
   {
     name: 'CodeSearch',
@@ -304,7 +304,7 @@ export function display(name, args = {}) {
     case 'Bash': return { label: 'Bash', arg: args.command ?? '' };
     case 'TodoWrite': return { label: 'Update Todos', arg: '' };
     case 'Ask': return { label: 'Ask', arg: args.question ?? '' };
-    case 'Map': return { label: 'Map', arg: 'the project' };
+    case 'Map': return { label: 'Map', arg: args?.part ? `docs/map/${String(args.part).replace(/\.md$/, '')}.md` : 'the project' };
     case 'CodeSearch': return { label: 'CodeSearch', arg: args.query ?? '' };
     case 'Rename': return { label: 'Rename', arg: args.from || args.to ? `${args.from ?? '?'} → ${args.to ?? '?'}` : '' };
     case 'TestFirst': { const t = String(args.task ?? '').replace(/\s+/g, ' ').trim(); return { label: 'TestFirst', arg: t.length > 70 ? `${t.slice(0, 69)}…` : t }; }
@@ -612,6 +612,7 @@ export function prepare(name, args, env) {
     if (p.shelf) return { error: `${p.rel} is in ${p.shelf.what}, which are read-only here. Read them; never change them.` };
     if (readSkillPath(env.cwd, args.path, [])) return { error: `${args.path} is one of the user's skills (SKILLS.md), which are read-only here. Read them; never change them.` };
     if (readGuidePath(env.cwd, args.path, readGuides(env.rulesSet, { agents: env.agents, mcp: env.mcp }))) return { error: `${args.path} is one of the user's guides (terminal/rules/remote), which are read-only here. Read them; never change them.` };
+    if (NOTES_PATH.test(String(args.path ?? '').trim()) && !existsSync(resolvePath(env.cwd, String(args.path).trim().replace(/^\.\//, '').split('/')[0]).abs)) return { error: `${args.path} is one of Claude's notes, which are read-only here. Read them; never change them.` };
     let exists = existsSync(p.abs);
     if (!exists && name === 'Edit') {
       const alt = didYouMean(env.cwd, args.path);
@@ -741,6 +742,9 @@ ${pages[args.page - 1] || '(no text on this page: a scan or a picture)'}`, view:
   return withScans({ text: `${note}${head}\n${cut(body, max)}${more}`, view: { kind: 'read', lines: part.length, total, content: body } });
 }
 
+// A path into the pack of Claude's notes: "NOTES", "NOTES/MAP.md", "NOTES/notes/<name>.md".
+export const NOTES_PATH = /^(?:\.\/)?NOTES(?:\/|$)/;
+
 export async function execute(name, args, prepared, env) {
   const max = env.maxResultChars ?? 12000;
   switch (name) {
@@ -754,6 +758,15 @@ export async function execute(name, args, prepared, env) {
       if (near && !existsSync(resolvePath(env.cwd, args.path).abs)) {
         if (near.error) return { text: near.error, error: true, view: { kind: 'error', message: 'No such skill' } };
         return { text: near.text, view: { kind: 'read', lines: near.text.split('\n').length, total: near.text.split('\n').length, content: near.text } };
+      }
+      // "NOTES/…": the pack of Claude's notes (claude-pack.mjs) as this model may see it (Memory sent),
+      // when the project has no NOTES folder of its own: MAP.md, a topic, notes/<name>.md, history/<name>.md.
+      if (NOTES_PATH.test(String(args.path ?? '').trim()) && !existsSync(resolvePath(env.cwd, String(args.path).trim().replace(/^\.\//, '').split('/')[0]).abs)) {
+        const view = env.notes?.() ?? null;
+        const text = view ? view.file(args.path) : null;
+        if (text == null) return { text: view ? `No ${args.path} that you can open. NOTES/MAP.md lists the topics${view.sent === 'project' ? ' about this project (the notes about the user stay on their Mac)' : ''}, each topic its notes.` : "There are no Claude's notes to open here.", error: true, view: { kind: 'error', message: 'No such note' } };
+        const n = text.split('\n').length;
+        return { text: `${args.path}:\n${text}`, view: { kind: 'read', lines: n, total: n, content: text } };
       }
       const guide = readGuidePath(env.cwd, args.path, guides);
       if (guide?.error) return { text: guide.error, error: true, view: { kind: 'error', message: 'No such guide' } };

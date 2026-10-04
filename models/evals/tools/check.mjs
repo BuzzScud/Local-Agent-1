@@ -512,7 +512,7 @@ async function installedApp() {
 // and the tools aside), or when a page that is or will be committed holds the home
 // folder's path or name (ownerMarks): the repo is public.
 async function docsStayPrivate({ files }) {
-  const own = (f) => f === 'README.md' || f.startsWith('tools/');
+  const own = (f) => f === 'README.md' || f.startsWith('tools/') || f.startsWith('map/'); // the code map: checkMap keeps it free of home paths
   const tracked = (await git('ls-files', '-z', '--', 'docs')).out.split('\0').filter(Boolean).map((f) => f.slice('docs/'.length));
   const strays = tracked.filter((f) => !published(f) && !own(f));
   const pages = [...new Set(files.filter((f) => f.startsWith('docs/')).map((f) => f.slice('docs/'.length)).filter(published))].filter((f) => existsSync(join(root, 'docs', f)));

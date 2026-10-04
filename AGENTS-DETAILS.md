@@ -146,6 +146,26 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   everywhere, as before) · `none` (no memory block); /remote's More has the row (Memory sent). `opening.test.mjs`
   checks each on a pretend service.
 
+- **The pack of Claude's notes and the code maps** (3 Oct 2026, the owner's picks: both, one shape, every model sized
+  by its context). One shape for both, a ladder (`terminal/src/agent/ladder.mjs`): `MAP.md` (a line per part) → a part
+  file under 2,000 tokens (a line per folder, file or note) → the file or note → for a long note its history. The
+  **pack** (`claude-pack.mjs`, `bun run pack [--from <copy>]`) is `~/.agentic-coder/claude-pack/`: every Claude Code
+  memory folder on this Mac and the copies named once with `--from` (kept in its `pack.json`), this Mac's note over
+  the copy's; a project's note is `<project>--<note>` and says its project; sign-ins, servers and secrets are left out
+  as before (`leftOut`, `holdsSecret`); a note over 7,000 characters keeps how it stands now (its opening, Why and How
+  to apply, its newest dated parts) with the whole note in `history/`; topics come from each MEMORY.md's headings.
+  `notesDir()` reads its `notes/` when there is one; nothing rebuilds it by itself (`/memory` says when notes changed
+  since). The **code map** (`tools/codemap.mjs`, `bun run codemap [<folder>]`) is a project's `docs/map/`: a line per
+  folder and per main file, written by a model on a service from a card per folder (cached per file's content under
+  `~/.agentic-coder/maps/labels-*.json`), else from the code; `checkMap` (and `maps-and-pack.test.mjs` for this repo's
+  own) fails on a missing path, a part over 2,000 tokens, a home path or an address. **What a model gets**
+  (`opening.mjs mapsRead`, `mapRoom`): the code map's lines and the notes map, 3,000 characters each at 32k, with the
+  code map's part nearest the request from 128k up; on the remote set in the opening read, on the local set as a step
+  of its own ("Reading the maps", `giveMaps`). `Map {"part"}` opens a part, `Read NOTES/…` the pack (read-only).
+  **Memory sent holds for Claude's notes too**: a service that is not the owner's own machine gets only the notes about
+  the project it works in (`sentAllows`, `packView`); before 3 Oct every matched note went. Measured by the Maps and
+  notes check (`models/evals/tools/ladder-check.mjs`, the Arena's `ladder`; its set and page are private).
+
 ## The prompt files
 
 - **TOOLS.md and SKILLS.md** (`terminal/rules/`, since 30 Sep 2026) are read by `terminal/src/agent/prompt-files.mjs`

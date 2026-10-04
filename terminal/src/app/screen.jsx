@@ -114,6 +114,9 @@ function ToolView({ it, width }) {
 // The clock time a turn ended, as Claude Code writes it: "12:58 PM".
 const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
+// "3 Oct, 5:42 PM": when the pack of Claude's notes was built.
+const packDay = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '?' : `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`; };
+
 // What came along with a request (agent.remember), and what the context
 // helpers brought (agent.bringHelpers, titled "Helpers"): one folded line,
 // like a tool's result; ctrl+o prints the list, each item with its fit and size
@@ -225,6 +228,8 @@ function MemoryPanel({ it, width }) {
         <>
           {head("Claude's notes", `${it.claude.used} · read only`, it.claude.where)}
           <Box paddingLeft={4} width={W}><Text color={C.dim} wrap="truncate-end">{it.claude.leftOut} about sign-ins, servers or secrets are left out</Text></Box>
+          {it.claude.pack ? <Box paddingLeft={4} width={W}><Text color={C.dim} wrap="truncate-end">the pack: {it.claude.pack.notes} notes in {it.claude.pack.topics} topics, built {packDay(it.claude.pack.built)}</Text></Box> : null}
+          {it.claude.pack?.newer ? <Box paddingLeft={4} width={W}><Text color={C.warn} wrap="truncate-end">{it.claude.pack.newer} of Claude's notes changed since: bun run pack makes it current</Text></Box> : null}
         </>
       ) : null}
       {it.health ? (

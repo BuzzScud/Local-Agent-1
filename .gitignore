@@ -25,6 +25,8 @@ docs/*
 !docs/other/
 !docs/older versions/
 !docs/gemma-docs/
+# The code map of this repo (bun run codemap, terminal/src/tools/codemap.mjs): not pages, for the models.
+!docs/map/
 # The pages' old folder names (before 30 Sep 2026): still ignored if one is left over
 cli docs/
 agentic-coder DOCS/
