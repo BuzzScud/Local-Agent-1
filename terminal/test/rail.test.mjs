@@ -90,7 +90,7 @@ test('while it writes a file, the rail says which and how many lines so far', as
   await fake.close();
   expect(r.snapshots.writing).toMatch(/✎ Writing {2}page\.html · \d+ lines?/);
   expect(r.snapshots.writing).toMatch(/[▰▱]{10} [\d.]+k? of [\d.]+k? reply room/);
-  expect(r.snapshots.writing).toMatch(/╰─ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · this step \d+s · (↓ [\d.]+ tok\/s · )?esc to interrupt\)/);
+  expect(r.snapshots.writing).toMatch(/╰─ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · ↓ [\d.]+k? tokens this session · this step \d+s · (↓ [\d.]+ tok\/s · )?esc to interrupt\)/);
   expect(r.snapshots.writing).not.toContain('writing page.html'); // the row above says it
   expect(r.text).toMatch(/╰─ ■ Interrupted/);
 }, 60_000);
