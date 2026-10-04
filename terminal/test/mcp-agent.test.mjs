@@ -98,22 +98,64 @@ test('a call by another form of a tool\'s name runs as that tool and asks as it;
   expect(results[2]).toContain('Ticket #144 created: "y"');
 });
 
-test('a request about what a server holds carries a note naming its tools, and an answer with no MCP tool tried is sent back once', async () => {
+test('a request about what a server holds carries a note naming its tools; an answer with no MCP tool tried is not shown, and is asked again with only that tool and thinking on', async () => {
   const note = 'What this request asks about is reached with the user\'s MCP server "shop" (mcp__shop__create_ticket, mcp__shop__get_ticket), not in the project\'s files: call the one that fits first.';
-  const { sent, notes, results } = await run([{ text: 'Its title is "Dark mode".' }, call('mcp__shop__get_ticket', { number: 142 }), { text: 'Checkout total rounds down.' }, { text: 'Fixed.' }], { mode: 'bypass', requests: ['What is the title of ticket 142 in the shop?', 'Fix the failing test in cart.mjs'] });
+  const shown = [];
+  const { sent, notes, results, names } = await run([{ text: 'Its title is "Dark mode".' }, call('mcp__shop__get_ticket', { number: 142 }), { text: 'Checkout total rounds down.' }, { text: 'Fixed.' }], {
+    mode: 'bypass', requests: ['What is the title of ticket 142 in the shop?', 'Fix the failing test in cart.mjs'], before: ({ agent }) => agent.on('assistant', (e) => shown.push(e.text)) });
   const asked = (r) => r.messages.filter((m) => m.role === 'user').map((m) => m.content);
   expect(asked(sent[0]).at(-1)).toContain(`(${note})`);
   expect(asked(sent[1]).at(-1)).toBe(`[Automatic note from Agentic Coder, not from the user] You answered without calling an MCP tool, so your answer did not come from the user's server. ${note}`);
-  expect(notes).toContain('It answered without calling the MCP tool the request is about; asked it to call it.');
+  // That one step: only the tools the note names, and thinking on; the next has everything again, as before.
+  expect(names(sent[1])).toEqual(['mcp__shop__create_ticket', 'mcp__shop__get_ticket']);
+  expect([sent[0], sent[1], sent[2]].map((r) => r.chat_template_kwargs?.enable_thinking)).toEqual([false, true, false]);
+  expect(names(sent[2])).toEqual(names(sent[0]));
+  expect(notes).toContain('It answered without calling the MCP tool the request is about (that answer is not shown); asked it again, with only that tool and thinking on.');
+  expect(shown.join('\n')).not.toContain('Dark mode');
   expect(results.some((r) => r.includes('Ticket #142'))).toBe(true);
   // A request about the project: no note, and its answer stands.
   expect(asked(sent[3]).at(-1)).not.toContain('What this request asks about');
   expect(notes.filter((n) => n.startsWith('It answered without calling the MCP tool'))).toHaveLength(1);
-  expect(notes).not.toContain('This answer did not come from your MCP server: no MCP tool was called for it.');
-  // Answered without the tool again: it stands, with a line saying where it did not come from.
-  const again = await run([{ text: '42 mugs.' }, { text: 'Still 42.' }], { requests: ['How many tickets are in the shop?'] });
-  expect(again.sent).toHaveLength(2);
-  expect(again.notes).toContain('This answer did not come from your MCP server: no MCP tool was called for it.');
+});
+
+test('an answer is left as it is when the request does not name the server, when it read the project, or when the server\'s data came with the message', async () => {
+  // Only a word of a tool's name ("add", the shop's add tool): the note, but no send-back.
+  const word = await run([{ text: 'The cart has no tests yet.' }], { requests: ['Add a test for the cart'] });
+  expect(word.sent).toHaveLength(1);
+  expect(word.sent[0].messages.at(-1).content).toContain('What this request asks about');
+  // It read the project's files: its answer is from there, not made up.
+  const read = await run([call('Read', { path: 'export.mjs' }), { text: 'Ticket 142 is about rounding, says export.mjs.' }], { mode: 'bypass', requests: ['What is ticket 142 in the shop about?'] });
+  expect(read.sent).toHaveLength(2);
+  expect(read.agent.messages.at(-1).content).toBe('Ticket 142 is about rounding, says export.mjs.');
+  // A resource you attached (@shop:uri) is the server's data already: no note, no send-back.
+  const attached = await run([{ text: 'The number is 8812.' }], { requests: ['What does the shop note say?\n\n<resource server="shop" uri="shop://notes/release">\nThe magic number is 8812.\n</resource>'] });
+  expect(attached.sent).toHaveLength(1);
+  expect(attached.sent[0].messages.at(-1).content).not.toContain('What this request asks about');
+});
+
+test('a request that names a server does not Look first (its answer is there); one about the project still does', async () => {
+  const { notes, sent } = await run([call('mcp__shop__get_ticket', { number: 142 }), { text: 'Checkout total rounds down.' }], { mode: 'bypass', requests: ['What is ticket 142 in the shop?'], before: ({ agent }) => { agent.look = '30'; } });
+  expect(notes.some((n) => n.startsWith('Looking first'))).toBe(false);
+  expect(sent[0].messages.at(-1).content).not.toContain('Look first:');
+  const plain = await run([{ text: 'It prints trades as CSV.' }, { text: 'It prints trades as CSV, from export.mjs.' }, { text: 'CSV.' }, { text: 'CSV, still.' }], { requests: ['What does export.mjs do?'], before: ({ agent }) => { agent.look = '30'; } });
+  expect(plain.notes.some((n) => n.startsWith('Looking first: at least 30 s'))).toBe(true);
+});
+
+test('asked twice and still no MCP tool tried: the answer is replaced by a line saying it did not come from the server', async () => {
+  const shown = [];
+  const { sent, notes, agent } = await run([{ text: '42 tickets.' }, { text: 'Still 42.' }, { text: 'I do not have access to that tool.' }], {
+    requests: ['How many tickets are in the shop?'], before: ({ agent: a }) => a.on('assistant', (e) => shown.push(e.text)) });
+  expect(sent).toHaveLength(3);
+  const last = sent[2].messages.filter((m) => m.role === 'user').at(-1).content;
+  expect(last).toContain('Your answer still did not come from the user\'s MCP server "shop": none of its tools was called. It is in your tools now: mcp__shop__create_ticket (arguments, * = needed: title* (string)');
+  expect(last).toContain('mcp__shop__get_ticket (arguments, * = needed: number* (integer): The ticket number)');
+  const answer = 'I couldn\'t get this from your MCP server "shop": none of its tools was called, so there is no answer from it. It said: "I do not have access to that tool."';
+  expect(agent.messages.at(-1)).toMatchObject({ role: 'assistant', content: answer });
+  expect(shown.filter(Boolean)).toEqual([answer]);
+  expect(notes).toContain('Its own answer is not shown: it did not come from your MCP server.');
+  // A made-up answer is no reason: it is not quoted.
+  const made = await run([{ text: '42 tickets.' }, { text: 'Still 42.' }, { text: '42.' }], { requests: ['How many tickets are in the shop?'] });
+  expect(made.agent.messages.at(-1).content).toBe('I couldn\'t get this from your MCP server "shop": none of its tools was called, so there is no answer from it.');
 });
 
 test('an MCP call written out as text, the way Mcp takes one, runs: by the tool\'s own name, or through Mcp', async () => {
@@ -249,6 +291,9 @@ test('a small context gets a big server by name and one line, through Mcp: its a
   expect(r.results[3]).toContain('The user\'s MCP server "github" has 31 tools on');
   // Its arguments written beside "tool", not inside "arguments": they are the arguments.
   expect(r.results[4]).toContain('Ticket #145 created: "Beside tool"');
+  // A tool that takes no arguments, named with only "tool": it runs (there is nothing to ask for).
+  const none = await run([call('Mcp', { tool: 'mcp__shop__notes_link' }), { text: 'ok' }], { mode: 'bypass' });
+  expect(none.results[0]).toContain('shop · notes.link answered.');
 });
 
 test('a question, read as one, asks even for an allowed tool you did not mark as reading', async () => {

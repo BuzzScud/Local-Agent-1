@@ -458,10 +458,13 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
 // ---- the model's settings -----------------------------------------------------------------------
 
 // A model this repo has no folder for: the server's own sampling, Low or High effort.
+// A model on /remote thinks unless you say otherwise (the owner's pick, 3 Oct 2026: "always leave on
+// thinking as the default, and turn it off when a model has no thinking"): thinkingDefault is on, and
+// off for a model the service says cannot think (remoteModel). Your own pick for a model is kept for it.
 export const GENERIC_REMOTE = {
   id: 'remote', name: 'Remote model', by: '', file: null, bytes: 0,
   sampling: {}, thinkingSampling: {},
-  thinkingDefault: false, thinkingEffort: 'high',
+  thinkingDefault: true, thinkingEffort: 'high',
   thinkingLevels: [
     { id: 'low', label: 'Low', effort: null, note: 'answers straight away' },
     { id: 'high', label: 'High', effort: 'high', note: 'asks the model to think first (one that cannot answers without it)' },
@@ -486,6 +489,10 @@ export function remoteLevels(o) {
   if (/laguna/i.test(`${o.family} ${o.id}`)) return [{ ...low, label: 'Off' }, { ...high, label: 'Max', note: 'thinks between its tool calls for as long as it needs: Laguna has only off and max' }];
   return [{ ...low, label: 'Off' }, { ...high, label: 'On', note: 'thinks first: this model has no steps, only on or off' }];
 }
+
+// Whether a model can think at all: a level that thinks, or no levels said (it is asked, and one that
+// cannot answers without it).
+export const canThink = (m) => (m?.thinkingLevels?.length ? m.thinkingLevels.some((l) => l.effort) : true);
 
 // Big-model mode (1 Oct 2026, the user's pick): a model on an Ollama service
 // with 30B parameters or more (by its total, so Qwen3.6 35B-A3B counts) that
@@ -532,8 +539,10 @@ export function remoteModel(r, info = {}) {
   const ctx = r?.context || (r?.kind === 'claude' && info.ctx ? Math.min(info.ctx, CLAUDE_CTX) : info.ctx) || null;
   const o = info.ollama ?? null;
   const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r), model: info.model || r?.model || null, ollama: o?.version ?? null, mine: ownMachine(r) }, bytes: 0, draft: null, slots: info.slots ?? 1 };
-  if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx };
-  const levels = o?.known ? { thinkingLevels: remoteLevels(o), thinkingEffort: o.thinking ? 'high' : 'low' } : {};
+  if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx, thinkingDefault: canThink(base) };
+  // On, at the model's own level (gpt-oss: Medium, its maker's default; its High is slow and can loop),
+  // unless the service says it cannot think.
+  const levels = o?.known ? { thinkingLevels: remoteLevels(o), thinkingEffort: o.thinking ? (/gpt-?oss/i.test(`${o.family} ${o.id}`) ? 'medium' : 'high') : 'low', thinkingDefault: Boolean(o.thinking) } : {};
   // An Ollama model's longest context is its own (/effort's Context row goes up to it).
   // A big one carries big-model mode (bigHarness).
   const harness = bigHarness(o);

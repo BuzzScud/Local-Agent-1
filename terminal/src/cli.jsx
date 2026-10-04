@@ -5,7 +5,7 @@ import { render, renderToString } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS, CLEAR } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath } from '../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath, thinkingLevel } from '../../models/index.mjs';
 import { readLimits, modelWithLimits, OWN_ROWS, ownOf } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
@@ -397,9 +397,12 @@ if (opts.print) {
     // and so do the ones /model's menu kept for that model, with its Effort (unless --effort or --think says).
     const own = readLimits(settings, remote.model);
     limits = { ...limits, ...Object.fromEntries(OWN_ROWS.map((id) => [id, own[id]])) };
+    // Else the model's default: thinking on, at its own level, unless it cannot think (remoteModel). The
+    // shared Effort is this Mac's models'; --think, --no-think and --effort still win.
     const levels = remote.model.thinkingLevels ?? [];
-    const lv = levels.length > 1 ? levels.find((l) => l.id === ownOf(settings, remote.model.remote?.model)?.level) : null;
-    if (lv && opts.thinking === undefined) { opts.thinking = Boolean(lv.effort); if (lv.effort) opts.effort = lv.id; }
+    const lv = (levels.length > 1 ? levels.find((l) => l.id === ownOf(settings, remote.model.remote?.model)?.level) : null)
+      ?? thinkingLevel(remote.model, remote.model.thinkingDefault ?? true, remote.model.thinkingEffort);
+    if (opts.thinking === undefined) { opts.thinking = Boolean(lv.effort); if (lv.effort) opts.effort ??= lv.id; }
     runModel = modelWithLimits(remote.model, limits);
     canSee = Boolean(remote.vision);
     if (remote.slots > 1) slots = { main: 0, side: 1 };

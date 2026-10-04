@@ -210,9 +210,18 @@ export function mcpBrief(entries, { listed = [], notes = {} } = {}) {
 // → the note, or '' (nothing in the request points at a server).
 const STOP_WORDS = new Set(['tool', 'tools', 'the', 'a', 'an', 'of', 'in', 'on', 'to', 'and', 'or', 'for', 'with', 'from', 'by', 'one', 'all', 'get', 'set', 'list', 'read', 'make', 'new', 'item', 'this', 'that', 'what', 'how', 'many']);
 const wordsOf = (s) => String(s ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP_WORDS.has(w)).map((w) => w.replace(/(ies)$/, 'y').replace(/(?<!s)s$/, ''));
+// requestHits: the servers and tools the note names, as data ([{ server, tools, gated, named }], named:
+// the request says the server's own name); the agent offers only those for a retry (mcpFocusTools).
 export function requestNote(text, entries, { listed = [] } = {}) {
+  const hits = requestHits(text, entries, { listed });
+  if (!hits.length) return '';
+  const say = (h) => `the user's MCP server "${h.server}" (${!h.tools.length ? `its tools are in the ${MCP_TOOL} tool's list` : h.gated ? `call ${MCP_TOOL} with tool ${h.tools.map((e) => e.name).join(' or ')}` : h.tools.map((e) => e.name).join(', ')})`;
+  const one = hits.length === 1 && hits[0].tools.length === 1;
+  return `What this request asks about is reached with ${hits.map(say).join(' and ')}, not in the project's files: call ${one ? 'that tool' : 'the one that fits'} first.`;
+}
+export function requestHits(text, entries, { listed = [] } = {}) {
   const asked = new Set(wordsOf(text));
-  if (!asked.size) return '';
+  if (!asked.size) return [];
   const on = entries.filter((e) => e.on);
   const through = new Set(listed.map((e) => e.name));
   // A tool's score: the words of its own name the request uses (get_ticket for "ticket", sales_report
@@ -230,12 +239,15 @@ export function requestNote(text, entries, { listed = [] } = {}) {
     // Named with no tool that fits: a big server's first tools would be a guess, so its list is meant.
     const gated = tools.every((e) => through.has(e.name));
     const pick = (fits.length ? fits : gated ? [] : tools).slice(0, 6);
-    hits.push({ server: s, tools: pick, gated });
+    hits.push({ server: s, tools: pick, gated, named });
   }
-  if (!hits.length) return '';
-  const say = (h) => `the user's MCP server "${h.server}" (${!h.tools.length ? `its tools are in the ${MCP_TOOL} tool's list` : h.gated ? `call ${MCP_TOOL} with tool ${h.tools.map((e) => e.name).join(' or ')}` : h.tools.map((e) => e.name).join(', ')})`;
-  const one = hits.length === 1 && hits[0].tools.length === 1;
-  return `What this request asks about is reached with ${hits.map(say).join(' and ')}, not in the project's files: call ${one ? 'that tool' : 'the one that fits'} first.`;
+  return hits;
+}
+// How one tool is called, for the second time a model answers without it: its name and arguments,
+// or the Mcp call that reaches it.
+export function callHint(entry, { gated = false } = {}) {
+  const args = argLines(entry).map((l) => l.replace(/^- /, '')).join('; ');
+  return gated ? `${MCP_TOOL} with "tool": "${entry.name}" and "arguments" (${args || 'none: send {}'})` : `${entry.name} (${args ? `arguments, * = needed: ${args}` : 'no arguments: send {}'})`;
 }
 
 // ---- a call ---------------------------------------------------------------------------------------

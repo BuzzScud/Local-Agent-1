@@ -52,7 +52,7 @@ import { choose, howChosen } from './search.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { useOf, describePictures, describedNote, reviewChange, checkPagePicture, screenshotPage } from './helper-models.mjs';
 import { openingRead, openingOn, memorySent } from './opening.mjs';
-import { isMcpCall, MCP_TOOL, mcpPlan, mcpToolDefs, mcpBrief, requestNote, unwrapArgs, gateCall, madeUpCall, mcpCallInText, findEntry, describeEntry, describeServer, checkArgs, argsPreview, resultParts, resultText, catalogStamp, mcpRule } from './mcp.mjs';
+import { isMcpCall, MCP_TOOL, mcpPlan, mcpToolDefs, mcpBrief, requestNote, requestHits, callHint, unwrapArgs, gateCall, madeUpCall, mcpCallInText, findEntry, describeEntry, describeServer, argLines, checkArgs, argsPreview, resultParts, resultText, catalogStamp, mcpRule } from './mcp.mjs';
 import { pictureFor } from '../tools/mcp.mjs';
 
 const MAX_STEPS = 40;
@@ -63,6 +63,8 @@ const newConversation = () => randomUUID().slice(0, 8);
 const LAYOUT_ROUNDS = 2;
 // When the model decides (way.mjs): the calls of one reply that run, in order.
 export const MAX_CALLS = 8;
+// A request about an MCP server's data answered with no MCP tool tried: sent back this many times, then replaced.
+export const MCP_BACKS = 2;
 // Its own tools on Model (tools.mjs MODEL_TOOL_DEFS), run by the agent itself.
 const MODEL_TOOLS = new Set(['Map', 'CodeSearch', 'Rename', 'TestFirst', 'Remember']);
 const CODE_SEARCH_CHARS = 6000; // what one CodeSearch brings back, at most (~1,700 tokens)
@@ -636,6 +638,15 @@ export class Agent extends EventEmitter {
     // (a prompt this app built; a caller's own is left as it is).
     if ((this.mcpInPrompt ?? '') !== this.mcpPrompt() && typeof this.messages[0]?.content === 'string' && this.messages[0].content.includes('\nTool use\n')) this.refreshNotes();
   }
+  // The tools a retry offers (mcpFocus: requestHits of the request): the ones the request's note
+  // named, by their own definitions, and Mcp for those reached through it; nothing else, so "that tool
+  // is not available" cannot be the answer. Only for that one step: the next has the whole list again.
+  mcpFocusTools(hits) {
+    const names = new Set(hits.flatMap((h) => h.tools.map((e) => e.name)));
+    const gate = hits.some((h) => h.gated || !h.tools.length);
+    const defs = this.mcpDefs().filter((t) => names.has(t.function.name) || (gate && t.function.name === MCP_TOOL));
+    return defs.length ? defs : this.tools();
+  }
   // The MCP tools this agent may use, of the conversation's list: every one that is on; an explore
   // helper those the user marked as reading; one of the user's helper agents those its file names.
   // off: with the ones switched off too (a call to one is told it is off, not that it does not exist).
@@ -1195,7 +1206,9 @@ export class Agent extends EventEmitter {
   // written down, for the facts' trust and for the next save.
   // shown: the message as you typed it (what /rewind lists and puts back).
   // images: pictures you attached ([{ path, mime, data, w, h }]), carried beside the text (images.mjs).
-  async send(text, { signal, shown, images } = {}) {
+  // fromServer: the message is an MCP server's own prompt (/server:prompt): no MCP note goes with it.
+  async send(text, { signal, shown, images, fromServer = null } = {}) {
+    this.fromServer = fromServer;
     this.corrected(text);
     this.turn = null;
     const happened = { at: new Date().toISOString(), request: String(text), recalled: [], notes: '', files: new Set(), tries: [], warnings: [], did: [] };
@@ -1404,10 +1417,16 @@ export class Agent extends EventEmitter {
       // A helper agent of yours with a model of its own (runHelper): every step on that model.
       ...(this.ownUse ? { use: this.ownUse } : {}) };
     if (asksForWork(this.turn.request) && wantsDesktop(this.turn.request)) this.desktopAsked = true;
+    // A request about what one of the user's MCP servers reaches: a line naming its tools (mcp.mjs requestNote).
+    // Not for a message that brings a server's data with it (a resource you attached: @server:uri), or
+    // that is a server's own prompt (/server:prompt).
+    const mcpSays = this.mcpFrozen && request?.role === 'user' && typeof request.content === 'string' && !this.fromServer && !/<resource server="/.test(text) ? requestNote(text, this.mcpEntries(), { listed: this.mcpListed() }) : '';
+    if (mcpSays) this.turn.mcp = { request, notes: mcpSays, hits: requestHits(text, this.mcpEntries(), { listed: this.mcpListed() }) };
     // Look first (look.mjs): a minimum of looking before the answer, on every task that goes step
     // by step here; not a follow-up (it continues a turn that already looked), not in the home
-    // folder (a general question there needs no files), not for a helper (it is part of the looking).
-    const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) ? this.lookSecsNow : 0;
+    // folder (a general question there needs no files), not for a helper (it is part of the looking),
+    // not for a request that names one of your MCP servers (its answer is there, not in the project).
+    const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
     let lookBacks = 0;
     if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.look = { request, notes: LOOK_NOTE };
@@ -1440,9 +1459,6 @@ export class Agent extends EventEmitter {
     if (urls.length && this.webTools()?.fetch && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.web = { request, notes: `${urls.length === 1 ? 'The request names a web page' : 'The request names web pages'} (${urls.slice(0, 3).join(', ')}): read ${urls.length === 1 ? 'it' : 'them'} with WebFetch. ${urls.length === 1 ? 'It is' : 'They are'} not a file in the project.` };
     }
-    // A request about what one of the user's MCP servers reaches: a line naming its tools (mcp.mjs requestNote).
-    const mcpSays = this.mcpFrozen && request?.role === 'user' && typeof request.content === 'string' ? requestNote(text, this.mcpEntries(), { listed: this.mcpListed() }) : '';
-    if (mcpSays) this.turn.mcp = { request, notes: mcpSays };
     if (math && request?.role === 'user' && typeof request.content === 'string') {
       try {
         this.turn.math = { request, notes: mathNotes(math, text) };
@@ -1507,7 +1523,7 @@ export class Agent extends EventEmitter {
     let correctedAlready = false;
     let blankRetry = false;
     let leakBacks = 0; // a reply that was only thinking written out as text, sent back (twice at most)
-    let mcpBack = false; // a request about an MCP server's data, answered with no MCP tool tried: sent back once
+    let mcpBacks = 0; // a request about an MCP server's data, answered with no MCP tool tried (MCP_BACKS)
     try {
       for (let step = 0; step < this.maxSteps; step++) {
         if (signal?.aborted) { reason = 'interrupted'; break; }
@@ -1599,6 +1615,35 @@ export class Agent extends EventEmitter {
         const lines = keyLines(`${thought}\n${text}`);
         for (const l of lines) if (!this.turn.findings.includes(l)) this.turn.findings.push(l);
         this.turn.findings = this.turn.findings.slice(-6);
+        // A request about what an MCP server holds (its note, turn.mcp), answered with no MCP tool tried:
+        // the answer cannot have come from the server (Qwen3.6, 3 Oct 2026: "42 mugs were sold" with no
+        // call; "I do not have access to mcp__shop__logo" while holding it). On both ways, as the leaked
+        // thinking is, and its words are not shown. Sent back MCP_BACKS times, each for one step with only
+        // that tool and thinking on (mcpFocus), the second with how the tool is called; then the answer is
+        // replaced by a line saying it did not come from the server (the owner's pick, 3 Oct 2026).
+        // Only when the request names the server itself, and nothing else was looked at: an answer from
+        // the project's own files (Read, Search, a command) is not made up, and a word that is only in
+        // a tool's name ("add a test", a tool named add) is no sign the request is the server's.
+        if (!calls.length && this.turn.mcp?.hits.some((h) => h.named) && !this.turn.mcpTried && !this.turn.lookedElsewhere && !(turn.leaked && !text.trim())) {
+          const { hits } = this.turn.mcp;
+          const servers = `${hits.length === 1 ? 'server' : 'servers'} ${hits.map((h) => `"${h.server}"`).join(' and ')}`;
+          const theirs = hits.length === 1 ? 'its' : 'their';
+          if (mcpBacks < MCP_BACKS) {
+            mcpBacks++;
+            this.emit('assistant', { text: '', reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false });
+            this.emit('note', { text: `It answered without calling the MCP tool the request is about (that answer is not shown); asked it ${mcpBacks === 1 ? 'again' : 'a second time'}, with only that tool and thinking on.`, tone: 'dim' });
+            this.turn.mcpFocus = hits;
+            const how = hits.flatMap((h) => h.tools.map((e) => callHint(e, { gated: h.gated })));
+            this.messages.push({ role: 'user', content: auto(mcpBacks === 1
+              ? `You answered without calling an MCP tool, so your answer did not come from the user's server. ${this.turn.mcp.notes}`
+              : `Your answer still did not come from the user's MCP ${servers}: none of ${theirs} tools was called. It is in your tools now: ${how.length ? how.join('; ') : `${MCP_TOOL}, with a tool's name from its list`}. Call it now, then answer from what it returns.`) });
+            continue;
+          }
+          const why = /\b(not|cannot|can['’]?t|unable|no access|unavailable)\b/i.test(text) ? ` It said: "${text.replace(/\s+/g, ' ').trim().slice(0, 200)}"` : '';
+          text = `I couldn't get this from your MCP ${servers}: none of ${theirs} tools was called, so there is no answer from ${hits.length === 1 ? 'it' : 'them'}.${why}`;
+          assistant.content = text;
+          this.emit('note', { text: 'Its own answer is not shown: it did not come from your MCP server.', tone: 'warn' });
+        }
         this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: !calls.length });
         if (!calls.length) {
           // Thinking that came out as the reply's text (leakedThinking) and nothing else: not an
@@ -1609,19 +1654,6 @@ export class Agent extends EventEmitter {
             this.emit('note', { text: 'The reply was only thinking, written out as text; asked it to take the next step.', tone: 'dim' });
             this.messages.push({ role: 'user', content: auto('Your last reply was only your thinking, with no tool call and no answer. Take the next step now with a tool, or give your answer.') });
             continue;
-          }
-          // A request about what an MCP server holds (its note, turn.mcp), answered with no MCP tool
-          // tried: the answer cannot have come from the server (Qwen3.6, 3 Oct 2026: "42 mugs were
-          // sold", with no call; or "what would you like me to do instead?"). Sent back once, on both
-          // ways, as the leaked thinking is: what it says is the server's or it is made up.
-          if (this.turn.mcp && !this.turn.mcpTried) {
-            if (!mcpBack) {
-              mcpBack = true;
-              this.emit('note', { text: 'It answered without calling the MCP tool the request is about; asked it to call it.', tone: 'dim' });
-              this.messages.push({ role: 'user', content: auto(`You answered without calling an MCP tool, so your answer did not come from the user's server. ${this.turn.mcp.notes}`) });
-              continue;
-            }
-            this.emit('note', { text: 'This answer did not come from your MCP server: no MCP tool was called for it.', tone: 'warn' });
           }
           // A reply that asks you something ends the turn: it waits for you.
           if (asksTheUser(text)) break;
@@ -1838,6 +1870,8 @@ export class Agent extends EventEmitter {
           }
           toolsUsed++;
           out = together ? (await together)[ci] : await this.runTool(c, signal);
+          // It looked at something besides an MCP server (a file, a search, a command): see the MCP send-back above.
+          if (!out.error && !isMcpCall(c.name) && !['List', 'TodoWrite', 'Ask'].includes(c.name)) this.turn.lookedElsewhere = true;
           if (c.name === 'Read' && !out.error) this.turn.readsRun = (this.turn.readsRun ?? 0) + (out.readKeys?.length || 1);
           if (!out.error) { cuts = 0; landed = true; } // a step landed: cut-off replies are no longer "in a row"
           if (!out.error && c.name === 'Write') wrote.push(c);
@@ -2400,20 +2434,24 @@ export class Agent extends EventEmitter {
   }
 
   // One model reply, streamed.
-  async generate(signal, { retry = true, textOnly = false, maxTokens: cap } = {}) {
-    const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
+  async generate(signal, { retry = true, textOnly = false, maxTokens: cap, focus } = {}) {
+    // A retry after an answer that skipped the MCP tool its request is about (mcpFocus): this one
+    // step offers only that tool, and thinks (a model that cannot think answers without it).
+    if (focus === undefined) { focus = this.turn?.mcpFocus ?? null; if (this.turn) this.turn.mcpFocus = null; }
+    const thinking = this.thinking || Boolean(focus);
+    const sampling = thinking ? this.model.thinkingSampling : this.model.sampling;
     // A model on a service with its own Reply length (/effort): up to that, never more than the
     // context has left under the trim line (at least the answer's 2,048).
     // One that cannot think (a single level: a remote's None) gets no room for thinking.
     // Auto on a service: SERVICE_REPLY, the same way (its thinking and its file both fit).
     const own = this.model?.replyTokens || (this.model?.remote?.ollama ? SERVICE_REPLY : 0);
-    const thinks = this.thinking && (this.model?.thinkingLevels?.length ?? 2) > 1;
+    const thinks = thinking && (this.model?.thinkingLevels?.length ?? 2) > 1;
     const maxTokens = cap ?? (own ? Math.max(2048, Math.min(own, Math.floor(this.ctx * this.trimAt) - this.estNow())) : replyRoom(thinks, this.model?.thinkingBudget));
     this.lastRoom = maxTokens;
     // fitContext keeps the answer's 2,048 and this much thinking free: in a tight
     // memory the thinking shrinks (thinkRoom), not the answer.
     const think = this.thinkRoom();
-    const thinkCap = this.thinking && think < (this.model?.thinkingBudget ?? 2048) ? think : undefined;
+    const thinkCap = thinking && think < (this.model?.thinkingBudget ?? 2048) ? think : undefined;
     const effort = this.stepEffort();
     const t0 = Date.now();
     let firstToken = null;
@@ -2428,11 +2466,11 @@ export class Agent extends EventEmitter {
     // request would go out and run to its end. It is not sent.
     if (signal?.aborted) local.abort();
     // The screen's meters: the most this reply may write, and its thinking cap.
-    this.emit('waiting', { room: maxTokens, thinkCap: !this.thinking ? 0 : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048 });
+    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048 });
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: (() => { const conn = textOnly ? [] : this.mcpConnectors(); return textOnly || conn.length ? { ...(textOnly ? { stop: CALL_STOPS } : {}), ...(conn.length ? { mcpServers: conn } : {}) } : undefined; })(), thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
+      const stream = streamChat({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: focus ? this.mcpFocusTools(focus) : this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: (() => { const conn = textOnly ? [] : this.mcpConnectors(); return textOnly || conn.length ? { ...(textOnly ? { stop: CALL_STOPS } : {}), ...(conn.length ? { mcpServers: conn } : {}) } : undefined; })(), thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -2486,7 +2524,7 @@ export class Agent extends EventEmitter {
       else if (retry && !e.status && /fetch failed|ECONNREFUSED|socket|terminated/i.test(`${e.message} ${e.cause?.message ?? ''}`) && this.waitForServer) {
         this.emit('note', { text: this.model?.remote ? 'The remote model stopped answering; connecting again…' : 'The model server stopped; restarting it and trying again…', tone: 'warn' });
         await this.waitForServer();
-        return this.generate(signal, { retry: false, textOnly, maxTokens: cap });
+        return this.generate(signal, { retry: false, textOnly, maxTokens: cap, focus });
       // A tool call the service could not read (Ollama's parser: "XML syntax error on line 17:
       // unexpected EOF", Qwen3.6, 3 Oct 2026): the reply is lost, so the model is told and writes it again,
       // twice at most a message. Before, the message ended there as an error.
@@ -2494,7 +2532,7 @@ export class Agent extends EventEmitter {
         this.turn.unreadable = (this.turn.unreadable ?? 0) + 1;
         this.emit('note', { text: `The service could not read the tool call it wrote (${String(e.message).replace(/^model server:\s*/, '').slice(0, 120)}); asked it to send the call again.`, tone: 'warn' });
         this.messages.push({ role: 'user', content: auto('The service could not read the tool call in your last reply: its arguments were cut off or not valid. Send the call again, complete and valid.') });
-        return this.generate(signal, { retry, textOnly, maxTokens: cap });
+        return this.generate(signal, { retry, textOnly, maxTokens: cap, focus });
       // A conversation too long for the model. Not a busy service: "Rate limit exceeded" is a 429,
       // already waited for and asked again (busy.mjs); summarizing would only lose the conversation.
       // Nor a model with no room on the service's GPU (its error ends "a smaller Context": 2 Oct 2026,
@@ -2502,7 +2540,7 @@ export class Agent extends EventEmitter {
       } else if (retry && !e.busy && !isBusy(e) && !e.noRoom && /context|exceed/i.test(e.message)) {
         this.emit('note', { text: 'The conversation outgrew the model’s memory; summarizing it and trying again…', tone: 'warn' });
         await this.compact(signal);
-        return this.generate(signal, { retry: false, textOnly, maxTokens: cap });
+        return this.generate(signal, { retry: false, textOnly, maxTokens: cap, focus });
       } else throw e;
     } finally {
       signal?.removeEventListener('abort', onAbort);
@@ -2881,8 +2919,11 @@ export class Agent extends EventEmitter {
       return { text };
     }
     const entry = found.entry;
-    const given = gate ? sent.given : unwrapArgs(entry, raw);
+    let given = gate ? sent.given : unwrapArgs(entry, raw);
     const label = `${entry.server} · ${entry.tool}`;
+    // Only "tool": its arguments, and nothing runs; a tool that takes none just runs (Qwen3.6 asked for
+    // the logo tool's arguments three times over, was told "none" each time, and gave up: 3 Oct 2026).
+    if (gate && given === undefined && !argLines(entry).length) given = {};
     if (gate && given === undefined) {
       const text = describeEntry(entry);
       this.emit('tool', { id, name: call.name, label, arg: 'its arguments', view: { kind: 'mcp', looked: true, lines: text.split('\n').length, content: text } });

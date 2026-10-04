@@ -242,6 +242,13 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the click lands on the row under the prompt box's bottom edge. So that a click can arrive, `/mouse on` keeps
   the mouse with an empty prompt too (before, only while the box had text); fn held is Terminal's own highlight.
 
+- **A model on /remote thinks by default** (3 Oct 2026, the owner's pick: "always leave on thinking as the default, and
+  turn it off when a model has no thinking"): `remoteModel` sets `thinkingDefault` on, and off for a model the service
+  says cannot think; gpt-oss starts on Medium, its maker's default. The shared Effort is this Mac's models'; a remote
+  model starts on its own (kept when you pick one there: `saveOwnLevel`), else its default (`ownLevel` in App.jsx,
+  the same in `coding -p`); `--think`/`--no-think` win. Look first's auto follows it, as designed (the owner kept that:
+  remote models now look for 30 s before answering), except for a request that names an MCP server.
+
 ## K2 Horizon, the third model
 
 - **K2 Horizon 7B** (MBZUAI IFM, added 30 Sep 2026; `models/k2-horizon-7b/`, id `k2`) is the third model in
@@ -362,7 +369,12 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   are read as the tool they mean: `shop__get_ticket`, `Shop_get_note`, a wrapper like `call_mcp` with the server and the
   tool inside (`madeUpCall`), arguments beside "tool" in an Mcp call (`gateCall`), the call written out as JSON text
   or as `mcp__warehouse__stock_level(item="mug")` (`mcpCallInText`), and a one-argument tool's argument under another
-  name. A Bash command naming one of the tools does not run (it waited on a yes in the window) and is told it is a tool. Qwen3.6 35B on a service, 3 Oct 2026: 10 of 12 questions
+  name. A Bash command naming one of the tools does not run (it waited on a yes in the window) and is told it is a tool.
+  An answer with no MCP tool tried, to a request that names the server (`hits[].named`) when the model looked at nothing
+  else, is not shown: it is sent back twice (`MCP_BACKS`), each time for one step with only the named tools
+  (`mcpFocusTools`) and thinking on, the second with how the tool is called (`callHint`); then it is replaced by "I
+  couldn't get this from your MCP server …" (the owner's pick). A message with a server's data in it (a resource you
+  attached, a server's own prompt: `fromServer`) gets no note, and a request naming a server does not Look first. Qwen3.6 35B on a service, 3 Oct 2026: 10 of 12 questions
   answered from the right tool with these, 3 or 4 of 8 without. On the Claude API: by name up to 10,000 tokens
   (`CLAUDE_BY_NAME`), past it every MCP tool carries `defer_loading` and `tool_search_tool_bm25_20251119` is added
   (`claude.mjs`). A schema is cut down for servers that are not Claude's (`simplifySchema`: llama.cpp turns a schema

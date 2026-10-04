@@ -163,6 +163,27 @@ test('coding -p follows /remote: the answer comes from the remote; --local would
   await remote.close();
 }, T);
 
+test('coding -p on an Ollama service: a model that can think thinks unless you say otherwise; one that cannot is not asked; its own Effort, or --no-think, wins', async () => {
+  const { fakeOllama } = await import('./fake-ollama.mjs');
+  const { cwd, env, base } = setup();
+  const srv = await fakeOllama();
+  const cli = join(import.meta.dir, '..', 'src', 'cli.jsx');
+  const r0 = { source: 'openai', kind: 'openai', connect: 'http', address: srv.url, port: null, context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  const think = async (model, { args = [], tuned } = {}) => {
+    writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ thinking: false, remote: { ...r0, model, use: true, ...(tuned ? { tuned } : {}) } }));
+    const before = srv.chats().length;
+    const p = Bun.spawn(['bun', cli, '-p', 'hello', '--no-flows', ...args], { cwd, env: { ...process.env, ...env, AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_NO_MEMORY: '1' }, stdout: 'pipe', stderr: 'pipe' });
+    await p.exited;
+    return srv.chats().slice(before).filter((c) => c.stream)[0]?.think;
+  };
+  // (The shared thinking: false is this Mac's models'; a model on /remote has its own.)
+  expect(await think('thinker:35b')).toBe(true);
+  expect(await think('tiny:3b')).toBe(undefined);
+  expect(await think('thinker:35b', { args: ['--no-think'] })).toBe(false);
+  expect(await think('thinker:35b', { tuned: { 'thinker:35b': { level: 'low' } } })).toBe(false);
+  await srv.close();
+}, T);
+
 test('/remote with Run on: Claude API: a key, a model from the list, its address behind More; Connect, and the reply comes through Anthropic’s Messages API with the key in x-api-key', async () => {
   const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
   const { cwd, env, base } = setup();
@@ -558,8 +579,9 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   // the menu: its Thinking choices with the suggested one, the suggested rows, the line on why, no Thinking cap; nothing loaded yet
   expect(s.menu).toMatch(/laguna-s-2\.1:latest · its own settings\s+nothing loads until you press enter/);
   expect(flat(s.menu)).toContain('Suggested: starved by the defaults: it thinks long, runs long tool loops and long builds · ranks page, not measured here');
-  expect(s.menu).toMatch(/Look first\s+◀ auto\s+▶\s+default · follows Thinking: none while it is off/);
-  expect(s.menu).toMatch(/❯ Thinking\s+◀ Off\s+▶\s+suggested Max · answers straight away/);
+  // a model on /remote thinks unless you say otherwise (3 Oct 2026): Max, its On, before anything is saved; Look first follows it
+  expect(s.menu).toMatch(/Look first\s+◀ auto\s+▶\s+default · follows Thinking: 30 s/);
+  expect(s.menu).toMatch(/❯ Thinking\s+◀ Max\s+▶\s+✓ suggested · thinks between its tool calls/);
   expect(s.menu).toMatch(/Context\s+◀ auto\s+▶\s+suggested 128k · default · the service's own/);
   expect(s.menu).toMatch(/Steps per request\s+◀ 80\s+▶\s+✓ suggested · default · stops a request after 80 tool steps/);
   expect(s.menu).toMatch(/Command timeout\s+◀ 2 min\s+▶\s+suggested 10 min · default/);
@@ -568,7 +590,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   expect(s.menu).toContain('s suggested · enter switches to it · esc back to the list');
   expect(lagunaLoadsAtMenu).toBe(0);
   // s: every suggested value filled in, marked as not saved yet
-  expect(s.filled).toMatch(/Thinking\s+◀ Max\s+▶ •\s+✓ suggested/);
+  expect(s.filled).toMatch(/Thinking\s+◀ Max\s+▶\s+✓ suggested/); // already its default: nothing to fill
   expect(s.filled).toMatch(/Context\s+◀ 128k\s+▶ •\s+✓ suggested · 128k on the service · laguna-s-2\.1:latest loads at this size as you switch/);
   expect(s.filled).toMatch(/Command timeout\s+◀ 10 min\s+▶ •\s+✓ suggested/);
   expect(s.filled).toMatch(/Reply length\s+◀ 32k tokens\s+▶ •\s+✓ suggested · up to 32k a reply, thinking and answer together/);
@@ -604,7 +626,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   expect(s.list).toMatch(/❯ laguna-s-2\.1:latest/);
   const saved = settingsOf(base);
   expect(saved.remote.model).toBe('tiny:3b');
-  expect(saved.remote.tuned).toEqual({ 'laguna-s-2.1:latest': { level: 'high', limits: { replyTokens: 32768, keepLoaded: 1800, timeoutSecs: 600, steps: 120 } } });
+  expect(saved.remote.tuned).toEqual({ 'laguna-s-2.1:latest': { limits: { replyTokens: 32768, keepLoaded: 1800, timeoutSecs: 600, steps: 120 } } }); // Max is its default: no level to keep
   expect(saved.remotes.openai.tuned).toEqual(saved.remote.tuned);
   expect(saved.remote.contexts).toEqual({ 'laguna-s-2.1:latest': 131072 });
   // nothing of it in the shared limits
