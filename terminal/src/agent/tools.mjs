@@ -743,7 +743,7 @@ ${pages[args.page - 1] || '(no text on this page: a scan or a picture)'}`, view:
 }
 
 // A path into the pack of Claude's notes: "NOTES", "NOTES/MAP.md", "NOTES/notes/<name>.md".
-export const NOTES_PATH = /^(?:\.\/)?NOTES(?:\/|$)/;
+const NOTES_PATH = /^(?:\.\/)?NOTES(?:\/|$)/;
 
 export async function execute(name, args, prepared, env) {
   const max = env.maxResultChars ?? 12000;

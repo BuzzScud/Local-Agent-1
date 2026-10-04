@@ -65,7 +65,7 @@ function topOf(cwd) {
 // every model: a model of the remote set gets them in its opening read, one of the local set as a step
 // of their own (agent.mjs giveMaps). notes: the pack as this model may see it (packView: Memory sent).
 // → { parts, lines, commands } or null when there is neither.
-export const MAP_PATH = 'docs/map';
+const MAP_PATH = 'docs/map';
 export function mapsRead(cwd, { ctx = 32768, request = '', notes = null, home = homedir() } = {}) {
   const room = mapRoom(ctx);
   const parts = [];

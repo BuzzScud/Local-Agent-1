@@ -21,10 +21,10 @@ import { parseNote, leftOut, holdsSecret, foldersOf } from './claude-notes.mjs';
 import { wordsOf } from './recall.mjs';
 import { splitPart, PART_CHARS, MAP_FILE } from './ladder.mjs';
 
-export const PACK_NAME = 'claude-pack';
+const PACK_NAME = 'claude-pack';
 const TOPIC_INTRO = 'One line per note: its name, then what it is about. Open a note with Read NOTES/notes/<name>.md. A note can be out of date: the files of the project you are in are right.';
 // A topic's files, with only the notes allow lets through (all of them without allow).
-export const topicFiles = (index, t, allow = null) => splitPart(t.slug, t.title, TOPIC_INTRO, t.ids.filter((i) => !allow || allow(i)).map((i) => index.notes[i]?.line ?? `- ${i}`));
+const topicFiles = (index, t, allow = null) => splitPart(t.slug, t.title, TOPIC_INTRO, t.ids.filter((i) => !allow || allow(i)).map((i) => index.notes[i]?.line ?? `- ${i}`));
 export const packDir = (home = HOME) => join(home, PACK_NAME);
 export const NOTE_CHARS = PART_CHARS; // a note longer than this is split: how it stands now + history/
 const LINE_DESC = 150; // of a note's summary on its topic's line
@@ -41,7 +41,7 @@ export function projectName(slug, homeSlug = '') {
   s = s.replace(/-+$/, '').replace(/-(main|master)(-\d+)?$/i, '');
   return s || null;
 }
-export const projectSlug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const projectSlug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 // Whether a folder (a path) is a project's: one of its folder names is the project's, or starts with
 // it ("MAIN2026-main-2" is MAIN2026's).
 export function sameProject(project, cwd, home = homedir()) {
@@ -128,7 +128,7 @@ export function datesIn(text, year = 2026) {
 
 // A note's body in blocks: a heading or a paragraph that opens in bold starts one, the paragraphs and
 // lists after it belong to it. The first block is the note's opening.
-export function blocksOf(body) {
+function blocksOf(body) {
   const paras = String(body).split(/\n\s*\n/).map((p) => p.replace(/\s+$/, '')).filter((p) => p.trim());
   const blocks = [];
   for (const p of paras) {
@@ -199,7 +199,7 @@ function skillMdFiles(dir) {
   walk(dir, 0);
   return out;
 }
-export function skillCard(raw, file) {
+function skillCard(raw, file) {
   const n = parseNote(raw, file);
   const name = (n.name && n.name !== 'SKILL' ? n.name : basename(dirname(file))).replace(/[^\w-]+/g, '-');
   const steps = [...n.body.matchAll(/^#{2,3}\s+(.+)$/gm)].map((m) => m[1].trim()).filter((h) => !/^(overview|contents?|table of contents)$/i.test(h)).slice(0, 12);
@@ -207,7 +207,7 @@ export function skillCard(raw, file) {
   const when = /(use (this|it) (when|whenever|for)|triggers?(?: on)?:|when the user)[^.]*\./i.exec(desc)?.[0] ?? '';
   return { name, description: desc, text: `What it is for: ${desc.slice(0, 600)}${when && !desc.slice(0, 600).includes(when) ? `\nWhen to use it: ${when}` : ''}${steps.length ? `\nIts main steps (its own headings): ${steps.join(' · ')}` : ''}\n\nA skill of Claude Code's, not one of yours: Agentic Coder has its own skills, listed in your instructions.` };
 }
-export function partsOfAll(text) {
+function partsOfAll(text) {
   const part = (n) => { const a = text.indexOf(`\n# Part ${n} `); if (a < 0) return ''; const b = text.indexOf('\n# Part ', a + 10); return text.slice(a, b < 0 ? undefined : b); };
   // An entry's own sub-headings ("### GOOD - Use EnterPlanMode:") stay in its text.
   const entries = (p) => {

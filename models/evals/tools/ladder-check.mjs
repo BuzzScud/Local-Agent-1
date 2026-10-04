@@ -32,12 +32,12 @@ const root = join(here, '..', '..', '..');
 const home = process.env.AGENTIC_REPO ?? root; // where the results go
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
-export const SET_FILE = join(home, 'models', 'remote', 'results', 'ladder-check-set.json');
+const SET_FILE = join(home, 'models', 'remote', 'results', 'ladder-check-set.json');
 export const MAIN2026 = process.env.AGENTIC_MAIN2026 ?? join(homedir(), 'Desktop', 'MAIN2026-main-2');
 
 // A file named in an answer: a path or a name with a code or text extension.
 const NAMED = /(?:[\w@.-]+\/)*[\w@.-]+\.(?:mjs|cjs|js|jsx|ts|tsx|json|md|py|sh|css|html|sql|yml|yaml|swift)\b/g;
-export function namedFiles(text) { return [...new Set(String(text).match(NAMED) ?? [])].filter((p) => !/^\d|^https?:/.test(p) && !/^[\d.]+$/.test(p)); }
+function namedFiles(text) { return [...new Set(String(text).match(NAMED) ?? [])].filter((p) => !/^\d|^https?:/.test(p) && !/^[\d.]+$/.test(p)); }
 
 // Every file of a project by its name, to tell a made-up file from a real one.
 const ALL_SKIP = /(^|\/)(node_modules|\.git|dist|build|\.next|coverage|__pycache__|\.venv|venv)(\/|$)/;
@@ -62,7 +62,7 @@ export function fileNames(dir) {
 // A file of Claude's notes (NOTES/…, a topic of the pack) is not a project file and is not judged here.
 export const notesFile = (p, pack = packFiles()) => /^(\.\/)?NOTES\//.test(p) || pack.has(basename(p));
 const packFiles = (() => { let s = null; return () => (s ??= new Set((() => { try { return readdirSync(join(process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder'), 'claude-pack')).filter((f) => f.endsWith('.md')); } catch { return []; } })())); })();
-export function madeUp(named, files) {
+function madeUp(named, files) {
   return named.filter((p) => {
     if (notesFile(p) || /^\.?\d*\.md$/.test(basename(p))) return false;
     const clean = p.replace(/^\.\//, '');

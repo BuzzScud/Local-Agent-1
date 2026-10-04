@@ -189,7 +189,7 @@ export function bestPart(note, request, maxChars = PART_CHARS) {
 // notes/ (claude-pack.mjs). Its part prefers the top: a piece of the history comes too only when it
 // shares two words more with the request than the best piece of the top does (port 5434 of the
 // distribution work sat in an older part of its note, 3 Oct 2026).
-export function historyPiece(note, request, dir) {
+function historyPiece(note, request, dir) {
   const file = join(dirname(dir), 'history', `${note.id}.md`);
   if (!existsSync(file)) return null;
   const q = new Set(wordsOf(request));

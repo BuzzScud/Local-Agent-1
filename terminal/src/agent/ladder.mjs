@@ -11,8 +11,7 @@ import { join } from 'node:path';
 import { wordsOf } from './recall.mjs';
 
 export const MAP_FILE = 'MAP.md';
-export const PART_TOKENS = 2000;
-export const PART_CHARS = 7000; // about 2,000 tokens at 3.5 characters a token
+export const PART_CHARS = 7000; // a part's limit: about 2,000 tokens at 3.5 characters a token
 // A part's name in a MAP.md line, after the arrow: "→ desks.md", "→ reference/claude-code-tools.md".
 const PART_LINE = /^- (.+?)\s+→\s+((?:[\w-]+\/)?[\w.-]+\.md)\s*$/;
 const PART_NAME = /^(?:[\w-]+\/)?[\w.-]+$/;

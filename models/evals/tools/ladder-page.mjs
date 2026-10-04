@@ -33,7 +33,7 @@ const OTHER = { 'agentic-coder': /backend\/api|desks\/|src\/features|wahlay|proj
 // another question than of its own (13 to 17 answered 12, 3 Oct 2026, qwen3-coder:30b).
 const STOPS = new Set('where is the are and that for with which what does how its it in of to a an on by from this my me i do code file files project'.split(' '));
 const wordsIn = (t) => new Set(String(t).toLowerCase().match(/[a-z][a-z0-9-]{2,}/g)?.filter((w) => !STOPS.has(w)) ?? []);
-export function answersAnother(r, questions) {
+function answersAnother(r, questions) {
   const head = wordsIn(String(r.answer ?? '').slice(0, 260));
   if (!head.size) return false;
   const df = new Map();
