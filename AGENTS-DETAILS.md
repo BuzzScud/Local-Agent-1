@@ -358,30 +358,41 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **A fixing loop that is not getting closer waits for you** (4 Oct 2026, the owner's pick): a test run's step says how
   many fail (`tests.count`), each run keeps it (`failing`), and when a `debug` loop's last two runs end with as many
   failing or more (`stuckWhy`), it pauses as "needs you · stuck" instead of a new try 15 s later. A note typed to it
-  sends it on at once with the note; r and p send it on as it is. Test, web and other loops are meant to repeat and
+  sends it on at once with the note; ^R and ^P send it on as it is. Test, web and other loops are meant to repeat and
   never stop this way.
 - **Its plan stays in sight** (4 Oct 2026, every message, not only loops): five steps after the model last saw its
   TodoWrite list, a line with the step under way and the next ones goes on the end of that step's result
   (`planDue`, `planReminder`; on the end so the conversation before it is not read again), and when memory fills the
   whole list goes into its notes (`restartFrom`). Only a plan written in the same message counts.
-- **The board** (`coding loops`, `/loops`; `loops-board.mjs`, drawn by `loops-draw.mjs`) is a program of its own in
-  a Terminal window of its own (`openBoardWindow`, like the door's window). It reads `<home>/loops/<pid>/state.json`
-  and each run's `run-<loop>-<n>.jsonl` five times a second and sends its keys back as files in `cmd/`, which the
-  window reads at its next tick (half a second): closing the board changes nothing. The look is the Tree, the owner's
-  pick after two design rounds (docs/design rounds/agentic-coder-loop-board-3-designs-2026-10-03.html and -v2): this
-  window, a box per loop with the four steps of a run (`cycleOf` reads them off the run's lines), a log, one line
-  for a question, the chat box, a status line. In the chat box every key is text; `+` types `/loop ` for you (never
-  `n`, which is only "no").
+- **The board** (`/loops`, and `coding loops` from another terminal; `loops-board.mjs`, drawn by `loops-draw.mjs`).
+  Since 4 Oct 2026 (round three: "/loop test5m" had made a loop whose whole task was that word, and the letters the
+  owner typed were read as keys and stopped it; their picks from docs/design rounds/
+  agentic-coder-loops-4-designs-2026-10-04.html) it is **the coding window's own screen**, as /agents' tree is
+  (App.jsx `openLoops`, `loopsKey`; loops-view.jsx), grown to 120 × 36 where the terminal follows that; esc goes back
+  to the chat, where a line above the prompt shows each open loop (`loopsLine`). Its keys go straight to the loops
+  (`Loops.apply`); `coding loops` still reads `<home>/loops/<pid>/state.json` and each run's `run-<loop>-<n>.jsonl`
+  and sends its keys back as files in `cmd/` (`readCommands`, then `apply`), so closing it changes nothing. The look
+  is the **Cards**: a card per loop with Now (the step its run is on, read off its lines: `nowWords`), Last, Next and
+  You (your last note and what became of it, `lastNote`/`youWords`: sent, read after a step (`heard`), read at the
+  start of a run, read as it gave its answer), then what happened, newest first, a line for what waits for you, the
+  box and the keys. **Typing always goes in the box; the commands are ctrl keys** (^N new, ^R run now, ^P pause, ^S
+  stop, ^O rules, ^X start over, ^B undo, ^G whole run, ↑↓ pick). A question is answered in the box (y, a or n; a
+  number for one of its choices; other words to a question that wants a yes go to it as a note), and so is Ask
+  first's go (y or n). A stop asks, and only y stops it: enter does nothing there. A note typed to a loop that ended
+  starts it again with the note. **A new loop a step at a time** (`openSetup`, `setupKey`, `drawSetup`): what each
+  run does → how often → when it stops → a read-back, then enter; it opens for /loops or /loop with no loop yet and
+  for ^N, and ^O there is the form with every rule. **An unclear task is asked about first** (`unclearOf`, rules
+  only, no model: a kind and a time typed together like "test5m", or a single word), from the chat and the box.
 - **More control** (4 Oct 2026, the owner's ask: "i want to be able to control it more"; their picks: everything, a
   preview first). Each loop has rules of its own (`rulesOf`, `fieldsOf`): its mode, how many runs (`maxRuns`), a stop
   time (`stopAt`: 18:30, 6pm, 2h), a spending cap (`usdCap`; each run's end says its cost, `usd`, and the window's $5
   now counts its loops' runs too, which before it did not), steps a run (`steps`, over /effort's; `--loop-events`
   reads it from `AGENTIC_LOOP_SPEC`) and Ask first (`askFirst`: a due run waits as `ready` for y / `/loop <n> go`; n
   leaves one out, or pauses a loop with no time of its own). `limitWhy` ends a loop at its limits; a run stopped to
-  start over does not count. The board's **form** (`+` new, `e` edit; an ended loop starts again from it, its counts
+  start over does not count. The board's **form** (^O, from the cards or the setup; an ended loop starts again from it, its counts
   from nothing) is `openForm`/`formKey` in loops-board.mjs, drawn by `drawForm`; `/loop <n> every 7m · runs 5 · stop
   18:30 · cap $1 · mode auto · steps 20 · ask on · go · skip · undo · redo · note · message · again` does the same
-  from the window or the chat box (`loopCommand`; `isLoopCommand` tells "/loop 2 every 7m" from "/loop 10 minutes …").
+  from the window or the board's box (`loopCommand`; `isLoopCommand` tells "/loop 2 every 7m" from "/loop 10 minutes …").
   **A note reaches the run at its next step**: `steering()` in loop-run.mjs hands it to the agent, which puts it on
   the end of that step's result (agent.mjs, beside the plan reminder) and emits `steered`; the run says `heard` with
   the step. On a focused path (a fix, a change) it goes with the next try's prompt and every try after it
@@ -390,15 +401,15 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   went down the focused path. A note that comes as the answer is given is still the next message (`more`). **Undo**: each run keeps
   copies in its own rewind session (`sessionOf`: `loop-<pid>-<id>`, rewind.mjs), and its end says from which point to
   which (`point`, `until`) and the files it changed; `Loops.undo` restores that run only (`plan(n, { until })`), a
-  file changed since is left alone and named, never under a run that is working. **Start over** (`x`, tab in the box
+  file changed since is left alone and named, never under a run that is working. **Start over** (^X, pressed again
   keeps the changes): the run is stopped and given 10 s (`kill({ wait })`) to keep its copy, its changes go back
-  (`redoWait`/`lateEnd`/`redoNext`), and a run starts with your note. A question's choices are numbered: 1–9 pick.
+  (`redoWait`/`lateEnd`/`redoNext`), and a run starts with your note. A question's choices are numbered: a number typed picks one.
   The preview the build followed ran on this code with a recorded Qwen run (docs/private/loops-preview/proto3).
-- **Tests**: `terminal/test/loops.test.mjs` (no model: what /loop reads, when a loop runs, the files, the Tree at
-  six sizes, the keys; the rules, limits, Ask first, edit, start over on a pretend store, undo on the real one, the
+- **Tests**: `terminal/test/loops.test.mjs` (no model: what /loop reads, when a loop runs, the files, the Cards at
+  six sizes, the keys, the setup, an unclear task, a note to a loop that ended; the rules, limits, Ask first, edit, start over on a pretend store, undo on the real one, the
   form) and `app-loops.test.mjs` (a stand-in model: one run that asks and takes a note at its next step, a note as it
-  answers, a run's copy put back, its own steps, the half-fix kept and put back, the app with its board in a second
-  pseudo-terminal). The Arena's **Loop controls check** (`models/evals/tools/loop-check.mjs`, `/test loops`) does the
+  answers, a run's copy put back, its own steps, the half-fix kept and put back, the app with /loops in its own window and `coding loops` in a
+  second pseudo-terminal). The Arena's **Loop controls check** (`models/evals/tools/loop-check.mjs`, `/test loops`) does the
   note, the copy, undo, start over and the steps with the real model. `/loop` and `/loops` are in the / menu
   where the window has room (`WHEN_ROOM`, after /jumptomac).
 
