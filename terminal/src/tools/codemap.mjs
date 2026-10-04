@@ -23,7 +23,7 @@ import { holdsSecret } from '../agent/claude-notes.mjs';
 import { splitPart, PART_CHARS, MAP_FILE } from '../agent/ladder.mjs';
 
 export const MAP_DIR = join('docs', 'map');
-export const FILES_PER_FOLDER = 5; // labelled; the others are named
+const FILES_PER_FOLDER = 5; // labelled; the others are named
 const LABELLED = new RegExp(`${CODE_FILE.source.replace(/\)\$$/, '|md|sh|sql)$')}`, 'i');
 const SECRET_FILE = /(^|\/)(\.env(\..*)?|.*secret.*|.*credential.*|.*\.(pem|key|p12|crt))$/i;
 const ENTRY = /^(index|main|server|app|router|routes?|cli|README|AGENTS)\.[\w.]+$/i;
@@ -142,7 +142,7 @@ export function codeLine(card) {
   if (card.names?.length) return `defines ${card.names.slice(0, 6).join(', ')}${card.names.length > 6 ? ', …' : ''}`;
   return `${card.lines} lines`;
 }
-export function folderCodeLine(card) {
+function folderCodeLine(card) {
   if (card.about) { const s = card.about.replace(/^#+\s*/, '').split(/(?<=[.!?])\s/)[0].trim(); if (s.length >= 12) return s.slice(0, 160); }
   const parts = [];
   if (card.dirs.length) parts.push(`${card.dirs.length + card.moreDirs} folders: ${card.dirs.slice(0, 6).map((d) => d.replace(/ \(.*$/, '')).join(', ')}${card.dirs.length > 6 ? ', …' : ''}`);
@@ -152,7 +152,7 @@ export function folderCodeLine(card) {
 
 // The labels kept per project: { "f:<rel>": { h, line, by }, "d:<rel>": { h, line, by } }. by: the
 // model that wrote it, 'code', or 'checked' (by hand against the code; kept while the file is the same).
-export const labelsFile = (root, home = HOME) => join(home, 'maps', `labels-${createHash('sha1').update(root).digest('hex').slice(0, 16)}.json`);
+const labelsFile = (root, home = HOME) => join(home, 'maps', `labels-${createHash('sha1').update(root).digest('hex').slice(0, 16)}.json`);
 export function loadLabels(root, home) { try { return JSON.parse(readFileSync(labelsFile(root, home), 'utf8')); } catch { return {}; } }
 export function saveLabels(root, labels, home) { const f = labelsFile(root, home); mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, JSON.stringify(labels, null, 1)); }
 export const folderHash = (card) => createHash('sha1').update(JSON.stringify({ f: card.files, d: card.dirs.map((d) => d.replace(/ \(.*$/, '')), a: card.about })).digest('hex').slice(0, 16);
@@ -166,7 +166,7 @@ export function lineFor(labels, key, h) {
 // docs/map/ written from the tree and the labels. → [{ file, chars }]
 // A docs/map/ the map did not make (no MAP.md that starts "# Code map") is the project's own: never
 // touched. Of its own, only the .md files are replaced; anything else in the folder stays.
-export const ownMap = (dir) => !existsSync(dir) || readdirSync(dir).length === 0 || (() => { try { return readFileSync(join(dir, MAP_FILE), 'utf8').startsWith('# Code map'); } catch { return false; } })();
+const ownMap = (dir) => !existsSync(dir) || readdirSync(dir).length === 0 || (() => { try { return readFileSync(join(dir, MAP_FILE), 'utf8').startsWith('# Code map'); } catch { return false; } })();
 export function writeMap(root, tree, labels, { name = basename(root), when = new Date() } = {}) {
   const dir = join(root, MAP_DIR);
   if (!ownMap(dir)) throw new Error(`${MAP_DIR} in this project is not a code map this made: left as it is`);
