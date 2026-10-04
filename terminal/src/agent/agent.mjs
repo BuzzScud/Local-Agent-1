@@ -89,6 +89,7 @@ const budgetFromEnv = () => { const v = Number(process.env.AGENTIC_THINK_BUDGET)
 const TRIM_AT = 0.78; // share of the context that starts a trim
 const TRIM_TO = 0.45; // …and where it stops
 const FULL = 0.85; // past this share (with the reply room counted) trimming was not enough: summarize
+export const RESULT_MAX = 30_000; // the most characters one tool result keeps (Claude Code's own for a command)
 // Room kept free for one reply: thinking (up to the server's reasoning budget)
 // plus the answer. At 16k, a trim at 78% left too little, and a High reply
 // ran into the end of the memory (chart bug, 25 Sep). The thinking part is the
@@ -1149,7 +1150,9 @@ export class Agent extends EventEmitter {
     return true;
   }
 
-  get maxResultChars() { return Math.max(4000, Math.floor(this.ctx * 0.15 * 3.6)); }
+  // A tool result's room: 15% of the context, at most RESULT_MAX characters. At a service's 262k
+  // context one Read of a report page brought 142,000 characters (4 Oct 2026), and every step after was slow.
+  get maxResultChars() { return Math.min(RESULT_MAX, Math.max(4000, Math.floor(this.ctx * 0.15 * 3.6))); }
 
   // Past half this request's time for thinking (THINK_BUDGET_SECS): true, and the first time a
   // note says so. Never with thinking off, a budget of 0, or AGENTIC_THINK=old.
@@ -2784,6 +2787,13 @@ export class Agent extends EventEmitter {
       else if (retry && !e.status && /fetch failed|ECONNREFUSED|socket|terminated/i.test(`${e.message} ${e.cause?.message ?? ''}`) && this.waitForServer) {
         this.emit('note', { text: this.model?.remote ? 'The remote model stopped answering; connecting again…' : 'The model server stopped; restarting it and trying again…', tone: 'warn' });
         await this.waitForServer();
+        return this.generate(signal, { retry: false, textOnly, maxTokens: cap, focus });
+      // Nothing came for minutes and a limit on the way gave up (Bun's own fetch did after 6 minutes, "The
+      // operation timed out.", until client.mjs turned it off: 4 Oct 2026, Qwen3.6 on a shared service with
+      // a 165k-token conversation). Asked once more; a second time, it says so in words.
+      } else if (e?.name === 'TimeoutError' || /operation timed out/i.test(e?.message ?? '')) {
+        if (!retry) throw Object.assign(new Error('The model service sent nothing back in time, twice: it may be busy with other work, or the conversation too long for it to read again quickly (/compact shortens it).'), { cause: e });
+        this.emit('note', { text: 'The model service sent nothing back for minutes (busy, or reading a long conversation again); asking once more…', tone: 'warn' });
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap, focus });
       // A tool call the service could not read (Ollama's parser: "XML syntax error on line 17:
       // unexpected EOF", Qwen3.6, 3 Oct 2026): the reply is lost, so the model is told and writes it again,
