@@ -906,7 +906,9 @@ export async function execute(name, args, prepared, env) {
       const own = secsOf(args.timeout);
       const timeoutMs = own ? own * 1000 : env.bash?.timeoutMs ?? 120_000;
       // A model on another machine gets a test run's passing tests folded into one line (squeezeTests).
-      const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal, squeeze: env.rulesSet === 'remote' });
+      // Bypass permissions lifts the folder fence and the internet block (sandbox.mjs open).
+      const open = env.permissionsNow?.().mode === 'bypass';
+      const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal, squeeze: env.rulesSet === 'remote', ...(open ? { sandbox: { open: true } } : {}) });
       const body = r.lines.join('\n');
       const took = timeoutMs >= 90_000 && timeoutMs % 60_000 === 0 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
       const longer = r.timedOut && timeoutMs < MAX_TIMEOUT_SECS * 1000 ? `; for longer, send timeout (up to ${MAX_TIMEOUT_SECS} seconds), or background: true for one that need not be waited for` : '';
@@ -949,7 +951,9 @@ export function secsOf(v) {
 
 async function startJob(args, env, max) {
   if (!env.jobs) return { text: 'Background jobs are not available here. Run the command without background; timeout gives it up to 600 seconds.', error: true, view: { kind: 'error', message: 'no background jobs here' } };
-  const r = await env.jobs.start(args.command, { cwd: env.cwd, description: args.description ?? '' });
+  // Bypass permissions lifts the folder fence and the internet block here too (sandbox.mjs open).
+  const open = env.permissionsNow?.().mode === 'bypass';
+  const r = await env.jobs.start(args.command, { cwd: env.cwd, description: args.description ?? '', ...(open ? { sandbox: { open: true } } : {}) });
   if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: 'too many background jobs' } };
   const { job } = r;
   const first = env.jobs.look(job, env.bash?.maxLines ?? 80).lines;

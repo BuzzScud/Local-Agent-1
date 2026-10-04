@@ -2,7 +2,8 @@
 // cannot flood a small context window. Commands run inside the macOS
 // sandbox (sandbox.mjs): they cannot read your home folder or write outside
 // `cwd`. Pass sandbox: false for a command you typed yourself (! in the app),
-// or sandbox: { readOnly: [...] } for more folders it may read.
+// sandbox: { readOnly: [...] } for more folders it may read, or sandbox: { open: true }
+// in Bypass permissions (any folder and the internet; sandbox.mjs).
 import { spawn } from 'node:child_process';
 import { sandboxAvailable, sandboxed, fenceHint } from './sandbox.mjs';
 
@@ -77,7 +78,7 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
       signal?.removeEventListener('abort', onAbort);
       child.stdout.destroy();
       child.stderr.destroy();
-      if (fenced) out += fenceHint(out); // also when a pipe hid the error code
+      if (fenced) out += fenceHint(out, { open: Boolean(sandbox?.open) }); // also when a pipe hid the error code
       const all = out.replace(/\n$/, '').split('\n');
       const lines = squeeze ? squeezeTests(all) : all;
       const cut = lines.length > maxLines;

@@ -321,7 +321,7 @@ test('Auto: reading and edits go through; what no rule covers goes to the check;
   expect(judge('Bash', { command: 'npm install left-pad' }, ctx5('auto')).why).toBe('Auto: no rule covers it, so the model checks it first');
 });
 
-test('Bypass permissions: nothing asks, but the blocked commands, the folder fence, your never-list and the app\'s own settings hold', () => {
+test('Bypass permissions: nothing asks, but the blocked commands, your never-list, secrets outside the project and the app\'s own settings hold', () => {
   for (const c of ['npm install left-pad', 'git commit -m x', 'cp x .env', 'node build.mjs > out.txt']) expect(d5('Bash', { command: c }, 'bypass')).toBe('allow');
   expect(d5('Write', { path: '.env' }, 'bypass', { rel: '.env' })).toBe('allow');
   expect(d5('Edit', { path: 'src/a.js' }, 'bypass')).toBe('allow');
@@ -330,7 +330,6 @@ test('Bypass permissions: nothing asks, but the blocked commands, the folder fen
   expect(decide('Write', { path: '.agentic/settings.json' }, ctx5('bypass', { rel: '.agentic/settings.json' }))).toEqual({ decision: 'deny', reason: ".agentic/settings.json holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions" });
   expect(d5('Bash', { command: 'cp x .agentic-coder/permissions.json' }, 'bypass')).toBe('deny');
   expect(d5('Bash', { command: 'cat .agentic/settings.json' }, 'bypass')).toBe('allow'); // reading one is fine
-  expect(d5('Edit', { path: '../x.js' }, 'bypass', { inside: false })).toBe('deny');
   expect(d5('WebFetch', { url: 'https://example.org/' }, 'bypass')).toBe('allow');
   expect(d5('Edit', { path: 'a.js' }, 'plan')).toBe('deny'); // plan is unchanged
 });
@@ -431,4 +430,40 @@ test('a command that runs tests: a runner, the project\'s test command or the ch
   expect(testRunOf('npm test || echo failed')).toEqual({ piped: false });
   expect(testRunOf('cd web && npm test')).toEqual({ piped: false });
   expect(splitCommand('npm test && ls | head; echo hi').seps).toEqual(['&&', '|', ';']);
+});
+
+// The owner's pick (3 Oct 2026): Bypass lifts the folder fence for commands and files, and the
+// internet block (sandbox.mjs open). Secrets outside the project and the app's own settings stay out.
+test('Bypass lifts the folder fence: any folder for commands and files, but not a secret outside the project', () => {
+  for (const c of ['cat /Users/x/notes.md', 'ls ~/Documents', 'cd .. && ls', 'python3 ../other/run.py', 'curl -s https://example.org/a.json'])
+    expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'allow']);
+  for (const c of ['cat /Users/x/notes.md', 'ls ~/Documents']) expect([c, d5('Bash', { command: c }, 'ask')]).toEqual([c, 'deny']); // the other modes keep it
+  for (const c of ['cat ~/.ssh/config', 'cp /Users/x/.ssh/id_ed25519 .', 'cat ../app/.env', 'cat /Users/x/certs/site.pem'])
+    expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'deny']);
+  expect(decide('Bash', { command: 'cat ~/.ssh/id_rsa' }, ctx5('bypass')).reason).toBe("~/.ssh/id_rsa is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach");
+  expect(d5('Read', { path: '/Users/x/a.py' }, 'bypass', { inside: false, rel: '../Users/x/a.py' })).toBe('allow');
+  expect(d5('Read', { path: '/Users/x/a.py' }, 'ask', { inside: false, rel: '../Users/x/a.py' })).toBe('deny');
+  expect(d5('Read', { path: '/Users/x/.ssh/id_rsa' }, 'bypass', { inside: false, rel: '../Users/x/.ssh/id_rsa' })).toBe('deny');
+  expect(d5('Edit', { path: '../x.js' }, 'bypass', { inside: false, rel: '../x.js' })).toBe('allow');
+  expect(d5('Write', { path: '../app/.env' }, 'bypass', { inside: false, rel: '../app/.env' })).toBe('deny');
+  expect(d5('Write', { path: '/Users/x/.agentic-coder/settings.json' }, 'bypass', { inside: false, rel: '../Users/x/.agentic-coder/settings.json' })).toBe('deny');
+  expect(d5('Bash', { command: 'cp x /Users/x/.agentic-coder/settings.json' }, 'bypass')).toBe('deny');
+  expect(d5('Edit', { path: '../x.js' }, 'edits', { inside: false, rel: '../x.js' })).toBe('deny');
+});
+
+// 3 Oct 2026: a Python check script sent as a heredoc was turned away as "/ is outside the
+// project folder", in the home folder: the division in it (model_mape / naive_mape) was read
+// as a shell word. A heredoc's body is the program's text, read as quoted text is.
+test('a heredoc body is the program\'s text: a division is not the folder /, a real path in it still is', () => {
+  const cwd = homedir();
+  const script = `python3 << 'PYEOF'\nimport json\npath = "${cwd}/Desktop/agent docs/f4_results.json"\nskill = 1 - model_mape / naive_mape\nhalf = 7 // 2\nPYEOF`;
+  expect(outsidePath(script, cwd)).toBe(null);
+  expect(decide('Bash', { command: script }, { mode: 'bypass', cwd }).decision).toBe('allow');
+  const p = `${cwd}/p`;
+  for (const c of ["python3 <<EOF\nprint(4 / 2)\nEOF", "cat <<-END\n\ta / b\n\tEND\nls", 'python3 - <<"X"\nx = a/b\nX'])
+    expect([c, outsidePath(c, p)]).toEqual([c, null]);
+  expect(outsidePath("python3 << 'EOF'\nopen('/Users/x/secret.txt')\nEOF", p)).toBe('/Users/x/secret.txt');
+  expect(outsidePath('cat <<EOF > out.txt\nhi / there\nEOF\ncat /Users/x/a', p)).toBe('/Users/x/a'); // the shell after the body
+  expect(outsidePath('echo $(( 1 << 2 )) /Users/x', p)).toBe('/Users/x');                           // a shift is not a heredoc
+  expect(outsidePath('expr 4 / 2', p)).toBe('/');                                                    // a bare / outside a body is still the disk
 });

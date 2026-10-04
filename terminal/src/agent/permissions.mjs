@@ -9,8 +9,10 @@ import { isMcpCall, mcpRule, parseMcpRule } from './mcp.mjs';
 //   ask     Manual: asks before every change (the default)
 //   edits   Accept edits: file changes go through; commands still ask
 //   plan    read-only: it may look but not change anything
-//   bypass  never asks; the blocked commands, the folder fence, your never-list
-//           and the app's own settings still hold, and commands keep the sandbox
+//   bypass  never asks; the blocked commands, your never-list and the app's own
+//           settings still hold. The folder fence and the sandbox's internet block
+//           are lifted (the owner's pick, 3 Oct 2026); what already runs on this
+//           Mac stays out of reach (sandbox.mjs)
 export const MODES = ['auto', 'ask', 'edits', 'plan', 'bypass'];
 // shift+tab walks these. Bypass is picked on purpose (/mode 5, /mode bypass, --mode
 // bypass), never by cycling into it; from Bypass, shift+tab goes back to Manual.
@@ -52,15 +54,18 @@ const SYSTEM_DIRS = ['/dev', '/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/lib
 
 // The first path a command names outside the project folder, or null.
 // Reads cd (a bare cd goes home), ~, $HOME, absolute paths and ../ escapes.
-export function outsidePath(command, cwd) {
-  if (!cwd) return null;
+export const outsidePath = (command, cwd) => outsidePaths(command, cwd)[0] ?? null;
+// Every one of them, in order (Bypass looks for a secret among them).
+function outsidePaths(command, cwd) {
+  if (!cwd) return [];
   const home = homedir();
   const cmd = String(command ?? '');
-  if (/(?:^|[;&|(]\s*)(?:cd|pushd)\s*(?:$|[;&|)])/.test(cmd)) return '~';
+  const out = [];
+  if (/(?:^|[;&|(]\s*)(?:cd|pushd)\s*(?:$|[;&|)])/.test(cmd)) out.push('~');
   for (const w of pathCandidates(cmd)) {
     let p = null;
     if (w === '~' || w.startsWith('~/')) p = home + w.slice(1);
-    else if (/^~[\w.-]+/.test(w)) return w; // ~user: someone's home folder
+    else if (/^~[\w.-]+/.test(w)) { out.push(w); continue; } // ~user: someone's home folder
     else if (/^\$\{?HOME\}?(\/|$)/.test(w)) p = w.replace(/^\$\{?HOME\}?/, home);
     else if (w.startsWith('/') && !/[\\^]/.test(w)) p = w; // not a regex such as /a\/b/
     else if (/(^|\/)\.\.(\/|$)/.test(w)) p = resolve(cwd, w);
@@ -69,22 +74,49 @@ export function outsidePath(command, cwd) {
     const rel = relative(cwd, p);
     if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) continue;
     if (SYSTEM_DIRS.some((d) => p === d || p.startsWith(`${d}/`))) continue;
-    return w;
+    out.push(w);
   }
-  return null;
+  return out;
 }
 
 // The words of a command as the shell sees them: quoted text stays one word
 // ("=== byte count / line count ===" is text, not the folder /), unquoted
 // text splits on spaces and shell operators, and Desktop/"a b.txt" is one word.
+// A heredoc's body (python3 << 'EOF' … EOF) is one quoted word too: it is the
+// program's text, not the shell's. Split into words, the division in a Python
+// script (model_mape / naive_mape) was the folder / and the script was turned
+// away as outside the project, in the home folder itself (3 Oct 2026).
 function shellWords(cmd) {
   const words = [];
   let cur = '';
   let has = false;
   let quoted = false;
+  const heredocs = []; // the ones opened on this line: their bodies start after it
   const push = () => { if (has) words.push(Object.assign(new String(cur), { quoted })); cur = ''; has = false; quoted = false; };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
+    // << WORD, <<-WORD, << 'WORD', << "WORD" (not <<<, and not a shift such as $(( a << 2 ))).
+    if (c === '<' && cmd[i + 1] === '<' && cmd[i + 2] !== '<') {
+      const m = /^<<(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|([A-Za-z_][\w.-]*))/.exec(cmd.slice(i));
+      if (m) { push(); heredocs.push({ end: m[2] ?? m[3] ?? m[4], tabs: m[1] === '-' }); i += m[0].length - 1; continue; }
+    }
+    if (c === '\n' && heredocs.length) {
+      push();
+      for (const h of heredocs.splice(0)) {
+        const lines = [];
+        let at = i + 1;
+        while (at < cmd.length) {
+          const nl = cmd.indexOf('\n', at);
+          const line = cmd.slice(at, nl < 0 ? cmd.length : nl);
+          at = nl < 0 ? cmd.length : nl + 1;
+          if ((h.tabs ? line.replace(/^\t+/, '') : line) === h.end) break;
+          lines.push(line);
+        }
+        if (lines.length) words.push(Object.assign(new String(lines.join('\n')), { quoted: true }));
+        i = at - 1;
+      }
+      continue;
+    }
     if (c === "'") { const j = cmd.indexOf("'", i + 1); const end = j < 0 ? cmd.length : j; cur += cmd.slice(i + 1, end); has = true; quoted = true; i = end; continue; }
     if (c === '"') {
       quoted = true;
@@ -355,6 +387,10 @@ export function protectedBy(rel, extra = [], list = PROTECTED) {
 }
 // One of the app's own files (OWN), by path or named in a command's words.
 export const ownBy = (rel) => protectedBy(rel, [], OWN);
+// Secrets outside the project stay out of reach even in Bypass, which lifts the folder fence:
+// an SSH key or another project's .env would go to a model on another machine.
+export const SECRET_FILES = ['.ssh', '.ssh/**', '.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*'];
+const secretBy = (paths) => protectedBy(paths, [], SECRET_FILES);
 const namesOwn = (command) => { for (const w of shellWords(String(command ?? ''))) { const g = ownBy(String(w)); if (g) return g; } return null; };
 
 // What a typed rule may be, for /permissions allow | never | protect:
@@ -475,9 +511,15 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     if (mode === 'auto') return { decision: 'check', rule, why: 'Auto: the model checks that it fits your request' };
     return { decision: 'ask', rule, why: name === 'WebSearch' ? 'a search sends its words to the search service' : `no rule allows reading ${siteOf(args.url)} yet` };
   }
-  if (name === 'Read' || name === 'List' || name === 'Search') return inside ? { decision: 'allow', why: 'reading inside the project never asks' } : { decision: 'deny', reason: 'that is outside the project folder; only files inside it may be read' };
+  // Outside the project, Bypass lets a step through unless it names a secret (SECRET_FILES).
+  const away = [].concat(rel ?? [], args?.path ?? []);
+  if (name === 'Read' || name === 'List' || name === 'Search') {
+    if (inside) return { decision: 'allow', why: 'reading inside the project never asks' };
+    if (bypass && !secretBy(away)) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
+    return { decision: 'deny', reason: bypass ? 'that is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach' : 'that is outside the project folder; only files inside it may be read' };
+  }
   if (name === 'Edit' || name === 'Write') {
-    if (!inside) return { decision: 'deny', reason: 'that file is outside the project folder' };
+    if (!inside && (!bypass || secretBy(away))) return { decision: 'deny', reason: bypass ? 'that is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach' : 'that file is outside the project folder' };
     if (mode === 'plan') return { decision: 'deny', reason: 'plan mode is on, so nothing may be changed yet' };
     // A protected file always asks, even in Accept edits and Auto, and has no "allow all edits"
     // choice (once). In Bypass nothing asks: it goes through, but the app's own settings never do.
@@ -495,15 +537,19 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     const command = args?.command ?? '';
     const why = blockedReason(command);
     if (why) return { decision: 'deny', reason: `blocked: ${why}` };
-    const out = outsidePath(command, cwd);
-    if (out) return { decision: 'deny', reason: `${out} is outside the project folder; commands stay inside it` };
+    // Bypass lifts the fence: a command may name any folder, but not a secret outside the
+    // project (SECRET_FILES), and not the app's own settings (below).
+    const outs = outsidePaths(command, cwd);
+    const secret = bypass ? outs.find((w) => secretBy(w)) : null;
+    if (secret) return { decision: 'deny', reason: `${secret} is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach` };
+    if (outs.length && !bypass) return { decision: 'deny', reason: `${outs[0]} is outside the project folder; commands stay inside it` };
     // Your own never-list holds in every mode.
     const mine = neverRule(command, rules?.never);
     if (mine) return { decision: 'deny', reason: `blocked by your rule "${mine}" (/permissions)` };
     if (mode === 'plan') return isReadOnly(command) ? { decision: 'allow', why: 'it only reads' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
     if (bypass) {
       const own = isReadOnly(command) ? null : namesOwn(command);
-      return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on (the sandbox still keeps it in the project, offline)' };
+      return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on (any folder and the internet; what already runs on this Mac stays out of reach)' };
     }
     // once: no "don't ask again" for it.
     if (runsGitCommit(command)) return { decision: 'ask', once: true, why: 'a commit always asks' };
@@ -559,7 +605,7 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [] } = 
     ['WebSearch and WebFetch (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the site' : ''}`],
     ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', or a rule allows it' : ''}`],
     ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
-    ['Other files or commands outside the project, the internet from a command', 'refused (the sandbox)'],
+    ['Other files or commands outside the project, the internet from a command', m === 'bypass' ? 'runs (Bypass lifts the fence), except secrets outside the project (keys, .ssh, .env); what already runs on this Mac stays out of reach' : 'refused (the sandbox)'],
     ['Agentic Coder\'s own settings and rules', 'refused'],
   ];
   return `## Right now (from the app, as you read this)
