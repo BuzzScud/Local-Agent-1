@@ -78,7 +78,7 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
       signal?.removeEventListener('abort', onAbort);
       child.stdout.destroy();
       child.stderr.destroy();
-      if (fenced) out += fenceHint(out, { open: Boolean(sandbox?.open) }); // also when a pipe hid the error code
+      if (fenced) out += fenceHint(out, { open: Boolean(sandbox?.open), command }); // also when a pipe hid the error code
       const all = out.replace(/\n$/, '').split('\n');
       const lines = squeeze ? squeezeTests(all) : all;
       const cut = lines.length > maxLines;

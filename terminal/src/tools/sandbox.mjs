@@ -125,10 +125,24 @@ export function sandboxed(command, root, { readOnly, open } = {}) {
 // note it came with sent it to answer at once, saying the page was on the
 // Desktop when it was not (30 Sep).
 const LAUNCHERS = APP_LAUNCHERS.map((p) => p.split('/').pop()).join('|');
-export function fenceHint(output, { open = false } = {}) {
+// A command that reached for a web address outside Bypass, where the sandbox closes the internet
+// (4 Oct 2026): curl and Python's urllib to a page were refused three times, the hint said only
+// "stay inside the project", and Qwen3.6 called it a firewall and never used WebFetch, which it had.
+// A refused connection, a name that could not be looked up, or nothing at all (curl -s | head).
+const NET_FAIL = /Failed to connect|Couldn't connect|Could not resolve host|urlopen error|\[Errno (?:1|8)\]|getaddrinfo|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|Network is unreachable|nodename nor servname|Operation not permitted/i;
+const WEB_ADDRESS = /\bhttps?:\/\/[^\s'"`<>|)\\]+/i;
+export function netHint(output, command) {
+  const url = WEB_ADDRESS.exec(String(command ?? ''))?.[0];
+  if (!url || !(NET_FAIL.test(output) || !String(output ?? '').trim())) return '';
+  return `\n(Commands cannot reach the internet here: only Bypass permissions opens it to them, and the user turns that on. To read the page, call the WebFetch tool: WebFetch {"url": "${url}"}. Do not try curl, wget or another language again.)`;
+}
+
+export function fenceHint(output, { open = false, command = '' } = {}) {
   if (new RegExp(`operation not permitted: (?:${LAUNCHERS})\\b`, 'i').test(output)) {
     return '\n(Apps cannot be started from here, so do not try again: say where the file is, with its full path.)';
   }
+  const net = open ? '' : netHint(output, command);
+  if (net) return net;
   if (!/Operation not permitted|operation not permitted|EPERM|sandbox/i.test(output)) return '';
   // In Bypass the folders are open: what is still closed is what already runs here and the app's own folder.
   return open

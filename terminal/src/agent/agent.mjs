@@ -1316,8 +1316,9 @@ export class Agent extends EventEmitter {
   // note says so. Never with thinking off, a budget of 0, or AGENTIC_THINK=old.
   // Not while steps are failing in a row (4 Oct 2026, the owner's pick: it stepped down right after a
   // script failed, and three quick fixes in a row failed too); it steps down after one that works.
+  // Nor on a service that takes no thinking cap (capsThinking): there it could only say so.
   steppedDown() {
-    if (!this.thinking || !(this.thinkBudgetSecs > 0) || !this.requestStarted || oldThinking()) return false;
+    if (!this.thinking || !(this.thinkBudgetSecs > 0) || !this.requestStarted || oldThinking() || !this.capsThinking()) return false;
     if (Date.now() - this.requestStarted < this.thinkBudgetSecs * 500) return false;
     if (this.turn?.errorsInRow > 0) return false;
     if (this.steppedAt == null) {
@@ -1325,6 +1326,15 @@ export class Agent extends EventEmitter {
       this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request used: thinking briefly from here, to finish in time`, tone: 'dim' });
     }
     return true;
+  }
+
+  // Whether the service ends the thinking at a cap of ours (client.mjs thinking_budget_tokens): llama.cpp,
+  // this Mac's server and `coding serve`, does; Ollama, OpenAI-style services and the Claude API take
+  // none, and there Reply length holds the thinking and the answer (4 Oct 2026: a remote run showed
+  // "39 of 64" after the step-down, a cap the service never had).
+  capsThinking() {
+    const ep = endpointOf(this.url);
+    return !(ep?.ollama || ep?.kind === 'openai' || ep?.kind === 'claude');
   }
 
   // The effort of this turn's next reply. High is for working the problem out: once this turn
@@ -1954,7 +1964,8 @@ export class Agent extends EventEmitter {
           // with no look of its own goes back once with the words to search for; a request for work
           // that made a file is not held to it (a new file needs no look). The second time it is
           // let through with a line under it (the owner's pick).
-          const lookHeld = this.model?.remote && !this.isHelper && (!isHomeFolder(this.cwd) || Boolean(this.turn.workFolder));
+          // A reply cut off at the limit with nothing in it is no answer: the cut handling below has it.
+          const lookHeld = this.model?.remote && !this.isHelper && (!isHomeFolder(this.cwd) || Boolean(this.turn.workFolder)) && !(!text.trim() && turn.finish === 'length');
           // Files the app read for it before its first step count as a look (App reads ahead); the opening
           // read and the maps do not (they say where things are, not what is in them).
           const sawCode = this.turn.lookedOwn || (this.turn.given ?? 0) > 0 || this.turn.shown;
@@ -2087,6 +2098,18 @@ export class Agent extends EventEmitter {
               reason = 'stuck';
               this.emit('note', { text: `Three replies in a row were cut off at the reply limit (${size}), so it stopped. Raise Reply length in /effort, or ask for the file in smaller pieces.`, tone: 'warn' });
               break;
+            }
+            // Cut at your own Reply length (/effort) while the context has room for twice as much:
+            // this step once more with that room, for the rest of the message (4 Oct 2026: Qwen3.6
+            // at 8.2k thought for 3½ minutes and none of its page arrived; "build it in parts" made
+            // one write many steps). Ollama's limit holds the thinking and the answer together.
+            const own = this.model?.replyTokens;
+            const more = Math.min(SERVICE_REPLY, Math.floor(this.ctx * this.trimAt) - this.estNow());
+            if (own && !this.turn.roomUp && more >= own * 2) {
+              this.turn.roomUp = more;
+              this.messages.pop();
+              this.emit('note', { text: `The reply was cut off at your Reply length (${size}) before anything arrived; this step goes again with ${kTok(more)} of room. Raise Reply length in /effort to keep it.`, tone: 'warn' });
+              continue;
             }
             // The thinking took the room: think less. Little or no thinking (a model that cannot
             // think, like qwen3-coder-next): it was writing a call, most likely a file, and Ollama
@@ -2942,7 +2965,7 @@ export class Agent extends EventEmitter {
     // context has left under the trim line (at least the answer's 2,048).
     // One that cannot think (a single level: a remote's None) gets no room for thinking.
     // Auto on a service: SERVICE_REPLY, the same way (its thinking and its file both fit).
-    const own = this.model?.replyTokens || (this.model?.remote?.ollama ? SERVICE_REPLY : 0);
+    const own = this.turn?.roomUp || this.model?.replyTokens || (this.model?.remote?.ollama ? SERVICE_REPLY : 0);
     const thinks = thinking && (this.model?.thinkingLevels?.length ?? 2) > 1;
     const maxTokens = cap ?? (own ? Math.max(2048, Math.min(own, Math.floor(this.ctx * this.trimAt) - this.estNow())) : replyRoom(thinks, this.model?.thinkingBudget));
     this.lastRoom = maxTokens;
@@ -2965,7 +2988,8 @@ export class Agent extends EventEmitter {
     if (signal?.aborted) local.abort();
     // The screen's meters: the most this reply may write, and its thinking cap.
     // whole: an Ollama service sends a tool call whole when it is written, so a long one streams nothing (screen.jsx says so).
-    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama) });
+    // The thinking meter's limit: where the service takes no cap, the reply's room, which holds it.
+    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : !this.capsThinking() ? maxTokens : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama) });
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.

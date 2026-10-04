@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { HOME, DEFAULT_MODEL } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
 import { startModeFor } from './perm-store.mjs';
+import { modeOf } from '../agent/permissions.mjs';
 
 const SETTINGS = join(HOME, 'settings.json');
 const DEFAULTS = { thinking: null, model: DEFAULT_MODEL };
@@ -41,6 +42,19 @@ export function loadSettings(cwd) {
   const saved = cwd ? startModeFor(cwd) : null;
   return { ...global, ...folderSettings(cwd), ...(saved ? { mode: saved.mode, modeFrom: saved.where } : {}) };
 }
+// The mode a window starts in: --mode; else the start-up mode saved with /permissions or a trusted
+// folder's own; else the one the last window was left in (lastMode, kept by the window as it
+// changes; 4 Oct 2026, the owner's ask: "when we close it or exit, can it remember the mode?",
+// Bypass included); else the older settings.json "mode"; else Manual. { mode, from } with from
+// 'flag', 'saved', 'last' or 'default'. AGENTIC_LAST_MODE=off: the last one is not used (the tests).
+export const keepsLastMode = () => !['off', '0', 'false'].includes(String(process.env.AGENTIC_LAST_MODE ?? 'on').toLowerCase());
+export function firstMode(asked, settings = {}) {
+  if (asked && modeOf(asked)) return { mode: modeOf(asked), from: 'flag' };
+  if ((settings.modeFrom || settings.fromFolder?.includes('mode')) && modeOf(settings.mode)) return { mode: modeOf(settings.mode), from: 'saved' };
+  if (keepsLastMode() && modeOf(settings.lastMode)) return { mode: modeOf(settings.lastMode), from: 'last' };
+  return { mode: modeOf(settings.mode) ?? 'ask', from: 'default' };
+}
+
 export function saveSettings(patch) {
   const next = { ...loadSettings(), ...patch };
   delete next.fromFolder;

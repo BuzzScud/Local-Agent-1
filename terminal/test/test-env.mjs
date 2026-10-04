@@ -50,3 +50,5 @@ process.env.AGENTIC_OPEN ??= 'off';
 // Background sessions (src/app/sessions.mjs): an app a test drives runs in its own
 // window, as before, unless the test is about sessions (sessions.test.mjs turns them on).
 process.env.AGENTIC_SESSIONS ??= 'off';
+// A window starts in Manual, not in the mode another test's window was left in (store.mjs firstMode).
+process.env.AGENTIC_LAST_MODE ??= 'off';
