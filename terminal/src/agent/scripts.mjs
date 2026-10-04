@@ -40,7 +40,9 @@ export function inScripts(abs) {
 
 // The script a command types in as a heredoc: { interp, body, ext } or null. Only a heredoc that
 // feeds a language (python3 - <<'EOF', node <<EOF, bash <<EOF), not one that writes a file (cat > x <<EOF).
-const HEREDOC = /^\s*(?:cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*&&\s*)?(python3?|node|bun|ruby|perl|bash|sh|zsh|Rscript)\b[^\n<|>]*<<-?\s*(['"]?)([A-Za-z_]\w*)\2[^\n]*\n([\s\S]*?)\n[ \t]*\3[ \t]*(?:\n|$)/;
+// Settings before it count too: HOME=/Users/x python3 <<'EOF', env A=1 node <<EOF (4 Oct 2026: every
+// script of a run began HOME=… python3, and none was saved).
+const HEREDOC = /^\s*(?:cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*&&\s*)?(?:env\s+)?(?:[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)\s+)*(python3?|node|bun|ruby|perl|bash|sh|zsh|Rscript)\b[^\n<|>]*<<-?\s*(['"]?)([A-Za-z_]\w*)\2[^\n]*\n([\s\S]*?)\n[ \t]*\3[ \t]*(?:\n|$)/;
 export function heredocScript(command) {
   const m = HEREDOC.exec(String(command ?? ''));
   if (!m) return null;
@@ -126,6 +128,25 @@ export function failingLine(output, { body = null, saved = null, cwd = '' } = {}
     return `Line ${f.line} of ${said}, where it stopped:\n${shown.join('\n')}`;
   }
   return '';
+}
+
+// A command's whole output when it was too long to show (4 Oct 2026: a 35 KB script printed with curl
+// came back cut, and was fetched again): saved as SCRIPTS/out-<n>.txt. { name, lines } or null.
+export function saveOutput(text, cwd) {
+  if (!text || ownFolder(cwd)) return null;
+  const dir = scriptsDir();
+  let names = [];
+  try { names = readdirSync(dir); } catch { mkdirSync(dir, { recursive: true }); sweep(join(dir, '..')); }
+  const n = `out-${names.filter((x) => x.startsWith('out-')).length + 1}.txt`;
+  writeFileSync(join(dir, n), text);
+  return { name: `SCRIPTS/${n}`, lines: text.replace(/\n$/, '').split('\n').length };
+}
+
+// ~ written inside a Python or Node string is not the home folder: only the shell expands it
+// (4 Oct 2026: open('~/Desktop/…') failed, and the model guessed /Users/agentic-coder). The hint, or ''.
+export function tildeHint(output) {
+  if (!/No such file or directory: '~\/|ENOENT[^\n]*'~\//.test(String(output ?? ''))) return '';
+  return "(~ is not the home folder inside a Python or Node string: only the shell expands it. Use os.path.expanduser('~/…') in Python, path.join(os.homedir(), '…') in Node, or \"$HOME/…\" in the shell.)";
 }
 
 // The line the result ends with for a saved script.

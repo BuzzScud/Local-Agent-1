@@ -231,7 +231,7 @@ ${notes ? `\nProject notes\n${now ? `${NOTES_RANK}\n\n` : ''}${notes}\n` : ''}`;
 // offered, so the helpers guide is listed. mcp: a tool of an MCP server is offered (true, or the
 // servers' list: agent/mcp.mjs mcpBrief), so the MCP guide is listed and TOOLS.md's MCP lines, with
 // the list, join the Tool use ones.
-function remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse, skills, agents, mcp }) {
+function remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse, skills, agents, mcp, web = false }) {
   const h = harnessOf();
   const guides = guidesList(readGuides('remote', { agents, mcp: Boolean(mcp) }), { path: guidePath(cwd), intro: h.guides });
   const list = skillsList(skills ?? readSkills(undefined, 'remote'), { path: skillPath(cwd) });
@@ -240,7 +240,7 @@ function remotePrompt({ cwd, notes, git, today, tests, example, math, instructio
 ${instructionBlock(instructions)}
 
 Tool use
-${toolUse ?? toolUseFor('remote', undefined, { mcp })}
+${toolUse ?? toolUseFor('remote', undefined, { mcp, web })}
 
 How you work
 ${h.how}
@@ -259,10 +259,10 @@ export const promptSetOf = (system) => (typeof system === 'string' && system.inc
 // toolUse and skills: terminal/rules/TOOLS.md and SKILLS.md as they are now
 // (prompt-files.mjs); the old prompt keeps the Tool use lines it had and no skills.
 // set 'remote': the remote set's instructions (remotePrompt); AGENTIC_PROMPT=old keeps the old local one.
-export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = process.env.AGENTIC_EXAMPLE === '1', math = '', instructions, toolUse, skills, set = 'local', agents = false, mcp = false }) {
+export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = process.env.AGENTIC_EXAMPLE === '1', math = '', instructions, toolUse, skills, set = 'local', agents = false, mcp = false, web = false }) {
   const today = localDay(date);
   const now = promptVersion() !== 'old';
-  if (set === 'remote' && now) return remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse, skills, agents, mcp });
+  if (set === 'remote' && now) return remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse, skills, agents, mcp, web });
   const tooling = toolUse ?? (now ? toolUseFor('local', undefined, { mcp }) : TOOL_USE_OLD);
   const list = now ? skillsList(skills ?? readSkills(), { path: skillPath(cwd) }) : '';
   return `You are Agentic Coder, a coding assistant in the user's terminal on their Mac. You work inside one project folder and use tools to read, search, change and test code. You can see the files only through your tools.

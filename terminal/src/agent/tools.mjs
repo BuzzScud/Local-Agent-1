@@ -17,7 +17,7 @@ import { mathPathFor, mathDir } from './expertise.mjs';
 import { designPathFor, designDir, inDesignDir } from './design.mjs';
 import { studioPathFor, studioDir, inStudioDir, hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
-import { scriptsPathFor, inScripts, saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote } from './scripts.mjs';
+import { scriptsPathFor, inScripts, saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint } from './scripts.mjs';
 import { permissionsTable } from './permissions.mjs';
 
 const str = (description) => ({ type: 'string', description });
@@ -975,7 +975,10 @@ export async function execute(name, args, prepared, env) {
       const status = r.timedOut ? `\n(stopped after ${took}${longer})` : r.code === 0 ? '' : `\n(exit code ${r.code})`;
       // Where a failed script stopped, with its lines (a traceback's "line 279 of <stdin>"), and the saved file.
       const where = r.code !== 0 && !r.timedOut ? failingLine(body, { body: heredocScript(args.command)?.body ?? null, saved: saved?.name ?? null, cwd: env.cwd }) : '';
-      const after = [where, saved ? savedNote(saved) : ''].filter(Boolean).join('\n');
+      // Output too long to show: kept whole as SCRIPTS/out-<n>.txt, to Read in parts instead of running it again.
+      const kept = r.whole || body.length > max ? saveOutput(scripts ? outputWithScripts(r.whole ?? body) : r.whole ?? body, env.cwd) : null;
+      const keptNote = kept ? `(The whole output, ${kept.lines.toLocaleString('en-US')} lines, is saved as ${kept.name}: Read it with offset and limit, or find, instead of running the command again.)` : '';
+      const after = [where, r.code !== 0 ? tildeHint(body) : '', saved ? savedNote(saved) : '', keptNote].filter(Boolean).join('\n');
       return { text: cut(body || '(no output)', max) + status + (after ? `\n${after}` : ''), error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut, ...(r.timedOut ? { after: took } : {}), ...(saved ? { saved: saved.name } : {}) }, ...(saved ? { saved } : {}) };
     }
     case 'Jobs': return jobsTool(args, env, max);
@@ -1101,6 +1104,28 @@ async function webSearch(args, env) {
   if (!found.length) return { text: `No results for "${args.query}" (${service}). Try other words.`, view: { kind: 'websearch', count: 0, service } };
   const body = found.map((r, i) => `${i + 1}. ${r.title || '(no title)'}\n   ${r.url}${r.age ? ` · ${r.age}` : ''}${r.snippet ? `\n   ${r.snippet}` : ''}`).join('\n');
   return { text: `${found.length} results for "${args.query}" (${service}). ${UNTRUSTED} WebFetch a result to read it.\n\n${body}`, view: { kind: 'websearch', count: found.length, service, content: body } };
+}
+
+// A plain page fetch in a command: curl (or wget -qO-) of one web address with only reading flags,
+// maybe 2>&1 and | head or | tail. The address, or null (writes a file, posts, sets headers, pipes on).
+// Outside Bypass it runs as WebFetch (agent.mjs; 4 Oct 2026, the owner's pick after curl was refused
+// by the sandbox four times and the model never called WebFetch).
+const READ_FLAGS = /^(?:-[sSLfvk]+|--silent|--show-error|--location|--fail|--compressed|--insecure|-q|--quiet|-qO-|-O-)$/;
+const VALUE_FLAGS = /^(?:--connect-timeout|--max-time|-m|--retry|--timeout|-T|--tries|-t|-A|--user-agent)$/;
+export function plainFetch(command) {
+  const m = /^\s*(curl|wget)\s+([\s\S]*?)(?:\s+2>&1)?(?:\s*\|\s*(?:head|tail)(?:\s+-n\s*\d+|\s+-\d+)?)?(?:\s+2>&1)?\s*$/.exec(String(command ?? ''));
+  if (!m || /[;&|<>`$]/.test(m[2].replace(/"[^"]*"|'[^']*'/g, '').replace(/\s+2>&1$/, ''))) return null;
+  const words = m[2].match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
+  if (m[1] === 'wget' && !words.some((w) => /^-(?:q?O-|O)$/.test(w))) return null;
+  let url = null;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i].replace(/^['"]|['"]$/g, '');
+    if (/^https?:\/\/\S+$/i.test(w)) { if (url) return null; url = w; continue; }
+    if (READ_FLAGS.test(w) || w === '-O' && words[i + 1] === '-') { if (w === '-O') i++; continue; }
+    if (VALUE_FLAGS.test(w)) { i++; continue; }
+    return null;
+  }
+  return url;
 }
 
 // WebFetch: a page read once is kept a quarter of an hour, so find and offset do not fetch it again.

@@ -9,7 +9,7 @@ import { readInstructions, replaceInstructionBlock, focusedInstructions } from '
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
 import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid } from './questions.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf } from './tools.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -21,6 +21,7 @@ import { lookSecs, LOOK_NOTE, LOOK_NOTE_DATA, LOOK_BACKS, lookBackNote } from '.
 import { folderKind, folderCard, namesInRequest, namesQuestion } from './folder.mjs';
 import { filesMade, madeNote } from './made.mjs';
 import { inScripts } from './scripts.mjs';
+import { readPage, emptyOf, pageReadNote, pageReadLine, pageReadOn } from './page-read.mjs';
 import { pickSkill, skillNote, readSkills, skillsList, skillPath, toolUseFor, rulesSetOf, readGuides, guidesList, guidePath, harnessOf, readHelperAgents } from './prompt-files.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
@@ -600,9 +601,14 @@ const stepText = (t) => String(t?.text ?? t?.content ?? '').replace(/\s+/g, ' ')
 function planList(todos) {
   return (todos ?? []).filter(stepText).map((t) => `- [${t.status === 'done' ? 'done' : t.status === 'in_progress' ? 'doing now' : 'to do'}] ${stepText(t).slice(0, 160)}`).join('\n');
 }
-export function requestReminder(request) {
-  const words = String(request ?? '').replace(/\s+/g, ' ').trim();
-  return words ? `(What the user asked, which this message is for: "${words.length > 400 ? `${words.slice(0, 399)}…` : words}")` : '';
+// task: what a short follow-up ("try again") stands for, said first (4 Oct 2026: the reminder of a
+// 29-step message quoted only "try again").
+export function requestReminder(request, task = '') {
+  const said = (s, n) => { const w = String(s ?? '').replace(/\s+/g, ' ').trim(); return w.length > n ? `${w.slice(0, n - 1)}…` : w; };
+  const words = said(request, 400);
+  const first = said(task, 400);
+  if (!words) return '';
+  return first && first !== words ? `(What the user asked: "${first}"; this message, about that: "${words}")` : `(What the user asked, which this message is for: "${words}")`;
 }
 export function planReminder(todos) {
   const items = (todos ?? []).filter(stepText);
@@ -879,7 +885,7 @@ export class Agent extends EventEmitter {
     this.notesRoomUsed = this.notesRoomNow;
     this.promptStampUsed = this.promptStamp();
     this.rulesSetUsed = this.rulesSet();
-    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()) }));
+    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()), web: Boolean(this.webTools()?.fetch) }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
   }
   // The prompt files as they are now: the rules files (AGENTS.md or CLAUDE.md, whole, without
@@ -892,7 +898,7 @@ export class Agent extends EventEmitter {
       const agents = this.agentsOn();
       const mcp = this.mcpInPrompt ?? '';
       const remote = set === 'remote' ? `${JSON.stringify(harnessOf())}\u0000${guidesList(readGuides(set, { agents, mcp: Boolean(mcp) }), { path: guidePath(this.cwd) })}` : '';
-      return `${set}\u0000${set === 'remote' ? agents : ''}\u0000${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseFor(set, undefined, { mcp })}\u0000${skillsList(readSkills(undefined, set), { path: skillPath(this.cwd) })}\u0000${remote}`;
+      return `${set}\u0000${set === 'remote' ? agents : ''}\u0000${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseFor(set, undefined, { mcp, web: Boolean(this.webTools()?.fetch) })}\u0000${skillsList(readSkills(undefined, set), { path: skillPath(this.cwd) })}\u0000${remote}`;
     } catch { return null; }
   }
   promptFilesChanged() {
@@ -911,7 +917,7 @@ export class Agent extends EventEmitter {
     this.testCmd = this.verify ? testCommand(dir) : null;
     this.notesRoomUsed = this.notesRoomNow;
     this.rulesSetUsed = this.rulesSet();
-    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(dir), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()) }));
+    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(dir), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()), web: Boolean(this.webTools()?.fetch) }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.promptStampUsed = this.promptStamp();
     this.readFiles = new SeenFiles();
@@ -1203,7 +1209,7 @@ export class Agent extends EventEmitter {
     if (!t || this.ctx < BIG_MEMORY || !String(t.request ?? '').trim()) return '';
     if ((t.steps ?? 0) - (t.requestAt ?? 0) < REQUEST_EVERY) return '';
     t.requestAt = t.steps ?? 0;
-    return requestReminder(t.request);
+    return requestReminder(t.request, t.task);
   }
   // The follow-through lines with a step's result (4 Oct 2026, the owner's picks after a Qwen run): a wall
   // it met and has not asked you about after two more steps (Stop when blocked); a reply that says it
@@ -1296,7 +1302,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.cardsGiven = new Set(); this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.cardsGiven = new Set(); this.task = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.
@@ -1588,6 +1594,11 @@ export class Agent extends EventEmitter {
     // little without it: no question first and no focused path, which both
     // read the line alone. It goes on step by step.
     const follow = !decides && isFollowUp(text, this.messages.slice(0, turnStart).some((m) => m.role === 'assistant'));
+    // The task a short follow-up stands for ("try again", "try again another way"): the last request
+    // that was not one; the request reminder says both.
+    const prior = this.messages.slice(0, turnStart).some((m) => m.role === 'assistant');
+    const again = prior && (isFollowUp(text, true) || (String(text).trim().split(/\s+/).length <= 6 && /\b(?:again|retry|another way)\b/i.test(text)));
+    if (!this.isHelper && !wake) this.task = again && this.task ? this.task : text;
     if (follow) this.sorted('follow-up');
     // The saved facts that fit the request come along with it. They are
     // written into the request itself, so the conversation read so far stays
@@ -1694,6 +1705,7 @@ export class Agent extends EventEmitter {
       // The request's words steer which lines of a long file a Read shows first.
       request: typeof request?.content === 'string' ? request.content : '',
       requestMsg: request,
+      task: this.task ?? null,
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
       opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
       fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map(), stuckSteps: new Set(),
@@ -1813,6 +1825,7 @@ export class Agent extends EventEmitter {
     let layoutSends = 0; // what the layout check found, sent back at most LAYOUT_ROUNDS times
     let layoutDone = false;
     let looked = false; // UI design · checks: a picture of the page looked at once (/subagents)
+    let pageReads = 0; // What a reader sees (page-read.mjs): read, and once more after a send-back
     let reviewed = false; // the second opinion: once per message (/subagents)
     let desktopSent = false; // sent back once to move a page asked for on the Desktop
     let correctedAlready = false;
@@ -2187,6 +2200,13 @@ export class Agent extends EventEmitter {
               this.messages.push({ role: 'user', content: auto(`The request asks for the file on the Desktop, but ${names} ${away.length === 1 ? 'is' : 'are'} not on the Desktop. Move ${away.length === 1 ? 'it' : 'them'} there with Bash: ${moves.join(', then ')}. Then say where ${away.length === 1 ? 'it is' : 'they are'} now, with the full path, in one sentence.`) });
               continue;
             }
+          }
+          // What a reader sees (page-read.mjs): each page this message wrote, opened before the answer
+          // stands; one mostly empty to a reader goes back once, and is read again after its fix.
+          if ((pageReads === 0 || (pageReads === 1 && this.turn.pageSentBack)) && !signal?.aborted && this.hook('page-read') && pageReadOn()) {
+            pageReads++;
+            const back = await this.readPages({ send: pageReads === 1 });
+            if (back) { this.turn.pageSentBack = true; this.messages.push({ role: 'user', content: auto(back) }); continue; }
           }
           // A page this message changed, and asking first: it is yours to look at before any check
           // (askPage), now that the model says it is done and the page is where it was asked for.
@@ -3273,6 +3293,15 @@ export class Agent extends EventEmitter {
     }
     if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
     if (call.name === 'Ask') { if (this.turn) this.turn.askedUser = true; return this.askUser(id, args, shown, signal); }
+    // A plain curl or wget of a page outside Bypass, with WebFetch on: run as WebFetch, since commands reach
+    // the internet only in Bypass (tools.mjs plainFetch); asked about as WebFetch is.
+    const fetching = call.name === 'Bash' && this.mode !== 'bypass' && this.webTools()?.fetch ? plainFetch(args.command) : null;
+    if (fetching) {
+      this.emit('note', { text: `A plain fetch of ${fetching}: run as WebFetch (commands reach the internet only in Bypass).`, tone: 'dim' });
+      const out = await this.runTool({ id, name: 'WebFetch', args: JSON.stringify({ url: fetching }) }, signal);
+      if (typeof out?.text === 'string') out.text = `(Run as WebFetch: commands reach the internet only in Bypass permissions. Call WebFetch yourself for a page.)\n${out.text}`;
+      return out;
+    }
     // Read of a web address, with WebFetch on: read as the page it is (asked about as WebFetch is).
     if (call.name === 'Read' && typeof args.path === 'string' && /^https?:\/\//i.test(args.path.trim()) && this.webTools()?.fetch) return this.runTool({ id, name: 'WebFetch', args: JSON.stringify({ url: args.path.trim(), ...(args.find ? { find: args.find } : {}), ...(args.offset ? { offset: args.offset } : {}) }) }, signal);
     // The model's own tools when it decides (Map, CodeSearch, Rename, TestFirst, Remember),
@@ -4259,6 +4288,31 @@ export class Agent extends EventEmitter {
     const g = u.groups.find((x) => x.key.toLowerCase() === text.toLowerCase() || /^yes\b/i.test(text) && u.groups.length === 1);
     if (/^all of them$/i.test(text)) return u.groups.map((x) => `${x.key} (${x.names.join(', ')})`).join(' and ');
     return g ? `${g.key} (${g.names.join(', ')})` : `"${text}"`;
+  }
+
+  // What a reader sees of each page this message wrote (page-read.mjs, at most 3, newest first): a line
+  // each on screen, kept for the second look. send: a page mostly empty to a reader is the text that
+  // goes back to the model (else null).
+  async readPages({ send = true } = {}) {
+    const t = this.turn;
+    const rels = pagesToCheck(this.cwd, [...(t?.startTexts?.keys() ?? []), ...this.madePages()], 3);
+    if (!rels.length) return null;
+    let back = null;
+    t.pageReads = [];
+    for (const rel of rels) {
+      const abs = resolvePath(this.cwd, rel).abs;
+      this.emit('busy', { task: `opening ${basename(abs)} to see what a reader sees` });
+      const read = await readPage(abs);
+      if (!read) continue;
+      const e = emptyOf(read);
+      const said = this.tilde(abs);
+      const line = pageReadLine(said, read, e);
+      t.pageReads.push(line);
+      const sending = send && e.problem && !back;
+      this.emit('note', { text: `Page check, ${line}${sending ? '; sent back to fill it' : ''}.`, tone: e.problem ? 'warn' : 'dim' });
+      if (sending) back = pageReadNote(said, read, e);
+    }
+    return back;
   }
 
   // The pages a command wrote this message (made.mjs), as paths from the project folder.
