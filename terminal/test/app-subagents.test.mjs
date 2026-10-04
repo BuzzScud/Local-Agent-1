@@ -2,7 +2,7 @@
 // first-pick try-out and its ✔ in /model, the panel (a job switched off and saved), a
 // picture described by the pictures helper for a main model that cannot see, the second
 // opinion after a change, the summary on the side model, the main model kept loaded
-// (keep_alive -1), and what the window used let go as it closes.
+// (keep_alive 15m, asked again while the window is open), and what it used let go as it closes.
 import { test, expect } from 'bun:test';
 import { needs } from './needs.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -69,7 +69,7 @@ test.skipIf(needs('pictures', mediaTool))('on an Ollama service: the try-out on 
   expect(chats.some((b) => b.model === 'tiny:3b' && /summarize a coding session/.test(b.messages[0].content))).toBe(true);
   expect(chats.some((b) => b.model === 'coder:30b' && /summarize a coding session/.test(b.messages[0]?.content ?? ''))).toBe(false);
   // the main model kept loaded while the window is open; helpers half an hour
-  expect(chats.filter((b) => b.model === 'coder:30b' && b.stream).every((b) => b.keep_alive === -1)).toBe(true);
+  expect(chats.filter((b) => b.model === 'coder:30b' && b.stream).every((b) => b.keep_alive === '15m')).toBe(true);
   expect(chats.filter((b) => b.model === 'tiny:3b').every((b) => b.keep_alive === '30m')).toBe(true);
   // at quit: what it used let go (keep_alive 0)
   const gone = svc.seen.filter((x) => x.path === '/api/generate' && x.body.keep_alive === 0).map((x) => x.body.model);

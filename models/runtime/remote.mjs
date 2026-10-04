@@ -20,7 +20,7 @@ import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
 import { HOME, MODELS } from '../registry.mjs';
 import { CLAUDE_HOST, CLAUDE_CTX, CLAUDE_MODELS, claudeProbe } from './claude.mjs';
-import { ollamaModel, ollamaCtx, floorCtx, isOutOfMemory } from './ollama.mjs';
+import { ollamaModel, ollamaCtx, floorCtx, isOutOfMemory, OPEN_KEEP } from './ollama.mjs';
 
 export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
 // The address used: what was typed, or Anthropic's for a Claude API remote left blank.
@@ -591,9 +591,9 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined, s
     // price: dollars a million tokens, in and out (the cost meter, terminal spend.mjs); free: a service of your own.
     const price = r.kind === 'claude' ? CLAUDE_MODELS.find((m) => m.id === info.model)?.price ?? null : info.price ?? null;
     const free = !price && (Boolean(o) || r.kind === 'llama' || isPrivateHost(parseAddress(r.address ?? '')?.host ?? ''));
-    // keepAlive -1: the service keeps the model loaded until told (the window unloads it as it closes),
-    // not Ollama's 5 idle minutes (the user's pick, 2 Oct 2026).
-    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), price, free, ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family, keepAlive: -1 } : {}) });
+    // OPEN_KEEP: the service keeps the model while the window is open (it asks again before that runs
+    // out, and lets it go as it closes), not Ollama's 5 idle minutes (the user's pick, 2 Oct 2026).
+    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), price, free, ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family, keepAlive: OPEN_KEEP } : {}) });
     return {
       // vision: it can take a picture (a llama.cpp server says so; OpenAI-compatible and Claude: yes)
       url, ctx, numCtx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel, vision: info.vision !== false,
