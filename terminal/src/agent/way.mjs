@@ -42,6 +42,11 @@ export const HOOKS = [
   { id: 'look-first', label: 'Look before answering', what: 'remote models: an answer about the code with nothing read or searched goes back once; then a line says so' },
   { id: 'real-files', label: 'Files that exist', what: 'remote models: an answer naming files not in the project goes back once; then a line names them' },
   { id: 'desktop', label: 'On the Desktop', what: 'a page asked for "on my desktop" that was saved somewhere else is sent back once to be moved there' },
+  { id: 'blocked', label: 'Stop when blocked', what: 'a page that needs a login, or an address or path you gave that is not there: it is told to ask you, not to do something else; an answer that leaves it out goes back once' },
+  { id: 'results', label: 'Answer matches results', what: 'an answer that says all passed or it works, when its last run of the checks failed, goes back once; then a line says so' },
+  { id: 'read-first', label: 'Read before claiming', what: 'a reply that says it found or has what it needs, when it has seen only outlines of those files, is told to read the part first' },
+  { id: 'to-do', label: 'Plan for several asks', what: 'a request with several asks and no plan after 3 steps: it is told to write its plan (TodoWrite), which then comes back every 5 steps' },
+  { id: 'second-look', label: 'Second look', what: 'after real work (commands, files written, pages fetched), a model checks the answer against what the app saw (runs, errors, walls, files only outlined) and sends it back once if it does not hold' },
   { id: 'drift', label: 'Stays on task', what: 'remote models: every 10 steps a helper model checks the work still serves your request, and nudges it back if not; off until you switch it on' },
 ];
 const HOOK_IDS = HOOKS.map((h) => h.id);
@@ -52,7 +57,9 @@ export const OPT_IN_HOOKS = new Set(['drift']);
 // hook either way. next-step is the fourth: a reply that names a cause and stops.
 // look-first and real-files (3 Oct 2026, the owner's picks): models on another machine answered
 // "where is…?" from nothing and named files that are not there.
-export const MODEL_HOOKS = ['next-step', 'tests', 'stuck', 'said-done', 'look-first', 'real-files'];
+// blocked, results, read-first, to-do and second-look (4 Oct 2026, the owner's picks after a Qwen run that
+// tested something else behind a login and said "all 24 passed" after 22 of 24): on for Model way too.
+export const MODEL_HOOKS = ['next-step', 'tests', 'stuck', 'said-done', 'look-first', 'real-files', 'blocked', 'results', 'read-first', 'to-do', 'second-look'];
 export const hooksEnv = (env = process.env) => env.AGENTIC_HOOKS;
 
 // The hooks on, as a Set: AGENTIC_HOOKS when set ("all", "off", or a list such as

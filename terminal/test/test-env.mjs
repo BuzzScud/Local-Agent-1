@@ -40,6 +40,9 @@ process.env.AGENTIC_STUDIO ??= 'off';
 // the models go as a window closes are off unless a test turns them on (app-subagents):
 // the try-out's three asks would count as replies in the tests that count them.
 process.env.AGENTIC_TRYOUT ??= 'off';
+// The second look at an answer (src/agent/second-look.mjs, 4 Oct 2026): one more call after real work,
+// which the tests that count a stand-in's replies would count. Its own test turns it on.
+process.env.AGENTIC_SECOND_LOOK ??= 'off';
 process.env.AGENTIC_UNLOAD ??= 'off';
 // A page asked for "on my desktop" (src/app/App.jsx openPage): no test opens a
 // browser, or offers to copy a page to the real Desktop.

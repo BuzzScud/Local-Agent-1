@@ -1,6 +1,6 @@
 // Started in a folder that is not a project (the home folder, say), Agentic Coder can
 // go into the project a request names: "fix the chart bug in MAIN2026".
-import { readdirSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, basename } from 'node:path';
 import { isCodeProject } from '../flows/index.mjs';
@@ -48,4 +48,29 @@ export function projectsNamed(text, projects, cwd = homedir()) {
     if (distinctive(basename(d))) return true;
     return new RegExp(` (in|into|inside|open|from)${name}| (the |my )?${name.trim()} (project|app|folder|repo|code|codebase) `).test(said);
   });
+}
+
+// Folders a request names by their path, code project or not (4 Oct 2026: "the calculator… this folder?
+// '/Users/<name>/Desktop/agent docs/forecast export work 3OCT'", asked from the home folder, where three
+// checks are off). A path in quotes may hold spaces. Never the home folder, its Desktop, Documents or
+// Downloads themselves, nor the folder you are in or one above it. A named file gives its folder.
+export function foldersNamed(text, cwd = homedir(), home = homedir()) {
+  const found = [];
+  const seen = new Set();
+  const paths = [
+    ...[...String(text ?? '').matchAll(/(['"`])((?:~|\/)[^'"`\n]+?)\1/g)].map((m) => m[2]),
+    ...[...String(text ?? '').matchAll(/(?:^|\s)((?:~\/|\/)[^\s'"`]+)/g)].map((m) => m[1]),
+  ];
+  const tooBroad = new Set([home, join(home, 'Desktop'), join(home, 'Documents'), join(home, 'Downloads'), '/']);
+  for (const raw of paths) {
+    const typed = raw.replace(/[.,;:!?)]+$/, '');
+    let p = typed.startsWith('~') ? join(home, typed.slice(1)) : resolve(cwd, typed);
+    let st;
+    try { st = statSync(p); } catch { continue; }
+    if (!st.isDirectory()) p = resolve(p, '..');
+    if (seen.has(p) || tooBroad.has(p) || cwd === p || cwd.startsWith(`${p}/`)) continue;
+    seen.add(p);
+    found.push(p);
+  }
+  return found.slice(0, 4);
 }
