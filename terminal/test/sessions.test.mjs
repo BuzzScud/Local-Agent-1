@@ -674,7 +674,7 @@ test.skipIf(!S.canHost())('/jumptomac: the host sends the window that typed last
   } finally { h.stop(); }
 }, 40_000);
 
-test.skipIf(!S.canHost())('/jumptomac in the app: the window shows the other Mac’s sessions, opens one, and ctrl+b there comes back to the session it left; alone, it goes to the Mac used last', async () => {
+test.skipIf(!S.canHost())('/jumptomac in the app: a Mac reached for the first time asks to be saved, the window shows its sessions, opens one, and ctrl+b there comes back to the session it left; alone, a box of the saved Macs opens on it and enter goes there', async () => {
   const { cwd, env, base } = sessionsEnv();
   const fake = await startFakeServer([]);
   const before = process.env.AGENTIC_HOME;
@@ -685,24 +685,32 @@ test.skipIf(!S.canHost())('/jumptomac in the app: the window shows the other Mac
   writeFileSync(join(env.AGENTIC_HOME, 'trust.json'), JSON.stringify({ [cwd]: new Date().toISOString(), [other]: new Date().toISOString() }));
   const windows = [];
   const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-test-key', mac: 'server-1', peerName: () => 'mac-mini', show: (name) => windows.push(name) });
-  const jumper = { ...env, AGENTIC_REMOTE_KEY: 'acd-test-key', AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_DOOR_AT: `server-1=127.0.0.1:${door.address().port}` };
+  // What Tailscale says here, standing in for the real one: server-1 online.
+  const tsFile = join(base, 'tailscale-status.json');
+  writeFileSync(tsFile, JSON.stringify({ Self: { DNSName: 'mac-mini.example.ts.net.', OS: 'macOS' }, Peer: { a: { DNSName: 'server-1.example.ts.net.', HostName: 'Server 1', OS: 'macOS', Online: true } } }));
+  const jumper = { ...env, AGENTIC_REMOTE_KEY: 'acd-test-key', AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_DOOR_AT: `server-1=127.0.0.1:${door.address().port}`, AGENTIC_TAILSCALE_STATUS: tsFile };
   try {
     expect(coding(['--bg', '--url', fake.url], { cwd: other, env }).stdout).toContain('Started in the background: other-1');
     expect(await until(() => records(env).includes('other-1.json'))).toBe(true);
     const r = await runInPty({ cwd, env: jumper, cols: 120, rows: 34, timeoutMs: 110_000, args: ['--url', fake.url], steps: [
       { wait: '? for shortcuts', ms: 30_000 },
       { type: '/jumptomac server-1' }, { key: 'enter' },
+      // The first time: kept for /jumptomac's box? enter says yes.
+      { wait: 'Keep it in /jumptomac', ms: 20_000 }, { sleep: 300 }, { snapshot: 'save' }, { key: 'enter' },
       { wait: 'Sessions on server-1', ms: 20_000 }, { sleep: 300 }, { snapshot: 'menu' }, { key: 'enter' },
       { wait: '⇄ on server-1', ms: 30_000 }, { type: 'typed on the other Mac' }, { sleep: 500 }, { snapshot: 'there' },
       // ctrl+b there: that session keeps running, and the window is back in the one it left.
       { key: CTRL_B }, { wait: 'This session keeps running here', ms: 20_000 }, { waitGone: 'typed on the other Mac', ms: 10_000 },
       { type: 'back home' }, { sleep: 500 }, { snapshot: 'back' },
       { key: 'ctrlC' }, { sleep: 300 },
-      // Alone: the Mac used last. Esc at its menu comes straight back.
-      { type: '/jumptomac' }, { key: 'enter' }, { wait: 'Sessions on server-1', ms: 20_000 }, { key: 'esc' },
+      // Alone: the box, on the saved Mac; enter goes there (no question now), esc at its menu comes straight back.
+      { type: '/jumptomac' }, { key: 'enter' }, { wait: 'Jump to a Mac', ms: 20_000 }, { wait: 'Tailscale sees', ms: 10_000 }, { sleep: 300 }, { snapshot: 'box' },
+      { key: 'enter' }, { wait: 'Sessions on server-1', ms: 20_000 }, { sleep: 200 }, { snapshot: 'menu2' }, { key: 'esc' },
       { wait: '? for shortcuts', ms: 20_000 }, { sleep: 800 }, { snapshot: 'again' },
       ...quit, { wait: 'Continue this conversation with', ms: 20_000 },
     ] });
+    expect(r.snapshots.save).toContain("server-1 answered. Keep it in /jumptomac's list?");
+    expect(r.snapshots.save).toContain('Save server-1: /jumptomac lists it from now on');
     expect(r.snapshots.menu).toMatch(/1\. other-1 · /);
     expect(r.snapshots.menu).toMatch(/2\. demo-project-1 · /);
     // On a clear window: from the line that says where it goes, nothing of the app's last frame
@@ -716,11 +724,16 @@ test.skipIf(!S.canHost())('/jumptomac in the app: the window shows the other Mac
     expect(r.snapshots.back).toContain('back home');
     expect(r.snapshots.back).not.toContain('⇄ on server-1');
     expect(r.snapshots.back).toContain('Jumping to server-1. This session keeps running here; ctrl+b there comes back to it.');
+    expect(r.snapshots.box).toMatch(/❯ server-1\s+● online · saved · used last/);
+    expect(r.snapshots.box).toContain('+ Add a Mac');
+    expect(r.snapshots.box).toContain('from mac-mini');
+    expect(r.snapshots.box).toContain('Tailscale sees 1 other Mac here: server-1');
+    expect(r.snapshots.menu2).not.toContain('Keep it in /jumptomac'); // saved: no question the second time
     expect(r.snapshots.again).toContain('demo-project');
     expect(r.code).toBe(0);
     // The one it jumped to still runs there; the one it came back to and quit is gone; the Mac is remembered.
     expect(await until(() => records(env).join() === 'other-1.json')).toBe(true);
-    expect(JSON.parse(readFileSync(join(env.AGENTIC_HOME, 'settings.json'), 'utf8')).lastMac).toBe('server-1');
+    expect(JSON.parse(readFileSync(join(env.AGENTIC_HOME, 'settings.json'), 'utf8'))).toMatchObject({ lastMac: 'server-1', macs: ['server-1'] });
     expect(windows).toEqual(['other-1']);
   } finally {
     door.close();
