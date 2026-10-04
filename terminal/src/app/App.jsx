@@ -86,7 +86,7 @@ import { growTo, canResize, resizeSeq } from './agents-window.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
-const VERBS = [['Baking', 'Baked'], ['Brewing', 'Brewed'], ['Cogitating', 'Cogitated'], ['Computing', 'Computed'], ['Conjuring', 'Conjured'], ['Cooking', 'Cooked'], ['Crafting', 'Crafted'], ['Crunching', 'Crunched'], ['Deliberating', 'Deliberated'], ['Forging', 'Forged'], ['Hatching', 'Hatched'], ['Ideating', 'Ideated'], ['Marinating', 'Marinated'], ['Mulling', 'Mulled'], ['Musing', 'Mused'], ['Noodling', 'Noodled'], ['Percolating', 'Percolated'], ['Pondering', 'Pondered'], ['Puzzling', 'Puzzled'], ['Ruminating', 'Ruminated'], ['Simmering', 'Simmered'], ['Stewing', 'Stewed'], ['Synthesizing', 'Synthesized'], ['Tinkering', 'Tinkered'], ['Working', 'Worked'], ['Wrangling', 'Wrangled']];
+const VERBS = [['Whittling', 'Whittled'], ['Untangling', 'Untangled'], ['Kneading', 'Kneaded'], ['Sifting', 'Sifted'], ['Scheming', 'Schemed'], ['Distilling', 'Distilled'], ['Spelunking', 'Spelunked'], ['Fermenting', 'Fermented'], ['Doodling', 'Doodled'], ['Juggling', 'Juggled']];
 // A turn's end line when it did not finish its job (rail.jsx); the note before it says why.
 const END_WORDS = { stuck: 'Stopped: it was stuck', limit: 'Stopped at the step limit', error: 'Stopped by an error', declined: 'Stopped: you said no' };
 const PLACEHOLDERS = ['Try "explain what this project does"', 'Try "add a test for …"', 'Try "fix the failing tests"', 'Try "find where … is set"'];
