@@ -9,7 +9,7 @@
 // Control-C (or SIGTERM, the hub's Stop) ends the task under way, skips the rest, and still saves
 // and records what ran, as stopped.
 //     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off] [--way app|model]
-//     [--remote <address> --remote-model <name> [--big on|off] [--remote-ctx <tokens>]]
+//     [--remote <address> --remote-model <name> [--big on|off] [--remote-ctx <tokens>]] [--lean]
 // --helpers: the context helpers (terminal/src/agent/helpers.mjs), by codename
 // or by id (named,tests,rag,lsp); default what
 // AGENTIC_HELPERS says (unset: all). "off" is the way before them. With the code
@@ -83,6 +83,8 @@ const codes = (sep) => [...helpers].map((h) => CODENAMES[h]).join(sep) || 'off';
 const byCode = (items) => Object.entries(Object.groupBy(items.filter((x) => !x.skipped), (x) => codenameOf(x.from))).map(([c, xs]) => `${c} ${xs.length}`).join(', ');
 const flowsOn = opt('flows', 'on') !== 'off';
 const wayArg = opt('way', null);
+// --lean: the lean harness (terminal agent/way.mjs): the model decides, and none of the app's checks run.
+const leanArg = args.includes('--lean');
 if (wayArg && !['app', 'model'].includes(wayArg)) { console.error(`--way app or model, not "${wayArg}"`); process.exit(1); }
 // A run from the Arena's panel can set Who decides too (its row reaches runHeadless); --way wins.
 const wayUsed = wayArg ?? (panel?.way === 'model' ? 'model' : 'app');
@@ -170,7 +172,7 @@ try {
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       let run;
       try {
-        run = await runHeadless({ prompt, cwd: work, url: server.url, model: runOn, thinking, effort, ctx: ctxUsed, limits: limitsUsed, subagents: Boolean(conn), hooks: conn ? MODEL_HOOKS : undefined, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000, way: wayArg ?? undefined,
+        run = await runHeadless({ prompt, cwd: work, url: server.url, model: runOn, thinking, effort, ctx: ctxUsed, lean: leanArg, limits: limitsUsed, subagents: Boolean(conn), hooks: conn ? MODEL_HOOKS : undefined, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000, way: wayArg ?? undefined,
           memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: withClaude } : false,
           onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : ev.given ? '+' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); if (type === 'context' && ev.title === 'Helpers') process.stdout.write(`    + helpers brought ${ev.items.filter((x) => !x.skipped).length} (${ev.tokens} tokens: ${byCode(ev.items)})${ev.items.some((x) => x.skipped) ? `; left out: ${ev.items.filter((x) => x.skipped).map((x) => `${x.text} (${x.skipped})`).join('; ')}` : ''}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
@@ -204,12 +206,12 @@ try {
 }
 const file = join(tdir, 'summary.json');
 if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, s) => n + s.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, s) => n + s.secs, 0) / saves.length) : 0} s a save`);
-writeFileSync(file, JSON.stringify({ remote: conn ? { address: remoteAt, model: conn.info.model, big: Boolean(runOn.harness) } : null, memory: withMemory, helpers: [...helpers], flows: flowsOn, way: limitsUsed?.way ?? wayUsed, prompt: promptUsed, instructions: instructionsArg ?? 'auto', set: setArg, thinkingWay: thinkingUsed, ctx: ctxUsed, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
+writeFileSync(file, JSON.stringify({ remote: conn ? { address: remoteAt, model: conn.info.model, big: Boolean(runOn.harness) } : null, lean: leanArg, memory: withMemory, helpers: [...helpers], flows: flowsOn, way: limitsUsed?.way ?? wayUsed, prompt: promptUsed, instructions: instructionsArg ?? 'auto', set: setArg, thinkingWay: thinkingUsed, ctx: ctxUsed, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
-  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: conn ? `remote:${conn.info.model}` : base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length}${setArg === 'hard' ? ' hard' : ''} practice tasks${conn ? ` on ${conn.info.model} (remote), big-model mode ${runOn.harness ? 'on' : 'off'}` : ''}${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}${wayUsed === 'model' ? ', model decides' : ''}${instructionsArg && instructionsArg !== 'auto' ? `, ${instructionsArg} instructions` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx: ctxUsed,
+  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: conn ? `remote:${conn.info.model}` : base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length}${setArg === 'hard' ? ' hard' : ''} practice tasks${conn ? ` on ${conn.info.model} (remote), big-model mode ${runOn.harness ? 'on' : 'off'}` : ''}${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}${wayUsed === 'model' ? ', model decides' : ''}${leanArg ? ', lean harness' : ''}${instructionsArg && instructionsArg !== 'auto' ? `, ${instructionsArg} instructions` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx: ctxUsed,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() || stopping ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });
 }
 console.log(`saved ${file}`);

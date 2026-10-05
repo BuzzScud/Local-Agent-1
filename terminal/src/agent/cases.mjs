@@ -66,10 +66,13 @@ export function caseProbe(example) {
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // A number, or N, M or K standing for one (tail -N); a quote of either kind.
   const literal = (w) => (/^-?[NMK]$/.test(w) ? `${w.startsWith('-') ? '-' : ''}\\d+` : esc(w).replace(/\d+/g, '\\d+').replace(/,/g, ',\\s*').replace(/["']/g, `["'\\x60]`));
+  // A call may take more arguments in the test than in the example: plainRead('ls') is tried by
+  // plainRead('ls', cwd) (4 Oct 2026: Qwen3.6 was sent back twice for a case its tests did try).
+  const call = (w) => literal(w).replace(/\\\)$/, '(?:\\s*,[^)]*)?\\)');
   let command = true;
   const parts = words.slice(0, 8).map((w) => {
     if (/^(\|\||&&|[|;<>])$/.test(w)) { command = true; return esc(w); }
-    if (command && !/^["']/.test(w)) { command = false; return literal(w); }
+    if (command && !/^["']/.test(w)) { command = false; return /^[\w.$]+\(/.test(w) ? call(w) : literal(w); }
     command = false;
     if (/^-\D/.test(w) || /^-?\d+$/.test(w) || /^[NMK]$/.test(w)) return literal(w);
     return '\\S+';

@@ -33,7 +33,7 @@ async function askOnTerminal(question, req) {
 }
 import { loadSettings, listSessions } from './app/store.mjs';
 import { helpersFrom } from './app/helpers.mjs';
-import { hooksFrom } from './agent/way.mjs';
+import { hooksFrom, leanFrom } from './agent/way.mjs';
 import { memoryOn } from './app/autosave.mjs';
 import { claudeOn } from './agent/claude-notes.mjs';
 import { openMemory } from './agent/facts.mjs';
@@ -109,6 +109,8 @@ function parse(argv) {
     else if (a === '--no-flows') o.flows = false;
     // --way app|model: who decides for this run (agent/way.mjs), over /effort's Who decides row.
     else if (a === '--way') o.way = String(val() ?? '').toLowerCase() === 'model' ? 'model' : 'app';
+    // --lean: the lean harness for this run (agent/way.mjs): the model decides, none of the app's checks.
+    else if (a === '--lean') o.lean = true;
     // --local: this run uses the model on this Mac even when /remote is on.
     else if (a === '--local') o.local = true;
     // --start: the model loads as the window opens (otherwise it waits for /start; /autostart on keeps that).
@@ -470,7 +472,7 @@ if (opts.print) {
       // The context helpers: as /helpers left them (AGENTIC_HELPERS wins).
       helpers: helpersFrom(settings),
       // Who decides (--way, else AGENTIC_WAY, else /effort's row in limits) and the hooks /hooks left on.
-      way: opts.way, hooks: hooksFrom(settings),
+      way: opts.way, hooks: hooksFrom(settings), lean: opts.lean ?? leanFrom(settings),
       // /remote's Clean up at: where a remote model's memory is cleaned up (0: when nearly full).
       workRoom: Number(settings.remoteCleanAt) || 0,
       // --agents: the request goes through /agents' six stages (agents-run.mjs) instead of one message.

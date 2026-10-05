@@ -4,7 +4,7 @@ import { Agent } from './agent/agent.mjs';
 import { UserHooks } from './agent/user-hooks.mjs';
 import { applyLimits, applySearch, testLimits } from './app/limits.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from './agent/prompt.mjs';
-import { wayEnv, wayOf, hooksOn, hooksEnv } from './agent/way.mjs';
+import { wayEnv, wayOf, hooksOn, hooksEnv, leanFrom, leanEnv } from './agent/way.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
 import { openMemory } from './agent/facts.mjs';
 import { saveLessons, worthSaving } from './agent/lessons.mjs';
@@ -25,7 +25,7 @@ import { agentDriver } from './agent/agents-driver.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false, workRoom = 0, steering = null, maxSteps = null, rewind = null }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false, workRoom = 0, steering = null, maxSteps = null, rewind = null, lean = false }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -55,6 +55,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     design: design ?? { auto: false, check: false },
     helpers: on, embedder: mem?.embedder ?? embedder ?? own,
     way: wayOf(way ?? wayEnv() ?? 'app'), hooks: hooksEnv() !== undefined ? hooksOn(hooksEnv()) : hooksOn(hooks ?? []),
+    // The lean harness (way.mjs): --lean or settings.json, AGENTIC_LEAN over both.
+    lean: leanEnv() !== undefined ? leanFrom() : Boolean(lean),
     // The web tools (/web) and helpers (the Agent tool): coding -p passes them; the benches pass
     // none, so their runs measure the same every time. mcp: the hub of the user's MCP servers
     // (coding -p passes it; a tool asks, or --yes allows; a project's own servers are never
@@ -186,7 +188,7 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     ownSteps: log.filter((e) => e.type === 'tool' && !e.given && !/^(flow|plan|project|check)_/.test(String(e.id ?? ''))).length,
     modelCalls: agent.stats.requests + (llmCalls.n - calls0),
     // Who decided, and the hooks that were on (they run only while the model decides).
-    way: agent.way, hooks: [...agent.hooks],
+    way: agent.way, hooks: agent.lean ? [] : [...agent.hooks], lean: agent.lean,
     helpers: [...on], helperItems: given.length, helperTokens: given.reduce((s, x) => s + (x.tokens ?? 0), 0), indexed,
     asked: log.filter((e) => e.type === 'tool' && e.label === 'Ask').map((e) => ({ question: String(e.arg), answer: e.view?.text ?? null })),
     toolErrors: log.filter((e) => e.type === 'tool' && e.error).length,

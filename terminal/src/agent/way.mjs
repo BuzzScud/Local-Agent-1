@@ -19,6 +19,33 @@
 import { toolUseText, toolUseFor } from './prompt-files.mjs';
 
 export const wayOf = (v) => (v === 'model' ? 'model' : 'app');
+
+// The lean harness (4 Oct 2026; the owner, shown Claude Code's own harness beside this one: "can we make it
+// just like this?"). One switch (settings.json "lean", AGENTIC_LEAN, /hooks lean · /hooks full, --lean), off
+// unless set, that leaves what Claude Code's has: the instructions, the folder's AGENTS.md and the memory
+// before the first call; the model deciding every step (Who decides is Model while it is on); permissions and
+// your own hooks around each step; notes when memory fills. Off with it: every one of the app's checks
+// (HOOKS), Look first, the plan's and the request's reminders, the Remember hints, and putting a failed
+// message's changes back. Its instructions gain LEAN_LINES, which say the model checks its own work.
+export const leanEnv = (env = process.env) => env.AGENTIC_LEAN;
+export function leanFrom(settings = {}, env = process.env) {
+  const v = String(leanEnv(env) ?? '').trim().toLowerCase();
+  if (v) return /^(on|1|yes|true|lean)$/.test(v);
+  return settings.lean === true;
+}
+export const LEAN_NOTE = "Lean harness: the app's checks, reminders and put-back are off (/hooks full brings them back).";
+export const LEAN_LINES = `Working on your own
+- The app's checks are off here: nothing runs the tests for you, reminds you of the request or your plan, or sends an answer back. Whatever these instructions say the app checks, you check yourself.
+- Before you say a change is done, run the project's tests and read what they print. When the request lists cases or forms, try each one.
+- Report exactly what happened: what you ran, what passed, what failed, and what you did not try. Never state a result you did not see.
+- Before your final answer, read the request once more and go through its parts one by one.`;
+// The instructions with or without LEAN_LINES (at the end, so what is before them stays as it was).
+export function leanPrompt(system, on) {
+  if (typeof system !== 'string') return system;
+  const has = system.includes(LEAN_LINES);
+  if (on) return has ? system : `${system.replace(/\s+$/, '')}\n\n${LEAN_LINES}\n`;
+  return has ? `${system.replace(LEAN_LINES, '').replace(/\s+$/, '')}\n` : system;
+}
 export const wayEnv = (env = process.env) => env.AGENTIC_WAY;
 
 // The app's checks, as hooks. On App each one runs as it always has (its own switches still

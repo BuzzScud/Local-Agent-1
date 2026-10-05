@@ -500,6 +500,29 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   addresses, the answers) and the folder are private: `~/.agentic-coder/evals/follow-through/`. The page names neither
   address. `terminal/test/follow-through.test.mjs` holds each part on a stand-in model.
 
+## The model shootout, Cases have tests and the lean harness (4 Oct 2026)
+
+- **The shootout** (`bun run eval:shootout --remote <address> --models a,b [--ctx 65536] [--reps 3] [--lean]`,
+  `models/evals/tools/model-shootout.mjs` and `-page.mjs`): one hard task (bench task 40, an Agentic Coder change,
+  scored in six parts by a hidden `check.mjs`) on each big model of an Ollama service, one model loaded at a time and
+  let go after. `AGENTIC_PUT_BACK=off` keeps a failed message's work so part of it can be scored. One run says little
+  (Qwen3.6 scored 2, 4, 3 and 1 of 6 in four runs): measure with `--reps`. Its pages are private (`~/Desktop/harness reviews/`).
+- **What the runs fixed** (`terminal/test/shootout-fixes.test.mjs`): TodoWrite takes a plan as text, under `tasks` or
+  one step a call, and a plan in the wrong shape is no error in a row; CodeSearch is offered only when it can run;
+  gpt-oss's own tool names (open_file, print_tree, exec, apply_patch → `patchOps`) run as the tools here; a range of a
+  short file runs as typed; notes when memory fills ask a service model with thinking off; a Write that would break
+  a file is refused; a test file in a code project is never asked about by the Desktop default.
+- **Cases have tests** (hook `cases`, `terminal/src/agent/cases.mjs`, on for Model with `done`): on a model on another
+  machine, in a project with tests, the first change brings a call of its own that lists the request's cases
+  (`listCases`, a fixed form of answer), and before the answer stands each case's example must appear in a test file
+  changed in the message (`untested`): back twice, then a line. Not yet measured to help.
+- **The lean harness** (the owner, shown Claude Code's harness beside this one: "can we make it just like this?";
+  `way.mjs` `leanFrom`, `LEAN_LINES`): one switch, off unless set (settings.json `"lean"`, `AGENTIC_LEAN`,
+  `/hooks lean` · `/hooks full`, `coding -p --lean`, the bench's and the shootout's `--lean`). On: Who decides is Model,
+  none of the app's checks run (`hook()` is false for all), no Look first, no reminders of the plan or the request,
+  no Remember hints, nothing put back; the instructions gain four lines on checking its own work. Permissions, your
+  own hooks, the memory, the notes when memory fills and the technical stops stay. `terminal/test/lean.test.mjs`.
+
 ## MCP servers (3 Oct 2026)
 
 - **What it is.** `/mcp` gives the model tools from outside the app (the Model Context Protocol): a program on this

@@ -32,7 +32,7 @@ import { findProjects, projectsNamed, foldersNamed } from './projects.mjs';
 import { homedir } from 'node:os';
 import { basename, join, dirname, relative } from 'node:path';
 import { runFlows, runKind, isSmallTalk, routeByRules, isCodeProject } from '../flows/index.mjs';
-import { wayOf, hooksOn, wayPrompt, OPT_IN_HOOKS } from './way.mjs';
+import { wayOf, hooksOn, wayPrompt, leanPrompt, LEAN_NOTE, OPT_IN_HOOKS } from './way.mjs';
 import { SeenFiles, changedNote, changesText } from './seen.mjs';
 import { toolInput, STOP_BACKS } from './user-hooks.mjs';
 import { clarify } from '../flows/clarify.mjs';
@@ -632,11 +632,13 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null, userHooks = null, steering = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null, userHooks = null, steering = null, lean = false }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
-    this.way = wayOf(way);
+    // The lean harness (way.mjs leanFrom): the model decides, and none of the app's checks run.
+    this.lean = Boolean(lean);
+    this.way = this.lean ? 'model' : wayOf(way);
     this.hooks = hooksOn(hooks ?? []);
     // /web: { search: 'off' | 'brave' | 'tavily', fetch, claude } (null: no web tools, as in a practice run).
     this.web = web;
@@ -693,7 +695,7 @@ export class Agent extends EventEmitter {
     this.slots = slots ?? null;
     // How this project runs its tests; used to check a change before calling it done.
     this.testCmd = verify ? testCommand(cwd) : null;
-    this.messages = [{ role: 'system', content: wayPrompt(system, this.way) }];
+    this.messages = [{ role: 'system', content: leanPrompt(wayPrompt(system, this.way), this.lean) }];
     this.conversation = newConversation(); // its own first line on an Ollama service (client.mjs ownStart)
     this.workingInstructions = readInstructions().sections;
     // The instructions set (prompt-files.mjs): a prompt built for the other set than this
@@ -727,7 +729,7 @@ export class Agent extends EventEmitter {
   // (App.jsx, headless.mjs): a practice run without it never reads the user's own.
   notesFrom() { return { memory: Boolean(this.memory), home: this.memory?.home }; }
   // The prompt of this way: the model's own tool lines when it decides (way.mjs wayPrompt).
-  setSystem(system) { this.messages[0] = { role: 'system', content: wayPrompt(system, this.way) }; }
+  setSystem(system) { this.messages[0] = { role: 'system', content: leanPrompt(wayPrompt(system, this.way), this.lean) }; }
   // The tools the model is offered: the app's eight, and its own five when it decides.
   tools() {
     const agents = this.agentsOn();
@@ -837,7 +839,8 @@ export class Agent extends EventEmitter {
     return { search: w.search && w.search !== 'off' ? w.search : null, fetch: w.fetch !== false };
   }
   // Whether one of the app's checks runs (way.mjs HOOKS): always on App, when switched on on Model.
-  hook(id) { return OPT_IN_HOOKS.has(id) ? this.hooks.has(id) : this.way !== 'model' || this.hooks.has(id); }
+  // On the lean harness (way.mjs) none runs.
+  hook(id) { return this.lean ? false : OPT_IN_HOOKS.has(id) ? this.hooks.has(id) : this.way !== 'model' || this.hooks.has(id); }
   // /subagents (helper-models.mjs): the helper model for a job on an Ollama service, as
   // the endpoint override a call takes, or undefined (the job is off, its model is the
   // main one, or this is not an Ollama service). helperJobs is set by the app.
@@ -846,7 +849,8 @@ export class Agent extends EventEmitter {
   // /effort's Who decides row: the next message goes the new way. The prompt and the tools
   // change with it, so the next reply reads the instructions again (the app warms them up).
   setWay(way, hooks) {
-    const next = wayOf(way);
+    // Lean is the model deciding: while it is on, Who decides stays Model (/hooks full ends it).
+    const next = this.lean ? 'model' : wayOf(way);
     if (hooks !== undefined) this.hooks = hooksOn(hooks ?? []);
     if (next === this.way) return false;
     const before = tokensOf(this.messages[0].content);
@@ -854,6 +858,18 @@ export class Agent extends EventEmitter {
     this.messages[0] = { role: 'system', content: wayPrompt(this.messages[0].content, next) };
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.emit('way', next);
+    return true;
+  }
+  // The lean harness on or off (/hooks lean · /hooks full): from the next message. On, Who decides is Model.
+  setLean(on) {
+    const next = Boolean(on);
+    if (next === this.lean) return false;
+    this.lean = next;
+    if (next && this.way !== 'model') this.setWay('model');
+    const before = tokensOf(this.messages[0].content);
+    this.messages[0] = { role: 'system', content: leanPrompt(this.messages[0].content, next) };
+    this.ctxUsed += tokensOf(this.messages[0].content) - before;
+    this.emit('lean', next);
     return true;
   }
   // /effort's Rules room and Up-front reading: 0 = auto, a share of the context (room.mjs).
@@ -865,7 +881,7 @@ export class Agent extends EventEmitter {
   // model keeps its whole memory, so one big file still fits. 0: its whole memory, as before.
   workRoom = 0;
   get cleanCap() { return this.workRoom > 0 && this.model?.remote ? Math.min(this.ctx, this.workRoom) : this.ctx; }
-  get lookSecsNow() { return lookSecs(this.look, { thinking: this.thinking, effort: this.effort }); }
+  get lookSecsNow() { return this.lean ? 0 : lookSecs(this.look, { thinking: this.thinking, effort: this.effort }); }
   rulesRoom = 0;
   upFront = 0;
   get notesRoomNow() { return this.rulesRoom || notesRoom(this.ctx); }
@@ -1226,7 +1242,7 @@ export class Agent extends EventEmitter {
     const t = this.turn;
     if (!t) return '';
     if (calls.some((c) => c.name === 'TodoWrite')) { t.planAt = t.steps ?? 0; return ''; }
-    if (t.planAt == null || (t.steps ?? 0) - t.planAt < PLAN_EVERY) return '';
+    if (this.lean || t.planAt == null || (t.steps ?? 0) - t.planAt < PLAN_EVERY) return '';
     const line = planReminder(this.todos);
     if (line) t.planAt = t.steps ?? 0;
     return line;
@@ -1236,7 +1252,7 @@ export class Agent extends EventEmitter {
   // when the model has the Remember tool (Model way, the memory on and saving).
   rememberHint(kind) {
     const t = this.turn;
-    if (!t || this.isHelper || this.way !== 'model' || !this.memory || this.memory.saveOff) return '';
+    if (!t || this.isHelper || this.lean || this.way !== 'model' || !this.memory || this.memory.saveOff) return '';
     t.remembered ??= new Set();
     if (t.remembered.has(kind)) return '';
     t.remembered.add(kind);
@@ -1261,7 +1277,7 @@ export class Agent extends EventEmitter {
   // Your request (requestReminder) on a model with a big memory, REQUEST_EVERY steps after it was last in sight.
   requestDue() {
     const t = this.turn;
-    if (!t || this.ctx < BIG_MEMORY || !String(t.request ?? '').trim()) return '';
+    if (!t || this.lean || this.ctx < BIG_MEMORY || !String(t.request ?? '').trim()) return '';
     if ((t.steps ?? 0) - (t.requestAt ?? 0) < REQUEST_EVERY) return '';
     t.requestAt = t.steps ?? 0;
     return requestReminder(t.request, t.task);
@@ -1848,6 +1864,7 @@ export class Agent extends EventEmitter {
     }
     const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
     let lookBacks = 0;
+    if (this.lean && !this.isHelper && !follow) this.emit('note', { text: LEAN_NOTE, tone: 'dim', fold: true });
     if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.look = { request, notes: folder?.kind === 'data' ? LOOK_NOTE_DATA : LOOK_NOTE };
       this.emit('note', { text: `Looking first: at least ${lookFloor} s of searching and reading before it answers (/effort Look first).`, tone: 'dim', fold: true });
@@ -4192,7 +4209,7 @@ export class Agent extends EventEmitter {
   // refuses that one change, and /rewind undoes the message.
   putBackWhy(reason) {
     const t = this.turn;
-    if (this.isHelper || !t?.originals?.size || reason === 'interrupted' || reason === 'declined') return null;
+    if (this.isHelper || this.lean || !t?.originals?.size || reason === 'interrupted' || reason === 'declined') return null;
     if (t.fence?.has('check') && !t.ranCommand) return "The skill's check never ran";
     if (t.checkFailed && this.keepProgress && this.madeProgress()) return null;
     if (t.checkFailed) return 'The check failed';

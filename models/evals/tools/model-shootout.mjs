@@ -3,7 +3,7 @@
 // we do"). Their picks: task 40-hard-harness-reads (an Agentic Coder change), the six big models, one
 // run each, the full picture: each check's part, time, steps, tokens, and whether the final answer told
 // the truth about what passed.
-//   bun run eval:shootout --remote <address> --models a,b,c [--task 40] [--timeout 1500] [--reps 3] [--ctx 65536] [--page file.html]
+//   bun run eval:shootout --remote <address> --models a,b,c [--task 40] [--timeout 1500] [--reps 3] [--ctx 65536] [--lean] [--page file.html]
 // The service is shared: each model is borrowed (borrowOllama) and let go when its run ends, unless it
 // was loaded before (someone's, or yours); one that cannot load or answer is a row that says so.
 // The app's put-back of a failed message is off (AGENTIC_PUT_BACK=off), so part of the work is scored;
@@ -27,6 +27,8 @@ const timeoutSecs = Number(opt('timeout', 1500));
 // --reps 3: each model runs the task that many times while it is loaded (one run says little: Qwen3.6 scored
 // 2, 4, 3 and 1 of 6 in four runs on nearly the same harness, 4 Oct 2026); the page shows the mean and range.
 const reps = Math.max(1, Number(opt('reps', 1)) || 1);
+// --lean: every run on the lean harness (none of the app's checks), to set beside the full one.
+const lean = args.includes('--lean');
 // --ctx 65536: every model at that context (the owner's ask, 4 Oct 2026: 64k for all); "llama4:latest=16384,…"
 // after it: a model the service has no room for at that size runs at the size given for it.
 const ctxArgs = String(opt('ctx', '')).split(',').map((x) => x.trim()).filter(Boolean);
@@ -72,7 +74,7 @@ for (const model of models) {
   const t0 = Date.now();
   const logFile = createWriteStream(join(dir, 'run.log'));
   const code = await new Promise((done) => {
-    const child = spawn(process.execPath, [join(here, '..', 'bench', 'run.mjs'), '--only', task, '--remote', remote, '--remote-model', model, '--big', 'on', '--think', opt('think', 'on'), '--timeout', String(timeoutSecs), '--out', dir, ...(reps > 1 ? ['--reps', String(reps)] : []), ...(ctxFor(model) ? ['--remote-ctx', String(ctxFor(model))] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, AGENTIC_PUT_BACK: 'off' } });
+    const child = spawn(process.execPath, [join(here, '..', 'bench', 'run.mjs'), '--only', task, '--remote', remote, '--remote-model', model, '--big', 'on', '--think', opt('think', 'on'), '--timeout', String(timeoutSecs), '--out', dir, ...(reps > 1 ? ['--reps', String(reps)] : []), ...(lean ? ['--lean'] : []), ...(ctxFor(model) ? ['--remote-ctx', String(ctxFor(model))] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, AGENTIC_PUT_BACK: 'off' } });
     child.stdout.on('data', (d) => logFile.write(d));
     child.stderr.on('data', (d) => logFile.write(d));
     // A run that outlasts its time and a minute or two more is stopped (the bench saves what ran).
@@ -102,7 +104,7 @@ for (const model of models) {
   if (row && /has no room to load/.test(ranLog) && !row.outTokens) {
     rows.push({ model, ran: false, short: 'did not fit', why: `the service had no room to load it (out of GPU memory) at a ${Math.round((ctxFor(model) ?? 32768) / 1024)}k context`, wall: Math.round((Date.now() - t0) / 1000), unloaded: let_go });
     log('  did not fit on the service');
-    writeFileSync(join(out, 'shootout.json'), JSON.stringify({ task, models, sizes, timeoutSecs, ctxAll: ctxAll ?? 32768, rows }, null, 1));
+    writeFileSync(join(out, 'shootout.json'), JSON.stringify({ task, models, sizes, timeoutSecs, ctxAll: ctxAll ?? 32768, reps, lean, rows }, null, 1));
     continue;
   }
   if (!row) {
@@ -120,11 +122,11 @@ for (const model of models) {
   const r = { model, ran: true, ctx: ctxFor(model) ?? 32768, pass: runs.every((x) => x.parts.got === x.parts.of), parts, secs: mean('secs'), wall: Math.round((Date.now() - t0) / 1000), steps: mean('steps'), toolErrors: mean('toolErrors'), outTokens: mean('outTokens'), thinkTokens: mean('thinkTokens'), tps: mean('tps'), reason: runs[0].reason, answer: said, overclaims: runs.some((x) => x.overclaims), putBack: runs.some((x) => x.putBack), runs, unloaded: let_go };
   rows.push(r);
   log(`  ${runs.map((x) => `${x.parts.got}/${x.parts.of}`).join(', ')} parts${runs.length > 1 ? ` (mean ${parts.got})` : ''} · ${r.secs} s · ${r.steps} steps · ${r.outTokens} tokens out${r.overclaims ? ' · an answer claims more than passed' : ''}`);
-  writeFileSync(join(out, 'shootout.json'), JSON.stringify({ task, models, sizes, timeoutSecs, ctxAll: ctxAll ?? 32768, reps, rows }, null, 1));
+  writeFileSync(join(out, 'shootout.json'), JSON.stringify({ task, models, sizes, timeoutSecs, ctxAll: ctxAll ?? 32768, reps, lean, rows }, null, 1));
 }
 
 // The page (model-shootout-page.mjs): it can be made again from shootout.json at any time.
-const page_ = shootoutPage({ task, rows, sizes, timeoutSecs, ctxAll: ctxAll ?? 32768, reps });
+const page_ = shootoutPage({ task, rows, sizes, timeoutSecs, ctxAll: ctxAll ?? 32768, reps, lean });
 mkdirSync(dirname(page), { recursive: true });
 writeFileSync(page, page_);
 log(`\nPage: ${page}\nRaw: ${out}`);

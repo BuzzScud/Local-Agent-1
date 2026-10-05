@@ -15,8 +15,8 @@ const DEFAULTS = { event: 'PreToolUse', matcher: '', command: '', timeout: HOOK_
 // ---- the list -----------------------------------------------------------------------------------
 
 // hooks: the window's UserHooks; checks: the app's checks on (a Set); way: who decides.
-export function openHooksList({ hooks, checks, way, index = 0, note = null } = {}) {
-  return { kind: 'hooks', view: 'list', index, yours: (hooks?.yours ?? []).map((h) => ({ ...h })), project: hooks?.project ?? null, error: hooks?.error ?? null, checks: new Set(checks ?? []), way, note, confirm: null };
+export function openHooksList({ hooks, checks, way, lean = false, index = 0, note = null } = {}) {
+  return { kind: 'hooks', view: 'list', index, yours: (hooks?.yours ?? []).map((h) => ({ ...h })), project: hooks?.project ?? null, error: hooks?.error ?? null, checks: new Set(checks ?? []), way, lean: Boolean(lean), note, confirm: null };
 }
 // The rows, in order: yours, + Add a hook, the project's line and (said yes to) its hooks, the app's checks.
 export function hookListRows(pk) {
@@ -44,7 +44,8 @@ export function projectLine(p) {
   return `This project brings its own hooks (.agentic/hooks.json): ${n}, not run${p.changed ? ' (the file changed since your yes)' : ''} · enter to look`;
 }
 // A check's on/off: on App every check runs, as it always has, but one you switch on yourself (OPT_IN_HOOKS).
-export const checkOn = (pk, c) => pk.checks.has(c.id) || (pk.way === 'app' && !OPT_IN_HOOKS.has(c.id));
+// On the lean harness (way.mjs) none runs.
+export const checkOn = (pk, c) => !pk.lean && (pk.checks.has(c.id) || (pk.way === 'app' && !OPT_IN_HOOKS.has(c.id)));
 
 // The window of rows the list shows in room lines: { start, shown, above, below }.
 export function rowWindow(rows, index, room) {

@@ -16,7 +16,7 @@ export const COMMANDS = [
   { name: 'instructions', desc: 'Edit the instructions and prompt files (AGENTS, TOOLS, SKILLS.md) in the hub' },
   { name: 'rules', desc: 'What the model reads at every start, numbered; add, switch off or remove a rule', arg: '[add|off|on|remove|always|open]' },
   { name: 'helpers', desc: 'The context helpers (Scout, Medic, Oracle, Sentry): what comes along with a request before the first step; switch one on or off', arg: '[on|off] [number|name|all]' },
-  { name: 'hooks', desc: "The app's checks (empty reply, tests after a change, done check…) as hooks: which run while the model decides (/effort's Who decides); switch one on or off", arg: '[on|off] [number|name|all]' },
+  { name: 'hooks', desc: "The app's checks (empty reply, tests after a change, done check…) as hooks: which run while the model decides (/effort's Who decides); switch one on or off; lean switches them all off (the model checks its own work, like Claude Code), full brings them back", arg: '[on|off] [number|name|all] | lean | full' },
   { name: 'rewind', desc: 'Put the files and the conversation back to before one of your messages (esc twice)' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder; a number opens the one the start page numbers so', arg: '[n]', picker: true },
   { name: 'model', desc: 'Pick the model and its effort' },
