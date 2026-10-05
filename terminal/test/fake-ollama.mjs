@@ -97,6 +97,13 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
       const a = answerOf(body, opts);
       if (!body.stream) return json(200, { model: body.model, message: { role: 'assistant', content: a.content || 'ready' }, done: true });
       res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+      // opts.overthink: characters of thinking a reply writes first when it is asked to think (a service takes no cap).
+      if (opts.overthink && body.think) {
+        for (let n = 0; n < opts.overthink && !res.destroyed; n += 200) {
+          res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: '', thinking: `Part ${n}: ${Array.from({ length: 14 }, () => Math.random().toString(36).slice(2)).join(' ')}. ` }, done: false })}\n`);
+          await new Promise((r) => setTimeout(r, 1));
+        }
+      }
       res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: a.content, ...(a.tool_calls ? { tool_calls: a.tool_calls } : {}) }, done: false })}\n`);
       res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: 900, prompt_eval_duration: 1e9, eval_count: 40, eval_duration: 1e9 })}\n`);
       return res.end();

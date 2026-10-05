@@ -74,7 +74,7 @@ for (const model of models) {
   const t0 = Date.now();
   const logFile = createWriteStream(join(dir, 'run.log'));
   const code = await new Promise((done) => {
-    const child = spawn(process.execPath, [join(here, '..', 'bench', 'run.mjs'), '--only', task, '--remote', remote, '--remote-model', model, '--big', 'on', '--think', opt('think', 'on'), '--timeout', String(timeoutSecs), '--out', dir, ...(reps > 1 ? ['--reps', String(reps)] : []), ...(lean ? ['--lean'] : []), ...(ctxFor(model) ? ['--remote-ctx', String(ctxFor(model))] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, AGENTIC_PUT_BACK: 'off' } });
+    const child = spawn(process.execPath, [join(here, '..', 'bench', 'run.mjs'), '--only', task, '--remote', remote, '--remote-model', model, '--big', 'on', '--think', opt('think', 'on'), '--timeout', String(timeoutSecs), '--out', dir, ...(reps > 1 ? ['--reps', String(reps)] : []), ...(lean ? ['--lean'] : []), '--keep', ...(ctxFor(model) ? ['--remote-ctx', String(ctxFor(model))] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, AGENTIC_PUT_BACK: 'off' } });
     child.stdout.on('data', (d) => logFile.write(d));
     child.stderr.on('data', (d) => logFile.write(d));
     // A run that outlasts its time and a minute or two more is stopped (the bench saves what ran).

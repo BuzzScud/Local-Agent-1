@@ -14,7 +14,8 @@ const { Agent } = await import('../src/agent/agent.mjs');
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const { parseArgs, toolNameOf, patchOps, desktopDefault } = await import('../src/agent/tools.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
-const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
+const { MODELS, DEFAULT_MODEL, setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
+const { fakeOllama } = await import('./fake-ollama.mjs');
 
 const local = MODELS[DEFAULT_MODEL];
 const remote = { ...local, remote: { kind: 'openai', label: 'the service', ollama: '0.12.0' }, harness: { read: { whole: 400 } } };
@@ -199,4 +200,81 @@ test('a new test file in a code project is written there, not asked about', () =
   for (const name of ['plainRead.test.mjs', 'cart.spec.ts', 'test_cart.py']) expect(desktopDefault(name, { cwd, home, request: 'add tests', code: true })).toBeNull();
   expect(desktopDefault('helper.mjs', { cwd, home, request: 'add a helper', code: true })).toEqual({ ask: true, name: 'helper.mjs' });
   expect(desktopDefault('report.html', { cwd, home, request: 'make a page', code: true })).toEqual({ to: join(home, 'Desktop', 'report.html') });
+});
+
+// Eight more runs (4 Oct 2026, late): "Edit needs path" and "Write needs content" three times each, and a
+// made-up folder before a command six times ("cd /testbed && npm test"), each a refused step.
+test('an Edit with no path goes to the one file it has seen with that text; a Write of old and new text is the Edit it means', async () => {
+  const fake = await startFakeServer([
+    { tool: { name: 'Read', args: { path: 'short.txt', offset: 1, limit: 20 } } },
+    { tool: { name: 'Edit', args: { old_text: 'line 5\n', new_text: 'LINE 5\n' } } },
+    { tool: { name: 'Write', args: { path: 'short.txt', old_text: 'line 6\n', new_text: 'LINE 6\n' } } },
+    { text: 'Both lines are in capitals now.' }, { text: 'again' },
+  ]);
+  try {
+    const a = agentOn(fake.url, remote);
+    await a.send('put lines 5 and 6 of short.txt in capitals');
+    const text = readFileSync(join(dir, 'short.txt'), 'utf8');
+    expect(text).toContain('line 4\nLINE 5\nLINE 6\nline 7');
+    const out = a.messages.filter((m) => m.role === 'tool').map((m) => String(m.content));
+    expect(out.some((t) => /Edit needs "path"|Write needs "content"/.test(t))).toBe(false);
+  } finally { await fake.close(); }
+});
+
+test('a folder that is not there before a command: the command runs in the project folder and says so', async () => {
+  const fake = await startFakeServer([
+    { tool: { name: 'Bash', args: { command: 'cd /testbed-that-is-not-here && ls' } } },
+    { text: 'Two files.' }, { text: 'again' },
+  ]);
+  try {
+    const a = agentOn(fake.url, remote);
+    await a.send('what files are here?');
+    const out = String(a.messages.filter((m) => m.role === 'tool' && !m.opening).pop().content);
+    expect(out).toStartWith('(There is no /testbed-that-is-not-here on this machine. You are already in the project folder');
+    expect(out).toContain('short.txt');
+    expect(out).not.toContain('outside the project folder');
+  } finally { await fake.close(); }
+});
+
+// Qwen3.6 on the service thought two to three minutes in single steps and ran out of its 25 minutes in four
+// runs of six: an Ollama service takes no thinking cap, so the step-down past half the time did nothing there.
+test('past half its time on an Ollama service, replies are asked for with thinking off', async () => {
+  const svc = await fakeOllama();
+  setEndpoint(svc.url, { remote: true, kind: 'openai', ollama: true, thinks: true, model: 'coder:30b', numCtx: 65536, keepAlive: -1, free: true });
+  try {
+    const a = new Agent({ url: svc.url, model: { ...local, remote: { model: 'coder:30b' } }, cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], thinking: true, thinkBudgetSecs: 1500, ctx: 65536 });
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    await a.send('hello');
+    const chats = () => svc.seen.filter((x) => x.path === '/api/chat');
+    expect(chats().at(-1).body.think).toBe(true);
+    expect(a.serviceSteppedDown()).toBe(false);
+    a.requestStarted = Date.now() - 800_000; // 13 of its 25 minutes
+    a.turn.errorsInRow = 1;
+    expect(a.serviceSteppedDown()).toBe(false); // not while steps are failing
+    a.turn.errorsInRow = 0;
+    await a.generate();
+    expect(chats().at(-1).body.think).toBe(false);
+    expect(notes.some((t) => /Half of the 25 minutes for this request used: thinking is off from here/.test(t))).toBe(true);
+    // No budget: never.
+    a.thinkBudgetSecs = 0;
+    expect(a.serviceSteppedDown()).toBe(false);
+  } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
+});
+
+// One reply of Qwen3.6 thought for 14 minutes (28.4k tokens) to the end of its reply room: an Ollama
+// service takes no thinking cap, so the app holds the model's own budget and asks again with thinking off.
+test('a reply that thinks past the budget on an Ollama service is stopped and asked for again with thinking off', async () => {
+  const svc = await fakeOllama({ overthink: 60_000 });
+  setEndpoint(svc.url, { remote: true, kind: 'openai', ollama: true, thinks: true, model: 'coder:30b', numCtx: 65536, keepAlive: -1, free: true });
+  try {
+    const a = new Agent({ url: svc.url, model: { ...local, thinkingBudget: 300, remote: { model: 'coder:30b' } }, cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], thinking: true, ctx: 65536 });
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    expect(await a.send('hello')).toBe('done');
+    const thinks = svc.seen.filter((x) => x.path === '/api/chat').map((x) => x.body.think);
+    expect(thinks).toEqual([true, false]);
+    expect(notes.some((t) => /It thought past .* in one reply \(the service takes no thinking cap\): that reply is asked for again with thinking off/.test(t))).toBe(true);
+    expect(String(a.messages.at(-1).content)).toContain('From coder:30b');
+  } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
 });

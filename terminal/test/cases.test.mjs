@@ -11,7 +11,7 @@ process.env.AGENTIC_MEMORY_SAVE = 'off';
 const { Agent } = await import('../src/agent/agent.mjs');
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const { prepare } = await import('../src/agent/tools.mjs');
-const { CASES_ASK, casesOf, caseProbe, untested, isTestPath, casesFromList } = await import('../src/agent/cases.mjs');
+const { CASES_ASK, casesOf, caseProbe, untested, isTestPath, casesFromList, gapCases } = await import('../src/agent/cases.mjs');
 const { MODEL_HOOKS } = await import('../src/agent/way.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
 const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
@@ -182,5 +182,88 @@ test('no list from its own call: the model is asked to write the cases, and its 
     expect(results(a).some((t) => t.includes(CASES_ASK))).toBe(true);
     expect(autoNotes(a).filter((t) => /have no test yet/.test(t))[0]).toContain('`g(3)` → 3');
   } finally { await fake.close(); }
-  expect(casesFromList([{ example: '`slugify("A B")`', expect: '"a-b"' }, { example: 'Rename the helper', expect: '-' }, { example: 'slugify("A B")', expect: 'again' }])).toEqual([{ text: '`slugify("A B")` → "a-b"', example: 'slugify("A B")' }]);
+  expect(casesFromList([{ example: '`slugify("A B")`', expect: '"a-b"' }, { example: 'Rename the helper', expect: '-' }, { example: 'slugify("A B")', expect: 'again' }])).toEqual([{ text: '`slugify("A B")` → "a-b"', example: 'slugify("A B")', exact: true }]);
+});
+
+// Eight runs (4 Oct 2026) all failed "anything else runs as typed": the list stopped at 20 cases, before the
+// ones that must stay as typed (&&, ;, a redirect, $( )), and a test of one file passed for the two-file case.
+test('the list has two halves, what changes and what stays; an example is tried only by its own form', () => {
+  const list = casesFromList([{ example: "plainRead('cat FILE')", expect: 'Read FILE' }], [{ example: "plainRead('ls && cat notes.txt')", expect: 'null: runs as typed' }, { example: "plainRead('cat FILE')", expect: 'again' }]);
+  expect(list.map((c) => c.example)).toEqual(["plainRead('cat FILE')", "plainRead('ls && cat notes.txt')"]);
+  expect(list[1].text).toBe("`plainRead('ls && cat notes.txt')` → null: runs as typed");
+  // A call with more arguments than the request gives the function is a made-up form: left out.
+  const req = 'Export plainRead(command, cwd) from tools.mjs: cat FILE is Read FILE.';
+  expect(casesFromList([{ example: "plainRead('cat', ['file.txt'], '/home/user')", expect: 'Read' }, { example: "plainRead('cat a.txt', cwd)", expect: 'Read' }, { example: 'cat notes.txt', expect: 'Read notes.txt' }], [], req).map((c) => c.example)).toEqual(["plainRead('cat a.txt', cwd)", 'cat notes.txt']);
+  // A sentence is no example: no test could be found to try it.
+  expect(casesFromList([{ example: 'agent.mjs step function output for a mapped plain read.', expect: 'starts with (Run as Read)' }, { example: "step with 'cat FILE' in agent.mjs", expect: 'x' }, { example: 'cat notes.txt > output.txt', expect: 'runs as typed' }, { example: 'cat notes.txt && echo done', expect: 'runs as typed' }]).map((c) => c.example)).toEqual(['cat notes.txt > output.txt', 'cat notes.txt && echo done']);
+  const tried = (example, test) => caseProbe(example).test(test);
+  // as many words as the example has
+  expect(tried("plainRead('cat FILE1 FILE2')", "plainRead('cat notes.txt', cwd)")).toBe(false);
+  expect(tried("plainRead('cat FILE1 FILE2')", "plainRead('cat a.txt b.txt', cwd)")).toBe(true);
+  expect(tried('cat FILE', "plainRead('cat a.txt b.txt')")).toBe(false);
+  expect(tried("plainRead('ls DIR')", "plainRead('ls', cwd)")).toBe(false);
+  expect(tried("plainRead('ls DIR')", "plainRead('ls src', cwd)")).toBe(true);
+  expect(tried('grep -rn tax', "plainRead('grep -rn tax src', dir)")).toBe(false);
+  expect(tried('grep -rn tax', "plainRead('grep -rn tax', dir)")).toBe(true);
+  expect(tried('find DIR -name GLOB', `plainRead("find src -name '*.mjs'", cwd)`)).toBe(true);
+  expect(tried('find DIR -name GLOB', `plainRead("find src -name '*.mjs' -type f", cwd)`)).toBe(false);
+  // a chain, a pipe, a redirect, $( ): each by its own sign
+  expect(tried('ls && cat notes.txt', "plainRead('ls && cat x.txt')")).toBe(true);
+  expect(tried('ls && cat notes.txt', "plainRead('ls; cat x.txt')")).toBe(false);
+  expect(tried('cat a.txt | grep x', "plainRead('cat n.txt | head -1')")).toBe(true);
+  expect(tried('cat notes.txt > copy.txt', "plainRead('cat n.txt > out.txt')")).toBe(true);
+  expect(tried('cat $(echo notes.txt)', "plainRead('cat a.txt b.txt')")).toBe(false);
+  expect(tried('cat $(echo notes.txt)', "plainRead('cat $(echo n.txt)')")).toBe(true);
+  expect(tried('head -c 10 FILE', "plainRead('head -n 10 n.txt')")).toBe(false);
+});
+
+test('the list asks for both halves, and the cases go with the notes when memory fills', async () => {
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: 'more.mjs', content: 'export const g = (x) => x;\n' } } },
+    { text: JSON.stringify({ cases: [{ example: 'g(3)', expect: '3' }], unchanged: [{ example: 'f(2)', expect: '2, as before' }] }) },
+    { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' },
+  ]);
+  try {
+    const a = agentOn(fake.url);
+    await a.send('add g, with a --json flag; f must stay as it is');
+    const asked = fake.requests.find((r) => JSON.stringify(r.messages ?? '').includes('List what this request specifies'));
+    expect(JSON.stringify(asked.messages)).toContain('unchanged: each thing it says must stay as it is');
+    expect(results(a).some((t) => t.includes('`g(3)` → 3') && t.includes('`f(2)` → 2, as before'))).toBe(true);
+    // What the request spells out and no case uses joins the list: here its --json flag.
+    expect(a.turn.cases.map((c) => c.example)).toEqual(['g(3)', 'f(2)', '--json']);
+    // Memory fills: the notes carry the cases.
+    a.turn.casesDone = false;
+    expect(a.restartFrom('I added g in more.mjs; next, the tests for g and f.')).toBe(true);
+    const notes = a.messages.find((m) => m.role === 'assistant' && String(m.content).includes('My memory filled up'));
+    expect(notes.content).toContain("The request's cases (before I answer, each needs a test that tries its example):");
+    expect(notes.content).toContain('1. `g(3)` → 3');
+    expect(notes.content).toContain('2. `f(2)` → 2, as before');
+    expect(notes.content).toContain('3. `--json` → the request names it and no case above uses it');
+  } finally { await fake.close(); }
+});
+
+// "; or &&" came back from the list as the ";" alone, twice; "&&" is what every run got wrong.
+test('a flag or a sign the request spells out, used by no case, is a case of its own', () => {
+  const request = 'Anything else runs as typed: a pipe, a redirect, ; or &&, $( ), a flag the tool has no word for (head -c, grep -i), two files. grep -r, -rn or -nr PATTERN DIR is Search.';
+  const listed = casesFromList([{ example: 'grep -r pattern src', expect: 'Search' }, { example: 'grep -rn pattern src', expect: 'Search' }], [{ example: 'cat notes.txt; ls src', expect: 'null' }, { example: 'cat $(echo notes.txt)', expect: 'null' }, { example: 'head -c 10 notes.txt', expect: 'null' }]);
+  const gaps = gapCases(request, listed);
+  expect(gaps.map((c) => c.example)).toEqual(['-i', '-nr', '&&']);
+  const tests = "plainRead('grep -i tax src'); plainRead('grep -nr tax src'); if (a && b) plainRead('cat notes.txt; ls');";
+  // a sign counts inside a quoted command, not as the test's own code
+  expect(untested(gaps, tests).map((c) => c.example)).toEqual(['&&']);
+  expect(untested(gaps, `${tests} plainRead('ls && cat notes.txt')`)).toEqual([]);
+  expect(gapCases('add a --json flag to export.mjs', casesFromList([{ example: 'export.mjs --json trades.json', expect: 'JSON' }]))).toEqual([]);
+});
+
+// Qwen3.6 on the fixed harness (5 Oct 2026): 4 of 6 twice, the same two parts missing. `cat nonexistent.txt`
+// had passed as tried by a test of a file that is there, and tail's "last N lines, with the right offset" had
+// come from the list as { name: 'Read', args: ['notes.txt', '-3'] }.
+test('a listed example must be in a test as written, and a made-up shape of its result is left to the request', () => {
+  const list = casesFromList([{ example: 'tail -n 3 notes.txt', expect: "{ name: 'Read', args: ['notes.txt', '-3'] }" }, { example: 'grep -r "pattern" src', expect: 'Search pattern in src' }], [{ example: 'cat nonexistent.txt', expect: 'null' }]);
+  expect(list.map((c) => c.text)).toEqual(['`tail -n 3 notes.txt` → what the request says for this form', '`grep -r "pattern" src` → Search pattern in src', '`cat nonexistent.txt` → null']);
+  const tests = `plainRead('cat notes.txt', cwd); plainRead('tail -n 2 notes.txt', cwd); plainRead("grep -r 'pattern'  src", cwd);`;
+  expect(untested(list, tests).map((c) => c.example)).toEqual(['tail -n 3 notes.txt', 'cat nonexistent.txt']);
+  expect(untested(list, `${tests} assert.equal(plainRead('cat nonexistent.txt', cwd), null); plainRead('tail -n 3 notes.txt', cwd);`)).toEqual([]);
+  // A case the model wrote in its own plan keeps the loose match (its FILE and N stand for any).
+  expect(untested(casesOf([{ text: '`head -n N FILE` → Read' }]), "plainRead('head -n 5 a.txt', cwd)")).toEqual([]);
 });

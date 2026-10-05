@@ -21,6 +21,7 @@ export class SeenFiles {
   #files = new Map();
   get size() { return this.#files.size; }
   has(abs) { return this.#files.has(abs); }
+  paths() { return [...this.#files.keys()]; }
   delete(abs) { return this.#files.delete(abs); }
   clear() { this.#files.clear(); }
 

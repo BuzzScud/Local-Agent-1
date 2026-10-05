@@ -9,7 +9,7 @@
 // Control-C (or SIGTERM, the hub's Stop) ends the task under way, skips the rest, and still saves
 // and records what ran, as stopped.
 //     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off] [--way app|model]
-//     [--remote <address> --remote-model <name> [--big on|off] [--remote-ctx <tokens>]] [--lean]
+//     [--remote <address> --remote-model <name> [--big on|off] [--remote-ctx <tokens>]] [--lean] [--keep]
 // --helpers: the context helpers (terminal/src/agent/helpers.mjs), by codename
 // or by id (named,tests,rag,lsp); default what
 // AGENTIC_HELPERS says (unset: all). "off" is the way before them. With the code
@@ -85,6 +85,9 @@ const flowsOn = opt('flows', 'on') !== 'off';
 const wayArg = opt('way', null);
 // --lean: the lean harness (terminal agent/way.mjs): the model decides, and none of the app's checks run.
 const leanArg = args.includes('--lean');
+// --keep: each run's project as the model left it is kept beside the results (<task>-think-on[-repN]-files/), so a
+// part that failed can be read afterwards (5 Oct 2026: tests that passed on wrong behaviour could not be looked at).
+const keepArg = args.includes('--keep');
 if (wayArg && !['app', 'model'].includes(wayArg)) { console.error(`--way app or model, not "${wayArg}"`); process.exit(1); }
 // A run from the Arena's panel can set Who decides too (its row reaches runHeadless); --way wins.
 const wayUsed = wayArg ?? (panel?.way === 'model' ? 'model' : 'app');
@@ -197,6 +200,7 @@ try {
       if (withMemory && run.save) { const s = await run.save(); if (s) { row.saved = s.added.map((f) => `${f.kind}: ${f.text}`); row.refused = s.refused.map((r) => r.why); row.saveSecs = Math.round(s.secs); saves.push(s); } }
       results.push(row);
       console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps (${row.ownSteps ?? '?'} its own)  ${row.modelCalls ?? '?'} model calls  ${row.toolErrors} errors${row.helperTokens ? `  +${row.helperTokens} helper tokens` : ''}  ${row.reads ?? '-'} reads  ~${row.thinkTokens ?? '-'} thinking  ${row.why}`);
+      if (keepArg) { try { cpSync(work, join(tdir, `${task}-think-${thinking ? 'on' : 'off'}${reps > 1 ? `-rep${rep}` : ''}-files`), { recursive: true, filter: (src) => !/(^|\/)(node_modules|\.git)(\/|$)/.test(src) }); } catch { /* the results stand without them */ } }
       rmSync(dir, { recursive: true, force: true });
     }
   }

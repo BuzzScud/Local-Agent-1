@@ -118,7 +118,9 @@ test('a second cut in the same message, or no room to give, is told to build in 
   expect(small.requests[1].messages.at(-1).content).toContain('Build the file in parts instead.');
 });
 
-test('a service that takes no thinking cap is not stepped down to one; its meter measures the reply\'s room', async () => {
+// Since 5 Oct 2026 the app holds a cap of its own there (one reply of Qwen3.6 thought for 14 minutes, to the end of
+// its reply room): the model's thinking budget for a reply, which the meter shows, and thinking off past half the time.
+test('a service that takes no thinking cap is not stepped down to 64 tokens: the app holds the model\'s budget, and past half the time thinking goes off', async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'agentic-cap-'));
   const fake = await startFakeServer([{ text: 'ok' }]);
   const make = () => new Agent({ url: fake.url, model: service, cwd, system: 's', thinking: true, ctx: 131072, memory: false, flows: false, thinkBudgetSecs: 10, way: 'model', hooks: [] });
@@ -134,10 +136,11 @@ test('a service that takes no thinking cap is not stepped down to one; its meter
     there.turn = { errorsInRow: 0 };
     expect(there.capsThinking()).toBe(false);
     expect(there.steppedDown()).toBe(false);
+    expect(there.serviceSteppedDown()).toBe(true); // past half its time: its replies are asked for with thinking off
     const caps = [];
     there.on('waiting', (w) => caps.push(w.thinkCap));
     await there.send('hi');
-    expect(caps[0]).toBe(8192);
+    expect(caps[0]).toBe(service.thinkingBudget ?? 4096); // the app's own cap for a reply, not the reply's room (8192) as before
     expect(caps).not.toContain(STEP_DOWN_CAP);
   } finally { dropEndpoint(fake.url); await fake.close(); }
 });

@@ -9,8 +9,8 @@ import { readInstructions, replaceInstructionBlock, focusedInstructions } from '
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
 import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid, wantsQuestions, questionLines, ASK_NOTE, pageWrongQuestion } from './questions.mjs';
-import { CASES_ASK, CASES_FIX, MAX_CASES, casesOf, casesFromList, casesTold, addCase, isTestPath, untested, casesBack } from './cases.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault, patchOps } from './tools.mjs';
+import { CASES_ASK, CASES_FIX, MAX_CASES, casesOf, casesFromList, gapCases, casesTold, addCase, isTestPath, untested, casesBack } from './cases.mjs';
+import { toolSchemas, parseArgs, normalizeArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault, patchOps } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -30,7 +30,7 @@ import { pickPieces, studioNotes, buildStyles, buildNote, isBuilt } from './stud
 import { layoutCheck, layoutNote, pagesToCheck, findChrome, needsServer } from '../flows/layoutcheck.mjs';
 import { findProjects, projectsNamed, foldersNamed } from './projects.mjs';
 import { homedir } from 'node:os';
-import { basename, join, dirname, relative } from 'node:path';
+import { basename, join, dirname, relative, isAbsolute } from 'node:path';
 import { runFlows, runKind, isSmallTalk, routeByRules, isCodeProject } from '../flows/index.mjs';
 import { wayOf, hooksOn, wayPrompt, leanPrompt, LEAN_NOTE, OPT_IN_HOOKS } from './way.mjs';
 import { SeenFiles, changedNote, changesText } from './seen.mjs';
@@ -90,6 +90,7 @@ export const MCP_BACKS = 2;
 const MODEL_TOOLS = new Set(['Map', 'CodeSearch', 'Rename', 'TestFirst', 'Remember']);
 // The calls that change the project's files (the cases' ask comes with the first of them).
 const CHANGES = new Set(['Edit', 'Write', 'apply_patch', 'TestFirst', 'Rename']);
+const CASE_ITEM = { type: 'object', properties: { example: { type: 'string' }, expect: { type: 'string' } }, required: ['example', 'expect'] };
 const CODE_SEARCH_CHARS = 6000; // what one CodeSearch brings back, at most (~1,700 tokens)
 // A request's time for thinking (30 Sep 2026): past half of it, it thinks only briefly, so it
 // finishes instead of running out of time (practice task 28 at High ran out of its 30 minutes on
@@ -1349,11 +1350,13 @@ export class Agent extends EventEmitter {
     const request = String(this.turn?.request ?? '').trim();
     if (!request) return [];
     try {
-      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 1500,
+      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 4000,
         system: 'You list the cases a coding request specifies, so each can be tested. Judge only from the request.',
-        user: `Request:\n${request.slice(0, 4000)}\n\nList every behaviour this request specifies as a case: an example in the code's own terms (a call, a command or an input, as a test would write it) and what it should give. Every form the request names is its own case, and so is each one that must stay as it is. At most ${MAX_CASES}.`,
-        schema: { type: 'object', properties: { cases: { type: 'array', items: { type: 'object', properties: { example: { type: 'string' }, expect: { type: 'string' } }, required: ['example', 'expect'] }, maxItems: MAX_CASES } }, required: ['cases'] } });
-      return casesFromList(r.json?.cases);
+        user: `Request:\n${request.slice(0, 6000)}\n\nList what this request specifies, so that each thing can be tested. Go through it phrase by phrase and stay with its own words: add no behaviour, argument or path it does not state.\n- cases: each behaviour it asks for. One case for every form it names: "A, B or C" is three cases.\n- unchanged: each thing it says must stay as it is, be refused, or be left alone. Again one for every form it names.\nFor each one: example is the input alone, just as the request writes it (a command line, a string, a value), with a small made-up value where it has a placeholder (FILE becomes notes.txt, DIR becomes src, N becomes 3) and relative names only, never a path from the root. Give a call only when the request's form is itself a call. expect is what the request says happens, in the request's own words, with no data shape of your own.\nAt most ${MAX_CASES} in each list.`,
+        schema: { type: 'object', properties: { cases: { type: 'array', items: CASE_ITEM, maxItems: MAX_CASES }, unchanged: { type: 'array', items: CASE_ITEM, maxItems: MAX_CASES } }, required: ['cases', 'unchanged'] } });
+      const listed = casesFromList(r.json?.cases, r.json?.unchanged, request);
+      // What the request spells out and the list left unused (cases.mjs gapCases): a case each.
+      return listed.length ? [...listed, ...gapCases(request, listed)] : listed;
     } catch (e) {
       if (signal?.aborted) throw e;
       return [];
@@ -1452,6 +1455,21 @@ export class Agent extends EventEmitter {
     if (this.steppedAt == null) {
       this.steppedAt = Date.now();
       this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request used: thinking briefly from here, to finish in time`, tone: 'dim', fold: true });
+    }
+    return true;
+  }
+
+  // The same step-down on an Ollama service, which takes no cap: past half the request's time its replies are
+  // asked for with thinking off (about 1.3 s there for the switch). 5 Oct 2026: Qwen3.6 thought two to three
+  // minutes in single steps, 12 of its 25 minutes, and ran out of time in four runs of six. Not while steps
+  // are failing in a row, as above. (gpt-oss cannot stop thinking: off is its lowest level.)
+  serviceSteppedDown() {
+    if (!this.thinking || !(this.thinkBudgetSecs > 0) || !this.requestStarted || oldThinking() || !endpointOf(this.url)?.ollama) return false;
+    if (Date.now() - this.requestStarted < this.thinkBudgetSecs * 500) return false;
+    if (this.turn?.errorsInRow > 0) return false;
+    if (this.steppedAt == null) {
+      this.steppedAt = Date.now();
+      this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request used: thinking is off from here, to finish in time`, tone: 'dim', fold: true });
     }
     return true;
   }
@@ -3161,11 +3179,11 @@ export class Agent extends EventEmitter {
   }
 
   // One model reply, streamed.
-  async generate(signal, { retry = true, textOnly = false, maxTokens: cap, focus } = {}) {
+  async generate(signal, { retry = true, textOnly = false, maxTokens: cap, focus, noThink = false } = {}) {
     // A retry after an answer that skipped the MCP tool its request is about (mcpFocus): this one
     // step offers only that tool, and thinks (a model that cannot think answers without it).
     if (focus === undefined) { focus = this.turn?.mcpFocus ?? null; if (this.turn) this.turn.mcpFocus = null; }
-    const thinking = this.thinking || Boolean(focus);
+    const thinking = (this.thinking || Boolean(focus)) && !noThink && !this.serviceSteppedDown();
     const sampling = thinking ? this.model.thinkingSampling : this.model.sampling;
     // A model on a service with its own Reply length (/effort): up to that, never more than the
     // context has left under the trim line (at least the answer's 2,048).
@@ -3195,7 +3213,11 @@ export class Agent extends EventEmitter {
     // The screen's meters: the most this reply may write, and its thinking cap.
     // whole: an Ollama service sends a tool call whole when it is written, so a long one streams nothing (screen.jsx says so).
     // The thinking meter's limit: where the service takes no cap, the reply's room, which holds it.
-    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : !this.capsThinking() ? maxTokens : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama) });
+    // An Ollama service takes no thinking cap, so the app holds one itself: a reply that thinks past the
+    // model's thinking budget is stopped and asked for once more with thinking off (5 Oct 2026: one reply
+    // of Qwen3.6 thought for 14 minutes, 28.4k tokens, to the end of its reply room, in a 25-minute task).
+    const serviceCap = thinking && endpointOf(this.url)?.ollama ? this.model?.thinkingBudget ?? 4096 : 0;
+    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : serviceCap ? serviceCap : !this.capsThinking() ? maxTokens : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama) });
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
@@ -3206,6 +3228,7 @@ export class Agent extends EventEmitter {
           turn.reasoning += ev.text;
           this.emit('reasoning', { text: ev.text, all: turn.reasoning });
           if (isLooping(turn.reasoning)) { turn.looping = true; local.abort(); break; }
+          if (serviceCap && turn.reasoning.length > serviceCap * 3 && tokensOf(turn.reasoning) > serviceCap) { turn.overThought = true; local.abort(); break; }
         } else if (ev.type === 'text') {
           if (thinkEnd === null && turn.reasoning) thinkEnd = Date.now();
           turn.text += ev.text;
@@ -3242,7 +3265,7 @@ export class Agent extends EventEmitter {
         }
       }
     } catch (e) {
-      if (turn.looping) { /* aborted on purpose */ }
+      if (turn.looping || turn.overThought) { /* aborted on purpose */ }
       else if (signal?.aborted) {
         turn.secs = (Date.now() - t0) / 1000;
         turn.thinkSecs = turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0;
@@ -3281,6 +3304,11 @@ export class Agent extends EventEmitter {
     } finally {
       signal?.removeEventListener('abort', onAbort);
       this.answering--;
+    }
+    if (turn.overThought) {
+      this.stats.outTokens += tokensOf(turn.reasoning);
+      this.emit('note', { text: `It thought past ${kTok(serviceCap)} in one reply (the service takes no thinking cap): that reply is asked for again with thinking off.`, tone: 'dim' });
+      return this.generate(signal, { retry, textOnly, maxTokens: cap, focus, noThink: true });
     }
     turn.calls = turn.calls.filter(Boolean).filter((c) => c.name);
     // Thinking written into the answer (<think>, Qwen's <|mask_start|>): it goes with the thinking.
@@ -3434,6 +3462,21 @@ export class Agent extends EventEmitter {
     return out;
   }
 
+  // Two slips of an edit, set right (4 Oct 2026, eight runs: "Edit needs path" and "Write needs content",
+  // three times each, a step lost every time): a Write with old_text and new_text and no content is the
+  // Edit it means; an Edit with no path goes to the one file the model has seen that holds old_text.
+  mendEdit(call) {
+    let raw;
+    try { raw = JSON.parse(call.args || '{}'); } catch { return call; }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return call;
+    const e = normalizeArgs('Edit', raw, this.way);
+    let name = call.name;
+    if (name === 'Write' && normalizeArgs('Write', raw, this.way).content === undefined && typeof e.old_text === 'string' && typeof e.new_text === 'string') name = 'Edit';
+    if (name !== 'Edit' || e.path || typeof e.old_text !== 'string' || !e.old_text.trim()) return name === call.name ? call : { ...call, name };
+    const holds = this.readFiles.paths().filter((abs) => { try { return readFileSync(abs, 'utf8').includes(e.old_text); } catch { return false; } });
+    return holds.length === 1 ? { ...call, name, args: JSON.stringify({ ...raw, path: relative(this.cwd, holds[0]) }) } : { ...call, name };
+  }
+
   // gpt-oss's own way to change files (4 Oct 2026: gpt-oss:120b sent apply_patch three times, was told
   // there is no such tool, and was stopped): each hunk runs as an Edit and each new file as a Write
   // (tools.mjs patchOps), so their checks and questions hold; the first that fails ends it.
@@ -3470,6 +3513,7 @@ export class Agent extends EventEmitter {
       if (made && findEntry(this.mcpEntries(), made.tool).entry) return this.runMcp({ ...call, name: MCP_TOOL, args: JSON.stringify(made) }, signal);
     }
     if (call.name === 'apply_patch') return this.applyPatch(call, signal);
+    if (call.name === 'Edit' || call.name === 'Write') call = this.mendEdit(call);
     let parsed = parseArgs(call.name, call.args, this.way);
     if (call.name === 'Write') parsed = this.keepWrite(call, parsed);
     const shown = display(call.name, parsed.args ?? {});
@@ -3498,6 +3542,17 @@ export class Agent extends EventEmitter {
         const gated = this.mcpListed().some((e) => e.name === named.name);
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: `${named.name} is an MCP tool, not a command` }, error: true });
         return { text: `Nothing ran: ${named.name} is a tool of the user's MCP server "${named.server}", not a command. Call it as a tool${gated ? `: ${MCP_TOOL} with "tool": "${named.name}" and its "arguments"` : ', with its arguments as JSON'}.`, error: true };
+      }
+    }
+    // A folder that is not there before the command ("cd /testbed && npm test", "cd /Users/gkane && …": six
+    // times in eight runs, 4 Oct 2026, each refused as outside the project): the command runs here, and says so.
+    if (call.name === 'Bash' && typeof args.command === 'string') {
+      const m = /^\s*cd\s+("[^"]+"|'[^']+'|\S+)\s*(?:&&|;)\s*(\S[\s\S]*)$/.exec(args.command);
+      const there = m?.[1].replace(/^["']|["']$/g, '');
+      if (m && isAbsolute(there) && !existsSync(there)) {
+        const out = await this.runStep({ ...call, args: JSON.stringify({ ...args, command: m[2] }) }, signal);
+        if (typeof out?.text === 'string') out.text = `(There is no ${there} on this machine. You are already in the project folder, so the command ran here; leave the cd out.)\n${out.text}`;
+        return out;
       }
     }
     if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
@@ -4800,7 +4855,7 @@ export class Agent extends EventEmitter {
     }
     summary = beforeCall(summary).trim();
     if (summary.length < 40) {
-      this.emit('note', { text: `Notes came out empty${called ? ' (it called a tool instead)' : ''}: freeing memory another way`, tone: 'dim' });
+      this.emit('note', { text: `Notes came out empty${called ? ' (it called a tool instead)' : summary ? ` (only "${summary.slice(0, 60)}")` : ''}: freeing memory another way`, tone: 'dim' });
       return false;
     }
     const before = this.ctxUsed;
@@ -4859,6 +4914,9 @@ export class Agent extends EventEmitter {
     const steps = this.turn?.planAt != null ? planList(this.todos) : '';
     const plan = steps ? `\n\nMy plan, as I last wrote it with TodoWrite:\n${steps}` : '';
     if (plan) this.turn.planAt = this.turn.steps ?? 0;
+    // The request's cases go with the notes too: the step's result that listed them is left behind
+    // (4 Oct 2026: memory filled in three runs of four, and the list was gone from then on).
+    const cases = this.turn?.cases?.length && !this.turn.casesDone ? `\n\nThe request's cases (before I answer, each needs a test that tries its example):\n${this.turn.cases.map((c, i) => `${i + 1}. ${c.text}`).join('\n')}` : '';
     // The request is at the top again: its reminder counts from here.
     if (this.turn) this.turn.requestAt = this.turn.steps ?? 0;
     // The notes that go with the request (the steps for its kind of bug, a
@@ -4870,7 +4928,7 @@ export class Agent extends EventEmitter {
     this.messages = [this.messages[0], ...opening,
       // "Nothing is saved anywhere else": after its notes the model once went
       // looking for them on disk (ls ~/.claude/sessions, chart bug, 27 Sep).
-      { role: 'assistant', content: `My memory filled up, so I wrote down where I am. My notes (all of them are here; nothing is saved anywhere else):\n${summary.trim()}${facts}${plan}${this.seenSoFar()}` },
+      { role: 'assistant', content: `My memory filled up, so I wrote down where I am. My notes (all of them are here; nothing is saved anywhere else):\n${summary.trim()}${facts}${plan}${cases}${this.seenSoFar()}` },
       { role: 'user', content: auto(held
         ? 'Those are your own notes, and they may be imperfect. Pick up from them. The output of your last step follows; read it, then take the next step with the tools. Do not start the investigation over and do not re-read what the notes already answer.'
         : 'Those are your own notes, and they may be imperfect. Pick up from them: take the single next step now with the tools. Do not start the investigation over and do not re-read what the notes already answer.') },
