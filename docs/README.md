@@ -8,7 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 158 KB | 2026-10-04 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 176 KB | 2026-10-05 |
 | [design rounds/agentic-coder-loops-4-designs-2026-10-04.html](design%20rounds/agentic-coder-loops-4-designs-2026-10-04.html) | page | /loops · round three | 78 KB | 2026-10-04 |
 | [design rounds/agentic-coder-remote-connect-2-designs-2026-10-03.html](design%20rounds/agentic-coder-remote-connect-2-designs-2026-10-03.html) | page | Remote connect designs | 444 KB | 2026-10-04 |
 | [design rounds/agentic-coder-jumptomac-saved-macs-2-designs-2026-10-03.html](design%20rounds/agentic-coder-jumptomac-saved-macs-2-designs-2026-10-03.html) | page | Jump to a Mac designs | 233 KB | 2026-10-04 |
