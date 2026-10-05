@@ -64,7 +64,7 @@ export const HOOKS = [
   { id: 'done', label: 'Done check', what: 'a second look asks whether every part of the request was done' },
   { id: 'plan', label: 'Plan first', what: 'on auto-accept, the first change of a message is shown as a plan to say yes to' },
   { id: 'checkin', label: 'Check-ins', what: 'after 6 looks with no change, it asks you where to look' },
-  { id: 'stuck', label: 'Stuck asks', what: 'the same step twice, or three errors in a row, asks you for a hint' },
+  { id: 'stuck', label: 'Stuck asks', what: 'the same step a third time (a look: a fourth), or three errors in a row, asks you, with ways out as choices: another way, skip the step, stop, or your hint' },
   { id: 'said-done', label: 'Said done, nothing changed', what: 'a reply that says the work is done when no file changed is sent back once; if it still claims it, a line says nothing was changed' },
   { id: 'look-first', label: 'Look before answering', what: 'remote models: an answer about the code with nothing read or searched goes back once; then a line says so' },
   { id: 'real-files', label: 'Files that exist', what: 'remote models: an answer naming files not in the project goes back once; then a line names them' },

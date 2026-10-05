@@ -531,6 +531,12 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Steps not lost** (`mendEdit`, runStep): an Edit with no path goes to the one seen file that holds its old text, a
   Write of old and new text is an Edit, and `cd /a-folder-not-there && cmd` runs in the project folder and says so.
   The bench's `--keep` keeps each run's files beside its results.
+- **The same step again** (5 Oct 2026, the owner's picks; agent.mjs's loop, questions.mjs `sameStepNote`,
+  `stuckQuestion`): the second time, the model is told why nothing changed in that step's own words (a write that
+  changed nothing, a command with the same result, a search already answered; a Read answers for itself) and you are
+  not asked. The third time (a look: the fourth) the Stuck question says what it is on, what it tried, how often and
+  what came of it, with ways out as choices: Try a different way, Skip this step, Stop here, or your hint ("Keep
+  going" means another way). One more time and it stops. A command whose words changed is not the same step again.
 - **The lean harness** (the owner, shown Claude Code's harness beside this one: "can we make it just like this?";
   `way.mjs` `leanFrom`, `LEAN_LINES`): one switch, off unless set (settings.json `"lean"`, `AGENTIC_LEAN`,
   `/hooks lean` · `/hooks full`, `coding -p --lean`, the bench's and the shootout's `--lean`). On: Who decides is Model,

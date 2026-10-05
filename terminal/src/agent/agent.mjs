@@ -8,7 +8,7 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
-import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid, wantsQuestions, questionLines, ASK_NOTE, pageWrongQuestion } from './questions.mjs';
+import { askedQuestions, checkInQuestion, stuckQuestion, sameStepNote, sameResultSaid, planQuestion, lookSaid, stepSaid, errorSaid, planSaid, wantsQuestions, questionLines, ASK_NOTE, pageWrongQuestion } from './questions.mjs';
 import { CASES_ASK, CASES_FIX, MAX_CASES, casesOf, casesFromList, gapCases, casesTold, addCase, isTestPath, untested, casesBack, REVIEW_MAX, REVIEW_CODE, REVIEW_SYSTEM, REVIEW_SCHEMA, reviewAsk, reviewWrong, reviewBack, signSample } from './cases.mjs';
 import { toolSchemas, parseArgs, normalizeArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault, patchOps } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
@@ -1859,6 +1859,7 @@ export class Agent extends EventEmitter {
     const request = this.messages.at(-1);
     let reason = 'done';
     let repeatKey = null;
+    let repeatOut = '';
     let repeats = 0;
     let errorsInRow = 0;
     let nudges = 0;
@@ -2585,35 +2586,48 @@ export class Agent extends EventEmitter {
         // A Read moved on to a long file's next part (runTool) got new lines: not a repeat.
         const paged = this.turn.paged;
         this.turn.paged = false;
-        repeats = key === repeatKey && !paged ? repeats + 1 : 0;
+        // A command that says something new is not the same step again (a job watched, a list after a change).
+        // Numbers apart: a test run's times differ every run, and the same failing run is the same step.
+        const outText = String(out?.text ?? '');
+        const sameWords = (a, b) => a.replace(/\d+(?:\.\d+)?/g, '#') === b.replace(/\d+(?:\.\d+)?/g, '#');
+        const saidNew = key === repeatKey && calls.length === 1 && calls[0].name === 'Bash' && !sameWords(outText, repeatOut);
+        repeats = key === repeatKey && !paged && !saidNew ? repeats + 1 : 0;
         repeatKey = key;
+        repeatOut = outText;
+        // Looking again is not being stuck yet: a model reads a file twice to have it fresh, and the third Read
+        // gives the text again (runTool). For looks the question, and the stop after it, come one step later.
+        const askAt = calls.length && calls.every((c) => LOOK_TOOLS.has(c.name)) ? 3 : 2;
         // A reply of only TodoWrite calls that failed is not one more error in a row: a plan sent in the
         // wrong shape harms no work (4 Oct 2026: Qwen3.6 was stopped by five of them, the repeat stop still holds).
         errorsInRow = landed ? 0 : calls.length && calls.every((c) => c.name === 'TodoWrite') ? errorsInRow : errorsInRow + 1;
         this.turn.errorsInRow = errorsInRow;
-        if (repeats >= 3 || errorsInRow >= 5) {
+        if (repeats > askAt || errorsInRow >= 5) {
           reason = 'stuck';
-          this.emit('note', { text: repeats >= 3 ? 'It kept repeating the same step, so it stopped. Try rephrasing the task, or give it a hint.' : 'Five tool errors in a row, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });
-          await this.lastWord(repeats >= 3 ? 'you kept repeating the same step' : 'five steps in a row failed', signal);
+          this.emit('note', { text: repeats > askAt ? 'It kept repeating the same step, so it stopped. Try rephrasing the task, or give it a hint.' : 'Five tool errors in a row, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });
+          await this.lastWord(repeats > askAt ? 'you kept repeating the same step' : 'five steps in a row failed', signal);
           break;
         }
-        // Stuck, sooner: the same step twice, or three errors in a row, and it
-        // asks you for a hint instead of going round again. "Keep going"
-        // starts the counts over and tells it to do something different; a
-        // step asked about once is not asked about again in this message (Read
-        // of one file six times asked three times in a minute, 2 Oct). With no
-        // one to answer (coding -p, the practice bench) it carries on and the
-        // old limits above still stop it.
-        const repeatAsk = repeats === 1 && !this.turn.stuckSteps.has(key);
+        // The same step a second time: the app says why nothing changed, to the model and in that step's own
+        // words (sameStepNote), and you are not asked (5 Oct 2026, the owner's picks: before, the second time
+        // asked you at once, with one choice, Keep going, which let it do the same again).
+        if (repeats === 1) {
+          const plan = this.turn.planAt != null ? this.todos ?? [] : [];
+          const said = sameStepNote(call?.name, outText, plan.find((x) => x.status === 'pending')?.text ?? '');
+          if (said) this.messages.push({ role: 'user', content: auto(said) });
+        }
+        // Stuck: the same step a third time (a look: a fourth), or three errors in a row, and it asks you,
+        // with ways out as choices. An answer starts the counts over; a step asked about once is not asked
+        // about again in this message (Read of one file six times asked three times in a minute, 2 Oct).
+        // With no one to answer (coding -p, the practice bench) it carries on and the limits above stop it.
+        const repeatAsk = repeats === askAt && !this.turn.stuckSteps.has(key);
         if ((repeatAsk || errorsInRow === 3) && this.checkIns && !checkedIn && this.hook('stuck')) {
-          const s2 = await this.stuckAsk(repeatAsk ? 'repeat' : 'errors', call, out, signal);
+          const s2 = await this.stuckAsk(repeatAsk ? 'repeat' : 'errors', call, out, signal, { tries: repeats + 1 });
           if (s2?.stop) { reason = s2.stop; break; }
           if (s2?.text) this.messages.push({ role: 'user', content: s2.text });
-          if (s2?.keepGoing && repeatAsk) this.messages.push({ role: 'user', content: auto(SAME_STEP) });
-          if (repeatAsk && (s2?.text || s2?.keepGoing)) this.turn.stuckSteps.add(key);
-          if (s2?.text || s2?.keepGoing) { repeats = 0; repeatKey = null; errorsInRow = 0; }
+          if (repeatAsk && s2?.text) this.turn.stuckSteps.add(key);
+          if (s2?.text) { repeats = 0; repeatKey = null; errorsInRow = 0; }
         }
-        if (repeats === 2) this.messages.push({ role: 'user', content: auto(SAME_STEP) });
+        if (repeats === askAt) this.messages.push({ role: 'user', content: auto(SAME_STEP) });
         if (step === this.maxSteps - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${this.maxSteps} steps (/effort moves this).`, tone: 'warn' }); }
       }
     } catch (e) {
@@ -4759,13 +4773,15 @@ export class Agent extends EventEmitter {
     return [...(this.turn?.madeByCommand?.keys() ?? [])].filter((a) => /\.html?$/i.test(a) && existsSync(a)).map((a) => relative(this.cwd, a));
   }
 
-  // Stuck: the same step twice, or three tool errors in a row. One question
-  // with what went wrong; a hint goes straight to the model.
-  async stuckAsk(why, call, out, signal) {
+  // Stuck: the same step again and again, or three tool errors in a row. One question that says what it is
+  // working on, what it tried and what came of it; a way out picked, or a hint, goes straight to the model.
+  async stuckAsk(why, call, out, signal, { tries = 3 } = {}) {
     const t = this.turn;
     const step = stepSaid(call.name, parseArgs(call.name, call.args).args ?? {});
     const err = errorSaid(call.name, out?.text);
-    const q = stuckQuestion(why, step, err);
+    const plan = t?.planAt != null ? this.todos ?? [] : [];
+    const next = plan.find((x) => x.status === 'pending')?.text ?? '';
+    const q = stuckQuestion(why, step, err, { tries, goal: plan.find((x) => x.status === 'in_progress')?.text ?? '', result: why === 'repeat' ? sameResultSaid(call.name, String(out?.text ?? '')) : '' });
     const { question } = q;
     const id = `stuck_${Date.now()}`;
     if (t) t.stuckAsks = (t.stuckAsks ?? 0) + 1;
@@ -4780,7 +4796,11 @@ export class Agent extends EventEmitter {
     if (!text) return null;
     t?.asked.push(question);
     this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text } });
-    if (/^(keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return { keepGoing: true };
+    // The ways out: stop; another way ("Keep going" means that too: the same again is what it was doing); skip.
+    if (/^stop( here)?\W*$/i.test(text)) return { stop: 'declined' };
+    const was = why === 'repeat' ? `You sent the same step ${tries} times (${step}) and nothing changed` : `Three steps in a row failed (the last: ${step})`;
+    if (/^(try (a|an)?\s*(different|other|another) way|keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return { text: `[Stuck] ${was}. The user says: try a different way. Do not send that step again; reach what it was for another way, or go on to the next step.` };
+    if (/^skip( (this|that|the) step| it)?\W*$/i.test(text)) return { text: `[Stuck] ${was}. The user says: skip this step. Leave it and go on with the rest of the request${next ? `; next in your plan: ${next}` : ''}. In your final answer, say that this step was skipped.` };
     return { text: `[Stuck] You were going round in circles and asked the user for a hint. The user answered: ${text}\nFollow that.` };
   }
 
