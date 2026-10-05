@@ -531,6 +531,14 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Steps not lost** (`mendEdit`, runStep): an Edit with no path goes to the one seen file that holds its old text, a
   Write of old and new text is an Edit, and `cd /a-folder-not-there && cmd` runs in the project folder and says so.
   The bench's `--keep` keeps each run's files beside its results.
+- **Older copies go before notes** (5 Oct 2026, the owner's pick; agent.mjs `dropSuperseded`, called by
+  `fitContext` on a model on another machine only): when memory is nearly full, what the conversation holds a newer
+  copy of is dropped first: an older Read of a file whose text came again later (the whole file, or the same lines,
+  told from the result's own first lines), an older whole version it wrote, an older output of a command run again.
+  The newest two outputs, a kept error and anything short stay. Only when that leaves 8% of the memory free are the
+  notes skipped. On this Mac a changed old message is read again slowly, so conversations there go to notes as before.
+  More names for an argument are taken too (Search's `find`, Write's `prompt` or `file_text`, Bash's `commands`,
+  TodoWrite's `todo`), and an Edit with the whole file and no old text is the Write it means. `memory-copies.test.mjs`.
 - **The same step again** (5 Oct 2026, the owner's picks; agent.mjs's loop, questions.mjs `sameStepNote`,
   `stuckQuestion`): the second time, the model is told why nothing changed in that step's own words (a write that
   changed nothing, a command with the same result, a search already answered; a Read answers for itself) and you are

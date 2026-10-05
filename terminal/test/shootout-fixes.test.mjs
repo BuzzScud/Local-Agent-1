@@ -284,3 +284,31 @@ test('a reply that thinks past the budget on an Ollama service is stopped and as
     expect(String(a.messages.at(-1).content)).toContain('From coder:30b');
   } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
 });
+
+// The calls that were still turned away in the saved runs (5 Oct 2026, 40 runs read): Search with the word under
+// "find", a file's text under "prompt", a plan under "todo", and commands as a list.
+test('more names a model sends for an argument are taken as the argument', () => {
+  expect(parseArgs('Search', JSON.stringify({ path: 'tools.mjs', find: '^-?\\d+$' }), 'model').args).toMatchObject({ path: 'tools.mjs', pattern: '^-?\\d+$' });
+  expect(parseArgs('Write', JSON.stringify({ path: 'agent.mjs', prompt: '// one step\n' }), 'model').args).toMatchObject({ path: 'agent.mjs', content: '// one step\n' });
+  expect(parseArgs('Write', JSON.stringify({ path: 'a.mjs', file_text: 'x\n' }), 'model').args.content).toBe('x\n');
+  expect(parseArgs('Bash', JSON.stringify({ commands: ['cd src', 'ls'] }), 'model').args.command).toBe('cd src && ls');
+  expect(parseArgs('Bash', JSON.stringify({ code: 'npm test' }), 'model').args.command).toBe('npm test');
+  expect(parseArgs('TodoWrite', JSON.stringify({ todo: 'Add plainRead\n\nUpdate step' }), 'model').args.todos.map((t) => t.text)).toEqual(['Add plainRead', 'Update step']);
+});
+
+test('an Edit that carries the whole file and no old text is the Write it means; new lines alone never replace a file', async () => {
+  const fake = await startFakeServer([
+    { tool: { name: 'Read', args: { path: 'short.txt', offset: 1, limit: 5 } } },
+    { tool: { name: 'Edit', args: { path: 'short.txt', new_text: 'only these lines\n' } } },
+    { tool: { name: 'Edit', args: { path: 'short.txt', content: 'the whole file, new\n' } } },
+    { text: 'Rewritten.' }, { text: 'again' },
+  ]);
+  try {
+    const a = agentOn(fake.url, remote);
+    await a.send('rewrite short.txt');
+    const out = a.messages.filter((m) => m.role === 'tool' && !m.opening).map((m) => String(m.content));
+    expect(out[1]).toContain('Edit needs "old_text"');
+    expect(out[2]).toContain('Updated short.txt');
+    expect(readFileSync(join(dir, 'short.txt'), 'utf8')).toBe('the whole file, new\n');
+  } finally { await fake.close(); }
+});

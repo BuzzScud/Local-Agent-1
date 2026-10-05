@@ -248,10 +248,10 @@ const ALIASES = {
   path: ['path', 'file_path', 'filePath', 'filename', 'file', 'dir', 'directory'],
   old_text: ['old_text', 'old_string', 'oldText', 'old', 'search', 'find'],
   new_text: ['new_text', 'new_string', 'newText', 'new', 'replace', 'replacement'],
-  content: ['content', 'contents', 'text', 'code'],
-  command: ['command', 'cmd', 'script'],
-  pattern: ['pattern', 'query', 'regex', 'glob_pattern'],
-  todos: ['todos', 'items', 'plan', 'steps', 'tasks', 'todo_list', 'todoList'],
+  content: ['content', 'contents', 'text', 'code', 'file_text', 'body', 'data', 'prompt'],
+  command: ['command', 'cmd', 'script', 'commands', 'code', 'bash', 'shell', 'input'],
+  pattern: ['pattern', 'query', 'regex', 'glob_pattern', 'find', 'search', 'term', 'keyword'],
+  todos: ['todos', 'items', 'plan', 'steps', 'tasks', 'todo_list', 'todoList', 'todo'],
   offset: ['offset', 'line_start', 'start_line'],
   question: ['question', 'prompt', 'text', 'message', 'query'],
   options: ['options', 'choices', 'answers'],
@@ -299,7 +299,8 @@ export function normalizeArgs(name, raw, way = 'model') {
   }
   // repo_browser.open_file's last line, and container.exec's command as a list (["bash", "-lc", "…"]).
   if (name === 'Read' && out.offset !== undefined && out.limit === undefined && Number(raw.line_end) >= Number(out.offset)) out.limit = Number(raw.line_end) - Number(out.offset) + 1;
-  if (name === 'Bash' && Array.isArray(out.command)) out.command = /^(ba|z)?sh$/.test(out.command[0]) && /^-l?c$/.test(out.command[1] ?? '') ? String(out.command.slice(2).join(' ')) : out.command.join(' ');
+  // Several commands as a list ("commands": ["cd src", "ls"]) run one after the other; one command in pieces is joined.
+  if (name === 'Bash' && Array.isArray(out.command)) out.command = /^(ba|z)?sh$/.test(out.command[0]) && /^-l?c$/.test(out.command[1] ?? '') ? String(out.command.slice(2).join(' ')) : out.command.join(Array.isArray(raw.commands) && raw.command === undefined && raw.cmd === undefined ? ' && ' : ' ');
   if (name === 'TodoWrite' && Array.isArray(out.todos)) {
     out.todos = out.todos.map((t) => (typeof t === 'string' ? { text: t, status: 'pending' } : {
       text: String(t.text ?? t.content ?? t.title ?? t.task ?? ''),

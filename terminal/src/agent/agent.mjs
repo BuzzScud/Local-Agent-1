@@ -3537,6 +3537,9 @@ export class Agent extends EventEmitter {
     const e = normalizeArgs('Edit', raw, this.way);
     let name = call.name;
     if (name === 'Write' && normalizeArgs('Write', raw, this.way).content === undefined && typeof e.old_text === 'string' && typeof e.new_text === 'string') name = 'Edit';
+    // An Edit with the whole file and no old text (content, not new_text: a few new lines sent alone must never
+    // replace a file) is the Write it means; Write's own rules still decide (read first, nothing broken).
+    if (name === 'Edit' && e.old_text === undefined && e.new_text === undefined && typeof normalizeArgs('Write', raw, this.way).content === 'string' && e.path) return { ...call, name: 'Write' };
     if (name !== 'Edit' || e.path || typeof e.old_text !== 'string' || !e.old_text.trim()) return name === call.name ? call : { ...call, name };
     const holds = this.readFiles.paths().filter((abs) => { try { return readFileSync(abs, 'utf8').includes(e.old_text); } catch { return false; } });
     return holds.length === 1 ? { ...call, name, args: JSON.stringify({ ...raw, path: relative(this.cwd, holds[0]) }) } : { ...call, name };
@@ -4881,6 +4884,19 @@ export class Agent extends EventEmitter {
       this.turn.toldTight = true;
       this.emit('note', { text: `The ${Math.round(cap / 1024)}k memory is nearly all taken by this request's start (about ${kept.toLocaleString('en-US')} tokens: the instructions, the request and what came with it), so notes would free nothing; carrying on without them. ${cap < this.ctx ? 'A later Clean up at in /remote’s More' : 'A bigger memory in /effort'} gives it room.`, tone: 'warn' });
     }
+    // On a model on another machine, older copies go first (dropSuperseded): what the conversation holds a
+    // newer copy of frees room and loses nothing, where notes start the conversation over and the model reads
+    // its files again. Only when that leaves real room (8% of the memory); else the notes, as before.
+    if (this.model?.remote) {
+      const d = this.dropSuperseded();
+      if (d.freed) {
+        est -= d.freed;
+        this.ctxUsed = Math.max(0, this.ctxUsed - d.freed);
+        const what = [d.reads ? `${d.reads} older read${d.reads === 1 ? '' : 's'} of ${d.files} file${d.files === 1 ? '' : 's'}` : '', d.writes ? `${d.writes} older version${d.writes === 1 ? '' : 's'} it wrote` : '', d.runs ? `${d.runs} older run${d.runs === 1 ? '' : 's'} of the same command` : ''].filter(Boolean).join(', ');
+        this.emit('note', { text: `Memory: dropped what it has a newer copy of (${what}), about ${d.freed.toLocaleString('en-US')} tokens.`, tone: 'dim' });
+        if (est + room < cap * (this.trimAt - 0.08)) return;
+      }
+    }
     // Notes first. Emptying old output makes the model read again everything
     // after it (measured: 186 to 261 s each time, up to half of a long try).
     // Its notes are written in the conversation it already holds, so only
@@ -4911,6 +4927,87 @@ export class Agent extends EventEmitter {
     this.ctxUsed = Math.max(0, this.ctxUsed - freed);
     if (freed) this.emit('note', { text: `Trimmed old tool output to save memory (about ${freed.toLocaleString()} tokens).`, tone: 'dim' });
     if (restartFits && est + room >= cap * this.fullAt) await this.compact(signal);
+  }
+
+  // Older copies of what the conversation holds a newer copy of (5 Oct 2026: in the hard task's runs a model
+  // read one file five to twenty times, wrote it three to six times whole and ran the same tests ten times;
+  // memory filled in most runs, the notes started the conversation over, and it read the files again):
+  //  - an older Read of a file whose text came again later: the whole file, or the same lines;
+  //  - an older whole version it wrote (a Write's content) of a file it wrote or read whole again later;
+  //  - an older output of a command it ran again later, word for word.
+  // The newest two outputs, a kept error and anything short stay. A dropped output starts as the trim's own
+  // does ("[older output removed"), so a Read of it later is given the text again, not pointed back to it.
+  dropSuperseded() {
+    const calls = new Map();
+    for (const m of this.messages) {
+      if (m.role !== 'assistant') continue;
+      for (const tc of m.tool_calls ?? []) {
+        const f = tc.function ?? tc;
+        let args = null;
+        try { args = typeof f.arguments === 'string' ? JSON.parse(f.arguments || '{}') : f.arguments; } catch { /* a call that did not parse had no result worth keeping track of */ }
+        if (args && typeof args === 'object') calls.set(tc.id, { name: toolNameOf(f.name, this.way), args, f });
+      }
+    }
+    const STUB = '[older output removed';
+    const text = (m) => (typeof m.content === 'string' ? m.content : '');
+    const abs = (p) => { try { return resolvePath(this.cwd, String(p)).abs; } catch { return null; } };
+    // What a Read's result holds, from its own first lines: the whole file ("x (60 lines):"), or lines a-b.
+    const holds = (t) => {
+      const head = t.split('\n').slice(0, 3).join('\n');
+      const part = /\(lines (\d+)-(\d+) of \d+/.exec(head);
+      if (part) return `${part[1]}-${part[2]}`;
+      return /^(?:\([^\n]*\)\n)?[^\n]* \(\d+ lines?\):/.test(head) ? 'whole' : null;
+    };
+    const newest = new Set(this.messages.filter((m) => m.role === 'tool').slice(-2));
+    const laterRead = new Map(); // file → the parts a later result holds
+    const laterWrite = new Set(); // file → written whole again later
+    const laterRun = new Set(); // command → ran again later
+    const out = { freed: 0, reads: 0, files: 0, writes: 0, runs: 0 };
+    const files = new Set();
+    const resultOf = new Map(this.messages.filter((m) => m.role === 'tool').map((m) => [m.tool_call_id, m]));
+    for (let i = this.messages.length - 1; i > 0; i--) {
+      const m = this.messages[i];
+      if (m.role === 'tool') {
+        const c = calls.get(m.tool_call_id);
+        const t = text(m);
+        // Not a copy of anything: dropped already, or the line that points back to an earlier Read.
+        if (!c || !t || t.startsWith(STUB) || t.startsWith('You already read')) continue;
+        const read = c.name === 'Read' ? c.args : c.name === 'Bash' && typeof c.args.command === 'string' ? (plainRead(c.args.command, this.cwd)?.name === 'Read' ? plainRead(c.args.command, this.cwd).args : null) : null;
+        const file = read && typeof read.path === 'string' ? abs(read.path) : null;
+        const cmd = c.name === 'Bash' && typeof c.args.command === 'string' ? c.args.command.trim() : null;
+        const has = file ? holds(t) : null;
+        const later = file ? laterRead.get(file) : null;
+        const stale = (file && has && later && (later.has('whole') || later.has(has))) || (!file && cmd && laterRun.has(cmd));
+        if (stale && !newest.has(m) && !m.keep && t.length > 300) {
+          const said = file ? `an older copy of ${relative(this.cwd, file) || basename(file)}; its text is further down` : `an earlier run of ${cmd.split('\n')[0].slice(0, 80)}; its newest run is further down`;
+          const stub = `${STUB} to save space: ${said}]`;
+          out.freed += Math.max(0, tokensOf(t) - tokensOf(stub));
+          m.content = stub;
+          if (file) { out.reads++; files.add(file); } else out.runs++;
+          continue;
+        }
+        if (file && has) laterRead.set(file, (later ?? new Set()).add(has));
+        // A command that ran (not one turned away) counts as the newer run, however short its output.
+        else if (!file && cmd && !m.keep && !/^(blocked|Nothing ran|The user said no)/i.test(t) && !/is outside the project folder/.test(t.slice(0, 200))) laterRun.add(cmd);
+      } else if (m.role === 'assistant' && i < this.messages.length - 2) {
+        for (const tc of [...(m.tool_calls ?? [])].reverse()) {
+          const c = calls.get(tc.id);
+          if (c?.name !== 'Write' || typeof c.args.path !== 'string' || typeof c.args.content !== 'string') continue;
+          const file = abs(c.args.path);
+          if (!file) continue;
+          const landed = /^(Created|Updated) /.test(text(resultOf.get(tc.id) ?? {}));
+          if (c.args.content.length > 1200 && (laterWrite.has(file) || laterRead.get(file)?.has('whole'))) {
+            const stub = '[an older version of this file, removed to save space: it was written or read whole again later]';
+            out.freed += Math.max(0, tokensOf(c.args.content) - tokensOf(stub));
+            const slim = { ...c.args, content: stub };
+            c.f.arguments = typeof c.f.arguments === 'string' ? JSON.stringify(slim) : slim;
+            out.writes++;
+          } else if (landed) laterWrite.add(file);
+        }
+      }
+    }
+    out.files = files.size;
+    return out;
   }
 
   // Its notes, written by the model in the conversation it already holds
