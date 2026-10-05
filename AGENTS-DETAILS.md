@@ -551,6 +551,21 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   none of the app's checks run (`hook()` is false for all), no Look first, no reminders of the plan or the request,
   no Remember hints, nothing put back; the instructions gain four lines on checking its own work. Permissions, your
   own hooks, the memory, the notes when memory fills and the technical stops stay. `terminal/test/lean.test.mjs`.
+- **Better tools** (5 Oct 2026, the owner: "can we make the tools better?"; from the failed steps of 40 runs on a
+  service). Edit already took a copy off by spaces, indent or a typo (`findEdit`); what failed was an old_text the
+  file no longer held, one that appears several times, and old and new the same. Now a miss shows the file's own
+  lines at the closest place, numbered as Read shows them, and from which line they differ, so the next try needs no
+  Read; Edit takes `line` (where the one meant starts) to pick among several; the same-text error says the line
+  already reads that way. The folder fence (`permissions.mjs`) reads a regex in quoted code as a regex
+  (`regexSpans`: five of the commands it turned away, such as `/x|y|z/.test(…)`), and the project under another
+  name for the same place as inside (`realOf`: /var is /private/var, which node's process.cwd() gives); a path that
+  is not there is refused with what to use instead. A failed node run ends with what to change (`nodeHint` in
+  scripts.mjs: require in a module, an import outside one, a name taken from the wrong built-in module; node 22.7 and
+  later already run import lines in node -e). Edit, Write, Bash and TodoWrite each show one call as an example. Map,
+  Rename, TestFirst and Remember (never called in those runs) are offered only where they can run, as CodeSearch is:
+  Map not in the home folder, Rename and TestFirst in a folder of code, Remember with a memory; the folder is looked
+  at once a conversation, so the list does not move. The remote TOOLS.md has two lines more: copy old_text from a
+  failed Edit's lines, and try out code in a file rather than a long node -e. `terminal/test/better-tools.test.mjs`.
 
 ## MCP servers (3 Oct 2026)
 

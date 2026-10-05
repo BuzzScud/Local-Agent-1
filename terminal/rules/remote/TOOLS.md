@@ -12,6 +12,8 @@ The lines under **MCP tools** join them only while an MCP server is on (/mcp).
 - When the conversation has a code map (docs/map), start from it: open the part of the folder the task is in (Map with its part, or Read docs/map/<part>.md), then the files it names, before you Search. Claude's notes open the same way: NOTES/MAP.md, a topic, then NOTES/notes/<name>.md.
 - When a search finds nothing, try a shorter or different word before you conclude it is not there.
 - To change an existing file, use Edit with old_text copied exactly from Read, without line numbers, with enough context to match once. To replace most of a file you have read, Write it whole instead of a long old_text.
+- When an Edit is turned back, copy old_text from the lines its error shows. After two misses on the same lines, Read them again, or Write the file whole if it is short.
+- To try out code, put it in a test or a script file and run that, not a long node -e or python -c line: quotes inside those break, and a file can be changed with Edit and run again.
 - Use Bash to run the program, the tests and the project's own scripts. Look at files with Read, Search and List, not cat, grep or ls.
 - To check a change, run the test file that covers it first; run the whole suite once at the end when the change touches shared code.
 - Say a change is done only after a tool shows it works: a test you ran, the program's output, or the changed lines read back.

@@ -737,7 +737,17 @@ export class Agent extends EventEmitter {
     const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [] });
     // CodeSearch only when it can run (4 Oct 2026: qwen3-coder-next called it twice, was told twice
     // "the code search is off here", and those two errors helped stop it at five in a row).
-    const can = (t) => t.function.name !== 'CodeSearch' || !this.codeSearchOff();
+    // The same for the four never called in 40 runs on a service (5 Oct 2026): Map not in the home
+    // folder, Rename and TestFirst in a folder of code, Remember with a memory. The folder is looked at
+    // once a conversation, so the list does not move under it; a call to one left out still runs.
+    const here = this.toolPlace?.cwd === this.cwd ? this.toolPlace : (this.toolPlace = { cwd: this.cwd, home: isHomeFolder(this.cwd), code: isCodeProject(this.cwd) });
+    const off = new Set([
+      ...(this.codeSearchOff() ? ['CodeSearch'] : []),
+      ...(here.home ? ['Map'] : []),
+      ...(here.code ? [] : ['Rename', 'TestFirst']),
+      ...(this.memory ? [] : ['Remember']),
+    ]);
+    const can = (t) => !off.has(t.function.name);
     const own = (this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all).filter(can);
     // The tools of the user's MCP servers go last, in one order, so the list above them never moves.
     const mcp = this.mcpDefs();
@@ -1456,7 +1466,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.cardsGiven = new Set(); this.task = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.toolPlace = null; this.cardsGiven = new Set(); this.task = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.

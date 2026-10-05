@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
-import { resolve, relative, isAbsolute } from 'node:path';
+import { resolve, relative, isAbsolute, dirname, basename, join } from 'node:path';
+import { realpathSync, existsSync } from 'node:fs';
 import { isMcpCall, mcpRule, parseMcpRule } from './mcp.mjs';
 
 // Which tool calls run straight away, which ask you first, and which are
@@ -61,6 +62,8 @@ function outsidePaths(command, cwd) {
   const home = homedir();
   const cmd = String(command ?? '');
   const out = [];
+  const within = (rel) => rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+  let realCwd = null;
   if (/(?:^|[;&|(]\s*)(?:cd|pushd)\s*(?:$|[;&|)])/.test(cmd)) out.push('~');
   for (const w of pathCandidates(cmd)) {
     let p = null;
@@ -71,12 +74,26 @@ function outsidePaths(command, cwd) {
     else if (/(^|\/)\.\.(\/|$)/.test(w)) p = resolve(cwd, w);
     else continue;
     p = resolve(p);
-    const rel = relative(cwd, p);
-    if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) continue;
+    if (within(relative(cwd, p))) continue;
     if (SYSTEM_DIRS.some((d) => p === d || p.startsWith(`${d}/`))) continue;
+    // The project under another name for the same place: on a Mac /var is /private/var, and node's
+    // process.cwd() gives the second. Twice in the shootout of 4-5 Oct 2026 a model's command on its own
+    // project ("cd /private/var/folders/…/project && node -e …") was turned away as outside it.
+    realCwd ??= realOf(cwd);
+    if (within(relative(realCwd, realOf(p)))) continue;
     out.push(w);
   }
   return out;
+}
+
+// Where a path really is, through links, for the part of it that exists.
+function realOf(p) {
+  const rest = [];
+  for (let head = p; ; head = dirname(head)) {
+    try { return join(realpathSync(head), ...rest.reverse()); } catch {}
+    if (dirname(head) === head) return p;
+    rest.push(basename(head));
+  }
 }
 
 // The words of a command as the shell sees them: quoted text stays one word
@@ -142,12 +159,48 @@ function pathCandidates(cmd) {
     const text = String(w);
     out.push(text);
     if (!w.quoted) continue;
+    const regexes = regexSpans(text);
     for (const m of text.matchAll(/[^\s;&|()<>=,`'"]+/g)) {
       const piece = m[0];
+      if (regexes.some(([a, b]) => m.index >= a && m.index < b)) continue;
       if (piece.length > 1 && piece !== text && !codeNotPath(text, piece, m.index)) out.push(piece);
     }
   }
   return out;
+}
+
+// The regular expressions written in quoted code (JavaScript's /…/), as [start, end) places in it: their
+// words are not paths. Five of the commands turned away in the shootout of 4-5 Oct 2026 were regexes in
+// node -e code: /x|y|z/.test(…) gave "/x", code.match(/export function plainRead\(…/) gave "/export".
+// One counts only where an expression starts (after ( , = : [ ! & | ? { } ;), on one line, and only when
+// it reads as one: a sign only a regex has (\ | ^ $ * + ? [ ( {), flags, .test( or .exec( after it, or
+// match(, replace(, split( or search( before it. A path such as /Users/x/a never ends its first name with a
+// slash followed by those, so "cat </Users/x/a" and "DIR=/Users/; ls" are still paths.
+function regexSpans(text) {
+  const spans = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '/' || text[i + 1] === '/' || text[i + 1] === '*') continue;
+    const before = text.slice(Math.max(0, text.lastIndexOf('\n', i - 1) + 1), i).trimEnd();
+    if (!/[(,=:[!&|?{};]$/.test(before)) continue;
+    let j = i + 1;
+    let inClass = false;
+    for (; j < text.length && text[j] !== '\n'; j++) {
+      if (text[j] === '\\') { j++; continue; }
+      if (text[j] === '[') inClass = true;
+      else if (text[j] === ']') inClass = false;
+      else if (text[j] === '/' && !inClass) break;
+    }
+    if (j >= text.length || text[j] !== '/' || j === i + 1) continue;
+    const flags = /^[dgimsuyv]*/.exec(text.slice(j + 1))[0];
+    const next = text.slice(j + 1 + flags.length);
+    if (!/^\s*(?:[.),;\]}:?&|]|$)/.test(next)) continue;
+    const body = text.slice(i + 1, j);
+    const reads = /[\\|^$*+?[({]/.test(body) || flags || /^\.(?:test|exec)\(/.test(next) || /\b(?:match|matchAll|replace|replaceAll|split|search)\(\s*$/.test(before);
+    if (!reads) continue;
+    spans.push([i, j + 1 + flags.length]);
+    i = j + flags.length;
+  }
+  return spans;
 }
 
 // Pieces of quoted code that only look like a path; each was a command turned away on 1 Oct
@@ -542,7 +595,9 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     const outs = outsidePaths(command, cwd);
     const secret = bypass ? outs.find((w) => secretBy(w)) : null;
     if (secret) return { decision: 'deny', reason: `${secret} is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach` };
-    if (outs.length && !bypass) return { decision: 'deny', reason: `${outs[0]} is outside the project folder; commands stay inside it` };
+    // A path that is not there (a made-up value in code, a file to make in /tmp): say what to use instead.
+    const gone = outs[0] && outs[0] !== '~' && !outs[0].startsWith('~') && !existsSync(resolve(cwd ?? '.', outs[0]));
+    if (outs.length && !bypass) return { decision: 'deny', reason: `${outs[0]} is outside the project folder; commands stay inside it${gone ? `. Nothing is there now: for a file of your own, or a made-up path in code, use a name inside the project, such as ${JSON.stringify(basename(outs[0]) || 'tmp')}` : ''}` };
     // Your own never-list holds in every mode.
     const mine = neverRule(command, rules?.never);
     if (mine) return { decision: 'deny', reason: `blocked by your rule "${mine}" (/permissions)` };
