@@ -177,7 +177,13 @@ test('a Desktop that is not this user\'s means their own, unless the request nam
   expect(at('/Users/yourname/Desktop/x.html')).toEqual({ to: join(home, 'Desktop', 'x.html'), notYours: '/Users/yourname/Desktop' });
   expect(at(join(home, 'Desktop', 'x.html'))).toBeNull(); // their own Desktop, by its full path
   expect(at('/Users/Shared/Desktop/x.html', 'save it in /Users/Shared/Desktop for everyone')).toBeNull();
-  expect(at('/Users/Shared/reports/x.html')).toBeNull(); // not a Desktop: as it was
+  // A page or a document sent to a folder that is not the user's at all: their Desktop too (that session's first writes).
+  expect(at('/Users/Shared/Thesis_API_Docs.md')).toEqual({ to: join(home, 'Desktop', 'Thesis_API_Docs.md'), notYours: '/Users/Shared' });
+  expect(at('/tmp/page.html')).toEqual({ to: join(home, 'Desktop', 'page.html'), notYours: '/tmp' });
+  expect(at('/Users/Shared/reports/x.html', 'put it in /Users/Shared/reports')).toBeNull(); // the request names it
+  expect(at('/Users/Shared/tool.mjs')).toBeNull(); // not a page or a document
+  expect(at('/Volumes/USB/report.html', 'save it to my USB drive')).toBeNull(); // a drive it was sent to
+  expect(at(join(home, 'Documents', 'report.html'))).toBeNull(); // a folder of their own
 });
 
 test('in a conversation: the file lands on the real Desktop, and the model is told where it is', async () => {
@@ -198,10 +204,65 @@ test('in a conversation: the file lands on the real Desktop, and the model is to
     expect(existsSync('/Users/agentic-nobody-here')).toBe(false);
     const out = String(a.messages.filter((m) => m.role === 'tool' && !m.opening).pop().content);
     expect(out).toContain('Created ~/Desktop/Thesis_API_Docs.html');
-    expect(out).toContain("(/Users/agentic-nobody-here/Desktop is not this user's Desktop, so the file is on their own: ~/Desktop/Thesis_API_Docs.html. Use that path from here on.)");
-    expect(notes).toContain('/Users/agentic-nobody-here/Desktop is not your Desktop: written to yours, ~/Desktop/Thesis_API_Docs.html.');
+    expect(out).toContain("(/Users/agentic-nobody-here/Desktop is not this user's Desktop, so the file is on their own Desktop: ~/Desktop/Thesis_API_Docs.html. Use that path from here on.)");
+    expect(notes).toContain('/Users/agentic-nobody-here/Desktop is not your Desktop: written to your own Desktop, ~/Desktop/Thesis_API_Docs.html.');
     // In Bypass the request says where the user's own folders are.
     const sent = JSON.stringify(fake.requests.find((r) => r.stream && r.messages).messages);
     expect(sent).toContain(`The user's home folder is ${home}; their Desktop is ${join(home, 'Desktop')}.`);
+  } finally { process.env.AGENTIC_DESKTOP_DEFAULT = was; await fake.close(); }
+});
+
+// The same session: it never opened the link. No web tool was called; a "mockup" of what the page might hold
+// was written to three places, and the answer said it could not reach the internet.
+test('a page the request names is read before anything is written about it, and an answer that never tried goes back', async () => {
+  const { createServer } = await import('node:http');
+  const site = createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.end('<html><body><main><h1>Thesis API</h1><p>POST /calculate takes a formula.</p></main></body></html>'); });
+  await new Promise((r) => site.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${site.address().port}/api/docs`;
+  const home = mkdtempSync(join(tmpdir(), 'agentic-run3-home6-'));
+  mkdirSync(join(home, 'Desktop'));
+  const page = '<p>POST /calculate takes a formula.</p>\n';
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: 'docs.html', content: '<p>a mockup</p>\n' } } },
+    { text: 'I cannot access external URLs.' },
+    { tool: { name: 'WebFetch', args: { url } } },
+    { tool: { name: 'Write', args: { path: 'docs.html', content: page } } },
+    { text: 'The page is read and saved.' }, { text: 'again' },
+  ]);
+  try {
+    const a = agentOn(fake.url, { home, mode: 'bypass', hooks: ['look-first'], web: { search: 'off', fetch: true } });
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    await a.send(`scrape everything on ${url} and save it`);
+    const tool = a.messages.filter((m) => m.role === 'tool' && !m.opening).map((m) => String(m.content));
+    // The write before the page was read did not happen, and said why.
+    expect(tool[0]).toContain(`Nothing was written: you have not read ${url} yet. WebFetch is one of your tools`);
+    expect(notes.some((t) => t.includes(`It began to write before reading ${url}`))).toBe(true);
+    // The answer that never tried went back once, with the tool to use.
+    const back = a.messages.filter((m) => m.role === 'user' && String(m.content).includes('You answered without reading'));
+    expect(back).toHaveLength(1);
+    expect(String(back[0].content)).toContain('do not say you cannot reach the internet without trying');
+    // After the fetch, the write goes through.
+    expect(tool.some((t) => t.includes('POST /calculate takes a formula'))).toBe(true);
+    expect(readFileSync(join(dir, 'docs.html'), 'utf8')).toBe(page);
+    expect(a.messages.at(-1).content).toBe('The page is read and saved.');
+  } finally { await fake.close(); site.close(); }
+});
+
+test('a command that names a Desktop that is not this user\'s runs with their own, and says so', async () => {
+  const was = process.env.AGENTIC_DESKTOP_DEFAULT;
+  process.env.AGENTIC_DESKTOP_DEFAULT = 'on';
+  const home = mkdtempSync(join(tmpdir(), 'agentic-run3-home7-'));
+  mkdirSync(join(home, 'Desktop'));
+  const fake = await startFakeServer([
+    { tool: { name: 'Bash', args: { command: 'echo saved > /Users/agentic-nobody-here/Desktop/out.txt' } } },
+    { text: 'Saved.' }, { text: 'again' },
+  ]);
+  try {
+    const a = agentOn(fake.url, { home, mode: 'bypass' });
+    await a.send('save the word saved on my desktop');
+    expect(readFileSync(join(home, 'Desktop', 'out.txt'), 'utf8')).toBe('saved\n');
+    const out = String(a.messages.filter((m) => m.role === 'tool' && !m.opening).pop().content);
+    expect(out).toStartWith(`(/Users/agentic-nobody-here/Desktop is not this user's Desktop; the command ran with their own, ${join(home, 'Desktop')}.`);
   } finally { process.env.AGENTIC_DESKTOP_DEFAULT = was; await fake.close(); }
 });
