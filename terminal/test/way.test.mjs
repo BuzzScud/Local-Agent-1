@@ -98,7 +98,9 @@ test('the tax question on Model: no sorting, nothing read ahead; it reads both f
   // Two model replies: the reads, then the answer. No sort request, no clarify request before them.
   expect(reqs.length).toBe(2);
   expect(reqs[0].parallel_tool_calls).toBe(true);
-  expect(reqs[0].tools.map((t) => t.function.name)).toEqual(expect.arrayContaining(['Map', 'CodeSearch', 'Rename', 'TestFirst', 'Remember']));
+  // CodeSearch only when the code search can run, which it cannot here (shootout-fixes.test.mjs, 4 Oct 2026).
+  expect(reqs[0].tools.map((t) => t.function.name)).toEqual(expect.arrayContaining(['Map', 'Rename', 'TestFirst', 'Remember']));
+  expect(reqs[0].tools.map((t) => t.function.name)).not.toContain('CodeSearch');
   // The first request holds only the system prompt and the question: nothing read ahead.
   expect(reqs[0].messages.map((m) => m.role)).toEqual(['system', 'user']);
   expect(reqs[0].messages[0].content).toContain(MODEL_TOOL_LINES);
@@ -285,7 +287,7 @@ test('switching the way mid-conversation changes the prompt and the tools for th
   await fake.close();
   const [a, b] = chats(fake).slice(-2);
   expect(a.tools.length).toBe(9);
-  expect(b.tools.length).toBe(15); // the app's eight, the model's own five, Jobs, and Agent (a helper)
+  expect(b.tools.length).toBe(14); // the app's eight, the model's own four (no CodeSearch: the code search is off here), Jobs, and Agent (a helper)
   expect(b.tools.at(-1).function.name).toBe('Agent');
   agent.setWay('app');
   expect(agent.messages[0].content).toContain(ONE_AT_A_TIME);

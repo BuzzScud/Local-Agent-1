@@ -1,0 +1,1 @@
+{ "name": "mini-harness", "type": "module", "private": true, "scripts": { "test": "node --test" } }

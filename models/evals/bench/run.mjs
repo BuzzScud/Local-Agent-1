@@ -9,7 +9,7 @@
 // Control-C (or SIGTERM, the hub's Stop) ends the task under way, skips the rest, and still saves
 // and records what ran, as stopped.
 //     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off] [--way app|model]
-//     [--remote <address> --remote-model <name> [--big on|off]]
+//     [--remote <address> --remote-model <name> [--big on|off] [--remote-ctx <tokens>]]
 // --helpers: the context helpers (terminal/src/agent/helpers.mjs), by codename
 // or by id (named,tests,rag,lsp); default what
 // AGENTIC_HELPERS says (unset: all). "off" is the way before them. With the code
@@ -116,7 +116,7 @@ const bigArg = opt('big', 'on');
 if (!['on', 'off'].includes(bigArg)) { console.error(`--big on or off, not "${bigArg}"`); process.exit(1); }
 let conn = null;
 if (remoteAt) {
-  try { conn = await connectRemote({ use: true, source: 'openai', kind: 'openai', connect: 'http', address: remoteAt, model: opt('remote-model', ''), key: Boolean(process.env.AGENTIC_REMOTE_KEY) }); } catch (e) { console.error(`the remote at ${remoteAt} did not answer: ${e.message}`); process.exit(1); }
+  try { conn = await connectRemote({ use: true, source: 'openai', kind: 'openai', connect: 'http', address: remoteAt, model: opt('remote-model', ''), key: Boolean(process.env.AGENTIC_REMOTE_KEY), ...(Number(opt('remote-ctx', 0)) ? { context: Number(opt('remote-ctx')) } : {}) }); } catch (e) { console.error(`the remote at ${remoteAt} did not answer: ${e.message}`); process.exit(1); }
   if (bigArg === 'off') delete conn.model.harness;
 }
 const runOn = conn ? conn.model : model;
@@ -186,7 +186,7 @@ try {
       const pass = check.status === 0;
       const route = (run.log ?? []).find((e) => e.type === 'route')?.kind ?? (run.way === 'model' ? 'model decides' : 'step by step');
       const tries = (run.log ?? []).filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${(e.marks ?? []).join('')}`);
-      const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, asked: run.asked ?? [], rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, replies: run.replies ?? null, reads: run.reads ?? null, readFirst: run.readFirst ?? null, thinkTokens: run.thinkTokens ?? null, stuckAsks: run.stuckAsks ?? null, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300),
+      const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, asked: run.asked ?? [], rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, replies: run.replies ?? null, reads: run.reads ?? null, readFirst: run.readFirst ?? null, thinkTokens: run.thinkTokens ?? null, stuckAsks: run.stuckAsks ?? null, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300), checkOut: `${check.stdout ?? ''}${check.stderr ?? ''}`.trim().slice(-1500),
         // The model's own work (a helper's step is not one) and what the helpers brought.
         flows: flowsOn, way: run.way ?? wayUsed, helpers: run.helpers ?? [...helpers], ownSteps: run.ownSteps ?? null, modelCalls: run.modelCalls ?? null, helperItems: run.helperItems ?? 0, helperTokens: run.helperTokens ?? 0, indexed: run.indexed ?? null,
         // Past half its time it thought only briefly (the step-down, agent.mjs).

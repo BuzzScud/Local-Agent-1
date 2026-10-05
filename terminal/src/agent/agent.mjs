@@ -9,7 +9,8 @@ import { readInstructions, replaceInstructionBlock, focusedInstructions } from '
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
 import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid, wantsQuestions, questionLines, ASK_NOTE, pageWrongQuestion } from './questions.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault } from './tools.mjs';
+import { CASES_ASK, CASES_FIX, MAX_CASES, casesOf, casesFromList, casesTold, addCase, isTestPath, untested, casesBack } from './cases.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault, patchOps } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -87,6 +88,8 @@ export const MAX_CALLS = 8;
 export const MCP_BACKS = 2;
 // Its own tools on Model (tools.mjs MODEL_TOOL_DEFS), run by the agent itself.
 const MODEL_TOOLS = new Set(['Map', 'CodeSearch', 'Rename', 'TestFirst', 'Remember']);
+// The calls that change the project's files (the cases' ask comes with the first of them).
+const CHANGES = new Set(['Edit', 'Write', 'apply_patch', 'TestFirst', 'Rename']);
 const CODE_SEARCH_CHARS = 6000; // what one CodeSearch brings back, at most (~1,700 tokens)
 // A request's time for thinking (30 Sep 2026): past half of it, it thinks only briefly, so it
 // finishes instead of running out of time (practice task 28 at High ran out of its 30 minutes on
@@ -729,7 +732,10 @@ export class Agent extends EventEmitter {
   tools() {
     const agents = this.agentsOn();
     const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [] });
-    const own = this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all;
+    // CodeSearch only when it can run (4 Oct 2026: qwen3-coder-next called it twice, was told twice
+    // "the code search is off here", and those two errors helped stop it at five in a row).
+    const can = (t) => t.function.name !== 'CodeSearch' || !this.codeSearchOff();
+    const own = (this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all).filter(can);
     // The tools of the user's MCP servers go last, in one order, so the list above them never moves.
     const mcp = this.mcpDefs();
     return mcp.length ? [...own, ...mcp] : own;
@@ -939,6 +945,10 @@ export class Agent extends EventEmitter {
   // The model that compares meanings for the code search: the service's Code search helper
   // (/subagents, helper-models.mjs RemoteEmbedder) when the app set one, else this Mac's.
   searchModel() { return this.searchEmbedder ?? this.embedder; }
+  // Why CodeSearch cannot run here, or null when it can.
+  codeSearchOff() {
+    return !this.helpers.has('rag') ? 'the code search helper (Oracle) is off in /helpers' : !this.searchModel() ? "the small model that compares meanings is off (/effort's Embedder)" : isHomeFolder(this.cwd) ? 'there is no code search of the home folder' : null;
+  }
   codeSearch() {
     const embedder = this.searchModel();
     if (!this.helpers.has('rag') || !embedder || isHomeFolder(this.cwd)) return null;
@@ -1283,6 +1293,57 @@ export class Agent extends EventEmitter {
     }
     return out;
   }
+  // The request's cases (cases.mjs): with the first change of a message, on a model on another machine in a
+  // project with tests, a call of their own lists them with a fixed form of answer (listCases), and the model is
+  // told the list; the check before its answer stands holds it to them. The owner's pick, 4 Oct 2026: asked to
+  // write its plan as the cases, two models of four ignored it twice, so the check had nothing to hold them to.
+  // A plan written as cases adds its own, kept for the whole message (a plan written again after memory filled
+  // dropped Qwen3.6's ten). No list from the call: the model is asked to write them, as before (once, then once more).
+  async casesDue(calls, signal) {
+    const t = this.turn;
+    if (!t || this.isHelper || !this.model?.remote || !this.testCmd || !this.hook('cases') || !this.tools().some((x) => x.function?.name === 'TodoWrite')) return '';
+    const wrotePlan = calls.some((c) => c.name === 'TodoWrite');
+    if (wrotePlan) for (const c of casesOf(t.planAt != null ? this.todos ?? [] : [])) addCase(t, c);
+    if (!t.casesAsked && calls.some((c) => CHANGES.has(c.name))) {
+      t.casesAsked = true;
+      t.toDoSent = true;
+      const listed = await this.listCases(signal);
+      if (signal?.aborted) return '';
+      for (const c of listed) addCase(t, c);
+      if (listed.length) {
+        t.casesListed = true;
+        this.emit('note', { text: `The request's cases, listed by a call of their own: ${listed.length}, each to be tried by a test before the answer stands.`, tone: 'dim' });
+        return casesTold(listed);
+      }
+      if (t.cases?.length) return '';
+      this.emit('note', { text: "Asked it for its plan as the request's cases, each with an example to test.", tone: 'dim' });
+      return CASES_ASK;
+    }
+    if (t.casesAsked && !t.casesListed && !t.casesFixAsked && wrotePlan && !t.cases?.length) {
+      t.casesFixAsked = true;
+      this.emit('note', { text: 'Its plan has no examples to test: asked for them once more.', tone: 'dim' });
+      return CASES_FIX;
+    }
+    return '';
+  }
+
+  // The request's cases from the model, in a call of their own: only the request, and a fixed form of answer
+  // (as the Done check asks its question). [] when it gives none or fails.
+  async listCases(signal) {
+    const request = String(this.turn?.request ?? '').trim();
+    if (!request) return [];
+    try {
+      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 1500,
+        system: 'You list the cases a coding request specifies, so each can be tested. Judge only from the request.',
+        user: `Request:\n${request.slice(0, 4000)}\n\nList every behaviour this request specifies as a case: an example in the code's own terms (a call, a command or an input, as a test would write it) and what it should give. Every form the request names is its own case, and so is each one that must stay as it is. At most ${MAX_CASES}.`,
+        schema: { type: 'object', properties: { cases: { type: 'array', items: { type: 'object', properties: { example: { type: 'string' }, expect: { type: 'string' } }, required: ['example', 'expect'] }, maxItems: MAX_CASES } }, required: ['cases'] } });
+      return casesFromList(r.json?.cases);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      return [];
+    }
+  }
+
   // Who checks that a model on another machine stays on task (drift.mjs): on an Ollama service its Side
   // jobs helper, else the main model; on the owner's other Mac (coding serve) the main model on the
   // server's second lane, as Auto's check does, so the conversation's own lane is not read again.
@@ -2298,6 +2359,25 @@ export class Agent extends EventEmitter {
             const found = await this.lookAtPages(signal);
             if (found) { this.messages.push({ role: 'user', content: auto(found) }); continue; }
           }
+          // The request's cases (cases.mjs): each case of its plan needs a test file changed in this message
+          // that tries its example. Back twice with the ones still untested; then a line names them.
+          if (this.turn.changed && this.model?.remote && this.hook('cases') && !this.turn.casesDone && !signal?.aborted) {
+            const cases = this.turn.cases ?? [];
+            if (cases.length) {
+              const tests = [...(this.turn.wrote?.keys() ?? [])].filter(isTestPath).map((rel) => { try { return readFileSync(join(this.cwd, rel), 'utf8'); } catch { return ''; } }).join('\n');
+              const missing = untested(cases, tests);
+              if (!missing.length) this.turn.casesDone = true;
+              else if ((this.turn.casesBacks ?? 0) < 2) {
+                this.turn.casesBacks = (this.turn.casesBacks ?? 0) + 1;
+                this.emit('note', { text: `${missing.length} of the ${cases.length} cases in its plan have no test yet: sent back (${this.turn.casesBacks} of 2).`, tone: 'warn' });
+                this.messages.push({ role: 'user', content: auto(casesBack(missing)) });
+                continue;
+              } else {
+                this.turn.casesDone = true;
+                this.emit('note', { text: `Untested cases from its plan: ${missing.map((c) => c.example).join(' · ')}`, tone: 'warn' });
+              }
+            }
+          }
           // It changed files and says it is done: does the work cover every
           // part of the request? Once per message; a miss sends it back. Not
           // after you were asked to look at the page yourself (askPage).
@@ -2382,13 +2462,15 @@ export class Agent extends EventEmitter {
         const asked = chased ? '' : this.requestDue();
         const nudge = await this.driftDue(signal);
         if (signal?.aborted) { reason = 'interrupted'; break; }
+        const cases = await this.casesDue(calls, signal);
+        if (signal?.aborted) { reason = 'interrupted'; break; }
         const follow = this.followDue(calls, text);
         // A loop's notes: those a focused path read before it handed over (carriedNotes), then any typed since.
         const stepped = this.messages.at(-1)?.role === 'tool';
         const fresh = stepped ? this.steering?.() ?? [] : [];
         const typed = [...(stepped ? this.carriedNotes?.splice(0) ?? [] : []), ...fresh];
         const said = typed.length ? `(A note from the user, sent while you worked: ${typed.join(' · ')})` : '';
-        const extra = [plan, chased, asked, nudge, ...follow, said].filter(Boolean);
+        const extra = [plan, chased, asked, nudge, cases, ...follow, said].filter(Boolean);
         if (extra.length && this.messages.at(-1)?.role === 'tool') {
           this.messages.at(-1).content += `\n\n${extra.join('\n')}`;
           if (fresh.length) this.emit('steered', { notes: fresh });
@@ -2422,7 +2504,9 @@ export class Agent extends EventEmitter {
         this.turn.paged = false;
         repeats = key === repeatKey && !paged ? repeats + 1 : 0;
         repeatKey = key;
-        errorsInRow = landed ? 0 : errorsInRow + 1;
+        // A reply of only TodoWrite calls that failed is not one more error in a row: a plan sent in the
+        // wrong shape harms no work (4 Oct 2026: Qwen3.6 was stopped by five of them, the repeat stop still holds).
+        errorsInRow = landed ? 0 : calls.length && calls.every((c) => c.name === 'TodoWrite') ? errorsInRow : errorsInRow + 1;
         this.turn.errorsInRow = errorsInRow;
         if (repeats >= 3 || errorsInRow >= 5) {
           reason = 'stuck';
@@ -2456,7 +2540,10 @@ export class Agent extends EventEmitter {
       this.busy = false;
       try {
         const why = this.putBackWhy(reason);
-        if (why) {
+        // A bench that scores part of the work (AGENTIC_PUT_BACK=off; the model shootout, 4 Oct 2026):
+        // the changes stay to be scored, and the note says what the app would have done.
+        if (why && process.env.AGENTIC_PUT_BACK === 'off') this.emit('note', { text: `${why}: the app would put this message's changes back; they stay to be scored (AGENTIC_PUT_BACK=off).`, tone: 'dim' });
+        else if (why) {
           const { back, left } = this.putBack();
           if (back.length) this.emit('note', { text: `${why}, so this message's changes were put back: ${back.join(', ')}.`, tone: 'warn' });
           if (left.length) this.emit('note', { text: `Not put back, because they changed after the last edit: ${left.join(', ')}.`, tone: 'warn' });
@@ -3330,6 +3417,28 @@ export class Agent extends EventEmitter {
     return out;
   }
 
+  // gpt-oss's own way to change files (4 Oct 2026: gpt-oss:120b sent apply_patch three times, was told
+  // there is no such tool, and was stopped): each hunk runs as an Edit and each new file as a Write
+  // (tools.mjs patchOps), so their checks and questions hold; the first that fails ends it.
+  async applyPatch(call, signal) {
+    let raw = {};
+    try { raw = JSON.parse(call.args || '{}'); } catch { raw = { patch: call.args }; }
+    const ops = patchOps(typeof raw === 'string' ? raw : raw.patch ?? raw.input ?? raw.diff ?? '');
+    if (!ops.length) {
+      this.emit('tool', { id: call.id, name: 'Edit', label: 'Update', arg: '', view: { kind: 'error', message: 'A patch with no change in it' }, error: true });
+      return { text: 'The patch has no change in it. Change a file with Edit (path, old_text, new_text), or make one with Write.', error: true };
+    }
+    const said = [];
+    for (const [i, op] of ops.entries()) {
+      const where = ops.length > 1 ? `Change ${i + 1} of ${ops.length}${op.args?.path ? ` (${op.args.path})` : ''}: ` : '';
+      if (op.error) return { text: `${where}${op.error}${i ? ` The ${i} before it went in.` : ''}`, error: true };
+      const out = await this.runStep({ id: `${call.id}-${i}`, name: op.name, args: JSON.stringify(op.args) }, signal);
+      if (out.error || out.stop) return { ...out, text: `${where}${out.text}${i ? ` The ${i} before it went in.` : ''}` };
+      said.push(`${where}${out.text}`);
+    }
+    return { text: said.join('\n') };
+  }
+
   async runStep(call, signal) {
     call = { ...call, name: toolNameOf(call.name, this.way) };
     // A tool of an MCP server: by its name here, through Mcp, or by the tool's own name when
@@ -3343,6 +3452,7 @@ export class Agent extends EventEmitter {
       const made = madeUpCall(call.name, raw);
       if (made && findEntry(this.mcpEntries(), made.tool).entry) return this.runMcp({ ...call, name: MCP_TOOL, args: JSON.stringify(made) }, signal);
     }
+    if (call.name === 'apply_patch') return this.applyPatch(call, signal);
     let parsed = parseArgs(call.name, call.args, this.way);
     if (call.name === 'Write') parsed = this.keepWrite(call, parsed);
     const shown = display(call.name, parsed.args ?? {});
@@ -3384,7 +3494,16 @@ export class Agent extends EventEmitter {
     // A plain read in a command on a model on another machine (cat, head, tail, sed -n, grep -r, rg, ls,
     // find -name): run as Read, Search or List (tools.mjs plainRead), so a long file comes in parts with an
     // outline and a profile, and it counts as a look (4 Oct 2026: a 35 KB file came back cut, twice).
-    const reading = call.name === 'Bash' && this.model?.remote ? plainRead(args.command, this.cwd) : null;
+    let reading = call.name === 'Bash' && this.model?.remote ? plainRead(args.command, this.cwd) : null;
+    // A range of a short file (sed -n '95,120p', tail -n 3) runs as typed: Read gives a short file whole,
+    // from line 1 and unnumbered, so the lines asked for get lost (4 Oct 2026: Qwen3.6 asked for lines
+    // 95-120 of a 183-line file, got all 183, and spent 40 steps hunting line 101 with od and xxd).
+    if (reading?.name === 'Read' && reading.args.offset > 1) {
+      try {
+        const text = readFileSync(resolvePath(this.cwd, reading.args.path).abs, 'utf8');
+        if (text.split('\n').length <= (this.model?.harness?.read?.whole ?? WHOLE_MAX) && text.length <= (this.maxResultChars ?? 12000)) reading = null;
+      } catch { /* Read says what is wrong */ }
+    }
     if (reading) {
       const out = await this.runTool({ id, name: reading.name, args: JSON.stringify(reading.args) }, signal);
       if (typeof out?.text === 'string') out.text = `(Run as ${reading.name}: the app's own tool shows a long file in parts, with an outline. Use ${reading.name} yourself.)\n${out.text}`;
@@ -3424,7 +3543,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, todos: () => this.todos, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
     // A new file goes to the Desktop unless the request says where (tools.mjs desktopDefault); a new code
     // file at the top of a code project is asked about once a message. AGENTIC_DESKTOP_DEFAULT=off: as before (the tests).
     if (call.name === 'Write' && typeof args.path === 'string' && process.env.AGENTIC_DESKTOP_DEFAULT !== 'off' && !this.isHelper && this.turn) {
@@ -3967,7 +4086,7 @@ export class Agent extends EventEmitter {
       return { text: map.ladder ? map.text : `Code files in the project (lines: top-level names):\n${map.text}` };
     }
     if (name === 'CodeSearch') {
-      const off = !this.helpers.has('rag') ? 'the code search helper (Oracle) is off in /helpers' : !this.searchModel() ? "the small model that compares meanings is off (/effort's Embedder)" : isHomeFolder(this.cwd) ? 'there is no code search of the home folder' : null;
+      const off = this.codeSearchOff();
       if (off) { seen({ kind: 'error', message: 'The code search is off' }, true); return { text: `The code search is off here: ${off}. Use Search with a word or name instead.`, error: true }; }
       let found = null;
       try { found = await this.findCode(args.query, signal); } catch (e) { if (signal?.aborted || e.name === 'AbortError') return { text: 'Interrupted.', stop: 'interrupted' }; }
@@ -4637,12 +4756,26 @@ export class Agent extends EventEmitter {
     const held = this.heldBack();
     const asked = held ? [...this.messages.slice(0, -held.length), held[0], { ...held[1], content: '(This output is kept for you: it comes back, whole, right after your notes.)' }] : this.messages;
     let summary = '';
+    let called = false;
     try {
-      const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
       // Thinking stays on (turning it off would change the prompt and read it all
-      // again) but is capped at NOTES_THINK, so the 700 tokens go to the notes.
-      for await (const ev of streamChat({ url: this.url, conversation: this.conversation, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: this.thinking, effort: this.stepEffort(), model: this.model, sampling, maxTokens: NOTES_ROOM + (this.thinking ? NOTES_THINK : 0), thinkCap: NOTES_THINK, slot: this.slots?.main, signal })) {
+      // again) but is capped at NOTES_THINK, so the 700 tokens go to the notes. A service
+      // has no such cap (Ollama: 4 Oct 2026, every note came out empty, the thinking took
+      // all 828 tokens), and there turning it off for one step costs about 1.3 s.
+      const remote = Boolean(this.model?.remote);
+      const think = this.thinking && !remote;
+      const sampling = think ? this.model.thinkingSampling : this.model.sampling;
+      const notesCall = (tools) => streamChat({ url: this.url, conversation: this.conversation, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools, toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: think, effort: this.stepEffort(), model: this.model, sampling, maxTokens: NOTES_ROOM + (remote ? 1024 : think ? NOTES_THINK : 0), thinkCap: NOTES_THINK, slot: this.slots?.main, signal });
+      for await (const ev of notesCall(this.tools())) {
         if (ev.type === 'text') summary += ev.text;
+        if (ev.type === 'tool') called = true;
+      }
+      // A model that answers with a tool call (Ollama does not hold it to toolChoice 'none'; gpt-oss's notes came
+      // out empty every time, 4 Oct 2026) is asked once more with no tools: one more read of the conversation.
+      if (called && beforeCall(summary).trim().length < 40) {
+        summary = '';
+        this.emit('note', { text: 'It answered the notes request with a tool call: asked again with no tools.', tone: 'dim' });
+        for await (const ev of notesCall([])) if (ev.type === 'text') summary += ev.text;
       }
     } catch (e) {
       if (signal?.aborted) throw e;
@@ -4650,7 +4783,7 @@ export class Agent extends EventEmitter {
     }
     summary = beforeCall(summary).trim();
     if (summary.length < 40) {
-      this.emit('note', { text: `Notes came out empty: freeing memory another way`, tone: 'dim' });
+      this.emit('note', { text: `Notes came out empty${called ? ' (it called a tool instead)' : ''}: freeing memory another way`, tone: 'dim' });
       return false;
     }
     const before = this.ctxUsed;

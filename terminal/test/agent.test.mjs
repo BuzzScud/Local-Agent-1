@@ -388,6 +388,32 @@ test('a failed check puts the message\'s edits back; a file another hand changed
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toBe('yours\n');
 });
 
+// A bench that scores part of the work keeps a failed message's edits (the model shootout, 4 Oct 2026:
+// Qwen3.6's 11 of 15 passing tests were put back, and the hidden check scored the untouched copy).
+test('AGENTIC_PUT_BACK=off keeps a failed check\'s edits and says the app would put them back', async () => {
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  return toCsv(rows).toUpperCase();' } } },
+    { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' },
+  ];
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const notes = [];
+  const was = process.env.AGENTIC_PUT_BACK;
+  process.env.AGENTIC_PUT_BACK = 'off';
+  try {
+    const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+    agent.on('note', (e) => notes.push(e.text));
+    await agent.send('add a --json flag to export.mjs');
+  } finally {
+    if (was === undefined) delete process.env.AGENTIC_PUT_BACK; else process.env.AGENTIC_PUT_BACK = was;
+    await fake.close();
+  }
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain('toCsv(rows).toUpperCase()');
+  expect(notes.some((t) => /The check failed: the app would put this message's changes back; they stay to be scored/.test(t))).toBe(true);
+  expect(notes.some((t) => /were put back/.test(t))).toBe(false);
+});
+
 // Only a run of the tests is the check (3 Oct 2026): before, the last command with "test" in it
 // decided, so a search of the test file after the tests kept a broken change or put a good one back.
 async function checkedBy(newText, after) {

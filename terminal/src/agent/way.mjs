@@ -47,6 +47,7 @@ export const HOOKS = [
   { id: 'read-first', label: 'Read before claiming', what: 'a reply that says it found or has what it needs, when it has seen only outlines of those files, is told to read the part first' },
   { id: 'to-do', label: 'Plan for several asks', what: 'a request with several asks and no plan after 3 steps: it is told to write its plan (TodoWrite), which then comes back every 5 steps' },
   { id: 'page-read', label: 'What a reader sees', what: 'each page it wrote is opened (on a Mac in WebKit, its scripts run) before the answer stands; one mostly empty to a reader goes back once' },
+  { id: 'cases', label: 'Cases have tests', what: "remote models, in a project with tests: its plan is the request's cases, each with an example, and each needs a test that tries it before the answer stands (back twice, then a line)" },
   { id: 'second-look', label: 'Second look', what: 'after real work (commands, files written, pages fetched), a model checks the answer against what the app saw (runs, errors, walls, files only outlined) and sends it back once if it does not hold' },
   { id: 'drift', label: 'Stays on task', what: 'remote models: every 10 steps a helper model checks the work still serves your request, and nudges it back if not; off until you switch it on' },
 ];
@@ -61,7 +62,9 @@ export const OPT_IN_HOOKS = new Set(['drift']);
 // blocked, results, read-first, to-do and second-look (4 Oct 2026, the owner's picks after a Qwen run that
 // tested something else behind a login and said "all 24 passed" after 22 of 24): on for Model way too.
 // page-read (4 Oct 2026, the owner's pick after a page of 8 empty sections was called done): on for Model way too.
-export const MODEL_HOOKS = ['next-step', 'tests', 'stuck', 'said-done', 'look-first', 'real-files', 'blocked', 'results', 'read-first', 'to-do', 'page-read', 'second-look'];
+// done and cases (4 Oct 2026, the owner's pick after the model shootout: every model called its work done with
+// forms the request listed never tried): on for Model way too.
+export const MODEL_HOOKS = ['next-step', 'tests', 'done', 'stuck', 'said-done', 'look-first', 'real-files', 'blocked', 'results', 'read-first', 'to-do', 'page-read', 'cases', 'second-look'];
 export const hooksEnv = (env = process.env) => env.AGENTIC_HOOKS;
 
 // The hooks on, as a Set: AGENTIC_HOOKS when set ("all", "off", or a list such as
