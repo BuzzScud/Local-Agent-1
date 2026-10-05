@@ -166,3 +166,35 @@ export function untested(cases, testText) {
 
 // What goes back: the cases still without a test, a line each.
 export const casesBack = (missing) => `These cases have no test yet: no test file changed in this message uses the example as it is written.\n${missing.map((c, i) => `${i + 1}. ${c.text}`).join('\n')}\nAdd a test for each one that feeds in just that example (make the files or folders it names in the test's own folder), run the tests, then answer. If one cannot be tested, say why in one line.`;
+
+// Case review (agent.mjs reviewCases, the hook 'case-review'; 5 Oct 2026, the owner's pick). With the list
+// complete and every case tested, runs still missed parts: the model's own tests held the same slip as its code
+// (tail read from the top, and its test expected that), so they passed. Before the answer stands, once a message,
+// a call of its own reads the changed code against each case: what the code gives for the example, worked
+// through by hand, then whether that is what the request says. The ones that read wrong go back once, marked
+// as a read that can be wrong, to be checked by running them.
+export const REVIEW_MAX = 40; // the cases one review reads
+export const REVIEW_CODE = 24_000; // characters of code it is given (past that, the message's changes instead)
+export const REVIEW_SYSTEM = 'You review code against the cases a request specifies. Judge only from the request and the code. Follow the code as written; do not assume it is right.';
+export const reviewAsk = ({ request, code, cases }) => `Request:\n${String(request).slice(0, 6000)}\n\nThe code as it is now:\n${code}\n\nCases (an example, then what the request says for it):\n${cases.map((c, i) => `${i + 1}. ${c.text}`).join('\n')}\n\nFor each case, in order:\n- says: what the request says this example must give, in the request's own words.\n- gives: follow the code by hand with the example (which branch runs, what each index, count and offset comes to) and say in one line what the code gives. Where the result depends on a file or other data, take a small one (a file of 12 lines, say) and work the numbers through. Where the case needs a check (a file that is not there, a sign or a flag to turn away), name the line that makes that check; if no line makes it, the code does not.\n- ok: true when gives is what says asks for, false when it is not.`;
+export const REVIEW_SCHEMA = (n) => ({ type: 'object', properties: { reviews: { type: 'array', items: { type: 'object', properties: { n: { type: 'integer' }, says: { type: 'string' }, gives: { type: 'string' }, ok: { type: 'boolean' } }, required: ['n', 'says', 'gives', 'ok'] }, maxItems: n } }, required: ['reviews'] });
+// A sign the request spells out (gapCases) as an example a review can follow: two of the listed examples joined
+// by it, or one sent to a file or put inside $( ).
+export function signSample(sign, examples = []) {
+  const [a = 'cat notes.txt', b = 'ls'] = examples.filter((x) => /^[a-z]/.test(x) && !/[|;&<>$]/.test(x));
+  if (sign === '$(') return `${a.split(/\s+/)[0]} $(echo ${a.split(/\s+/).at(-1)})`;
+  if (/^(>>?|<)$/.test(sign)) return `${a} ${sign} out.txt`;
+  return `${a} ${sign} ${b}`;
+}
+// The cases a review read as wrong: { example, text, gives }, eight at most, each once.
+export function reviewWrong(reviews, cases) {
+  const out = [];
+  for (const r of Array.isArray(reviews) ? reviews : []) {
+    const c = cases[Number(r?.n) - 1];
+    if (!c || r.ok !== false || out.some((x) => x.example === c.example)) continue;
+    out.push({ example: c.example, text: c.text, gives: String(r.gives ?? '').replace(/\s+/g, ' ').trim().slice(0, 200), says: String(r.says ?? '').replace(/\s+/g, ' ').trim().slice(0, 160) });
+    if (out.length === 8) break;
+  }
+  return out;
+}
+export const reviewBack = (wrong, of) => `(A fresh read of your code against the request's cases thinks ${wrong.length} of the ${of} come out wrong. It read the code and did not run it, so it can be wrong:\n${wrong.map((w, i) => `${i + 1}. ${w.text}${w.says ? `\n   the request: ${w.says}` : ''}\n   as read, the code gives: ${w.gives}`).join('\n')}\nCheck each one by running it: a test that expects what the request says, or a short command. Fix what is real, run the tests, then answer; when one is fine as it is, say so in one line.)`;

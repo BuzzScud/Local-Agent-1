@@ -514,8 +514,23 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   a file is refused; a test file in a code project is never asked about by the Desktop default.
 - **Cases have tests** (hook `cases`, `terminal/src/agent/cases.mjs`, on for Model with `done`): on a model on another
   machine, in a project with tests, the first change brings a call of its own that lists the request's cases
-  (`listCases`, a fixed form of answer), and before the answer stands each case's example must appear in a test file
-  changed in the message (`untested`): back twice, then a line. Not yet measured to help.
+  (`listCases`): two halves, what it asks for and what must stay as it is, 25 each, in the request's own words, the
+  input alone. Left out: a call with more arguments than the request gives the function (`madeUp`), a sentence, a
+  made-up shape of a result. A flag or a shell sign the request spells out that no case uses is a case too
+  (`gapCases`). Before the answer stands, each listed example must be in a test file changed in the message as
+  written (`untested`; a plan's own cases match by form): back twice, then a line. The cases go with the notes when
+  memory fills.
+- **Case review** (hook `case-review`, on for Model; 5 Oct 2026): once a message, after that, a call of its own reads
+  the changed code (not the tests) against each case: what the request says, what the code gives when followed by
+  hand, ok or not (`reviewAsk`, `REVIEW_SCHEMA`). What reads wrong goes back once, as a read that can be wrong, to be
+  checked by running it. Tried on a correct solution with three bugs put in: Qwen3.6 found two and raised none on the
+  correct one; qwen3-coder-next found none.
+- **Thinking on an Ollama service** (5 Oct 2026; it takes no cap of ours): a reply that thinks past the model's
+  thinking budget is stopped and asked for again with thinking off (`generate`'s `noThink`; one reply had thought 14
+  minutes), and past half a request's time its replies are asked for with thinking off (`serviceSteppedDown`).
+- **Steps not lost** (`mendEdit`, runStep): an Edit with no path goes to the one seen file that holds its old text, a
+  Write of old and new text is an Edit, and `cd /a-folder-not-there && cmd` runs in the project folder and says so.
+  The bench's `--keep` keeps each run's files beside its results.
 - **The lean harness** (the owner, shown Claude Code's harness beside this one: "can we make it just like this?";
   `way.mjs` `leanFrom`, `LEAN_LINES`): one switch, off unless set (settings.json `"lean"`, `AGENTIC_LEAN`,
   `/hooks lean` · `/hooks full`, `coding -p --lean`, the bench's and the shootout's `--lean`). On: Who decides is Model,

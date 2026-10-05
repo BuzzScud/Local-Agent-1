@@ -11,7 +11,7 @@ process.env.AGENTIC_MEMORY_SAVE = 'off';
 const { Agent } = await import('../src/agent/agent.mjs');
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const { prepare } = await import('../src/agent/tools.mjs');
-const { CASES_ASK, casesOf, caseProbe, untested, isTestPath, casesFromList, gapCases } = await import('../src/agent/cases.mjs');
+const { CASES_ASK, casesOf, caseProbe, untested, isTestPath, casesFromList, gapCases, reviewWrong, reviewBack, signSample } = await import('../src/agent/cases.mjs');
 const { MODEL_HOOKS } = await import('../src/agent/way.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
 const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
@@ -266,4 +266,75 @@ test('a listed example must be in a test as written, and a made-up shape of its 
   expect(untested(list, `${tests} assert.equal(plainRead('cat nonexistent.txt', cwd), null); plainRead('tail -n 3 notes.txt', cwd);`)).toEqual([]);
   // A case the model wrote in its own plan keeps the loose match (its FILE and N stand for any).
   expect(untested(casesOf([{ text: '`head -n N FILE` → Read' }]), "plainRead('head -n 5 a.txt', cwd)")).toEqual([]);
+});
+
+// With every case tested, runs still missed parts: the model's tests held the same slip as its code. A call
+// of its own reads the changed code against each case, and what reads wrong goes back once.
+test('case review: the changed code is read against each case; what reads wrong goes back once, to be checked by running it', async () => {
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: 'more.mjs', content: 'export const g = (x) => x + 1;\n' } } },
+    LIST([{ example: 'f(2)', expect: '2' }, { example: 'g(3)', expect: '3' }]),
+    { tool: { name: 'Write', args: { path: 'more.test.mjs', content: "import { f } from './lib.mjs';\nimport { g } from './more.mjs';\nf(2); g(3);\n" } } },
+    { text: 'Done: f and g are tested.' },
+    { text: JSON.stringify({ reviews: [{ n: 1, gives: 'f returns its argument: 2', ok: true }, { n: 2, says: 'g(3) is 3', gives: 'g returns x + 1: 4, not 3', ok: false }, { n: 9, gives: 'no such case', ok: false }] }) },
+    { tool: { name: 'Edit', args: { path: 'more.mjs', old_text: 'x + 1', new_text: 'x' } } },
+    { text: 'Fixed: g(3) gave 4; it gives 3 now.' }, { text: 'again' },
+  ]);
+  try {
+    const a = agentOn(fake.url, { hooks: ['cases', 'case-review'] });
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    await a.send('add g to the project, with tests');
+    // The review saw the request, the code it changed (not the test file) and both cases.
+    const asked = fake.requests.find((r) => JSON.stringify(r.messages ?? '').includes('follow the code by hand'));
+    const body = JSON.stringify(asked.messages);
+    expect(body).toContain('--- more.mjs');
+    expect(body).toContain('export const g = (x) => x + 1;');
+    expect(body).not.toContain('--- more.test.mjs');
+    expect(body).toContain('2. `g(3)` → 3');
+    // Only the case read as wrong went back, once, as a read that can be wrong.
+    const back = autoNotes(a).filter((t) => /A fresh read of your code against the request's cases/.test(t));
+    expect(back).toHaveLength(1);
+    expect(back[0]).toContain('thinks 1 of the 2 come out wrong');
+    expect(back[0]).toContain('1. `g(3)` → 3\n   the request: g(3) is 3\n   as read, the code gives: g returns x + 1: 4, not 3');
+    expect(back[0]).not.toContain('`f(2)`');
+    expect(notes.some((t) => /Case review: 1 of the 2 cases read as wrong .*sent back once to be checked\. · g\(3\)/.test(t))).toBe(true);
+    expect(a.messages.at(-1).content).toBe('Fixed: g(3) gave 4; it gives 3 now.');
+    expect(fake.requests.filter((r) => JSON.stringify(r.messages ?? '').includes('follow the code by hand'))).toHaveLength(1);
+  } finally { await fake.close(); }
+});
+
+test('case review: all read right, or no answer, and the answer stands; off without its hook', async () => {
+  const script = (review) => [
+    { tool: { name: 'Write', args: { path: 'more.mjs', content: 'export const g = (x) => x;\n' } } },
+    LIST([{ example: 'g(3)', expect: '3' }]),
+    { tool: { name: 'Write', args: { path: 'more.test.mjs', content: "import { g } from './more.mjs';\ng(3);\n" } } },
+    { text: 'Done.' }, ...(review ? [review] : []), { text: 'again' },
+  ];
+  for (const [review, said, hooks] of [
+    [{ text: JSON.stringify({ reviews: [{ n: 1, gives: '3', ok: true }] }) }, /Case review: the code reads right for all 1 cases/, ['cases', 'case-review']],
+    [{ text: 'I cannot say.' }, /Case review: no answer came back/, ['cases', 'case-review']],
+    [null, null, ['cases']],
+  ]) {
+    const fake = await startFakeServer(script(review));
+    // a folder of its own each time: the file it writes must be new
+    const cwd = mkdtempSync(join(tmpdir(), 'agentic-cases-r-'));
+    writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'mini', type: 'module', scripts: { test: 'node --test' } }));
+    try {
+      const a = agentOn(fake.url, { hooks, cwd, system: systemPrompt({ cwd, git: 'none' }) });
+      const notes = [];
+      a.on('note', (e) => notes.push(e.text));
+      await a.send('add g');
+      expect(a.messages.at(-1).content).toBe('Done.');
+      expect(autoNotes(a).some((t) => /A fresh read of your code/.test(t))).toBe(false);
+      if (said) expect(notes.some((t) => said.test(t))).toBe(true);
+      else expect(notes.some((t) => /Case review/.test(t))).toBe(false);
+    } finally { await fake.close(); }
+  }
+  expect(reviewWrong([{ n: 1, gives: 'a', ok: false }, { n: 1, gives: 'again', ok: false }, { n: 2, gives: 'b', ok: true }], [{ example: 'x(1)', text: '`x(1)` → 1' }, { example: 'y(1)', text: '`y(1)` → 1' }])).toEqual([{ example: 'x(1)', text: '`x(1)` → 1', gives: 'a', says: '' }]);
+  expect(reviewBack([{ example: 'x(1)', text: '`x(1)` → 1', gives: 'a' }], 2)).toContain('It read the code and did not run it, so it can be wrong');
+  // A sign the request spells out, as an example the review can follow.
+  expect(signSample('&&', ['cat notes.txt', 'ls src', 'cat a | b'])).toBe('cat notes.txt && ls src');
+  expect(signSample('>', ['cat notes.txt'])).toBe('cat notes.txt > out.txt');
+  expect(signSample('$(', ['cat notes.txt'])).toBe('cat $(echo notes.txt)');
 });
