@@ -75,6 +75,7 @@ export const HOOKS = [
   { id: 'to-do', label: 'Plan for several asks', what: 'a request with several asks and no plan after 3 steps: it is told to write its plan (TodoWrite), which then comes back every 5 steps' },
   { id: 'page-read', label: 'What a reader sees', what: 'each page it wrote is opened (on a Mac in WebKit, its scripts run) before the answer stands; one mostly empty to a reader goes back once' },
   { id: 'cases', label: 'Cases have tests', what: "remote models, in a project with tests: its plan is the request's cases, each with an example, and each needs a test that tries it before the answer stands (back twice, then a line)" },
+  { id: 'case-review', label: 'Case review', what: "remote models: before the answer stands, a fresh read of the changed code against each of the request's cases; the ones that read wrong go back once (it can be wrong)" },
   { id: 'second-look', label: 'Second look', what: 'after real work (commands, files written, pages fetched), a model checks the answer against what the app saw (runs, errors, walls, files only outlined) and sends it back once if it does not hold' },
   { id: 'drift', label: 'Stays on task', what: 'remote models: every 10 steps a helper model checks the work still serves your request, and nudges it back if not; off until you switch it on' },
 ];
@@ -91,7 +92,7 @@ export const OPT_IN_HOOKS = new Set(['drift']);
 // page-read (4 Oct 2026, the owner's pick after a page of 8 empty sections was called done): on for Model way too.
 // done and cases (4 Oct 2026, the owner's pick after the model shootout: every model called its work done with
 // forms the request listed never tried): on for Model way too.
-export const MODEL_HOOKS = ['next-step', 'tests', 'done', 'stuck', 'said-done', 'look-first', 'real-files', 'blocked', 'results', 'read-first', 'to-do', 'page-read', 'cases', 'second-look'];
+export const MODEL_HOOKS = ['next-step', 'tests', 'done', 'stuck', 'said-done', 'look-first', 'real-files', 'blocked', 'results', 'read-first', 'to-do', 'page-read', 'cases', 'case-review', 'second-look'];
 export const hooksEnv = (env = process.env) => env.AGENTIC_HOOKS;
 
 // The hooks on, as a Set: AGENTIC_HOOKS when set ("all", "off", or a list such as

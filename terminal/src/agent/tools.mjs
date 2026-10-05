@@ -1031,8 +1031,12 @@ export async function execute(name, args, prepared, env) {
       mkdirSync(dirname(prepared.abs), { recursive: true });
       writeFileSync(prepared.abs, prepared.after);
       const verb = prepared.created ? 'Created' : 'Updated';
+      // A file outside the project is named to the model by its full path ("~/Desktop/x.html"), not as a climb
+      // out of the folder ("../Shared/Desktop/x.html" was read as a guess at where it went, 5 Oct 2026).
+      const h = env.home ?? homedir();
+      const named = prepared.rel.startsWith('..') ? (prepared.abs.startsWith(`${h}/`) ? `~${prepared.abs.slice(h.length)}` : prepared.abs) : prepared.rel;
       return {
-        text: `${verb} ${prepared.rel} (+${prepared.additions} −${prepared.removals} lines).`,
+        text: `${verb} ${named} (+${prepared.additions} −${prepared.removals} lines).`,
         view: { kind: 'diff', path: prepared.rel, created: prepared.created, hunk: prepared.hunk, additions: prepared.additions, removals: prepared.removals, lines: prepared.after.split('\n').length },
       };
     }
@@ -1203,10 +1207,16 @@ const TEST_FILE = /[._](test|spec)\.[a-z]+$|^test_[\w-]+\.py$/i;
 const NAMES_A_PLACE = /\b(in|into|to|under|inside) (this|the|my) (folder|project|repo|repository|directory|codebase)\b|\b(right )?here\b|\bin (src|docs|lib|test|tests|app)\b/i;
 export function desktopDefault(path, { cwd, home, request = '', code = false } = {}) {
   const p = String(path ?? '').trim().replace(/^\.\//, '');
+  const desktop = join(home, 'Desktop');
+  // A Desktop that is not this user's ("/Users/Shared/Desktop/x.html", "/home/user/Desktop/…"): the model does
+  // not know the user's name and made one up. Unless the request names that folder, the user's own Desktop is
+  // meant (5 Oct 2026: asked to "download it to my desktop" from the home folder in Bypass, Qwen3.6 wrote
+  // /Users/Shared/Desktop/Thesis_API_Docs.html, the app made the folder, and it rewrote that file three times).
+  const other = /^\/(?:Users|home)\/([^/]+)\/Desktop\/(.+)$/.exec(p);
+  if (other && !p.startsWith(`${desktop}/`) && !String(request).includes(`${other[1]}/Desktop`)) return { to: join(desktop, ...other[2].split('/').filter(Boolean)), notYours: `/${p.split('/')[1]}/${other[1]}/Desktop` };
   if (!p || isAbsolute(p) || p.startsWith('~')) return null;
   const segs = p.split('/').filter(Boolean);
   const name = segs.at(-1);
-  const desktop = join(home, 'Desktop');
   if (cwd === desktop || `${cwd}/`.startsWith(`${desktop}/`) && segs[0] !== 'Desktop') return null; // already on the Desktop
   // "Desktop/x.html" from a folder with no Desktop of its own means the Desktop.
   if (segs[0] === 'Desktop' && segs.length > 1 && !existsSync(join(cwd, 'Desktop'))) return { to: join(desktop, ...segs.slice(1)) };

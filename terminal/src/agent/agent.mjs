@@ -9,7 +9,7 @@ import { readInstructions, replaceInstructionBlock, focusedInstructions } from '
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
 import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid, wantsQuestions, questionLines, ASK_NOTE, pageWrongQuestion } from './questions.mjs';
-import { CASES_ASK, CASES_FIX, MAX_CASES, casesOf, casesFromList, gapCases, casesTold, addCase, isTestPath, untested, casesBack } from './cases.mjs';
+import { CASES_ASK, CASES_FIX, MAX_CASES, casesOf, casesFromList, gapCases, casesTold, addCase, isTestPath, untested, casesBack, REVIEW_MAX, REVIEW_CODE, REVIEW_SYSTEM, REVIEW_SCHEMA, reviewAsk, reviewWrong, reviewBack, signSample } from './cases.mjs';
 import { toolSchemas, parseArgs, normalizeArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault, patchOps } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
@@ -1363,6 +1363,35 @@ export class Agent extends EventEmitter {
     }
   }
 
+  // Case review: the changed code (not its tests), read against each case of the request by a call of its
+  // own with a fixed form of answer. What goes back to the model, or '' (all read right, nothing to read, no answer).
+  async reviewCases(signal) {
+    const t = this.turn;
+    // A sign the request spells out (gapCases) is read as an example made of two listed ones; a flag alone has none.
+    const listed = (t?.cases ?? []).filter((c) => !c.sign && !c.probe).map((c) => c.example);
+    const cases = (t?.cases ?? []).filter((c) => !c.probe).map((c) => (c.sign ? { ...c, example: signSample(c.sign, listed), text: `\`${signSample(c.sign, listed)}\` → what the request says about \`${c.sign}\`` } : c)).slice(0, REVIEW_MAX);
+    const request = String(t?.request ?? '').trim();
+    if (!cases.length || !request) return '';
+    let code = [...(t.wrote?.keys() ?? [])].filter((rel) => !isTestPath(rel)).map((rel) => { try { return `--- ${rel}\n${readFileSync(join(this.cwd, rel), 'utf8')}`; } catch { return ''; } }).filter(Boolean).join('\n\n');
+    if (!code) return '';
+    if (code.length > REVIEW_CODE) code = t.diffs?.trim() ? `(The changed files are long, so these are this message's changes: + added, - removed.)\n${t.diffs.slice(0, REVIEW_CODE)}` : code.slice(0, REVIEW_CODE);
+    const t0 = Date.now();
+    this.emit('busy', { task: 'reading the code against the cases' });
+    try {
+      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 4000, system: REVIEW_SYSTEM, user: reviewAsk({ request, code, cases }), schema: REVIEW_SCHEMA(cases.length) });
+      const secs = Math.max(1, Math.round((Date.now() - t0) / 1000));
+      if (!Array.isArray(r.json?.reviews)) { this.emit('note', { text: `Case review: no answer came back (${secs} s); the answer stands as it is.`, tone: 'dim', fold: true }); return ''; }
+      const wrong = reviewWrong(r.json.reviews, cases);
+      if (!wrong.length) { this.emit('note', { text: `Case review: the code reads right for all ${cases.length} cases (${secs} s).`, tone: 'dim', fold: true }); return ''; }
+      this.emit('note', { text: `Case review: ${wrong.length} of the ${cases.length} cases read as wrong (${secs} s); sent back once to be checked. · ${wrong.slice(0, 4).map((w) => w.example).join(' · ')}`, tone: 'warn' });
+      return reviewBack(wrong, cases.length);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      this.emit('note', { text: 'Case review: no answer came back; the answer stands as it is.', tone: 'dim', fold: true });
+      return '';
+    }
+  }
+
   // Who checks that a model on another machine stays on task (drift.mjs): on an Ollama service its Side
   // jobs helper, else the main model; on the owner's other Mac (coding serve) the main model on the
   // server's second lane, as Auto's check does, so the conversation's own lane is not read again.
@@ -1917,7 +1946,8 @@ export class Agent extends EventEmitter {
     // Bypass permissions: the prompt's rules say commands stay in the folder, offline. They are
     // kept word for word (the service's cache), so the request says what is true while it is on.
     if (this.mode === 'bypass' && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.open = { request, notes: BYPASS_OPEN };
+      // With where the user's own folders are: it does not know their name, and guessed /Users/Shared/Desktop (5 Oct 2026).
+      this.turn.open = { request, notes: `${BYPASS_OPEN} The user's home folder is ${this.home}; their Desktop is ${this.desktopDir}.` };
     }
     if (math && request?.role === 'user' && typeof request.content === 'string') {
       try {
@@ -2412,6 +2442,13 @@ export class Agent extends EventEmitter {
                 this.emit('note', { text: `Untested cases from its plan: ${missing.map((c) => c.example).join(' · ')}`, tone: 'warn' });
               }
             }
+          }
+          // Case review (cases.mjs): once a message, when the cases have their tests or their send-backs are
+          // used up, a call of its own reads the changed code against each case; what reads wrong goes back once.
+          if (this.turn.changed && this.model?.remote && this.hook('case-review') && !this.turn.caseReviewed && this.turn.cases?.length && !signal?.aborted) {
+            this.turn.caseReviewed = true;
+            const read = await this.reviewCases(signal);
+            if (read && !signal?.aborted) { this.messages.push({ role: 'user', content: auto(read) }); continue; }
           }
           // It changed files and says it is done: does the work cover every
           // part of the request? Once per message; a miss sends it back. Not
@@ -3183,7 +3220,7 @@ export class Agent extends EventEmitter {
     // A retry after an answer that skipped the MCP tool its request is about (mcpFocus): this one
     // step offers only that tool, and thinks (a model that cannot think answers without it).
     if (focus === undefined) { focus = this.turn?.mcpFocus ?? null; if (this.turn) this.turn.mcpFocus = null; }
-    const thinking = (this.thinking || Boolean(focus)) && !noThink && !this.serviceSteppedDown();
+    const thinking = (this.thinking || Boolean(focus)) && !noThink && !this.turn?.overThought && !this.serviceSteppedDown();
     const sampling = thinking ? this.model.thinkingSampling : this.model.sampling;
     // A model on a service with its own Reply length (/effort): up to that, never more than the
     // context has left under the trim line (at least the answer's 2,048).
@@ -3307,7 +3344,10 @@ export class Agent extends EventEmitter {
     }
     if (turn.overThought) {
       this.stats.outTokens += tokensOf(turn.reasoning);
-      this.emit('note', { text: `It thought past ${kTok(serviceCap)} in one reply (the service takes no thinking cap): that reply is asked for again with thinking off.`, tone: 'dim' });
+      // And the rest of this request with it off: thinking stopped at the cap is thrown away, and a model that
+      // passes it once passes it again (5 Oct 2026: six capped replies in one run, about 100 s each, 10 of its 25 minutes).
+      if (this.turn) this.turn.overThought = true;
+      this.emit('note', { text: `It thought past ${kTok(serviceCap)} in one reply (the service takes no thinking cap): that reply is asked for again with thinking off, and so is the rest of this request.`, tone: 'dim' });
       return this.generate(signal, { retry, textOnly, maxTokens: cap, focus, noThink: true });
     }
     turn.calls = turn.calls.filter(Boolean).filter((c) => c.name);
@@ -3615,9 +3655,10 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, todos: () => this.todos, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, home: this.home, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, todos: () => this.todos, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
     // A new file goes to the Desktop unless the request says where (tools.mjs desktopDefault); a new code
     // file at the top of a code project is asked about once a message. AGENTIC_DESKTOP_DEFAULT=off: as before (the tests).
+    let notYours = '';
     if (call.name === 'Write' && typeof args.path === 'string' && process.env.AGENTIC_DESKTOP_DEFAULT !== 'off' && !this.isHelper && this.turn) {
       const t = this.turn;
       let where = null;
@@ -3637,7 +3678,8 @@ export class Agent extends EventEmitter {
         args.path = where.to;
         this.desktopAsked = true; // the Desktop's opening for a new file (desktopOpen)
         t.desktopDefaulted = this.tilde(where.to);
-        this.emit('note', { text: `New file on your Desktop: ${this.tilde(where.to)} (new files go there unless you say where).`, tone: 'dim', fold: true });
+        if (where.notYours) { notYours = `(${where.notYours} is not this user's Desktop, so the file is on their own: ${this.tilde(where.to)}. Use that path from here on.)`; this.emit('note', { text: `${where.notYours} is not your Desktop: written to yours, ${this.tilde(where.to)}.`, tone: 'warn' }); }
+        else this.emit('note', { text: `New file on your Desktop: ${this.tilde(where.to)} (new files go there unless you say where).`, tone: 'dim', fold: true });
       }
     }
     let prepared;
@@ -3857,6 +3899,7 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: `${prepared.rel} does not parse yet: ${broken}`, tone: 'warn' });
       }
     }
+    if (notYours && !out.error && typeof out.text === 'string') out.text += `\n${notYours}`;
     // A Write that landed has used (or replaced) the kept content.
     if (!out.error && call.name === 'Write' && this.keptWrite) {
       if (parsed.fromKept) this.emit('note', { text: `Wrote the kept content to ${prepared.rel}; it was not written again.`, tone: 'dim' });

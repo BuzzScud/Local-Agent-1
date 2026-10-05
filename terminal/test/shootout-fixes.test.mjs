@@ -274,7 +274,13 @@ test('a reply that thinks past the budget on an Ollama service is stopped and as
     expect(await a.send('hello')).toBe('done');
     const thinks = svc.seen.filter((x) => x.path === '/api/chat').map((x) => x.body.think);
     expect(thinks).toEqual([true, false]);
-    expect(notes.some((t) => /It thought past .* in one reply \(the service takes no thinking cap\): that reply is asked for again with thinking off/.test(t))).toBe(true);
+    expect(notes.some((t) => /It thought past .* in one reply \(the service takes no thinking cap\): that reply is asked for again with thinking off, and so is the rest of this request/.test(t))).toBe(true);
+    // The rest of this request too: stopped thinking is thrown away, and it would pass the cap again.
+    await a.generate();
+    expect(svc.seen.filter((x) => x.path === '/api/chat').at(-1).body.think).toBe(false);
+    // The next message thinks again.
+    await a.send('and again');
+    expect(svc.seen.filter((x) => x.path === '/api/chat').map((x) => x.body.think).slice(3, 5)).toEqual([true, false]);
     expect(String(a.messages.at(-1).content)).toContain('From coder:30b');
   } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
 });

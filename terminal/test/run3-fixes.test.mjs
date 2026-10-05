@@ -165,3 +165,43 @@ test('a List of a file reads it; your answers to its questions bring a Remember 
     expect(results.find((r) => r.startsWith('The user answered: All'))).toContain('If one of these answers will hold next time too, save it with Remember: one short sentence.');
   } finally { await fake.close(); }
 });
+
+// 5 Oct 2026, the owner's session from the home folder in Bypass: "download it to my desktop". Qwen3.6 did not
+// know the user's name and wrote /Users/Shared/Desktop/Thesis_API_Docs.html; the app made that folder, called the
+// file "../Shared/Desktop/…", and the model rewrote it there three times.
+test('a Desktop that is not this user\'s means their own, unless the request names that folder', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-run3-home4-'));
+  const at = (p, request = 'download it to my desktop') => desktopDefault(p, { cwd: home, home, request, code: false });
+  expect(at('/Users/Shared/Desktop/Thesis_API_Docs.html')).toEqual({ to: join(home, 'Desktop', 'Thesis_API_Docs.html'), notYours: '/Users/Shared/Desktop' });
+  expect(at('/home/user/Desktop/api/tabs.md')).toEqual({ to: join(home, 'Desktop', 'api', 'tabs.md'), notYours: '/home/user/Desktop' });
+  expect(at('/Users/yourname/Desktop/x.html')).toEqual({ to: join(home, 'Desktop', 'x.html'), notYours: '/Users/yourname/Desktop' });
+  expect(at(join(home, 'Desktop', 'x.html'))).toBeNull(); // their own Desktop, by its full path
+  expect(at('/Users/Shared/Desktop/x.html', 'save it in /Users/Shared/Desktop for everyone')).toBeNull();
+  expect(at('/Users/Shared/reports/x.html')).toBeNull(); // not a Desktop: as it was
+});
+
+test('in a conversation: the file lands on the real Desktop, and the model is told where it is', async () => {
+  const was = process.env.AGENTIC_DESKTOP_DEFAULT;
+  process.env.AGENTIC_DESKTOP_DEFAULT = 'on';
+  const home = mkdtempSync(join(tmpdir(), 'agentic-run3-home5-'));
+  mkdirSync(join(home, 'Desktop'));
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: '/Users/agentic-nobody-here/Desktop/Thesis_API_Docs.html', content: '<p>the api</p>\n' } } },
+    { text: 'It is on your Desktop.' }, { text: 'again' },
+  ]);
+  try {
+    const a = agentOn(fake.url, { home, mode: 'bypass' });
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    await a.send('download it to my desktop');
+    expect(readFileSync(join(home, 'Desktop', 'Thesis_API_Docs.html'), 'utf8')).toBe('<p>the api</p>\n');
+    expect(existsSync('/Users/agentic-nobody-here')).toBe(false);
+    const out = String(a.messages.filter((m) => m.role === 'tool' && !m.opening).pop().content);
+    expect(out).toContain('Created ~/Desktop/Thesis_API_Docs.html');
+    expect(out).toContain("(/Users/agentic-nobody-here/Desktop is not this user's Desktop, so the file is on their own: ~/Desktop/Thesis_API_Docs.html. Use that path from here on.)");
+    expect(notes).toContain('/Users/agentic-nobody-here/Desktop is not your Desktop: written to yours, ~/Desktop/Thesis_API_Docs.html.');
+    // In Bypass the request says where the user's own folders are.
+    const sent = JSON.stringify(fake.requests.find((r) => r.stream && r.messages).messages);
+    expect(sent).toContain(`The user's home folder is ${home}; their Desktop is ${join(home, 'Desktop')}.`);
+  } finally { process.env.AGENTIC_DESKTOP_DEFAULT = was; await fake.close(); }
+});

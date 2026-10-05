@@ -125,6 +125,6 @@ test('/hooks lean and /hooks full in the window', async () => {
   expect(r.snapshots.lean).toMatch(/Hooks · all off: the lean harness/);
   expect(r.snapshots.lean).toMatch(/off\s+Tests after a change/);
   expect(r.snapshots.lean).not.toMatch(/\d\s+on\s+/);
-  expect(r.snapshots.full).toMatch(/Hooks · 14 of 22 on while the model decides/);
+  expect(r.snapshots.full).toMatch(/Hooks · 15 of 23 on while the model decides/);
   expect(r.snapshots.full).toMatch(/on\s+Tests after a change/);
 }, T);
