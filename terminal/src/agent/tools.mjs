@@ -1214,6 +1214,12 @@ export function desktopDefault(path, { cwd, home, request = '', code = false } =
   // /Users/Shared/Desktop/Thesis_API_Docs.html, the app made the folder, and it rewrote that file three times).
   const other = /^\/(?:Users|home)\/([^/]+)\/Desktop\/(.+)$/.exec(p);
   if (other && !p.startsWith(`${desktop}/`) && !String(request).includes(`${other[1]}/Desktop`)) return { to: join(desktop, ...other[2].split('/').filter(Boolean)), notYours: `/${p.split('/')[1]}/${other[1]}/Desktop` };
+  // A page or a document sent by its full path to a folder that is not the user's at all ("/Users/Shared/report.md",
+  // "/tmp/page.html"), with nothing in the request naming that folder: their Desktop, where pages and documents go
+  // (the same session's first two writes: /Users/Shared/Thesis_API_Docs.md and .html).
+  // Only another user's folder, the shared one or a temporary one: a drive or a server's folder the model was sent to stays.
+  const elsewhere = /^\/(?:Users|home)\/[^/]+\//.test(p) || /^\/(?:private\/)?(?:var\/)?tmp\//.test(p);
+  if (elsewhere && DELIVERABLE.test(p) && !p.startsWith(`${home}/`) && !p.startsWith(`${cwd}/`) && !String(request).includes(dirname(p))) return { to: join(desktop, basename(p)), notYours: dirname(p) };
   if (!p || isAbsolute(p) || p.startsWith('~')) return null;
   const segs = p.split('/').filter(Boolean);
   const name = segs.at(-1);

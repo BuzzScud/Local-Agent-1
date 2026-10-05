@@ -1941,7 +1941,7 @@ export class Agent extends EventEmitter {
     // curl, twice in seven (the Web check, 30 Sep 2026).
     const urls = webAddresses(text);
     if (urls.length && this.webTools()?.fetch && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.web = { request, notes: `${urls.length === 1 ? 'The request names a web page' : 'The request names web pages'} (${urls.slice(0, 3).join(', ')}): read ${urls.length === 1 ? 'it' : 'them'} with WebFetch. ${urls.length === 1 ? 'It is' : 'They are'} not a file in the project.` };
+      this.turn.web = { request, urls, notes: `${urls.length === 1 ? 'The request names a web page' : 'The request names web pages'} (${urls.slice(0, 3).join(', ')}): read ${urls.length === 1 ? 'it' : 'them'} with WebFetch. ${urls.length === 1 ? 'It is' : 'They are'} not a file in the project.` };
     }
     // Bypass permissions: the prompt's rules say commands stay in the folder, offline. They are
     // kept word for word (the service's cache), so the request says what is true while it is on.
@@ -2189,6 +2189,17 @@ export class Agent extends EventEmitter {
               continue;
             }
             this.emit('note', { text: 'Answered without looking at the project\'s files: check it before you rely on it.', tone: 'warn' });
+          }
+          // The page the request names, never tried (Look before answering): the answer goes back once, with the
+          // tool to use; the second time a line under it says the page was not read.
+          if (this.turn.web?.urls?.length && !this.turn.fetched && !this.isHelper && this.hook('look-first') && text.trim()) {
+            if (!this.turn.webBack) {
+              this.turn.webBack = true;
+              this.emit('note', { text: `It answered without reading ${this.turn.web.urls[0]}; told it to read the page with WebFetch.`, tone: 'warn' });
+              this.messages.push({ role: 'user', content: auto(`You answered without reading ${this.turn.web.urls.slice(0, 3).join(', ')}. WebFetch is one of your tools here and this address is allowed: call it now, then answer from what the page shows. If it fails, tell the user exactly what it answered; do not say you cannot reach the internet without trying.`) });
+              continue;
+            }
+            this.emit('note', { text: `Answered without reading ${this.turn.web.urls[0]}: what it says about that page is not from the page.`, tone: 'warn' });
           }
           // Files that exist: an answer that names files not in the project (and not made this
           // message, nor named in the request) goes back once; the second time, a line says which.
@@ -3658,6 +3669,31 @@ export class Agent extends EventEmitter {
     const env = { cwd: this.cwd, home: this.home, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, todos: () => this.todos, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
     // A new file goes to the Desktop unless the request says where (tools.mjs desktopDefault); a new code
     // file at the top of a code project is asked about once a message. AGENTIC_DESKTOP_DEFAULT=off: as before (the tests).
+    // The page the request names, not read yet (Look before answering; 5 Oct 2026: asked to scrape a link, Qwen3.6
+    // called no web tool, wrote a "mockup" of what the page might hold to three places, and said it could not reach
+    // the internet). A file is not written about a page nobody read: twice, then it is let through.
+    if (this.turn?.web?.urls?.length && !this.turn.fetched && !this.isHelper) {
+      const t = this.turn;
+      if (call.name === 'Bash' && t.web.urls.some((u) => String(args.command ?? '').includes(u.replace(/^https?:\/\//, '').split('/')[0]))) t.fetched = true;
+      else if ((call.name === 'Write' || call.name === 'Edit') && this.hook('look-first') && (t.webHeld ?? 0) < 2) {
+        t.webHeld = (t.webHeld ?? 0) + 1;
+        if (t.webHeld === 1) this.emit('note', { text: `It began to write before reading ${t.web.urls[0]}: told it to read the page first.`, tone: 'warn' });
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: 'The page was not read yet' }, error: true });
+        return { text: `Nothing was written: you have not read ${t.web.urls.slice(0, 3).join(', ')} yet. WebFetch is one of your tools and this address is allowed: read the page with it first, then write from what it shows. Never write what a page might say from memory. If WebFetch fails, tell the user exactly what it answered.`, error: true };
+      }
+    }
+    // A Desktop in a command that is not this user's ("curl -o /Users/Shared/Desktop/x.html …"): their own, said so.
+    if (call.name === 'Bash' && typeof args.command === 'string' && process.env.AGENTIC_DESKTOP_DEFAULT !== 'off' && !this.isHelper && this.turn) {
+      const req = String(this.turn.task ?? this.turn.request ?? '');
+      let was = '';
+      const fixed = args.command.replace(/\/(?:Users|home)\/([^/\s'"]+)\/Desktop(?=[/\s'"]|$)/g, (all, user) => (all === this.desktopDir || req.includes(`${user}/Desktop`) ? all : (was ||= all, this.desktopDir)));
+      if (was) {
+        this.emit('note', { text: `${was} is not your Desktop: the command uses yours, ${this.tilde(this.desktopDir)}.`, tone: 'warn' });
+        const out = await this.runStep({ ...call, args: JSON.stringify({ ...args, command: fixed }) }, signal);
+        if (typeof out?.text === 'string') out.text = `(${was} is not this user's Desktop; the command ran with their own, ${this.desktopDir}. Use that path from here on.)\n${out.text}`;
+        return out;
+      }
+    }
     let notYours = '';
     if (call.name === 'Write' && typeof args.path === 'string' && process.env.AGENTIC_DESKTOP_DEFAULT !== 'off' && !this.isHelper && this.turn) {
       const t = this.turn;
@@ -3678,7 +3714,11 @@ export class Agent extends EventEmitter {
         args.path = where.to;
         this.desktopAsked = true; // the Desktop's opening for a new file (desktopOpen)
         t.desktopDefaulted = this.tilde(where.to);
-        if (where.notYours) { notYours = `(${where.notYours} is not this user's Desktop, so the file is on their own: ${this.tilde(where.to)}. Use that path from here on.)`; this.emit('note', { text: `${where.notYours} is not your Desktop: written to yours, ${this.tilde(where.to)}.`, tone: 'warn' }); }
+        if (where.notYours) {
+          const desk = where.notYours.endsWith('/Desktop');
+          notYours = `(${where.notYours} is not ${desk ? "this user's Desktop" : "a folder of this user's"}, so the file is on their own Desktop: ${this.tilde(where.to)}. Use that path from here on.)`;
+          this.emit('note', { text: `${where.notYours} is not ${desk ? 'your Desktop' : 'a folder of yours'}: written to your own Desktop, ${this.tilde(where.to)}.`, tone: 'warn' });
+        }
         else this.emit('note', { text: `New file on your Desktop: ${this.tilde(where.to)} (new files go there unless you say where).`, tone: 'dim', fold: true });
       }
     }
