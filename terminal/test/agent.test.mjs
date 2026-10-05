@@ -60,19 +60,45 @@ test('repeating the same call stops as stuck', async () => {
   expect(events.find((e) => e.type === 'note').text).toContain('kept repeating');
 });
 
-test('the same step twice: it asks you for a hint, and the hint goes to the model', async () => {
-  const same = { tool: { name: 'Read', args: { path: 'export.mjs' } } };
+// Since 5 Oct 2026 (the owner's picks): the second time the model is told why nothing changed and you are not
+// asked; the third time (a look: the fourth) you are, with what it tried and ways out as choices.
+test('the same step: the second time the model is told why, the third time it asks you, and the hint goes to the model', async () => {
+  const same = { tool: { name: 'Bash', args: { command: 'ls' } } };
   const cwd = project();
-  const fake = await startFakeServer([same, same, { text: 'Done, the flags are read in export.mjs.' }]);
+  const fake = await startFakeServer([same, same, same, { text: 'Done, the flags are read in export.mjs.' }]);
   const asked = [];
   const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false,
     ask: async (req) => { asked.push(req); return req.kind === 'stuck' ? { choice: 'answer', text: 'Look at parseArgs instead' } : { choice: 'yes' }; } });
   const reason = await agent.send('where are the flags read?');
   await fake.close();
   expect(reason).toBe('done');
+  expect(asked.filter((r) => r.kind === 'stuck')).toHaveLength(1);
   const q = asked.find((r) => r.kind === 'stuck');
-  expect(q.args.question).toContain('same step twice');
+  expect(q.args.question).toStartWith('I am going round in circles: I tried running ls 3 times and nothing changed');
+  expect(q.args.options).toEqual(['Try a different way', 'Skip this step', 'Stop here']);
+  // The second time: a line for the model, no question.
+  expect(agent.messages.some((m) => m.role === 'user' && m.content.includes('The same command gave the same result as before'))).toBe(true);
   expect(agent.messages.some((m) => m.role === 'user' && m.content.includes('[Stuck]') && m.content.includes('parseArgs'))).toBe(true);
+});
+
+test('a way out picked: another way tells the model not to send the step again, skip sends it on, stop ends the message', async () => {
+  const same = { tool: { name: 'Bash', args: { command: 'ls' } } };
+  const go = async (text, replies) => {
+    const cwd = project();
+    const fake = await startFakeServer(replies);
+    const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false,
+      ask: async (req) => (req.kind === 'stuck' ? { choice: 'answer', text } : { choice: 'yes' }) });
+    const reason = await agent.send('where are the flags read?');
+    await fake.close();
+    return { reason, said: agent.messages.filter((m) => m.role === 'user').map((m) => String(m.content)) };
+  };
+  const other = await go('Try a different way', [same, same, same, { text: 'Read in export.mjs.' }]);
+  expect(other.reason).toBe('done');
+  expect(other.said.some((t) => t.startsWith('[Stuck] You sent the same step 3 times (running ls) and nothing changed. The user says: try a different way. Do not send that step again'))).toBe(true);
+  const skip = await go('Skip this step', [same, same, same, { text: 'Skipped the listing.' }]);
+  expect(skip.said.some((t) => t.includes('The user says: skip this step. Leave it and go on with the rest of the request'))).toBe(true);
+  const stop = await go('Stop here', [same, same, same, { text: 'never reached' }]);
+  expect(stop.reason).toBe('declined');
 });
 
 test('three errors in a row: it asks; "Stop here" ends the turn', async () => {
@@ -582,20 +608,24 @@ test('a check-in answered "keep going" adds nothing; "Stop here" ends the turn',
 // 2 Oct, Read of one file six times in a minute: two stuck questions and a check-in ("looked at 1
 // thing"), each "Keep going" sending the model nothing. Now: one question about that step, the note
 // to do something different with the answer, and no check-in for one file read again and again.
-test('the same step again and again: one stuck question, "Keep going" tells the model to do something different, no check-in', async () => {
+// Since 5 Oct a look is asked about the fourth time (the second Read is pointed back, the third gets the
+// text again), and "Keep going" means another way: the same again is what it was doing.
+test('the same look again and again: one stuck question the fourth time, "Keep going" tells the model to try another way, no check-in', async () => {
   const same = { tool: { name: 'Read', args: { path: 'export.mjs' } } };
   const { reason, events, fake } = await steered([same, same, same, same, same, { text: 'Done looking.' }], (req) => (req.kind === 'stuck' ? { choice: 'answer', text: 'Keep going' } : { choice: 'yes' }));
   expect(reason).toBe('done');
   expect(events.filter((e) => e.type === 'ask' && e.kind === 'stuck').length).toBe(1);
   expect(events.filter((e) => e.type === 'ask' && e.kind === 'checkin').length).toBe(0);
-  expect(lastUser(fake.requests[2])).toBe('[Automatic note from Agentic Coder, not from the user] You already did exactly this step. Do something different, or finish.');
+  expect(lastUser(fake.requests[2])).toBe('add a --json flag to export.mjs'); // the second Read: no question, nothing sent for you
+  expect(lastUser(fake.requests[4])).toStartWith('[Stuck] You sent the same step 4 times (looking at export.mjs) and nothing changed. The user says: try a different way.');
 });
 
 test('a stuck question answered starts the check-in count over: the two never ask about one loop', async () => {
   const [l1, l2, l3, l4, l5, l6] = looks(6);
-  const { events } = await steered([l1, l2, l3, l4, l5, l5, l6, { text: 'Done looking.' }], (req) => ({ choice: req.kind === 'stuck' ? 'answer' : 'yes', text: 'Keep going' }));
+  // (the same look four times brings the stuck question: 5 Oct 2026)
+  const { events } = await steered([l1, l2, l2, l2, l2, l3, l4, l5, l6, { text: 'Done looking.' }], (req) => ({ choice: req.kind === 'stuck' ? 'answer' : 'yes', text: 'Keep going' }));
   expect(events.filter((e) => e.type === 'ask' && e.kind === 'stuck').length).toBe(1);
-  expect(events.filter((e) => e.type === 'ask' && e.kind === 'checkin').length).toBe(0); // six different looks, but only one since the question
+  expect(events.filter((e) => e.type === 'ask' && e.kind === 'checkin').length).toBe(0); // nine looks, but only four since the question
 });
 
 test('on auto-accept the first edit is a plan question; an answer other than yes steers instead', async () => {
@@ -1090,7 +1120,7 @@ test('a long file read again with no offset: the outline, then its parts in turn
 test('stopped as stuck, it still answers: one reply without tools; the app\'s own words when that reply is a call', async () => {
   const same = { tool: { name: 'Read', args: { path: 'export.mjs' } } };
   const said = 'I read export.mjs again and again. The flags are parsed at its top. Tell me which flag to look at.';
-  const a = await run([same, same, same, same, { text: said }]);
+  const a = await run([same, same, same, same, same, { text: said }]); // a look stops the fifth time (5 Oct 2026)
   expect(a.reason).toBe('stuck');
   const final = a.events.filter((e) => e.type === 'assistant' && e.final);
   expect(final.at(-1).text).toBe(said);

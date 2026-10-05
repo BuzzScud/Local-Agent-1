@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt, WORK_HABITS } from '../src/agent/prompt.mjs';
-import { askedQuestions, fileSaid, planSaid, changesSaid, lookSaid, stepSaid, errorSaid, checkInQuestion, stuckQuestion } from '../src/agent/questions.mjs';
+import { askedQuestions, fileSaid, planSaid, changesSaid, lookSaid, stepSaid, errorSaid, checkInQuestion, stuckQuestion, sameStepNote, sameResultSaid } from '../src/agent/questions.mjs';
 import { parseArgs, TOOL_DEFS } from '../src/agent/tools.mjs';
 import { permissionOptions } from '../src/app/screen.jsx';
 import { cleanChoices } from '../src/flows/clarify.mjs';
@@ -78,9 +78,22 @@ test("the app's own questions in plain words: files by name, the Desktop as your
   expect(lookSaid('WebFetch', { url: 'https://example.com/a/b' })).toBe('a web page on example.com');
   const q = checkInQuestion(['the output of a command', 'countdown-card.html on your Desktop'], 6 * 60);
   expect(q.question).toBe('I have spent 6 minutes looking around and have not changed anything yet. I looked at the output of a command and countdown-card.html on your Desktop. Am I on the right track?');
-  expect(stuckQuestion('repeat', stepSaid('Read', { path: 'export.mjs' }), '').question).toBe('I tried the same step twice (looking at export.mjs) and I am not getting further. What should I do?');
+  // Stuck (5 Oct 2026): what it tried, how often, what came of it, and on which step of its plan.
+  expect(stuckQuestion('repeat', stepSaid('Read', { path: 'export.mjs' }), '', { tries: 4, result: sameResultSaid('Read', 'x') }).question).toBe('I am going round in circles: I tried looking at export.mjs 4 times and nothing changed (I have read it already). What should I do?');
   // The step it repeated, by name: the command, the file changed (3 Oct: "looking at the output of a command", "looking at Edit").
-  expect(stuckQuestion('repeat', stepSaid('Bash', { command: 'npm test' }), '').question).toBe('I tried the same step twice (running npm test) and I am not getting further. What should I do?');
+  expect(stuckQuestion('repeat', stepSaid('Bash', { command: 'npm test' }), '').question).toBe('I am going round in circles: I tried running npm test 3 times and nothing changed. What should I do?');
+  const stuck = stuckQuestion('repeat', stepSaid('Write', { path: 'notes.txt' }), '', { tries: 3, goal: 'Save the report', result: sameResultSaid('Write', 'Updated notes.txt (+0 −0 lines).') });
+  expect(stuck.question).toBe('I am going round in circles on "Save the report": I tried writing notes.txt 3 times and nothing changed (the file already holds that content). What should I do?');
+  // The choices are ways out, not "the same again".
+  expect(stuck.options).toEqual(['Try a different way', 'Skip this step', 'Stop here']);
+  expect(permissionOptions({ name: 'Ask', args: stuck }, '').map((o) => o.label)).toEqual(['Try a different way', 'Skip this step', 'Stop here', 'Give me a hint…']);
+  expect(sameResultSaid('Bash', '\n3 failing\nmore')).toBe('it answered: 3 failing');
+  // The second time, the model is told why nothing changed, each kind of step in its own words; a Read answers for itself.
+  expect(sameStepNote('Write', 'Updated notes.txt (+0 −0 lines).', 'Run the tests')).toBe('(That write changed nothing: the file already holds exactly this, and it is saved. Do not send it again. Go on to the next step of your plan: Run the tests.)');
+  expect(sameStepNote('Bash', 'ok')).toBe('(The same command gave the same result as before: nothing has changed since. Change something first, or do something else. Do not run it again as it is.)');
+  expect(sameStepNote('Search', 'x')).toBe('(You asked exactly this before and the answer is the same; it is above. Use it, or look somewhere else.)');
+  expect(sameStepNote('Read', 'x')).toBe('');
+  expect(sameStepNote('Edit', 'old_text was not found')).toBe('(You already did exactly this step, and nothing changed. Do something different, or finish.)');
   expect(stepSaid('Edit', { path: 'src/export.mjs' })).toBe('changing export.mjs in src');
   expect(stepSaid('Write', { path: 'notes.txt' })).toBe('writing notes.txt');
   expect(stepSaid('List', { path: 'src' })).toBe('looking at the files in src');

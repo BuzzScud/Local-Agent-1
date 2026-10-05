@@ -164,19 +164,39 @@ export function pageWrongQuestion(names) {
   };
 }
 
-// Stuck: the same step twice, or three that failed; the step, then the error's own words.
-// step: the step in words (stepSaid); err: errorSaid.
-export function stuckQuestion(why, step, err) {
+// Stuck: the same step again and again, or three that failed (5 Oct 2026, the owner's picks after "I tried the
+// same step twice (…) and I am not getting further. What should I do?" with one choice, Keep going, which let it
+// do the same again). The question says what it is working on (its plan's step), what it tried, how often and
+// what came of it; the choices are ways out. step: the step in words (stepSaid); err: errorSaid.
+export function stuckQuestion(why, step, err, { tries = 3, goal = '', result = '' } = {}) {
   const end = /[.!?]$/.test(err ?? '') ? '' : '.';
   return {
     question: why === 'repeat'
-      ? `I tried the same step twice (${step}) and I am not getting further. What should I do?`
+      ? `I am going round in circles${goal ? ` on "${clip(goal, 70)}"` : ''}: I tried ${step} ${tries} times and nothing changed${result ? ` (${result})` : ''}. What should I do?`
       : `Three steps in a row did not work. The last one (${step}) ${err ? `ended with: ${err}${end}` : 'gave no error words.'} What should I do?`,
-    options: ['Keep going'],
-    about: ['I try again my own way.'],
+    options: ['Try a different way', 'Skip this step', 'Stop here'],
+    about: ['I drop this approach and take another.', 'I leave this step and go on with the rest.', 'I stop and tell you where things stand.'],
     typeLabel: 'Give me a hint…',
     typeAbout: 'Say what to try, or where to look, and I follow that.',
   };
+}
+// What a repeated step gave, in a few words, for the question.
+export function sameResultSaid(name, outText = '') {
+  if ((name === 'Write' || name === 'Edit') && /\(\+0 −0 lines\)/.test(outText)) return 'the file already holds that content';
+  if (name === 'Read') return 'I have read it already';
+  const line = String(outText).split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  return line ? `it answered: ${clip(line, 90)}` : '';
+}
+// The second time the same step comes, the model is told why nothing changed, each kind of step in its own
+// words; the user is not asked yet. next: the next step of its plan. '' for a Read: Read answers for itself
+// (the part after, or "it is above", and the third time the text again).
+export function sameStepNote(name, outText = '', next = '') {
+  const go = next ? ` Go on to the next step of your plan: ${clip(next, 120)}.` : ' Go on to the next step.';
+  if ((name === 'Write' || name === 'Edit') && /\(\+0 −0 lines\)/.test(outText)) return `(That ${name === 'Write' ? 'write' : 'change'} changed nothing: the file already holds exactly this, and it is saved. Do not send it again.${go})`;
+  if (name === 'Read') return '';
+  if (name === 'Bash') return '(The same command gave the same result as before: nothing has changed since. Change something first, or do something else. Do not run it again as it is.)';
+  if (['List', 'Search', 'Map', 'CodeSearch', 'WebFetch', 'WebSearch'].includes(name)) return '(You asked exactly this before and the answer is the same; it is above. Use it, or look somewhere else.)';
+  return '(You already did exactly this step, and nothing changed. Do something different, or finish.)';
 }
 
 // The go-ahead before changing files: yes covers the rest of this request's changes.
