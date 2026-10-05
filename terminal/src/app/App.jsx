@@ -13,7 +13,7 @@ import { loadTimes, saveTime, startLeft, typicalStart } from './start-times.mjs'
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
-import { hooksFrom, hooksEnv, changeHooks, HOOKS } from '../agent/way.mjs';
+import { hooksFrom, hooksEnv, changeHooks, HOOKS, leanFrom, leanEnv } from '../agent/way.mjs';
 import { UserHooks, answerProjectHooks, writeUserHooks, eventOf } from '../agent/user-hooks.mjs';
 import { openHooksList, hookListRows, openHookForm, hookFormRows, moveHookRow, startHookEdit, commitHookEdit, hookWarning, toHook, testHookForm, checkOn } from './hooks-form.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom, isHomeFolder } from '../agent/prompt.mjs';
@@ -536,7 +536,7 @@ export function App({ opts, win, onRestart }) {
       // saveOff: "memorySave": "off" — the model's Remember saves nothing either (agent/way.mjs).
       memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false, saveOff: saveModeOf(settings) === 'off' } : null,
       // Who decides (/effort's last row) and the app's checks switched on for when the model does (/hooks).
-      way: limitsRef.current.way, hooks: hooksFrom(settings),
+      way: limitsRef.current.way, hooks: hooksFrom(settings), lean: leanFrom(settings),
       // The web (/web): a search service and reading pages, each asked about first.
       web: webSettings(settings.web),
       // Helpers the model can hand work to (the Agent tool), unless "subagents": false.
@@ -1742,7 +1742,7 @@ export function App({ opts, win, onRestart }) {
     else if (ch === 'o') { if (cfg.runs === 'address' && cfg.auth === 'oauth') { mcpSignOut(cfg); mcpHub.start(cfg.name); agent.mcpStale = true; say(`Signed out of ${cfg.name}: its token is gone from the Keychain. s signs in again.`); } else say(`${cfg.name} has no sign-in to take back.`); }
   };
   // ---- /hooks (hooks-form.mjs): your own hooks and the app's checks ----
-  const hooksList = (patch = {}) => { agent.userHooks?.reload(); return { ...openHooksList({ hooks: agent.userHooks, checks: agent.hooks, way: agent.way, ...patch }), envSet: hooksEnv(), off: !agent.userHooks }; };
+  const hooksList = (patch = {}) => { agent.userHooks?.reload(); return { ...openHooksList({ hooks: agent.userHooks, checks: agent.hooks, way: agent.way, lean: agent.lean, ...patch }), envSet: hooksEnv(), off: !agent.userHooks }; };
   // Your hooks written to ~/.agentic-coder/hooks.json; they work from the next step on.
   const keepHooks = (pk, list) => {
     if (!agent.userHooks) { setPicker({ ...pk, confirm: null, note: { text: 'Your hooks are off in this window (AGENTIC_USER_HOOKS=off).', tone: 'warn' } }); return false; }
@@ -1811,6 +1811,7 @@ export function App({ opts, win, onRestart }) {
     else if (row.check) {
       if (!(key.return || ch === ' ')) return;
       if (agent.busy) { say('Wait for Agentic Coder to finish first.', 'warn'); return; }
+      if (agent.lean) { say('The lean harness is on, so none of these run: /hooks full brings them back.', 'warn'); return; }
       const r = changeHooks(agent.hooks, checkOn({ ...pk, way: 'model' }, row.check) ? 'off' : 'on', row.check.id);
       if (r.changed) { agent.hooks = r.on; saveSettings({ hooks: [...r.on] }); }
       setPicker({ ...pk, checks: new Set(agent.hooks), note: { text: `${r.text}${r.changed && agent.way === 'app' ? ' (Who decides is App in /effort, so every check runs now anyway.)' : ''}`, tone: r.tone ?? 'dim' } });
@@ -3438,6 +3439,18 @@ export function App({ opts, win, onRestart }) {
         const [what = '', ...rest] = arg.trim().split(/\s+/);
         if (what) {
           if (busy) { flash('Wait for Agentic Coder to finish first'); break; }
+          // /hooks lean · /hooks full: the lean harness (way.mjs), like Claude Code's: no app checks at all.
+          if (/^(lean|full)$/i.test(what)) {
+            if (leanEnv() !== undefined) { push({ type: 'note', text: `AGENTIC_LEAN=${leanEnv()} is set where Agentic Coder started, so it decides. Start it without that (unset AGENTIC_LEAN) to switch here.`, tone: 'warn' }); break; }
+            const on = what.toLowerCase() === 'lean';
+            const changed = agent.setLean(on);
+            if (!on) agent.setWay(limitsRef.current.way);
+            settings.lean = saveSettings({ lean: on }).lean;
+            push({ type: 'note', text: !changed ? `The ${on ? 'lean' : 'full'} harness is already on.` : on
+              ? "Lean harness on, like Claude Code's: the model decides every step and checks its own work. Off with it: the app's checks, Look first, the reminders of your request and its plan, and putting changes back after a failed test run. Permissions, your own hooks and the memory stay. /hooks full brings it all back. Kept for next time (settings.json)."
+              : "Full harness on: the app's checks, reminders and put-back run again from the next message. Kept for next time (settings.json).", tone: 'dim' });
+            break;
+          }
           const r = changeHooks(agent.hooks, what.toLowerCase(), rest.join(' '));
           if (r.changed) { agent.hooks = r.on; saveSettings({ hooks: [...r.on] }); }
           push({ type: 'note', text: `${r.text}${r.changed && agent.way === 'app' ? ' (Who decides is App in /effort, so every check runs now anyway.)' : ''}`, tone: r.tone ?? 'dim' });

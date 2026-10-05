@@ -86,7 +86,7 @@ function dotChart(rows, { value, range = () => null, max, step, fmt, limit = nul
 }
 
 // earlier: [{ model, result, why }], an earlier try of the same task (another harness or context) for Table 3.
-export function shootoutPage({ task = '40', rows = [], sizes = {}, timeoutSecs = 1500, date = new Date(), ctxAll = 32768, earlier = [], earlierAbout = '', reps = 1 } = {}, notes = {}) {
+export function shootoutPage({ task = '40', rows = [], sizes = {}, timeoutSecs = 1500, date = new Date(), ctxAll = 32768, earlier = [], earlierAbout = '', reps = 1, lean = false, title = null } = {}, notes = {}) {
   const ranked = [...rows].sort((a, b) => (b.ran - a.ran) || (b.parts?.got ?? -1) - (a.parts?.got ?? -1) || (a.secs ?? 1e9) - (b.secs ?? 1e9));
   const marks = ranked.map((r) => (r.ran ? marksOf(r.parts?.lines ?? [], task) : null));
   // Several runs: each part as the runs that passed it ("2/3"), the score as its mean with the lowest and highest.
@@ -111,7 +111,7 @@ ${parts.map((p, j) => row(`${j + 1}&nbsp; ${esc(p.label)}`, ranked.map((r, i) =>
 <tbody>${row('The run', ranked.map((r) => num(r, (x) => (x.secs / 60).toFixed(1))), true, 'Minutes')}
 ${row('Steps', ranked.map((r) => num(r, (x) => x.steps ?? '–')))}
 ${row('Tool errors', ranked.map((r) => num(r, (x) => x.toolErrors ?? '–')))}
-${row('How it ended', ranked.map((r) => num(r, (x) => esc(REASONS[x.reason] ?? x.reason ?? '–'))))}
+${row('How it ended', ranked.map((r) => num(r, (x) => esc(many(x) ? [...new Set(x.runs.map((y) => REASONS[y.reason] ?? y.reason ?? '–'))].join(' · ') : REASONS[x.reason] ?? x.reason ?? '–'))))}
 ${row('Context (thousands of tokens)', ranked.map((r) => num(r, (x) => (x.ctx && x.ctx !== ctxAll ? `<span class="part">${Math.round(x.ctx / 1024)}</span>` : Math.round((x.ctx ?? ctxAll) / 1024)))))}</tbody>
 <tbody>${row('Tokens', ranked.map((r) => num(r, (x) => k(x.outTokens))), true, 'Written (thousands)')}
 ${row('Thinking (thousands)', ranked.map((r) => num(r, (x) => k(x.thinkTokens))))}
@@ -166,17 +166,18 @@ tr.head .unit{margin-left:14px}td .sub{padding-left:28px;display:inline-block}
 .said{min-width:640px}.said td{padding:12px 10px;border-top:1px solid var(--line);vertical-align:top}.said tr:first-child td{border-top:0}
 .said .who{width:210px;white-space:nowrap}.quote{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.verdict{margin-top:6px;color:var(--muted);font-size:13.5px}
 .t1 td:first-child,.t1 th:first-child{position:sticky;left:0;background:var(--bg);z-index:1;min-width:250px;white-space:nowrap}
+.t1 tr.head td:first-child{white-space:normal}.t1 tr.head td:first-child b{white-space:nowrap}
 @media (max-width:700px){.t1 td:first-child,.t1 th:first-child{min-width:190px;white-space:normal;padding-right:12px}tr.head .unit{display:block;margin-left:0}td .sub{padding-left:14px}
 .said{min-width:0}.said tr,.said td{display:block}.said .who{width:auto;padding-bottom:2px}.said td+td{border-top:0;padding-top:4px}}
 .fine{margin-top:22px;color:var(--muted);font-size:13px;line-height:1.85;max-width:900px}.fine p{margin:0}
 </style></head><body><div class="wrap">
 <header class="mast"><div class="brand"><span class="logo"><svg viewBox="0 0 26 26" fill="none"><path d="M5 7l7 6-7 6M14 20h8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Agentic Coder Bench</div><div class="date">${esc(day)}</div></header>
-<h1>One hard task: ${ranked.length} big models, one harness change</h1>
-<p class="lede">Parts of the hidden check passed, time and tokens on task ${esc(task)}, ${runs > 1 ? `${runs} runs` : 'one run'} each on the shared service.</p>
+<h1>${title ? esc(title) : `One hard task: ${ranked.length} big models, one harness change`}</h1>
+<p class="lede">Parts of the hidden check passed, time and tokens on task ${esc(task)}, ${runs > 1 ? `${runs} runs` : 'one run'} each on the shared service${lean ? ", on the lean harness (none of the app's checks)" : ''}.</p>
 <div class="legend">${ranked.map((r, i) => `<span>${swatch(i)}${esc(nameOf(r))}${sizes[r.model] ? ` <i>· ${(sizes[r.model] / 1e9).toFixed(0)} GB</i>` : ''}</span>`).join('')}</div>
 <div class="charts">
 <section><h2>Check score</h2><span class="unit">parts passed, of ${of} · higher is better</span>${dotChart(ranked, { value: (r) => (r.ran ? r.parts.got : null), range: (r) => (r.ran && many(r) ? [r.parts.min, r.parts.max] : null), max: of, step: 1, fmt: (v) => `${v}/${of}` })}</section>
-<section><h2>Runtime</h2><span class="unit">minutes for the task, one run · lower is better</span>${dotChart(ranked, { value: mins, max: Math.ceil(maxMin / 5) * 5, step: 5, fmt: (v) => v.toFixed(1), limit: limitMin, limitLabel: 'time limit' })}</section>
+<section><h2>Runtime</h2><span class="unit">minutes for the task, ${runs > 1 ? `mean of ${runs} runs` : 'one run'} · lower is better</span>${dotChart(ranked, { value: mins, max: Math.ceil(maxMin / 5) * 5, step: 5, fmt: (v) => v.toFixed(1), limit: limitMin, limitLabel: 'time limit' })}</section>
 </div>
 <div class="cap">Table 1&nbsp; | &nbsp;<b>Each model on each measure</b></div>
 <div class="scroll">${table}</div>

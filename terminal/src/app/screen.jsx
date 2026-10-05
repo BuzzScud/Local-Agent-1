@@ -1426,7 +1426,7 @@ function HooksPicker({ app }) {
   const room = Math.max(6, (app.rows ?? 24) - 10);
   const win = rowWindow(rows, Math.min(pk.index, rows.length - 1), room);
   const at = rows[Math.min(pk.index, rows.length - 1)];
-  const n = pk.way === 'app' ? 'all on: Who decides is App' : `${pk.checks.size} of ${APP_CHECKS.length} on while the model decides`;
+  const n = pk.lean ? 'all off: the lean harness (/hooks full brings them back)' : pk.way === 'app' ? 'all on: Who decides is App' : `${pk.checks.size} of ${APP_CHECKS.length} on while the model decides`;
   const mine = pk.yours.length;
   const whenW = 30;
   const hint = at?.check ? 'space on/off · ↑↓ move · esc close'

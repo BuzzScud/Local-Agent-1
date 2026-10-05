@@ -55,6 +55,9 @@ test('cases written with arrows are read, and plain steps of the plan are not', 
   expect(casesOf(plan).map((c) => c.example)).toEqual(['cat FILE', 'head -n N/FILE', 'tail -N', 'ls DIR', 'head -n 5 FILE', 'head -5 FILE']);
   expect(caseProbe('tail -N').test("plainRead('tail -3 x.txt', dir)")).toBe(true);
   expect(caseProbe('slugify("")').test("slugify('')")).toBe(true);
+  // More arguments in the test than in the example still tries it.
+  expect(caseProbe("plainRead('ls')").test("assert.deepStrictEqual(plainRead('ls', cwd), {})")).toBe(true);
+  expect(caseProbe("plainRead('ls')").test("plainRead('cat', cwd)")).toBe(false);
   expect(CASES_ASK).not.toMatch(/head|tail|cat |grep|ls /); // no task's own answer in the ask
 });
 
