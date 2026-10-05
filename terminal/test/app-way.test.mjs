@@ -33,7 +33,7 @@ test('--way model: no sorting line, the model reads two files in one reply, /eff
   expect(chats.length).toBe(2);
   expect(chats[0].messages.map((m) => m.role)).toEqual(['system', 'user']);
   expect(r.snapshots.effort).toMatch(/Who decides\s+◀ Model\s+▶\s+it sorts, looks and saves for itself, like Claude Code/);
-  expect(r.snapshots.hooks).toMatch(/Hooks · 12 of 21 on while the model decides/);
+  expect(r.snapshots.hooks).toMatch(/Hooks · 14 of 22 on while the model decides/); // Done check and Cases have tests joined Model (4 Oct 2026)
   expect(r.snapshots.hooks).toMatch(/1\s+off\s+Empty reply/);
   expect(r.snapshots.hooks).toMatch(/on\s+Tests after a change/);
   expect(r.snapshots.hooks).toMatch(/on\s+Said done, nothing changed/);
