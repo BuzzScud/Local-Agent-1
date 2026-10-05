@@ -11,6 +11,7 @@
 // names the file, says to Edit it, and shows the failing line of a traceback.
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
+import { createRequire } from 'node:module';
 import { HOME } from '../../../models/index.mjs';
 
 const SCRIPT_LINES = 40;
@@ -148,6 +149,25 @@ export function tildeHint(output) {
   if (!/No such file or directory: '~\/|ENOENT[^\n]*'~\//.test(String(output ?? ''))) return '';
   return "(~ is not the home folder inside a Python or Node string: only the shell expands it. Use os.path.expanduser('~/…') in Python, path.join(os.homedir(), '…') in Node, or \"$HOME/…\" in the shell.)";
 }
+
+// What a failed node script needs to hear (5 Oct 2026: of 112 node -e runs in the shootout, four mixed
+// import with require, four imported a name from the wrong built-in module, such as tmpdir from
+// node:path, and each took a step or two more to see why). Node 22.7 and later run import lines in
+// node -e by themselves; an older one is told how.
+export function nodeHint(output) {
+  const out = String(output ?? '');
+  if (/require is not defined in ES module scope/.test(out)) return "(This code runs as a module, because it has import lines or the package.json says \"type\": \"module\": use import for everything (import { existsSync } from 'node:fs'), not require.)";
+  if (/Cannot use import statement outside a module/.test(out)) return "(import lines run only in a module: run it as node --input-type=module -e \"…\", or save the code as a .mjs file in the project and run that. To use another file's code, import it (await import('./file.mjs')); eval cannot run its import lines.)";
+  const m = /requested module '([^']+)' does not provide an export named '([^']+)'/.exec(out);
+  if (!m) return '';
+  const [, from, name] = m;
+  if (/^\.{0,2}\//.test(from)) return `(${from} has no export named ${name}: Search for "export" in it to see the names it gives.)`;
+  if (!BUILT_INS.includes(from.replace(/^node:/, ''))) return '';
+  const home = BUILT_INS.find((b) => { try { return name in builtIn(b); } catch { return false; } });
+  return home ? `(${name} is in node:${home}, not ${from}: import { ${name} } from 'node:${home}'.)` : '';
+}
+const BUILT_INS = ['fs', 'path', 'os', 'url', 'util', 'child_process', 'crypto', 'events', 'readline', 'stream', 'module', 'assert', 'zlib', 'http', 'fs/promises', 'timers/promises'];
+const builtIn = (name) => createRequire(import.meta.url)(`node:${name}`);
 
 // The line the result ends with for a saved script.
 export function savedNote(s) {

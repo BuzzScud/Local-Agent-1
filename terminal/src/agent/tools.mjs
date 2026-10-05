@@ -17,7 +17,7 @@ import { mathPathFor, mathDir } from './expertise.mjs';
 import { designPathFor, designDir, inDesignDir } from './design.mjs';
 import { studioPathFor, studioDir, inStudioDir, hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
-import { scriptsPathFor, inScripts, saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint } from './scripts.mjs';
+import { scriptsPathFor, inScripts, saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint, nodeHint } from './scripts.mjs';
 import { permissionsTable } from './permissions.mjs';
 
 const str = (description) => ({ type: 'string', description });
@@ -49,22 +49,22 @@ export const TOOL_DEFS = [
   },
   {
     name: 'Edit',
-    description: 'Change part of an existing file: replaces old_text with new_text. Copy old_text exactly from Read output (without the line numbers). It must appear exactly once, so include a line or two around the change; or set replace_all to true to change every occurrence (for renaming).',
-    parameters: { type: 'object', properties: { path: str('File path'), old_text: str('Exact text to replace'), new_text: str('Replacement text'), replace_all: { type: 'boolean', description: 'Change every occurrence instead of exactly one' } }, required: ['path', 'old_text', 'new_text'] },
+    description: 'Change part of an existing file: replaces old_text with new_text. Copy old_text exactly from Read output (without the line numbers). It must appear exactly once, so include a line or two around the change; or pass line (where the one you mean starts), or set replace_all to true to change every occurrence (for renaming). new_text replaces old_text, so it holds the whole new version of those lines. Example: {"path": "src/cart.mjs", "old_text": "  return total;\\n}", "new_text": "  return Math.round(total * 100) / 100;\\n}"}',
+    parameters: { type: 'object', properties: { path: str('File path'), old_text: str('Exact text to replace'), new_text: str('Replacement text'), replace_all: { type: 'boolean', description: 'Change every occurrence instead of exactly one' }, line: { type: 'integer', description: 'Only when old_text appears more than once: the line the one you mean starts on, from Read' } }, required: ['path', 'old_text', 'new_text'] },
   },
   {
     name: 'Write',
-    description: 'Create a new file. To change an existing file use Edit instead; Write replaces the whole file. A big file (hundreds of lines) does not fit in one reply: Write a short skeleton first, then add one section at a time with Edit.',
+    description: 'Create a new file. To change an existing file use Edit instead; Write replaces the whole file. A big file (hundreds of lines) does not fit in one reply: Write a short skeleton first, then add one section at a time with Edit. Example: {"path": "notes/todo.md", "content": "# To do\\n- Add the -c flag\\n"}',
     parameters: { type: 'object', properties: { path: str('File path'), content: str('The full file content') }, required: ['path', 'content'] },
   },
   {
     name: 'Bash',
-    description: 'Run a shell command (zsh) in the project folder, for example tests, a build, or git status. Stops after 2 minutes unless timeout gives it more seconds (600 at most). Long output is cut. For a dev server, a watcher, or a long run you need not wait for, set background: true: it keeps running while you work, you get its id, Jobs shows what it printed or stops it, and you are told when it ends.',
+    description: 'Run a shell command (zsh) in the project folder, for example tests, a build, or git status. Stops after 2 minutes unless timeout gives it more seconds (600 at most). Long output is cut. For a dev server, a watcher, or a long run you need not wait for, set background: true: it keeps running while you work, you get its id, Jobs shows what it printed or stops it, and you are told when it ends. Example: {"command": "node --test test/cart.test.mjs", "description": "Run the cart tests"}',
     parameters: { type: 'object', properties: { command: str('The command'), description: str('A few words on what it does'), timeout: { type: 'integer', description: 'Optional: seconds it may run before it is stopped, up to 600' }, background: { type: 'boolean', description: 'Optional: true runs it in the background and answers at once with its id' } }, required: ['command'] },
   },
   {
     name: 'TodoWrite',
-    description: 'Write your plan for a task with 3 or more steps. Send the whole list every time; mark each step pending, in_progress or done.',
+    description: 'Write your plan for a task with 3 or more steps. Send the whole list every time; mark each step pending, in_progress or done. Example: {"todos": [{"text": "Add the -c flag to plainRead", "status": "in_progress"}, {"text": "Test it in tools.test.mjs", "status": "pending"}]}',
     parameters: {
       type: 'object',
       properties: { todos: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' }, status: { type: 'string', enum: ['pending', 'in_progress', 'done'] } }, required: ['text', 'status'] } } },
@@ -253,6 +253,7 @@ const ALIASES = {
   pattern: ['pattern', 'query', 'regex', 'glob_pattern', 'find', 'search', 'term', 'keyword'],
   todos: ['todos', 'items', 'plan', 'steps', 'tasks', 'todo_list', 'todoList', 'todo'],
   offset: ['offset', 'line_start', 'start_line'],
+  line: ['line', 'line_number', 'lineNumber', 'start_line', 'at_line'],
   question: ['question', 'prompt', 'text', 'message', 'query'],
   options: ['options', 'choices', 'answers'],
   paths: ['paths', 'files', 'file_paths', 'filePaths'],
@@ -571,13 +572,44 @@ export function fuzzyFind(fileLines, want) {
   return hits.length === 1 ? hits[0] : null;
 }
 
-const linesWith = (text, needle) => text.split('\n').map((l, i) => (l.includes(needle.split('\n')[0]) ? i + 1 : 0)).filter(Boolean);
+// Where old_text starts, each time it appears: its place in the text and its line (from 1).
+const startsOf = (text, needle) => {
+  const out = [];
+  let line = 1;
+  let counted = 0;
+  for (let at = text.indexOf(needle); at >= 0 && needle; at = text.indexOf(needle, at + needle.length)) {
+    for (let k = text.indexOf('\n', counted); k >= 0 && k < at; k = text.indexOf('\n', k + 1)) line++;
+    counted = at;
+    out.push({ at, line });
+  }
+  return out;
+};
+// Of several places (each with its first line and how many lines it spans), the one Edit's line
+// names: the place holding that line, else the one starting within 3 lines of it.
+const placeAt = (places, line, span) => {
+  if (!Number.isInteger(line) || line < 1) return null;
+  return places.find((p) => line >= p.line && line < p.line + span) ?? places.find((p) => Math.abs(p.line - line) <= 3) ?? null;
+};
+// The file's own lines, numbered as Read shows them, for an error the model can act on without a Read
+// (5 Oct 2026: in 40 runs on a service most failed Edits were a stale old_text, each followed by a Read).
+const SHOWN_MAX = 30;
+const shownLines = (fileLines, from, count) => fileLines.slice(from, from + Math.min(count, SHOWN_MAX))
+  .map((l, k) => `${String(from + k + 1).padStart(5)}\t${l.length > 400 ? `${l.slice(0, 400)}…` : l}`).join('\n');
 
-export function findEdit(text, oldText, newText, { replaceAll = false } = {}) {
-  const count = text.split(oldText).length - 1;
-  if (count >= 1 && replaceAll) return { ok: true, after: text.split(oldText).join(newText), how: 'all', count };
-  if (count === 1) return { ok: true, after: text.replace(oldText, () => newText), how: 'exact' };
-  if (count > 1) return { ok: false, error: `old_text appears ${count} times (lines ${linesWith(text, oldText).slice(0, 8).join(', ')}). Either include more surrounding lines so it matches once, or set replace_all to true to change all of them.` };
+// line: when old_text appears more than once, the line the one meant starts on (from Read).
+// at: the line (from 1) where the change starts, on a match.
+export function findEdit(text, oldText, newText, { replaceAll = false, line = null } = {}) {
+  const places = startsOf(text, oldText);
+  const count = places.length;
+  const span = oldText.replace(/\n$/, '').split('\n').length;
+  if (count >= 1 && replaceAll) return { ok: true, after: text.split(oldText).join(newText), how: 'all', count, at: places[0].line };
+  if (count === 1) return { ok: true, after: text.replace(oldText, () => newText), how: 'exact', at: places[0].line };
+  if (count > 1) {
+    const pick = placeAt(places, Number(line), span);
+    if (pick) return { ok: true, after: text.slice(0, pick.at) + newText + text.slice(pick.at + oldText.length), how: 'line', at: pick.line };
+    const lines = [...new Set(places.map((p) => p.line))].slice(0, 8).join(', ');
+    return { ok: false, error: `old_text appears ${count} times (lines ${lines}).${line ? ` None of them is at line ${line}.` : ''} Pass line with the one you mean (the line it starts on), or include more surrounding lines so it matches once, or set replace_all to true to change all of them.` };
+  }
   // The change is already there (the model is repeating an edit it made).
   if (newText.trim() && text.includes(newText.trim())) return { ok: false, error: 'This change is already in the file: new_text is there and old_text is gone. Do not repeat it; go on with the next step.' };
   const fileLines = text.split('\n');
@@ -590,8 +622,9 @@ export function findEdit(text, oldText, newText, { replaceAll = false } = {}) {
       for (let j = 0; j < want.length; j++) if (norm(fileLines[i + j]) !== norm(want[j])) { ok = false; break; }
       if (ok) hits.push(i);
     }
-    if (hits.length === 1) {
-      const i = hits[0];
+    const one = hits.length === 1 ? hits[0] : placeAt(hits.map((i) => ({ i, line: i + 1 })), Number(line), want.length)?.i;
+    if (one !== undefined) {
+      const i = one;
       let repl = newText.replace(/\n$/, '').split('\n');
       if (mode === 'indent') {
         const have = /^\s*/.exec(fileLines[i])[0];
@@ -599,9 +632,9 @@ export function findEdit(text, oldText, newText, { replaceAll = false } = {}) {
         repl = repl.map((l) => (l.startsWith(gave) ? have + l.slice(gave.length) : l));
       }
       const after = [...fileLines.slice(0, i), ...repl, ...fileLines.slice(i + want.length)].join('\n');
-      return { ok: true, after, how: mode };
+      return { ok: true, after, how: mode, at: i + 1 };
     }
-    if (hits.length > 1) return { ok: false, error: `old_text matches ${hits.length} places; include more surrounding lines so it matches once.` };
+    if (hits.length > 1) return { ok: false, error: `old_text matches ${hits.length} places (lines ${hits.slice(0, 8).map((i) => i + 1).join(', ')}); pass line with the one you mean, or include more surrounding lines so it matches once.` };
   }
   // Point at the closest line to help the model try again.
   // Near-copies: the model mistyped a character or two. Accept only one
@@ -614,10 +647,11 @@ export function findEdit(text, oldText, newText, { replaceAll = false } = {}) {
     const map = new Map(want.map((w, j) => [w, real[j]]));
     const repl = newText.replace(/\n$/, '').split('\n').map((l) => map.get(l) ?? l);
     const after = [...fileLines.slice(0, i), ...repl, ...fileLines.slice(i + want.length)].join('\n');
-    return { ok: true, after, how: 'fuzzy' };
+    return { ok: true, after, how: 'fuzzy', at: i + 1 };
   }
   // The line sharing the longest start with old_text's first line.
-  const first = (want.find((l) => l.trim()) ?? '').trim();
+  const firstAt = Math.max(0, want.findIndex((l) => l.trim()));
+  const first = (want[firstAt] ?? '').trim();
   let near = -1;
   let best = 0;
   fileLines.forEach((l, i) => {
@@ -627,8 +661,14 @@ export function findEdit(text, oldText, newText, { replaceAll = false } = {}) {
     if (n > best) { best = n; near = i; }
   });
   if (best < Math.min(8, Math.ceil(first.length * 0.5))) near = -1;
-  const hint = near >= 0 ? ` The closest match is line ${near + 1}: "${fileLines[near].trim().slice(0, 120)}". Read the file again and copy old_text exactly.` : ' Read the file again and copy old_text exactly.';
-  return { ok: false, error: `old_text was not found in the file.${hint}` };
+  if (near < 0) return { ok: false, error: 'old_text was not found in the file. Read the file again and copy old_text exactly (or Search for it, if it is in another file).' };
+  // The place as the file has it now, so the next Edit can copy from it at once: from where old_text
+  // would start, its length and a line more; and the first of its lines that is not the same.
+  const from = Math.max(0, near - firstAt);
+  let differs = from;
+  while (differs - from < want.length && differs < fileLines.length && fileLines[differs].trim() === want[differs - from].trim()) differs++;
+  const now = shownLines(fileLines, from, want.length + 1);
+  return { ok: false, error: `old_text was not found in the file. The closest match is line ${near + 1}: "${fileLines[near].trim().slice(0, 120)}"; your old_text differs from line ${differs + 1} on. Those lines are now:\n${now}\nCopy old_text exactly from these lines (without the numbers) and send the Edit again.` };
 }
 
 // Small models copy Read's line numbers ("    12\t…") into what they write.
@@ -762,9 +802,10 @@ export function prepare(name, args, env) {
       // The design studio's built line is read folded (hideBuilt): the fold in an edit means the real line.
       args.old_text = realBuilt(args.old_text, before);
       args.new_text = realBuilt(args.new_text, before);
-      const m = findEdit(before, args.old_text, args.new_text, { replaceAll: args.replace_all === true });
+      const m = findEdit(before, args.old_text, args.new_text, { replaceAll: args.replace_all === true, line: Number(args.line) || null });
       if (!m.ok) return { error: m.error };
-      if (m.after === before) return { error: 'old_text and new_text are the same, so nothing would change. new_text must be the corrected version: write the changed lines out in full.' };
+      // Seven times in 40 runs on a service (5 Oct 2026): say where, and that the file may already be right.
+      if (m.after === before) return { error: `old_text and new_text are the same, so nothing would change${m.at ? `: line ${m.at} already reads that way` : ''}. If that is what you wanted, the file is already right: go on with the next step. Otherwise new_text must be the corrected version: write the changed lines out in full.` };
       // Refuse an edit that breaks a file which parsed before.
       const broken = syntaxError(p.abs, m.after, { more: env.checks });
       if (broken && !syntaxError(p.abs, before, { more: env.checks })) return { error: `That edit would break ${p.rel}: ${broken}. Nothing was changed. Remember: new_text REPLACES old_text (it is not added after it), so new_text must contain the whole new version of those lines and nothing twice.` };
@@ -1065,7 +1106,7 @@ export async function execute(name, args, prepared, env) {
       // Output too long to show: kept whole as SCRIPTS/out-<n>.txt, to Read in parts instead of running it again.
       const kept = r.whole || body.length > max ? saveOutput(scripts ? outputWithScripts(r.whole ?? body) : r.whole ?? body, env.cwd) : null;
       const keptNote = kept ? `(The whole output, ${kept.lines.toLocaleString('en-US')} lines, is saved as ${kept.name}: Read it with offset and limit, or find, instead of running the command again.)` : '';
-      const after = [where, r.code !== 0 ? tildeHint(body) : '', saved ? savedNote(saved) : '', keptNote].filter(Boolean).join('\n');
+      const after = [where, r.code !== 0 ? tildeHint(body) : '', r.code !== 0 ? nodeHint(body) : '', saved ? savedNote(saved) : '', keptNote].filter(Boolean).join('\n');
       return { text: cut(body || '(no output)', max) + status + (after ? `\n${after}` : ''), error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut, ...(r.timedOut ? { after: took } : {}), ...(saved ? { saved: saved.name } : {}) }, ...(saved ? { saved } : {}) };
     }
     case 'Jobs': return jobsTool(args, env, max);
