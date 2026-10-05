@@ -44,6 +44,10 @@ const nameOf = (r, short = false) => `${shortName(r.model)}${r.tag ? ` · ${shor
 const keyOf = (r) => (r.tag ? `${r.model} (${r.tag})` : r.model);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // The bench stops a task at its time limit by interrupting it; limit is the step limit; stuck, the stops for errors or repeats.
+// Where a run's time went (the bench's timeline, terminal/src/agent/timing.mjs): the model writing (its
+// thinking a part of that), reading the conversation, waiting on a shared service, the tools, the app's own work,
+// and the replies cut short and asked for again (a part of writing and reading, shown on its own).
+const TIME_ROWS = [['write', 'Writing'], ['think', 'Thinking (part of writing)'], ['read', 'Reading the conversation'], ['wait', 'Waiting on the service'], ['toolSecs', 'Tools (commands, reads, tests)'], ['app', 'The app’s own work'], ['cutSecs', 'Replies cut short and asked again (counted above)']];
 const REASONS = { done: 'finished', timeout: 'out of time', time: 'out of time', interrupted: 'out of time', limit: 'out of steps', steps: 'out of steps', 'max-steps': 'out of steps', stuck: 'stopped, stuck' };
 
 // The markers, one shape and colour a model, in the order of the ranking.
@@ -113,6 +117,8 @@ ${row('Steps', ranked.map((r) => num(r, (x) => x.steps ?? '–')))}
 ${row('Tool errors', ranked.map((r) => num(r, (x) => x.toolErrors ?? '–')))}
 ${row('How it ended', ranked.map((r) => num(r, (x) => esc(many(x) ? [...new Set(x.runs.map((y) => REASONS[y.reason] ?? y.reason ?? '–'))].join(' · ') : REASONS[x.reason] ?? x.reason ?? '–'))))}
 ${row('Context (thousands of tokens)', ranked.map((r) => num(r, (x) => (x.ctx && x.ctx !== ctxAll ? `<span class="part">${Math.round(x.ctx / 1024)}</span>` : Math.round((x.ctx ?? ctxAll) / 1024)))))}</tbody>
+${ranked.some((r) => r.time) ? `<tbody>${row('Where the time went', ranked.map((r) => num(r, (x) => (x.time ? (x.time.secs / 60).toFixed(1) : '–'))), true, 'Minutes')}
+${TIME_ROWS.map(([key, label]) => row(label, ranked.map((r) => num(r, (x) => (x.time ? ((x.time[key] ?? 0) / 60).toFixed(1) : '–'))))).join('\n')}</tbody>` : ''}
 <tbody>${row('Tokens', ranked.map((r) => num(r, (x) => k(x.outTokens))), true, 'Written (thousands)')}
 ${row('Thinking (thousands)', ranked.map((r) => num(r, (x) => k(x.thinkTokens))))}
 ${row('Speed (tokens a second)', ranked.map((r) => num(r, (x) => (x.tps == null ? '–' : Number(x.tps).toFixed(1)))))}</tbody>

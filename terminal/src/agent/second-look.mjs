@@ -65,7 +65,7 @@ export async function secondLook({ url, model, slot, use, request = '', plan = '
   try {
     const user = `The user's request:\n${String(request).trim().slice(0, 2000) || '(none given)'}${plan ? `\n\nThe assistant's plan:\n${plan}` : ''}\n\nIts steps, oldest first:\n${steps.map((s) => `- ${s}`).join('\n') || '(none)'}\n\nWhat the app recorded:\n${facts.map((f) => `- ${f}`).join('\n') || '- nothing failed or blocked'}\n\nIts answer:\n${String(answer).trim().slice(0, 2500)}`;
     const call = (more, maxTokens) => ask({
-      url, model, slot, use, temperature: 0, maxTokens, thinking: false, schema: SCHEMA, system: LOOK_SYSTEM,
+      what: 'the second look', url, model, slot, use, temperature: 0, maxTokens, thinking: false, schema: SCHEMA, system: LOOK_SYSTEM,
       signal: signal ? AbortSignal.any([signal, late.signal]) : late.signal, user: `${user}${more}`,
     });
     const listed = (r) => (Array.isArray(r?.json?.problems) ? r.json.problems : []).map((p) => short(p, 220)).filter(Boolean).slice(0, 3);

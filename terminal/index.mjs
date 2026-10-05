@@ -11,6 +11,7 @@
 //   - the design examples and the layout check, for the before/after test
 //     (models/evals/bench/design/).
 export { runHeadless } from './src/headless.mjs';
+export { timeLine, slowReads } from './src/agent/timing.mjs';
 // THINK_BUDGET_SECS and STEP_DOWN_CAP: the step-down the Thinking old vs new test (models/evals/tools/think-ab.mjs) names.
 // toolCallInText: a tool call written as text, read the way the app reads it (the New model check, models/evals/tools/model-check.mjs).
 export { Agent, claimsAlreadyThere, claimsDone, asksForWork, THINK_BUDGET_SECS, STEP_DOWN_CAP, toolCallInText, claimsAllGood, claimsFound } from './src/agent/agent.mjs';

@@ -566,6 +566,17 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   Map not in the home folder, Rename and TestFirst in a folder of code, Remember with a memory; the folder is looked
   at once a conversation, so the list does not move. The remote TOOLS.md has two lines more: copy old_text from a
   failed Edit's lines, and try out code in a file rather than a long node -e. `terminal/test/better-tools.test.mjs`.
+- **Where the time goes** (5 Oct 2026, the owner: "CAN WE BUILD #2?"; `terminal/src/agent/timing.mjs`). In the saved
+  runs the replies took about three quarters of a run, and with thinking off a short reply still took 60-80 s, with
+  nothing saved to say whether the service was reading the conversation or writing. Now each model reply is one entry
+  (agent.mjs `generate`, event `timing`) with what the service says it spent (Ollama's durations, kept by client.mjs
+  as llama.cpp names them: `prompt_ms`, `predicted_ms`, `load_ms`): loading, reading, writing, and the rest as
+  waiting; the tokens new since the last reply (`fresh`: a long read of few new tokens is the conversation read
+  again); its thinking; and a reply cut short says why. Each side call (`complete({ what })`, flows/llm.mjs `timers`:
+  the cases' list, the case review, the second look, the notes) and each tool run (`runTool`) is one too. `coding -p`
+  returns them (`timeline`, `time`), the bench keeps them in each run's file and summary and prints a line and the
+  slowest reads under each result, and the shootout page has a "Where the time went" section. Nothing measured yet.
+  `terminal/test/timing.test.mjs`.
 
 ## MCP servers (3 Oct 2026)
 

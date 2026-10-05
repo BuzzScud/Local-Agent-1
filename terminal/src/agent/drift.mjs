@@ -48,7 +48,7 @@ export async function driftCheck({ url, model, slot, use, request = '', plan = '
   const ms = () => Date.now() - t0;
   try {
     const r = await ask({
-      url, model, slot, use, temperature: 0, maxTokens: 160, thinking: false, schema: SCHEMA, system: DRIFT_SYSTEM,
+      what: 'the stays-on-task check', url, model, slot, use, temperature: 0, maxTokens: 160, thinking: false, schema: SCHEMA, system: DRIFT_SYSTEM,
       signal: signal ? AbortSignal.any([signal, late.signal]) : late.signal,
       user: `The user's request:\n${String(request).trim().slice(0, 2000) || '(none given)'}${plan ? `\n\nThe assistant's plan:\n${plan}` : ''}\n\nIts last steps, oldest first:\n${steps.map((s) => `- ${s}`).join('\n') || '(none)'}${said ? `\n\nIts last words: ${said}` : ''}`,
     });

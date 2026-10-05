@@ -9,7 +9,8 @@ import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
 import { openMemory } from './agent/facts.mjs';
 import { saveLessons, worthSaving } from './agent/lessons.mjs';
 import { helpersOn } from './agent/helpers.mjs';
-import { llmCalls } from './flows/llm.mjs';
+import { llmCalls, timers } from './flows/llm.mjs';
+import { timeOf, timelineFrom } from './agent/timing.mjs';
 import { AgentsRun } from './agent/agents-run.mjs';
 import { agentDriver } from './agent/agents-driver.mjs';
 
@@ -128,6 +129,11 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     if (index) { const i0 = Date.now(); await index.build({ signal }); indexed = { parts: index.parts.length, secs: (Date.now() - i0) / 1000, state: index.state }; }
   }
   const calls0 = llmCalls.n;
+  // Where the run's time went (agent/timing.mjs): each reply and tool run, and each side call.
+  const timeline = [];
+  agent.on('timing', (e) => timeline.push(e));
+  const timer = (e) => timeline.push(e);
+  timers.add(timer);
   const t0 = Date.now();
   agent.canSee = canSee;
   // A picture the model reads by itself: its vision turned on then (coding -p reloads the model).
@@ -158,6 +164,7 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   // more() → a message that arrived while it worked (a note typed to a loop's run), sent when the turn ends.
   if (more && !agents) { for (let next = more(); next != null && !signal?.aborted; next = more()) reason = await agent.send(String(next), { signal }); }
   await agent.endSession('exit');
+  timers.delete(timer);
   // Background jobs end with the run (nothing is left to wake for them).
   const left = agent.jobs.running();
   if (left.length) { agent.jobs.stopAll(); agent.emit('note', { text: `Stopped ${left.length === 1 ? 'a background job' : `${left.length} background jobs`} as the run ended: ${left.map((j) => `${j.id} (${j.command})`).join(', ')}`, tone: 'dim' }); }
@@ -196,5 +203,7 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     replies: counts.steps ?? 0, reads: counts.reads ?? 0, readFirst: counts.readFirst ?? 0, thinkTokens: counts.thinkTokens ?? 0, stuckAsks: counts.stuckAsks ?? 0,
     // Past half its time for thinking, it thought only briefly (agent.mjs steppedDown).
     steppedDown: agent.steppedAt != null,
+    // Each reply, side call and tool run from the start (at: seconds), and the sums.
+    timeline: timelineFrom(timeline.filter((e) => e.start >= t0), t0), time: timeOf(timeline.filter((e) => e.start >= t0), secs),
   };
 }

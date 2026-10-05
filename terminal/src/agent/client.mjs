@@ -233,6 +233,7 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
   let buf = '';
   let finish = null, usage = null, timings = null, calls = 0;
   const per = (n, ns) => (n && ns ? n / (ns / 1e9) : undefined);
+  const ms = (ns) => (Number.isFinite(ns) ? ns / 1e6 : undefined);
   // One line of the stream as events (the last one also says how it ended and what it cost).
   const read = (line) => {
     if (!line.trim()) return [];
@@ -251,7 +252,8 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
     if (j.done) {
       finish = j.done_reason === 'length' ? 'length' : calls ? 'tool_calls' : 'stop';
       usage = { prompt_tokens: j.prompt_eval_count ?? 0, completion_tokens: j.eval_count ?? 0 };
-      timings = { prompt_n: j.prompt_eval_count, prompt_per_second: per(j.prompt_eval_count, j.prompt_eval_duration), predicted_n: j.eval_count, predicted_per_second: per(j.eval_count, j.eval_duration) };
+      // With what it spent, as llama.cpp names it (agent/timing.mjs): reading the conversation, writing, loading the model.
+      timings = { prompt_n: j.prompt_eval_count, prompt_per_second: per(j.prompt_eval_count, j.prompt_eval_duration), predicted_n: j.eval_count, predicted_per_second: per(j.eval_count, j.eval_duration), prompt_ms: ms(j.prompt_eval_duration), predicted_ms: ms(j.eval_duration), load_ms: ms(j.load_duration) };
     }
     return evs;
   };

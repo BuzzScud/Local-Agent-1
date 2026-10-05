@@ -3,6 +3,7 @@
 // thinking: think first, at the chat's level (Medium/High); used for writing
 // code and tests. Sorting and choosing (JSON answers) never think.
 import { streamChat } from '../agent/client.mjs';
+import { replyTiming } from '../agent/timing.mjs';
 import { thinkingKwargs, endpointOf, authHeaders } from '../../../models/index.mjs';
 
 // Whoever wants a count of every focused call's tokens (the agent, while a
@@ -12,6 +13,9 @@ export const tallies = new Set();
 // of the model's own calls (headless.mjs), and how many are answering now
 // (the code search waits for them, tools/codeindex.mjs).
 export const llmCalls = { n: 0, now: 0 };
+// Whoever wants each call's time (headless.mjs, for a run's timeline: agent/timing.mjs). what: what the
+// call was for, from its caller ("listing the cases", "second look").
+export const timers = new Set();
 
 // Writing tests and drafting (the work before the tries) think at most this
 // much; the tries keep the model's whole cap. On practice task 28 at High
@@ -29,11 +33,11 @@ export const oldThinking = () => (process.env.AGENTIC_THINK === 'old');
 
 // thinkCap: a smaller thinking cap for this one call (the server's
 // --reasoning-budget stays the model's thinkingBudget).
-export async function complete({ url, model, slot, system, user, instructions = '', temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap, use }) {
+export async function complete({ url, model, slot, system, user, instructions = '', temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap, use, what }) {
   system = withInstructions(system, instructions);
   llmCalls.n++;
   llmCalls.now++;
-  try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap, use }); } finally { llmCalls.now--; }
+  try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap, use, what }); } finally { llmCalls.now--; }
 }
 
 const withInstructions = (system, instructions) => (instructions ? `${instructions}\n\nCurrent subtask (follow its output format):\n${system}` : system);
@@ -88,8 +92,10 @@ export async function decide({ url, model, slot, system, user, instructions = ''
   } finally { llmCalls.now--; }
 }
 
-async function ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap, use }) {
+async function ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap, use, what }) {
   const t0 = Date.now();
+  let timings = null;
+  let firstToken = null;
   const think = Boolean(thinking) && !schema;
   const base = think ? model.thinkingSampling ?? model.sampling : model.sampling;
   const sampling = { ...base, ...(temperature !== undefined ? { temperature } : {}) };
@@ -102,6 +108,12 @@ async function ask({ url, model, slot, system, user, temperature, maxTokens, sch
   for await (const ev of streamChat({ url, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], thinking: think, effort, model, sampling, maxTokens: maxTokens + budget, thinkCap: think && budget < full ? budget : undefined, slot, signal, extra, use })) {
     if (ev.type === 'text') { text += ev.text; tokens++; onToken?.(tokens + thought); }
     if (ev.type === 'reasoning') { thought++; onToken?.(tokens + thought); }
+    if ((ev.type === 'text' || ev.type === 'reasoning') && firstToken === null) firstToken = Date.now();
+    if (ev.type === 'done') timings = ev.timings;
+  }
+  if (timers.size) {
+    const entry = replyTiming({ kind: 'call', what: what ?? 'a side call', start: t0, firstToken, timings, out: timings?.predicted_n ?? tokens + thought, think: thought });
+    for (const t of timers) { try { t(entry); } catch { /* a timer never stops the work */ } }
   }
   let json = null;
   if (schema) { try { json = JSON.parse(text); } catch { json = null; } }
