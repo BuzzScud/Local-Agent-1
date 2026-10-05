@@ -46,6 +46,7 @@ import { readResults, testsFailed } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { Jobs, took } from '../tools/jobs.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
+import { replyTiming, toolTiming } from './timing.mjs';
 import { autoCheck } from './auto-check.mjs';
 import { driftCheck, recentSteps, nudgeText, DRIFT_EVERY, DRIFT_NUDGES } from './drift.mjs';
 import { secondLook, ownSteps, lookFacts, lookText, lookOn } from './second-look.mjs';
@@ -1360,7 +1361,7 @@ export class Agent extends EventEmitter {
     const request = String(this.turn?.request ?? '').trim();
     if (!request) return [];
     try {
-      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 4000,
+      const r = await complete({ what: 'listing the cases', url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 4000,
         system: 'You list the cases a coding request specifies, so each can be tested. Judge only from the request.',
         user: `Request:\n${request.slice(0, 6000)}\n\nList what this request specifies, so that each thing can be tested. Go through it phrase by phrase and stay with its own words: add no behaviour, argument or path it does not state.\n- cases: each behaviour it asks for. One case for every form it names: "A, B or C" is three cases.\n- unchanged: each thing it says must stay as it is, be refused, or be left alone. Again one for every form it names.\nFor each one: example is the input alone, just as the request writes it (a command line, a string, a value), with a small made-up value where it has a placeholder (FILE becomes notes.txt, DIR becomes src, N becomes 3) and relative names only, never a path from the root. Give a call only when the request's form is itself a call. expect is what the request says happens, in the request's own words, with no data shape of your own.\nAt most ${MAX_CASES} in each list.`,
         schema: { type: 'object', properties: { cases: { type: 'array', items: CASE_ITEM, maxItems: MAX_CASES }, unchanged: { type: 'array', items: CASE_ITEM, maxItems: MAX_CASES } }, required: ['cases', 'unchanged'] } });
@@ -1388,7 +1389,7 @@ export class Agent extends EventEmitter {
     const t0 = Date.now();
     this.emit('busy', { task: 'reading the code against the cases' });
     try {
-      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 4000, system: REVIEW_SYSTEM, user: reviewAsk({ request, code, cases }), schema: REVIEW_SCHEMA(cases.length) });
+      const r = await complete({ what: 'reviewing the cases', url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 4000, system: REVIEW_SYSTEM, user: reviewAsk({ request, code, cases }), schema: REVIEW_SCHEMA(cases.length) });
       const secs = Math.max(1, Math.round((Date.now() - t0) / 1000));
       if (!Array.isArray(r.json?.reviews)) { this.emit('note', { text: `Case review: no answer came back (${secs} s); the answer stands as it is.`, tone: 'dim', fold: true }); return ''; }
       const wrong = reviewWrong(r.json.reviews, cases);
@@ -1466,7 +1467,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.toolPlace = null; this.cardsGiven = new Set(); this.task = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.toolPlace = null; this.timedTo = 0; this.cardsGiven = new Set(); this.task = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.
@@ -1629,7 +1630,7 @@ export class Agent extends EventEmitter {
         try {
           // Only the lines that really differ: a change in two places is not a rewrite.
           const d = changedLines(before, after).map((l) => `${l.type}${l.text}`).join('\n').slice(0, 3000);
-          const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0.2, maxTokens: 70, system: 'You describe code changes in one short plain sentence.', user: `The change to ${rel}:\n${d}\n\nIn one short sentence, what does this change do?` });
+          const r = await complete({ what: 'describing a change', url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0.2, maxTokens: 70, system: 'You describe code changes in one short plain sentence.', user: `The change to ${rel}:\n${d}\n\nIn one short sentence, what does this change do?` });
           const one = r.text.trim().split('\n')[0].replace(/^["']|["']$/g, '');
           return one ? `${one.replace(/\.?$/, '.')} ` : '';
         } catch { return ''; }
@@ -3275,7 +3276,17 @@ export class Agent extends EventEmitter {
     let thinkEnd = null;
     let measured = null; // the server's own speed for this request (llama.cpp, Ollama); none from the Claude API or OpenRouter
     let written = 0; // the tokens the service says it wrote, for timing one that sends no speed
+    let served = null; // what the service says it spent on this reply (agent/timing.mjs)
     const turn = { reasoning: '', text: '', calls: [], finish: null, tokens: 0 };
+    // The tokens added since the model's last reply (tool results, notes; not its own reply): all a perfect
+    // cache would have to read. The whole conversation after a restart from notes, or a new one.
+    const since = this.timedTo && this.messages[this.timedTo - 1] === this.timedLast ? this.timedTo : 0;
+    const fresh = this.messages.slice(since).filter((m) => m.role !== 'assistant').reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')), 0);
+    this.timedTo = this.messages.length;
+    this.timedLast = this.messages.at(-1);
+    const clock = (cut = null) => this.emit('timing', replyTiming({ start: t0, firstToken, timings: served, fresh, cut,
+      out: served?.predicted_n || written || tokensOf(turn.reasoning + turn.text + turn.calls.filter(Boolean).map((c) => c.args).join('')),
+      think: turn.reasoning ? tokensOf(turn.reasoning) : 0, thinkSecs: turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0 }));
     const local = new AbortController();
     const onAbort = () => local.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
@@ -3329,6 +3340,7 @@ export class Agent extends EventEmitter {
           if (ev.usage) this.ctxUsed = (ev.usage.prompt_tokens ?? 0) + (ev.usage.completion_tokens ?? 0);
           written = ev.usage?.completion_tokens ?? 0;
           measured = ev.timings?.predicted_per_second ?? null;
+          served = ev.timings ?? null;
           if (ev.timings) {
             this.stats.tps = ev.timings.predicted_per_second ?? this.stats.tps;
             if ((ev.timings.prompt_n ?? 0) > 50) this.stats.pps = ev.timings.prompt_per_second;
@@ -3337,6 +3349,7 @@ export class Agent extends EventEmitter {
         }
       }
     } catch (e) {
+      if (!turn.looping && !turn.overThought) clock(signal?.aborted ? 'stopped' : 'failed');
       if (turn.looping || turn.overThought) { /* aborted on purpose */ }
       else if (signal?.aborted) {
         turn.secs = (Date.now() - t0) / 1000;
@@ -3378,6 +3391,7 @@ export class Agent extends EventEmitter {
       this.answering--;
     }
     if (turn.overThought) {
+      clock('thought past the cap');
       this.stats.outTokens += tokensOf(turn.reasoning);
       // And the rest of this request with it off: thinking stopped at the cap is thrown away, and a model that
       // passes it once passes it again (5 Oct 2026: six capped replies in one run, about 100 s each, 10 of its 25 minutes).
@@ -3394,6 +3408,7 @@ export class Agent extends EventEmitter {
     this.stats.requests++;
     turn.secs = (Date.now() - t0) / 1000;
     turn.thinkSecs = turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0;
+    clock(turn.looping ? 'repeating itself' : null);
     // The footer's gauges on a remote (app/remote-footer.mjs): the time to this request's first
     // token, and its speed, timed here when the service sends none; the last 8 speeds of the
     // model in use (speedsOf names it, so another model starts its own).
@@ -3505,7 +3520,18 @@ export class Agent extends EventEmitter {
   // A step, with your hooks around it: PreToolUse may stop it (the model is told why), allow it
   // without a question or make it ask; PostToolUse may tell the model something after it. A hook
   // that changed a file the model has seen (a formatter after an Edit) is said with the lines.
+  // Each tool's time (agent/timing.mjs), once: a step that runs another (a List of a file as a Read) counts once.
   async runTool(call, signal) {
+    if (this.toolsTiming) return this.hookedTool(call, signal);
+    this.toolsTiming = true;
+    const start = Date.now();
+    let out;
+    try { out = await this.hookedTool(call, signal); return out; } finally {
+      this.toolsTiming = false;
+      this.emit('timing', toolTiming({ name: toolNameOf(call.name, this.way), start, error: Boolean(out?.error) }));
+    }
+  }
+  async hookedTool(call, signal) {
     const hooks = this.userHooks;
     const name = toolNameOf(call.name, this.way);
     if (!hooks || (!hooks.has('PreToolUse', name) && !hooks.has('PostToolUse', name))) return this.runStep(call, signal);
@@ -4588,7 +4614,7 @@ export class Agent extends EventEmitter {
     const request = [...this.messages].reverse().find((m) => m.role === 'user' && !/^\[|^Not done yet|^Go ahead|^The tests fail|^You created|^Reply to the user|^You ran out/.test(m.content))?.content ?? '';
     if (!request.trim() || !this.turn.diffs.trim()) return null;
     try {
-      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 220,
+      const r = await complete({ what: 'checking it did everything', url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 220,
         system: 'You check whether a coding assistant did everything a request asked. Judge only from the request, the changes and its report.',
         user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Agentic Coder shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nBreak the request into its distinct asks (parts, at most 6) and judge each one against the changes. A request with one ask has one part. A part is done only when it is done fully, the way the person asking would expect: a story, notes, a description or documentation that is only a sentence or two, a placeholder, a stub or a TODO counts as not done. Is every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
         schema: { type: 'object', properties: { parts: { type: 'array', items: { type: 'object', properties: { part: { type: 'string' }, done: { type: 'boolean' } }, required: ['part', 'done'] }, maxItems: 6 }, done: { type: 'boolean' }, missing: { type: 'string' } }, required: ['parts', 'done', 'missing'] } });
@@ -5039,6 +5065,7 @@ export class Agent extends EventEmitter {
     const asked = held ? [...this.messages.slice(0, -held.length), held[0], { ...held[1], content: '(This output is kept for you: it comes back, whole, right after your notes.)' }] : this.messages;
     let summary = '';
     let called = false;
+    const notesAt = Date.now();
     try {
       // Thinking stays on (turning it off would change the prompt and read it all
       // again) but is capped at NOTES_THINK, so the 700 tokens go to the notes. A service
@@ -5062,6 +5089,8 @@ export class Agent extends EventEmitter {
     } catch (e) {
       if (signal?.aborted) throw e;
       return false;
+    } finally {
+      this.emit('timing', replyTiming({ kind: 'call', what: 'notes when memory filled', start: notesAt, out: tokensOf(summary) }));
     }
     summary = beforeCall(summary).trim();
     if (summary.length < 40) {

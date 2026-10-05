@@ -44,7 +44,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady, connectRemote } from '../../index.mjs';
-import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf, testSettings, readLimits, MODEL_HOOKS } from '../../../terminal/index.mjs';
+import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf, testSettings, readLimits, MODEL_HOOKS, timeLine, slowReads } from '../../../terminal/index.mjs';
 // A run from the Tests page's control panel: its Context and Thinking cap (the rest reaches runHeadless).
 const panel = testSettings();
 import { recordTest, codeLabel } from '../record.mjs';
@@ -185,7 +185,7 @@ try {
       if (stopping) { if (asHome) process.env.HOME = realHome; rmSync(dir, { recursive: true, force: true }); break runs; }
       writeFileSync(join(dir, 'answer.txt'), run.finalText ?? '');
       writeFileSync(join(dir, 'asked.txt'), (run.asked ?? []).map((a) => a.question).join('\n'));
-      writeFileSync(join(tdir, `${task}-think-${thinking ? 'on' : 'off'}${reps > 1 ? `-rep${rep}` : ''}.json`), JSON.stringify({ task, thinking, reason: run.reason, messages: run.messages ?? [], log: run.log ?? [] }, null, 1));
+      writeFileSync(join(tdir, `${task}-think-${thinking ? 'on' : 'off'}${reps > 1 ? `-rep${rep}` : ''}.json`), JSON.stringify({ task, thinking, reason: run.reason, messages: run.messages ?? [], log: run.log ?? [], timeline: run.timeline ?? [] }, null, 1));
       const check = spawnSync('/bin/zsh', [join(here, 'tasks', task, 'check.sh')], { cwd: work, encoding: 'utf8', timeout: 60_000 });
       if (asHome) process.env.HOME = realHome;
       const pass = check.status === 0;
@@ -195,11 +195,14 @@ try {
         // The model's own work (a helper's step is not one) and what the helpers brought.
         flows: flowsOn, way: run.way ?? wayUsed, helpers: run.helpers ?? [...helpers], ownSteps: run.ownSteps ?? null, modelCalls: run.modelCalls ?? null, helperItems: run.helperItems ?? 0, helperTokens: run.helperTokens ?? 0, indexed: run.indexed ?? null,
         // Past half its time it thought only briefly (the step-down, agent.mjs).
-        steppedDown: Boolean(run.steppedDown) };
+        steppedDown: Boolean(run.steppedDown),
+        // Where its time went: writing, reading, tools, the app (terminal/src/agent/timing.mjs).
+        time: run.time ?? null };
       // The memory's save comes after the check: its own files are not the task's.
       if (withMemory && run.save) { const s = await run.save(); if (s) { row.saved = s.added.map((f) => `${f.kind}: ${f.text}`); row.refused = s.refused.map((r) => r.why); row.saveSecs = Math.round(s.secs); saves.push(s); } }
       results.push(row);
       console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps (${row.ownSteps ?? '?'} its own)  ${row.modelCalls ?? '?'} model calls  ${row.toolErrors} errors${row.helperTokens ? `  +${row.helperTokens} helper tokens` : ''}  ${row.reads ?? '-'} reads  ~${row.thinkTokens ?? '-'} thinking  ${row.why}`);
+      if (row.time) { console.log(`      ${timeLine(row.time)}`); for (const r of slowReads(run.timeline ?? [])) console.log(`        slow read · ${r}`); }
       if (keepArg) { try { cpSync(work, join(tdir, `${task}-think-${thinking ? 'on' : 'off'}${reps > 1 ? `-rep${rep}` : ''}-files`), { recursive: true, filter: (src) => !/(^|\/)(node_modules|\.git)(\/|$)/.test(src) }); } catch { /* the results stand without them */ } }
       rmSync(dir, { recursive: true, force: true });
     }

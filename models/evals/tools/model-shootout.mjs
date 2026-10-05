@@ -17,6 +17,8 @@ import { homedir } from 'node:os';
 import { borrowOllama } from '../../index.mjs';
 import { shootoutPage } from './model-shootout-page.mjs';
 
+// The parts of a run's time the page shows (seconds).
+const TIME_PARTS = ['secs', 'write', 'think', 'read', 'wait', 'load', 'before', 'toolSecs', 'app', 'cutSecs'];
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
@@ -96,7 +98,7 @@ for (const model of models) {
     const answer = saved?.messages?.filter((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim()).pop()?.content ?? res.answer ?? '';
     const parts = partsOf(res.checkOut);
     const putBack = (saved?.log ?? []).some((e) => /the app would put this message's changes back/.test(e.text ?? ''));
-    return { rep: res.rep ?? i + 1, parts, secs: res.secs, steps: res.steps, toolErrors: res.toolErrors, outTokens: res.outTokens, thinkTokens: res.thinkTokens, tps: res.tps, reason: res.reason, answer, overclaims: overclaims(answer, parts), putBack };
+    return { rep: res.rep ?? i + 1, parts, secs: res.secs, steps: res.steps, toolErrors: res.toolErrors, outTokens: res.outTokens, thinkTokens: res.thinkTokens, tps: res.tps, reason: res.reason, answer, overclaims: overclaims(answer, parts), putBack, time: res.time ?? null };
   });
   const said = runs[0]?.answer ?? row?.answer ?? '';
   // A model the service had no room for never ran: a row that says so, not a score of 0.
@@ -117,9 +119,12 @@ for (const model of models) {
   // (AGENTIC_PUT_BACK=off, a first run scored the put-back copy as 0 of 6), and the log says so.
   // With several runs the row's numbers are their means, parts with its lowest and highest, and runs keeps each.
   const mean = (k) => { const v = runs.map((x) => x[k]).filter((x) => typeof x === 'number'); return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 : null; };
+  // Where the time went (terminal/src/agent/timing.mjs), each part the mean of the runs that recorded it.
+  const timed = runs.map((x) => x.time).filter(Boolean);
+  const time = timed.length ? Object.fromEntries(TIME_PARTS.map((k) => [k, Math.round(timed.reduce((a, t) => a + (t[k] ?? 0), 0) / timed.length)])) : null;
   const got = runs.map((x) => x.parts.got);
   const parts = { ...runs[0].parts, got: Math.round((got.reduce((a, b) => a + b, 0) / got.length) * 10) / 10, min: Math.min(...got), max: Math.max(...got) };
-  const r = { model, ran: true, ctx: ctxFor(model) ?? 32768, pass: runs.every((x) => x.parts.got === x.parts.of), parts, secs: mean('secs'), wall: Math.round((Date.now() - t0) / 1000), steps: mean('steps'), toolErrors: mean('toolErrors'), outTokens: mean('outTokens'), thinkTokens: mean('thinkTokens'), tps: mean('tps'), reason: runs[0].reason, answer: said, overclaims: runs.some((x) => x.overclaims), putBack: runs.some((x) => x.putBack), runs, unloaded: let_go };
+  const r = { model, ran: true, time, ctx: ctxFor(model) ?? 32768, pass: runs.every((x) => x.parts.got === x.parts.of), parts, secs: mean('secs'), wall: Math.round((Date.now() - t0) / 1000), steps: mean('steps'), toolErrors: mean('toolErrors'), outTokens: mean('outTokens'), thinkTokens: mean('thinkTokens'), tps: mean('tps'), reason: runs[0].reason, answer: said, overclaims: runs.some((x) => x.overclaims), putBack: runs.some((x) => x.putBack), runs, unloaded: let_go };
   rows.push(r);
   log(`  ${runs.map((x) => `${x.parts.got}/${x.parts.of}`).join(', ')} parts${runs.length > 1 ? ` (mean ${parts.got})` : ''} · ${r.secs} s · ${r.steps} steps · ${r.outTokens} tokens out${r.overclaims ? ' · an answer claims more than passed' : ''}`);
   writeFileSync(join(out, 'shootout.json'), JSON.stringify({ task, models, sizes, timeoutSecs, ctxAll: ctxAll ?? 32768, reps, lean, rows }, null, 1));

@@ -38,7 +38,7 @@ export async function autoCheck({ url, model, slot, request = '', name, args, cw
   const ms = () => Date.now() - t0;
   try {
     const r = await ask({
-      url, model, slot, temperature: 0, maxTokens: 120, thinking: false, schema: SCHEMA, system: AUTO_SYSTEM,
+      what: "Auto's check", url, model, slot, temperature: 0, maxTokens: 120, thinking: false, schema: SCHEMA, system: AUTO_SYSTEM,
       signal: signal ? AbortSignal.any([signal, late.signal]) : late.signal,
       user: `The user's request:\n${String(request).trim().slice(0, 2000) || '(none given)'}\n\nThe project folder: ${cwd}\n\nThe step:\n${stepText(name, args)}`,
     });
