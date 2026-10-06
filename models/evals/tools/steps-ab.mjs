@@ -128,7 +128,8 @@ const changed = [
 ];
 const ctx = sides.new?.ctx ?? sides.old?.ctx ?? null;
 const method = [
-  `Model: ${model} on ${address ?? 'the service'}${ctx ? `, ${Math.round(ctx / 1024)}k context` : ''}, thinking on. The ${only ? `practice tasks ${only}` : '10 hard tasks'}${reps > 1 ? `, each ${reps} times,` : ''} both ways, ${order[0]} first, one after the other.`,
+  // The service by no address: the repo is public, and its pages with it.
+  `Model: ${model} on the service${ctx ? `, ${Math.round(ctx / 1024)}k context` : ''}, thinking on. The ${only ? `practice tasks ${only}` : '10 hard tasks'}${reps > 1 ? `, each ${reps} times,` : ''} both ways, ${order[0]} first, one after the other.`,
   'Each side is <code>bench/run.mjs --remote … --think on --no-record</code> with <code>AGENTIC_STEPS=old</code> or <code>new</code>: the same code, tasks, checks and context; only the three changes differ.',
   `The rule, written before the first run: after holds when it passes at least as many tasks, takes fewer replies, and takes at least ${Math.round(FASTER * 100)}% less working time in all. Working time is a task’s seconds less the time the service kept its replies waiting (other work on a shared service), as the bench’s timing reads it.`,
   'A task’s seconds run from its first request to its last reply; loading the model is not in them. One run of a task says little on this model: --reps 2 or more for a firmer answer.',

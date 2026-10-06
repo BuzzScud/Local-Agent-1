@@ -58,6 +58,7 @@ test('from two runs: as many passes, fewer replies and 10% less working time hol
   const page = readFileSync(join(DOCS, line.page), 'utf8');
   expect(page).toContain('Fewer steps holds');
   expect(page).toContain('waiting on the service: before 0 s · after 300 s');
+  expect(page).not.toContain('127.0.0.1'); // the repo is public: a page names no service address
 });
 
 test('fewer passes, or not 10% faster, does not hold', async () => {
