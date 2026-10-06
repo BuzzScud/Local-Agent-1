@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fewer steps: before vs after · Qwen3.6:35B-A3B</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--line:#e3dfd5;--soft:#efece4;--best:#f3d9cc;--bestInk:#8a3a1c;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--mute)}
+.chip.ok{color:var(--up)}.chip.no{color:var(--down)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small,td small{display:block;color:var(--mute);font-weight:400;font-size:11.5px}
+td.num,th.num{text-align:right}
+td.best{background:var(--best);color:var(--bestInk);font-weight:700}
+.ok{color:var(--up)}.no{color:var(--down)}.dim{color:var(--mute)}
+.pager{display:flex;align-items:center;gap:10px;margin-top:auto}.pager button{font:inherit;font-size:13px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer}
+.pager button:disabled{background:var(--soft);color:var(--mute);cursor:default}.pager span{font-size:13px;color:var(--mute)}
+.fill{flex:1;min-height:0;overflow:hidden}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 6px}ul.how code,pre{overflow-wrap:anywhere}
+code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+pre{margin:4px 0 0;white-space:pre-wrap;background:var(--soft);border-radius:8px;padding:8px 10px;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (max-height:820px){body{padding:10px 14px;gap:8px}.panel{padding:12px 16px;gap:9px}.verdict{font-size:15px}.card{padding:7px 12px}.card .v{font-size:20px}th,td{padding:5px 10px}}
+@media (max-width:760px),(max-height:520px){body{overflow:auto;height:auto}.panel{overflow:visible}.fill{overflow:visible}td.task{white-space:normal}.table-wrap{overflow-x:auto}}
+</style>
+</head>
+<body>
+<header><h1>Fewer steps: before vs after · Qwen3.6:35B-A3B</h1><span class="date">On a service · thinking on · Oct 6, 2026</span></header>
+<div class="tabs" role="tablist" id="tabs"></div>
+<main class="panel" id="panel"><noscript>This page draws its tables with JavaScript.</noscript></main>
+<script id="data" type="application/json">{"rows":[{"task":"31-hard-refactor-dedupe","old":{"pass":false,"secs":899,"wait":650.3,"steps":31,"ownSteps":30,"modelCalls":19,"toolErrors":6,"thinkTokens":4532,"route":"model decides","why":"no validate.mjs"},"new":{"pass":false,"secs":552,"wait":223.1,"steps":32,"ownSteps":31,"modelCalls":28,"toolErrors":11,"thinkTokens":5374,"route":"model decides","why":"no validate.mjs"}},{"task":"37-hard-two-bugs","old":{"pass":true,"secs":334,"wait":189.8,"steps":22,"ownSteps":21,"modelCalls":19,"toolErrors":4,"thinkTokens":2966,"route":"model decides","why":""},"new":{"pass":true,"secs":588,"wait":435.9,"steps":21,"ownSteps":20,"modelCalls":15,"toolErrors":1,"thinkTokens":2069,"route":"model decides","why":""}},{"task":"39-hard-question-trace","old":{"pass":true,"secs":25,"wait":0.4,"steps":6,"ownSteps":5,"modelCalls":2,"toolErrors":0,"thinkTokens":375,"route":"model decides","why":""},"new":{"pass":true,"secs":139,"wait":106.6,"steps":7,"ownSteps":6,"modelCalls":3,"toolErrors":0,"thinkTokens":545,"route":"model decides","why":""}}],"old":{"tasks":3,"passed":2,"secs":1258,"median":334,"modelCalls":40,"ownSteps":56,"toolErrors":10,"thinkTokens":7873},"new":{"tasks":3,"passed":2,"secs":1279,"median":552,"modelCalls":46,"ownSteps":57,"toolErrors":12,"thinkTokens":7988},"flips":{"fixed":[],"broke":[]}}</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const VERDICT = "<b>Fewer steps does not hold.</b> Qwen3.6:35B-A3B passed 2 of 3 after, against 2 before, in 23% more working time (46 replies against 40, 12 calls turned back against 10): not fewer replies.", CHIPS = "<span class=\"chip ok\">✓ passes: after 2 ≥ before 2</span><span class=\"chip no\">✗ replies: after 46 &lt; before 40 (fewer is better)</span><span class=\"chip no\">✗ working time: at least 10% less (+23%) (less is better)</span><span class=\"chip \">· calls turned back: before 10 · after 12 (fewer is better)</span><span class=\"chip \">· waiting on the service: before 840 s · after 766 s (left out of the time)</span><span class=\"chip ok\">✓ every task run both ways (3)</span>";
+const CHANGED = ["<b>Names it uses.</b> Before: a call named RunCommand, run_command, shell or read_file, or a name in another case (\"bash\"), was told \"There is no tool called\"; Edit sent with \"pattern\", \"original\" or \"old_content\" for its old text, or Bash with \"Command\", was told it needs \"old_text\" or \"command\". After: each runs as the tool and argument it means.","<b>A Read of a folder.</b> Before: an error, \"Use List to see what is in it\". After: what is in the folder, as a List gives it.","<b>Several files a reply.</b> Before: nothing past the tool’s own words. After: two one-file Reads in a row, when the model decides, bring one line once a message: Read takes \"paths\", the other files can come together.","<b>The same both ways.</b> The model, its context (the size it is loaded at on the service), thinking on at High as /remote starts it, the tasks and their checks."], METHOD = ["Model: Qwen3.6:35B-A3B on the service, 117k context, thinking on. The practice tasks 31,37,39 both ways, old first, one after the other.","Each side is <code>bench/run.mjs --remote … --think on --no-record</code> with <code>AGENTIC_STEPS=old</code> or <code>new</code>: the same code, tasks, checks and context; only the three changes differ.","The rule, written before the first run: after holds when it passes at least as many tasks, takes fewer replies, and takes at least 10% less working time in all. Working time is a task’s seconds less the time the service kept its replies waiting (other work on a shared service), as the bench’s timing reads it.","A task’s seconds run from its first request to its last reply; loading the model is not in them. One run of a task says little on this model: --reps 2 or more for a firmer answer.","Code: <code>298ec43+</code>. Run Oct 6, 2026, 12:07 PM."], RAW = ["../../Desktop/agentic-coder/models/remote/results/steps-ab-2026-10-06-1016"];
+const N = {"old":"Before","new":"After","oldSub":"calls turned back as before","newSub":"the names it uses run","thing":"change"};
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const TABS = [['result', 'Result'], ['tasks', 'Task by task'], ['changed', 'What changed'], ['how', 'How it was measured']];
+let tab = Math.max(0, TABS.findIndex(([id]) => '#' + id === location.hash)), page = 0;
+const num = (n) => (n == null ? '—' : Math.round(n).toLocaleString('en-US'));
+const pct = (a, b) => (a && b != null ? (b >= a ? '+' : '−') + Math.abs(Math.round(100 * (b - a) / a)) + '%' : '');
+// Old and new side by side; the better cell marked (higher or lower is better, said on the row).
+function row(name, sub, a, b, better, show = num) {
+  const best = a != null && b != null && a !== b && better ? ((better === 'low') === (b < a) ? 'b' : 'a') : null;
+  return '<tr><td><b>' + name + '</b><small>' + sub + '</small></td><td class="num' + (best === 'a' ? ' best' : '') + '">' + show(a) + '</td><td class="num' + (best === 'b' ? ' best' : '') + '">' + show(b) + '</td><td class="num dim">' + (better ? pct(a, b) : '') + '</td></tr>';
+}
+const cell = (x) => x ? '<span class="' + (x.pass ? 'ok' : 'no') + '">' + (x.pass ? 'PASS' : 'FAIL') + '</span> <span class="dim">· ' + num(x.secs) + ' s · ' + num(x.ownSteps ?? x.steps) + ' steps</span>' : '<span class="dim">— not run</span>';
+function draw() {
+  document.getElementById('tabs').innerHTML = TABS.map(([id, name], i) => '<button type="button" role="tab" aria-selected="' + (i === tab) + '" data-i="' + i + '">' + (i + 1) + ' · ' + name + '</button>').join('');
+  const p = document.getElementById('panel'), id = TABS[tab][0], o = D.old, n = D.new, f = D.flips;
+  if (id === 'result') {
+    const cards = '<div class="card"><div class="k">' + N.old + ' · passed · higher is better</div><div class="v">' + o.passed + ' of ' + o.tasks + '</div><div class="s">' + num(o.secs) + ' s in all</div></div>'
+      + '<div class="card"><div class="k">' + N.new + ' · passed · higher is better</div><div class="v">' + n.passed + ' of ' + n.tasks + '</div><div class="s">' + num(n.secs) + ' s in all</div></div>'
+      + '<div class="card"><div class="k">Time in all · lower is better</div><div class="v">' + (pct(o.secs, n.secs) || '—') + '</div><div class="s">new against old</div></div>'
+      + '<div class="card"><div class="k">Tasks that moved</div><div class="v">' + f.fixed.length + ' fixed · ' + f.broke.length + ' broke</div><div class="s">' + (f.fixed.length + f.broke.length ? esc([...f.fixed.map((t) => '+' + t), ...f.broke.map((t) => '−' + t)].join(', ')) : 'none') + '</div></div>';
+    p.innerHTML = '<p class="verdict">' + VERDICT + '</p><div class="chips">' + CHIPS + '</div><div class="cards">' + cards + '</div><div class="table-wrap"><table><thead><tr><th>Measure</th><th class="num">' + N.old + '<small>' + N.oldSub + '</small></th><th class="num">' + N.new + '<small>' + N.newSub + '</small></th><th class="num">Change</th></tr></thead><tbody>'
+      + row('Tasks passed', 'each task’s own check · higher is better', o.passed, n.passed, 'high')
+      + row('Seconds in all', 'the tasks both ran · lower is better', o.secs, n.secs, 'low')
+      + row('Seconds a task', 'the median · lower is better', o.median, n.median, 'low')
+      + row('Model calls', 'in all · lower is better', o.modelCalls, n.modelCalls, 'low')
+      + row('Its own steps', 'tool calls the model made · lower is better', o.ownSteps, n.ownSteps, 'low')
+      + row('Tool errors', 'calls that came back as an error · lower is better', o.toolErrors, n.toolErrors, 'low')
+      + row('Thinking', 'tokens, about · lower is better when the passes hold', o.thinkTokens, n.thinkTokens, 'low')
+      + '</tbody></table></div>';
+  } else if (id === 'tasks') {
+    p.innerHTML = '<p class="verdict">Each practice task with the old ' + N.thing + ' and the new one: its check, its seconds and the model’s own steps. A task that moved is named in the last column.</p><div class="fill" id="fill"><div class="table-wrap"><table><thead><tr><th>Task</th><th>' + N.old + '</th><th>' + N.new + '</th><th>Moved</th></tr></thead><tbody></tbody></table></div></div><div class="pager"><button type="button" id="prev">‹ Back</button><button type="button" id="next">Next ›</button><span id="at"></span></div>';
+    const fill = document.getElementById('fill'), body = p.querySelector('tbody'), list = D.rows;
+    const moved = (r) => !r.old || !r.new ? '' : !r.old.pass && r.new.pass ? '<span class="ok">fixed</span>' : r.old.pass && !r.new.pass ? '<span class="no">broke</span>' : '<span class="dim">same</span>';
+    const rowHtml = (r) => '<tr><td class="task">' + esc(r.task) + '</td><td>' + cell(r.old) + '</td><td>' + cell(r.new) + '</td><td>' + moved(r) + '</td></tr>';
+    body.innerHTML = list.length ? rowHtml(list[0]) : '<tr><td colspan="4" class="dim">No tasks ran.</td></tr>';
+    const small = matchMedia('(max-width:760px),(max-height:520px)').matches;
+    const rh = body.firstElementChild?.getBoundingClientRect().height || 36, th = p.querySelector('thead').getBoundingClientRect().height;
+    const per = small ? list.length || 1 : Math.max(1, Math.floor((fill.clientHeight - th) / rh));
+    const pages = Math.max(1, Math.ceil(list.length / per)); page = Math.min(page, pages - 1);
+    if (list.length) body.innerHTML = list.slice(page * per, page * per + per).map(rowHtml).join('');
+    document.getElementById('at').textContent = list.length ? 'Page ' + (page + 1) + ' of ' + pages + ' · tasks ' + (page * per + 1) + '–' + Math.min(list.length, page * per + per) + ' of ' + list.length : '';
+    document.getElementById('prev').disabled = page === 0; document.getElementById('next').disabled = page >= pages - 1;
+    document.getElementById('prev').onclick = () => { page--; draw(); }; document.getElementById('next').onclick = () => { page++; draw(); };
+  } else if (id === 'changed') {
+    p.innerHTML = '<ul class="how">' + CHANGED.map((m) => '<li>' + m + '</li>').join('') + '</ul>';
+  } else {
+    p.innerHTML = '<ul class="how">' + METHOD.map((m) => '<li>' + m + '</li>').join('') + (RAW.length ? '<li>Raw results, on this Mac: ' + RAW.map((r) => '<code>' + r + '</code>').join(', ') + '</li>' : '') + '<li>Nothing on this page loads from the internet.</li></ul>';
+  }
+}
+document.getElementById('tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) { tab = Number(b.dataset.i); page = 0; try { history.replaceState(null, '', '#' + TABS[tab][0]); } catch {} draw(); } };
+addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = Number(e.key);
+  if (k >= 1 && k <= TABS.length) { tab = k - 1; page = 0; draw(); }
+  else if (e.key === 'ArrowRight') { tab = (tab + 1) % TABS.length; page = 0; draw(); }
+  else if (e.key === 'ArrowLeft') { tab = (tab + TABS.length - 1) % TABS.length; page = 0; draw(); }
+});
+addEventListener('resize', () => draw());
+draw();
+</script>
+</body>
+</html>
