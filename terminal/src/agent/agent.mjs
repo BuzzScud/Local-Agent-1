@@ -10,7 +10,7 @@ import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
 import { askedQuestions, checkInQuestion, stuckQuestion, sameStepNote, sameResultSaid, planQuestion, lookSaid, stepSaid, errorSaid, planSaid, wantsQuestions, questionLines, ASK_NOTE, pageWrongQuestion } from './questions.mjs';
 import { CASES_ASK, CASES_FIX, MAX_CASES, casesOf, casesFromList, gapCases, casesTold, addCase, isTestPath, untested, casesBack, REVIEW_MAX, REVIEW_CODE, REVIEW_SYSTEM, REVIEW_SCHEMA, reviewAsk, reviewWrong, reviewBack, signSample } from './cases.mjs';
-import { toolSchemas, parseArgs, normalizeArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault, patchOps } from './tools.mjs';
+import { oldSteps, toolSchemas, parseArgs, normalizeArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault, patchOps } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -555,6 +555,9 @@ export function safeArgs(args) {
     return j && typeof j === 'object' && !Array.isArray(j) ? JSON.stringify(j) : '{}';
   } catch { return '{}'; }
 }
+
+// The line after two one-file Reads in a row (see runStep's results).
+export const READ_TIP = '\n\n(Tip: Read takes "paths", a list of files. The other files you need can come together in one reply.)';
 
 // Check-ins while exploring: every this many looks, or seconds, without a change.
 // 6 looks (was 8, 28 Sep): a task that has read six things and changed
@@ -2539,7 +2542,14 @@ export class Agent extends EventEmitter {
           if (!out.error && c.name === 'Write') wrote.push(c);
           // A background job that ended meanwhile is told with this step's result.
           const news = this.takeJobNews();
-          const result = { role: 'tool', tool_call_id: c.id, content: news ? `${out.text}\n\n(Meanwhile: ${news})` : out.text, ...(out.images?.length ? { images: out.images } : {}) };
+          // One file a reply, twice in a row, when the model decides (6 Oct 2026: Qwen3.6 on the service read
+          // seven files in seven replies, ~1.5 s each, though its tools say Read takes several): once a
+          // message, a line on the end of that result says so.
+          const oneRead = calls.length === 1 && c.name === 'Read' && !out.error && !(out.readKeys?.length > 1);
+          this.turn.readsInRow = oneRead ? (this.turn.readsInRow ?? 0) + 1 : 0;
+          const readTip = oneRead && this.way === 'model' && this.turn.readsInRow >= 2 && !this.turn.readTip && !oldSteps() ? READ_TIP : '';
+          if (readTip) this.turn.readTip = true;
+          const result = { role: 'tool', tool_call_id: c.id, content: `${news ? `${out.text}\n\n(Meanwhile: ${news})` : out.text}${readTip}`, ...(out.images?.length ? { images: out.images } : {}) };
           this.messages.push(result);
           if (out.error) this.noteError(out.text, result);
           else if (/^(?:Rules\/)?SKILLS\//.test(String(out.text))) result.keep = 'skill';
