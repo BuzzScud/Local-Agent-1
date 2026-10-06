@@ -211,6 +211,10 @@ function regexSpans(text) {
 function codeNotPath(text, piece, at) {
   const after = text[at + piece.length];
   if (/^\/+$/.test(piece)) return true;
+  // A division by a number (6 Oct 2026: Math.round(x*100)/100 in node -e code, and '/100→' in its text,
+  // refused four times in one task): a slash, a number and nothing after but signs. /100/notes.txt and
+  // /2024-report.pdf go on past the number and are still paths.
+  if (/^\/\d+(?:\.\d+)?[^\w/]*$/.test(piece)) return true;
   if (/^\/\.[A-Za-z_$][\w$]*$/.test(piece) && after === '(') return true;
   return /^\/[A-Za-z][\w-]*$/.test(piece) && text[at - 1] === '<' && after === '>';
 }

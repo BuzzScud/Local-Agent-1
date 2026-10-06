@@ -76,6 +76,25 @@ test('the fence: a regex in node -e code is not a path; real paths beside it sti
   expect(outsidePath(`sh -c "x=1;/Users/me/run.sh"`, cwd)).toBe('/Users/me/run.sh');
 });
 
+test('the fence: a division by a number in code is not a path; real paths beside it still are', () => {
+  const cwd = join(homedir(), 'p');
+  // Four refused in one task of the Fewer steps check (6 Oct 2026, Qwen3.6 on the service): money rounded
+  // to cents in node -e code, each "/100 is outside the project folder".
+  for (const cmd of [
+    `node -e "\nconsole.log('round2(10.005) =', Math.round(10.005 * 100) / 100);\nconsole.log('Math.round((0.1+0.2)*100)/100 =', Math.round((0.1+0.2)*100) / 100);\n"`,
+    `node --input-type=module -e "\nconsole.log(v.toFixed(3), '*,100→', floatMul, 'rounded→', rounded, '/100→', round2(v));\n"`,
+    `node --input-type=module -e '\nconsole.log(v.toFixed(3), "*,100=" + floatMul, "round=" + rounded, "/100=" + round2(v));\n'`,
+    `node --input-type=module -e '\nconsole.log("Math.floor(x*100)/100:", Math.floor(val * 100) / 100);\n'`,
+    `python3 -c "print(total*100/100, x /2.5)"`,
+    `awk '{ print $1/100 }' data.txt`,
+  ]) expect([cmd, outsidePath(cmd, cwd)]).toEqual([cmd, null]);
+  // A path that starts with a number, or goes on past it, is still a path.
+  expect(outsidePath(`node -e "require('fs').readFileSync('/100/notes.txt')"`, cwd)).toBe('/100/notes.txt');
+  expect(outsidePath(`node -e "require('fs').readFileSync('/2024-report.pdf')"`, cwd)).toBe('/2024-report.pdf');
+  expect(outsidePath(`node -e "const x = a * 100 / 100; require('fs').readFileSync('/Users/x/a')"`, cwd)).toBe('/Users/x/a');
+  expect(outsidePath(`cat /100`, cwd)).toBe('/100');
+});
+
 test('the fence: the project under another name for the same place is inside', () => {
   // tmpdir() on a Mac is /var/folders/…, which is really /private/var/folders/…; node's process.cwd() gives the second.
   const project = join(dir, 'project');
