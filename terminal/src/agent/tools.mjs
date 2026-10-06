@@ -196,12 +196,30 @@ export const toolSchemas = (way = 'app', web = null, opts = {}) => toolDefs(way,
 // may put "functions." before a name.
 // It also calls them without the prefix (open_file, print_tree, exec), and changes files with
 // apply_patch (agent.mjs applyPatch runs it as Edits and Writes).
-const TOOL_NAME_ALIASES = { Glob: 'List', Grep: 'Search', LS: 'List', print_tree: 'List', open_file: 'Read', search: 'Search', exec: 'Bash', apply_patch: 'apply_patch' };
-export const toolNameOf = (name, way = 'app') => {
-  const bare = String(name ?? '').replace(/^(?:functions|repo_browser|container)\./, '');
-  const n = defOf(name, way) || !(defOf(bare, way) || TOOL_NAME_ALIASES[bare]) ? name : bare;
-  return TOOL_NAME_ALIASES[n] && !defOf(n, way) ? TOOL_NAME_ALIASES[n] : n;
+const OLD_NAME_ALIASES = { Glob: 'List', Grep: 'Search', LS: 'List', print_tree: 'List', open_file: 'Read', search: 'Search', exec: 'Bash', apply_patch: 'apply_patch' };
+// Fewer steps lost (6 Oct 2026): Qwen3.6 on the service called RunCommand {"command": "npm test"} and
+// was told "There is no tool called". The other common names for the same tools come with it, and a
+// name that differs only in case ("bash", "READ") is the tool it names. AGENTIC_STEPS=old: as before
+// (the Fewer steps check, models/evals/tools/steps-ab.mjs, runs both).
+export const oldSteps = (env = process.env) => env.AGENTIC_STEPS === 'old';
+const TOOL_NAME_ALIASES = {
+  ...OLD_NAME_ALIASES,
+  RunCommand: 'Bash', run_command: 'Bash', run_shell_command: 'Bash', execute_command: 'Bash', shell: 'Bash', terminal: 'Bash',
+  read_file: 'Read', write_file: 'Write', create_file: 'Write', edit_file: 'Edit', list_dir: 'List', list_directory: 'List', list_files: 'List',
 };
+export const toolNameOf = (name, way = 'app') => {
+  const names = oldSteps() ? OLD_NAME_ALIASES : TOOL_NAME_ALIASES;
+  const bare = String(name ?? '').replace(/^(?:functions|repo_browser|container)\./, '');
+  const n = defOf(name, way) || !(defOf(bare, way) || names[bare]) ? name : bare;
+  if (names[n] && !defOf(n, way)) return names[n];
+  if (defOf(n, way) || oldSteps()) return n;
+  // Its own spelling of one of those names ("ReadFile", "run-command"), and any name for running a command
+  // (Qwen3.6 on the service, 6 Oct 2026: run_commands, Run_commands, run_bash, each a step lost).
+  const flat = n.toLowerCase().replace(/[^a-z]/g, '');
+  return toolDefs(way).find((d) => d.name.toLowerCase() === flat)?.name ?? Object.entries(names).find(([k]) => k.toLowerCase().replace(/[^a-z]/g, '') === flat)?.[1]
+    ?? (SHELL_NAME.test(flat) && defOf('Bash', way) ? 'Bash' : n);
+};
+const SHELL_NAME = /^(?:run|exec|execute)?(?:shell|bash|terminal|command|commands|cmd|cli)(?:command|commands)?$/;
 
 // apply_patch's text as the app's changes, in order: each hunk of an "*** Update File:" an Edit (its " "
 // and "-" lines the old text, its " " and "+" lines the new), an "*** Add File:" a Write of its "+" lines.
@@ -275,6 +293,10 @@ const ALIASES = {
   id: ['id', 'job', 'job_id', 'shell_id', 'bash_id', 'task_id'],
   stop: ['stop', 'kill', 'cancel'],
 };
+// Fewer steps lost (6 Oct 2026, off with AGENTIC_STEPS=old): Qwen3.6 on the service sent Edit
+// {"pattern", "replacement"} twice and {"original", "replacement"} once, each turned back.
+const MORE_ALIASES = { old_text: ['original', 'pattern', 'old_content'], new_text: ['new_content', 'updated'] };
+const aliasesOf = (key) => [...(ALIASES[key] ?? [key]), ...(oldSteps() ? [] : MORE_ALIASES[key] ?? [])];
 
 // A tool's definition, on either way (Read's own takes paths only on Model).
 const defOf = (name, way = 'app') => [...toolDefs(way), ...WEB_TOOL_DEFS, SCREEN_TOOL_DEF, AGENT_TOOL_DEF].find((d) => d.name === name);
@@ -283,10 +305,14 @@ export function normalizeArgs(name, raw, way = 'model') {
   const def = defOf(name, way);
   if (!def) return raw;
   const out = {};
+  // A name that differs only in case or _ and - ({"Command": "npm test"}, Qwen3.6 on the service, 6 Oct 2026) counts too.
+  const flat = (k) => String(k).toLowerCase().replace(/[_-]/g, '');
+  const loose = oldSteps() ? new Map() : new Map(Object.keys(raw ?? {}).map((k) => [flat(k), raw[k]]));
   for (const key of Object.keys(def.parameters.properties)) {
-    for (const alias of ALIASES[key] ?? [key]) {
+    for (const alias of aliasesOf(key)) {
       if (raw[alias] !== undefined) { out[key] = raw[alias]; break; }
     }
+    if (out[key] === undefined) for (const alias of aliasesOf(key)) if (loose.get(flat(alias)) !== undefined) { out[key] = loose.get(flat(alias)); break; }
   }
   // A plan sent as text (4 Oct 2026: qwen3-coder-next sent its list as a string of JSON three times,
   // Qwen3.6 a numbered plan, each told "must be a list"): JSON read as the list it is, else a step a line.
@@ -460,6 +486,14 @@ const MATH_SHELF = () => ({ name: 'MATH', root: mathDir(), what: "the user's mat
 const DESIGN_SHELF = () => ({ name: 'DESIGN', root: designDir(), what: "the user's design examples" });
 const STUDIO_SHELF = () => ({ name: 'STUDIO', root: studioDir(), what: "the user's design studio" });
 
+// A path as it really is: the nearest folder of it that exists, with its links followed, and the rest.
+const realOf = (p) => {
+  const rest = [];
+  let head = p;
+  while (!existsSync(head) && dirname(head) !== head) { rest.unshift(basename(head)); head = dirname(head); }
+  return join(realpathSync(head), ...rest);
+};
+
 export function resolvePath(cwd, p) {
   // "~" and "~/…" mean the home folder, as in the shell: a Write to
   // "~/Desktop/notes.html" once made a folder named "~" in the home folder,
@@ -499,14 +533,37 @@ export function resolvePath(cwd, p) {
   else if (isAbsolute(p) && !existsSync(abs)) {
     {
       const parts = abs.split(sep).filter(Boolean);
+      let found = false;
       for (let i = 1; i < parts.length; i++) {
         const candidate = resolve(cwd, parts.slice(i).join(sep));
-        if (existsSync(candidate)) { abs = candidate; break; }
+        if (existsSync(candidate)) { abs = candidate; found = true; break; }
+      }
+      // A new file at a made-up place (6 Oct 2026: Qwen3.6 on the service wrote
+      // /home/logan/AI_Projects/calculator/handlers/validate.mjs, refused as outside, three steps lost):
+      // the end of the path whose folder is in the project, when no more than the first folder of the
+      // path it named is there (/home is; ~/Desktop/new/x.mjs names a real place and is left as it is).
+      let real = dirname(abs);
+      while (!existsSync(real) && dirname(real) !== real) real = dirname(real);
+      if (!found && !oldSteps() && real.split(sep).filter(Boolean).length <= 1) {
+        for (let i = 1; i < parts.length - 1; i++) {
+          const candidate = resolve(cwd, parts.slice(i).join(sep));
+          const folder = dirname(candidate);
+          if (folder !== cwd && existsSync(folder) && statSync(folder).isDirectory()) { abs = candidate; break; }
+        }
       }
     }
   }
-  const rel = relative(cwd, abs);
   const within = (base, p) => { const r = relative(base, p); return r === '' || (!r.startsWith('..') && !isAbsolute(r)); };
+  // The project under its real name (6 Oct 2026: a new file by /private/var/… was outside a project
+  // opened as /var/…; on a Mac /var and /tmp are links into /private).
+  if (isAbsolute(p) && !fromHome && !within(cwd, abs) && !oldSteps()) {
+    try {
+      const rc = realpathSync(cwd);
+      const ra = realOf(abs);
+      if (within(rc, ra)) abs = resolve(cwd, relative(rc, ra));
+    } catch {}
+  }
+  const rel = relative(cwd, abs);
   // A link inside the project that points outside it is outside too.
   let inside = within(cwd, abs);
   // realRel: where a link inside the project really points (notes.md → .env),
@@ -954,7 +1011,14 @@ export async function execute(name, args, prepared, env) {
         p = resolvePath(env.cwd, fix.path);
         args.path = fix.path;
       }
-      if (statSync(p.abs).isDirectory()) return { text: `${args.path} is a folder. Use List to see what is in it.`, error: true, view: { kind: 'error', message: 'That is a folder' } };
+      // A folder comes back as what is in it (6 Oct 2026: Qwen3.6 on the service read handlers/, was
+      // told to use List, and spent a step on it).
+      if (statSync(p.abs).isDirectory()) {
+        const r = oldSteps() ? { error: true } : listFiles(env.cwd, { path: p.abs });
+        if (r.error) return { text: `${args.path} is a folder. Use List to see what is in it.`, error: true, view: { kind: 'error', message: 'That is a folder' } };
+        const more = r.total > r.lines.length ? `\n… and ${r.total - r.lines.length} more` : '';
+        return { text: `${note}${p.rel} is a folder, not a file. What is in it:\n${r.lines.join('\n') || '(nothing)'}${more}\nRead the files you need; several can come together with "paths".`, view: { kind: 'list', count: r.total, content: r.lines.join('\n') } };
+      }
       // A picture is shown to the model (when it can see: env.canSee); a PDF comes back as its text.
       if (isImage(p.abs)) return readPicture(p, note, env);
       if (isPdf(p.abs)) return readPdf(p, args, note, env, max);
