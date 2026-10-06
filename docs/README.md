@@ -8,9 +8,9 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 516 KB | 2026-10-06 |
 | [tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1103.html](tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1103.html) | page | Fewer steps: before vs after · Qwen3.6:35B-A3B | 15 KB | 2026-10-06 |
 | [tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1016.html](tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1016.html) | page | Fewer steps: before vs after · Qwen3.6:35B-A3B | 15 KB | 2026-10-06 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 176 KB | 2026-10-06 |
 | [design rounds/agentic-coder-loops-4-designs-2026-10-04.html](design%20rounds/agentic-coder-loops-4-designs-2026-10-04.html) | page | /loops · round three | 78 KB | 2026-10-06 |
 | [tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-0957.html](tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-0957.html) | page | Fewer steps: before vs after · Qwen3.6:35B-A3B | 15 KB | 2026-10-06 |
 | [design rounds/agentic-coder-remote-connect-2-designs-2026-10-03.html](design%20rounds/agentic-coder-remote-connect-2-designs-2026-10-03.html) | page | Remote connect designs | 444 KB | 2026-10-04 |
