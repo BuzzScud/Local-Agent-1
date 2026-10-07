@@ -330,6 +330,12 @@ test('Bypass permissions: nothing asks, but the blocked commands, your never-lis
   expect(decide('Write', { path: '.agentic/settings.json' }, ctx5('bypass', { rel: '.agentic/settings.json' }))).toEqual({ decision: 'deny', reason: ".agentic/settings.json holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions" });
   expect(d5('Bash', { command: 'cp x .agentic-coder/permissions.json' }, 'bypass')).toBe('deny');
   expect(d5('Bash', { command: 'cat .agentic/settings.json' }, 'bypass')).toBe('allow'); // reading one is fine
+  // A part that only reads may name them, whatever comes after it; one that may write may not
+  // (7 Oct 2026: a grep of the test record piped on into another command was refused as a change).
+  for (const c of ['grep -c suite ~/.agentic-coder/tests/record.jsonl | jq .', 'cd ~/.agentic-coder/tests && grep -n suite record.jsonl | tail -3', 'grep x ~/.agentic-coder/tests/record.jsonl > rows.txt'])
+    expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'allow']);
+  for (const c of ['grep x a | tee ~/.agentic-coder/settings.json', 'cd ~/.agentic-coder/tests; mv record.jsonl old.jsonl', 'cd .agentic && echo x > settings.json', 'grep x a.txt >> ~/.agentic-coder/tests/record.jsonl', 'echo $(rm ~/.agentic-coder/settings.json)'])
+    expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'deny']);
   expect(d5('WebFetch', { url: 'https://example.org/' }, 'bypass')).toBe('allow');
   expect(d5('Edit', { path: 'a.js' }, 'plan')).toBe('deny'); // plan is unchanged
 });

@@ -450,6 +450,49 @@ export const SECRET_FILES = ['.ssh', '.ssh/**', '.env', '.env.*', '*.pem', '*.ke
 const secretBy = (paths) => protectedBy(paths, [], SECRET_FILES);
 const namesOwn = (command) => { for (const w of shellWords(String(command ?? ''))) { const g = ownBy(String(w)); if (g) return g; } return null; };
 
+// The files a part writes with > or >> (not /dev/null, not >&2), as typed.
+function writeTargets(part) {
+  const s = String(part ?? '');
+  const out = [];
+  let q = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { if (c === '\\' && q === '"') i++; else if (c === q) q = null; continue; }
+    if (c === '"' || c === "'") { q = c; continue; }
+    if (c === '\\') { i++; continue; }
+    if (c !== '>') continue;
+    let j = i + 1;
+    if (s[j] === '>' || s[j] === '|') j++;
+    if (s[j] === '&') { i = j; continue; }
+    while (s[j] === ' ' || s[j] === '\t') j++;
+    const m = /^(?:"([^"]*)"|'([^']*)'|([^\s;|&<>()]+))/.exec(s.slice(j));
+    if (!m) continue;
+    const target = m[1] ?? m[2] ?? m[3];
+    if (target !== '/dev/null') out.push(target);
+    i = j + m[0].length - 1;
+  }
+  return out;
+}
+
+// The app's own settings and rules a command may change (Bypass refuses it): one named by a part
+// that does more than read, or written with >; after a cd, the names are taken from that folder too.
+// A part that only reads may name them: 7 Oct 2026, a grep of the test record (~/.agentic-coder/tests)
+// piped on into another command was refused as if it changed the app's own settings.
+function ownChanged(command) {
+  const s = splitCommand(command);
+  if (s.nested || s.open || s.background) return namesOwn(command);
+  let dir = '';
+  for (const raw of s.parts) {
+    const part = raw.trim();
+    const words = shellWords(part).map(String);
+    const own = (list) => { for (const w of list) { const g = ownBy(w) ?? (dir ? ownBy(join(dir, w)) : null); if (g) return g; } return null; };
+    if (words[0] === 'cd' || words[0] === 'pushd') { const to = words[1] ?? '~'; dir = !dir || to.startsWith('/') || to.startsWith('~') ? to : join(dir, to); continue; }
+    const hit = readerPart(part) ? own(writeTargets(part)) : own(words);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 // What a typed rule may be, for /permissions allow | never | protect:
 // { rule, note? } to save, or { error } to say why not.
 export function checkRule(kind, text, { protect = [] } = {}) {
@@ -607,7 +650,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     if (mine) return { decision: 'deny', reason: `blocked by your rule "${mine}" (/permissions)` };
     if (mode === 'plan') return isReadOnly(command) ? { decision: 'allow', why: 'it only reads' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
     if (bypass) {
-      const own = isReadOnly(command) ? null : namesOwn(command);
+      const own = ownChanged(command);
       return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on (any folder and the internet; what already runs on this Mac stays out of reach)' };
     }
     // once: no "don't ask again" for it.
