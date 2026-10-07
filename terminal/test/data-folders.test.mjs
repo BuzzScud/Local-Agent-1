@@ -5,7 +5,7 @@
 // the files a command writes are said and checked, a second look that names nothing asks again,
 // and thinking is not cut while steps keep failing.
 import { test, expect, beforeEach } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -150,6 +150,22 @@ test('the files a command wrote: named in its words (quoted, with spaces) or new
   writeFileSync(join(dir, 'top.csv'), 'a\n');
   const made = filesMade('python3 x.py > "out dir/report.html"', { since, cwd: dir, home: '/h', dirs: [dir] });
   expect(made.map((f) => f.abs).sort()).toEqual([join(dir, 'out dir', 'report.html'), join(dir, 'top.csv')]);
+});
+
+// 7 Oct 2026: a page another session wrote on the Desktop while a command ran was said to be the command's.
+test('on the Desktop, a new file is the command\'s only when the command, its output or its script names it', () => {
+  const desk = mkdtempSync(join(tmpdir(), 'agentic-desk-'));
+  const since = Date.now();
+  writeFileSync(join(dir, 'make_page.py'), "from pathlib import Path\n(Path.home() / 'Desktop' / 'es-report.html').write_text('<p>es</p>')\n");
+  utimesSync(join(dir, 'make_page.py'), new Date(since - 60_000), new Date(since - 60_000)); // written before the command
+  for (const n of ['es-report.html', 'other-session-review.html', 'printed.csv', 'summary.html']) writeFileSync(join(desk, n), 'x');
+  const at = (command, more = {}) => filesMade(command, { since, cwd: dir, home: '/h', dirs: [dir, desk], shared: [desk], ...more }).map((f) => f.abs.split('/').pop()).sort();
+  expect(at('python3 make_page.py')).toEqual(['es-report.html']); // its script names it
+  expect(at('python3 make_page.py', { said: 'saved printed.csv' })).toEqual(['es-report.html', 'printed.csv']); // its output does
+  expect(at("python3 -c \"name = 'summary'; open(f'{name}.html', 'w')\"")).toEqual(['summary.html']); // its name without the ending
+  expect(at('npm run build')).toEqual([]); // nothing names another session's page
+  // A folder that is not shared keeps every new file at its top.
+  expect(filesMade('npm run build', { since, cwd: dir, home: '/h', dirs: [desk] }).length).toBe(4);
 });
 
 // A run on a scripted model in the exports folder: what went with the request, what was asked.
