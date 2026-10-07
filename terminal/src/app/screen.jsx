@@ -9,14 +9,14 @@ import { Box, Text, Static, renderToString, measureElement, useCursor } from 'in
 import { cursorCell, rowText, selection, promptTextWidth } from './edit-input.mjs';
 import { C, MARK, spinFrame, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { money } from '../agent/spend.mjs';
-import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
+import { wrap, Row, Result, ToolHead, Diff, Todos, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { AgentsView, AgentsLine } from './agents-view.jsx';
 import { LoopsView, LoopsLine } from './loops-view.jsx';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { gaugesOf, gaugeLine, fitRemote, meterWords } from './remote-footer.mjs';
-import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
+import { showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
 import { jumpRows, rowStatus, jumpInfo } from './jump-box.mjs';
 import { DETACH_LABEL } from './sessions.mjs';
 import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc, formReady } from './remote-form.mjs';
@@ -765,13 +765,6 @@ const REMOTE_SHORTCUTS = [
 export const shortcutsOf = (remote) => (remote ? REMOTE_SHORTCUTS : SHORTCUTS);
 // Rows the shortcuts take under the footer (? opens them).
 export const shortcutRows = (remote) => shortcutsOf(remote).length + 1;
-
-// The footer's right side is the mode, as in Claude Code; a narrow window
-// drops the "(shift+tab to cycle)" hint so it never runs into "? for shortcuts".
-export function footerRight(mode, room) {
-  const m = MODE_TEXT[mode] ?? '';
-  return { cycle: !m || m.length + CYCLE_HINT.length <= room };
-}
 
 // The model's label on the footer's right, longest first (a narrow window takes a shorter one).
 // modelState: { state: off · loading · on, name, gb }; null for a server given with --url.

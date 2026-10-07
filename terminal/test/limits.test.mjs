@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId, TEST_CTX, testDefaults, testSettings, testLimits, panelData, HARNESS_LIMITS, OWN_ROWS, ownOf, shownLimits } from '../src/app/limits.mjs';
+import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId, TEST_CTX, testDefaults, testSettings, testLimits, panelData, OWN_ROWS, ownOf, shownLimits } from '../src/app/limits.mjs';
 import { COMMANDS } from '../src/app/commands.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { execute } from '../src/agent/tools.mjs';
@@ -52,7 +52,6 @@ test('big-model mode: a big model on a service starts with more steps, tries and
   expect([d.way, d.steps, d.tries, d.outputLines]).toEqual(['app', 80, 12, 160]);
   // the rest is this Mac's
   expect({ ...d, steps: 0, tries: 0, outputLines: 0 }).toEqual({ ...small, thinking: d.thinking, steps: 0, tries: 0, outputLines: 0 });
-  expect(HARNESS_LIMITS).toEqual(['steps', 'tries', 'outputLines']);
   // saved wins on either
   expect(readLimits({ limits: { way: 'model', steps: 60 } }, big)).toMatchObject({ way: 'model', steps: 60, tries: 12 });
   // Steps 80 saved on Qwen, then Command output moved on a big model (where 80 is the default):

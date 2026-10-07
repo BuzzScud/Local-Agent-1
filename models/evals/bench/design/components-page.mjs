@@ -7,7 +7,7 @@
 // layout check found, and how it was run. The picture tabs are a blind vote:
 // which model (or which side) made a picture shows only once you
 // have voted on it. Votes are kept in the browser (localStorage), not in the file.
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

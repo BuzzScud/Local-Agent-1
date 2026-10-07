@@ -10,7 +10,6 @@ import { gather, dayWindow } from '../src/morning/gather.mjs';
 import { pick } from '../src/morning/sort.mjs';
 import { checkWords, digest, plainWords, schemaFor, writeWords } from '../src/morning/words.mjs';
 import { buildDay, pageHtml, writeBrief } from '../src/morning/render.mjs';
-import { summary } from '../src/morning/index.mjs';
 import { matchCommands, COMMANDS } from '../src/app/commands.mjs';
 import { helpData } from '../src/app/help.mjs';
 import { startFakeServer } from './fake-server.mjs';

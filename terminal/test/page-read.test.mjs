@@ -5,7 +5,7 @@
 // it held, was never called. The owner's picks: read every page as a reader sees it and send a mostly
 // empty one back once, run a plain curl of a page as WebFetch outside Bypass, and the rest.
 import { test, expect, beforeEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 

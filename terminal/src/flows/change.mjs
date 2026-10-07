@@ -3,9 +3,9 @@
 // then try versions in the scratch copy until every test passes.
 // A project without tests gets a throwaway check instead, kept out of your project.
 import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname, basename } from 'node:path';
+import { join, dirname } from 'node:path';
 import { Scratch } from './scratch.mjs';
-import { readResults, failureDigest, assertionDetail } from './results.mjs';
+import { readResults, failureDigest } from './results.mjs';
 import { projectFiles, filesInText, pickFile, isTestFile, testsFor, relatedData } from './localize.mjs';
 import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, findFunction, functionNames, isWholeFile, splice, langFor } from './units.mjs';
 import { tryUntilPass } from './tries.mjs';
@@ -16,7 +16,6 @@ import { rescueTests } from './rescue.mjs';
 import { applyChange } from './apply.mjs';
 import { guardChange } from './blocks.mjs';
 import { diffLines } from '../tools/edit.mjs';
-import { syntaxError } from '../agent/tools.mjs';
 
 // For source files: no tests or example calls inside them (they run on import).
 const SOURCE_ONLY = ' Source code only: no tests, asserts or example calls in the file.';

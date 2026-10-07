@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-maps-home-'));
 process.env.AGENTIC_MEMORY_SAVE = 'off';
-const { buildPack, packView, packState, projectName, sameProject, nowPart, datesIn, findSources } = await import('../src/agent/claude-pack.mjs');
+const { buildPack, packView, packState, projectName, sameProject, nowPart, datesIn } = await import('../src/agent/claude-pack.mjs');
 const { fitLines, partsOf, openPart, nearestPart, splitPart, mapRoom, readLadder, PART_CHARS } = await import('../src/agent/ladder.mjs');
 const { mapTree, writeMap, checkMap, parseLabels, fileCard, codeLine, lineFor, folderCard, folderHash, labelRequest } = await import('../src/tools/codemap.mjs');
 const { recallClaude, notesDir, claudeText } = await import('../src/agent/claude-notes.mjs');

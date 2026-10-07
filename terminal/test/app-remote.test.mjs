@@ -8,7 +8,6 @@
 // test's home, never the Keychain.
 import { test, expect } from 'bun:test';
 import { readFileSync, writeFileSync, statSync, existsSync, mkdirSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { startFakeServer } from './fake-server.mjs';

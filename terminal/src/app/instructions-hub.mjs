@@ -1,6 +1,6 @@
 // Shared instruction editor. Project files and permission enforcement stay separate.
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_INSTRUCTIONS, INSTRUCTION_LIMITS, INSTRUCTION_START, INSTRUCTION_END, instructionFile, instructionHome, readInstructions, saveInstructions, focusedInstructions } from '../agent/instructions.mjs';
 import { projectNotes, systemPrompt, gitSummary, isHomeFolder, SESSION_MARK, NOTES_RANK, promptVersion, notesRoom } from '../agent/prompt.mjs';

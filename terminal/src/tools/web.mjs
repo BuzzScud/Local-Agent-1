@@ -39,8 +39,6 @@ export function webUrl(text) {
   u.hash = '';
   return u;
 }
-// The site a permission is for: its host name, without "www.".
-export const siteOf = (url) => { try { return webUrl(url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return null; } };
 
 // ---- a page as text ---------------------------------------------------------------------------
 

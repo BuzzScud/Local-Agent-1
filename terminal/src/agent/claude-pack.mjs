@@ -57,7 +57,7 @@ const real = (d) => { try { return realpathSync(d); } catch { return d; } };
 // ~/.claude-3, which may share one folder). copies: folders copied from another Mac, each the
 // "Claude memory …" folder (or its originals/) and the "Claude skills and tools …" folder.
 // → { memory: [{ dir, project, from }], skills: [{ dir, from }], toolsFile, copies }
-export function findSources({ home = homedir(), copies = [] } = {}) {
+function findSources({ home = homedir(), copies = [] } = {}) {
   const memory = [];
   const skills = [];
   let toolsFile = null;

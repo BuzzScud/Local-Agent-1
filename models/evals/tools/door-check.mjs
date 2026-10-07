@@ -44,7 +44,7 @@ if (!globalThis.Bun) {
 
 const { recordTest, codeLabel } = await import('../../index.mjs');
 const { openDoor, startHost, viewSession, SESSION_FRAMES: F, sessionFrame: frame, sessionFrameReader: frameReader, sessionJson: json } = await import('../../../terminal/index.mjs');
-const { DOCS_DIR, docsPath } = await import('../../../docs/tools/to-docs.mjs');
+const { DOCS_DIR } = await import('../../../docs/tools/to-docs.mjs');
 const { doorPage } = await import('./door-page.mjs');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

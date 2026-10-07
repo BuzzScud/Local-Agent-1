@@ -1,13 +1,13 @@
 // The system prompt: short and concrete, written for a small model.
 import { existsSync, readFileSync } from 'node:fs';
-import { join, dirname, basename } from 'node:path';
+import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { instructionBlock } from './instructions.mjs';
 import { RULES } from './rules.mjs';
 import { memoryNotes } from './facts.mjs';
 import { rulesRoomFor } from './room.mjs';
-import { toolUseText, toolUseFor, TOOL_USE_OLD, readSkills, skillsList, skillPath, readGuides, guidesList, guidePath, harnessOf } from './prompt-files.mjs';
+import { toolUseFor, TOOL_USE_OLD, readSkills, skillsList, skillPath, readGuides, guidesList, guidePath, harnessOf } from './prompt-files.mjs';
 
 // The home folder and its Desktop, Documents and Downloads: places to start
 // from, not projects. Agentic Coder answers from what it knows there, and goes into a

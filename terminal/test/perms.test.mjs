@@ -1,6 +1,6 @@
 // /permissions: the saved rules (perm-store.mjs) and the command's words (perms.mjs), on a throwaway home.
 import { test, expect, beforeEach, afterAll } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 

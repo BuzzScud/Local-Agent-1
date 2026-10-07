@@ -78,22 +78,6 @@ const blank = (cols) => fit([], cols);
 const pickedOf = (state, ui) => (ui.view === 'watch' || ui.confirm?.back === 'watch' ? state.loops.find((x) => x.id === ui.watch?.id) : null) ?? state.loops[ui.sel] ?? null;
 const waitsForYou = (l) => Boolean(l.current?.needs || (l.stuck && !l.current) || (l.ready && !l.current));
 
-// What a loop is doing, in a word or two, and its colour (the window's /loop list, the chat's line).
-export function stateOf(l, now) {
-  if (l.current?.needs) return ['! needs you', 'warn b'];
-  if (l.ready && !l.current) return [`! run ${l.ready.n} waits for your go`, 'warn b'];
-  if (l.state === 'redoing') return [`${spin(now)} starting over`, 'accent'];
-  if (l.current && l.pauseAfter) return [`${spin(now)} running · pauses after`, 'dim'];
-  if (l.current) return [`${spin(now)} running ${dur(now - l.current.startedAt)}`, 'accent'];
-  if (l.stuck) return ['! needs you · stuck', 'warn b'];
-  if (l.state === 'paused') return ['‖ paused', 'dim'];
-  if (l.state === 'done') return ['✓ ended', 'ok'];
-  if (l.state === 'stopped') return ['■ stopped', 'faint'];
-  if (l.state === 'off') return [`○ waits: ${l.offWhy ?? 'the model is off'}`, 'faint'];
-  if (l.queued) return ['… next in line', 'dim'];
-  return [`in ${countdown(l.nextAt - now)}`, 'dim'];
-}
-
 function header(state, ui, now, cols, title) {
   const run = state.loops.filter((l) => l.current && !l.current.needs).length;
   const need = state.loops.filter(waitsForYou).length;

@@ -5,7 +5,7 @@ import React from 'react';
 import { Box, Text, Static } from 'ink';
 import { C, spinGlyph, fmtSecs, fmtTok } from './theme.mjs';
 import {
-  wrap, Welcome, Tips, UserMsg, Row, Result, ToolHead, ToolResult, Todos, Spinner, InputBox, Footer, Permission, modeLabel, Diff, testCounts,
+  wrap, Welcome, Tips, UserMsg, Row, Result, ToolHead, ToolResult, Todos, Spinner, InputBox, Footer, Permission, modeLabel, testCounts,
 } from './parts.jsx';
 
 const diffW = (width) => Math.max(40, Math.min(100, width - 12));

@@ -3,7 +3,6 @@
 //   node terminal/scripts/report.mjs
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { docsPath } from '../../docs/tools/to-docs.mjs';

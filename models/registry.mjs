@@ -1,7 +1,7 @@
 // The models Agentic Coder can run (one folder each), and where their files
 // live on this Mac (~/.agentic-coder).
 import { homedir, tmpdir } from 'node:os';
-import { existsSync, statSync, mkdtempSync } from 'node:fs';
+import { statSync, mkdtempSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 // The state folder: ~/.agentic-coder. AGENTIC_HOME overrides.

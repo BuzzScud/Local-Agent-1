@@ -50,10 +50,10 @@ export function showReply(ui, loops, r) {
 // ---- the form: every rule of a new loop or of one loop (^O) ----
 // Its rows, in order: what each run does, then its rules. A row with choices steps through them
 // with ←→; one you can type in takes letters and digits too (the first key replaces a word).
-export const FORM_ROWS = ['message', 'kind', 'every', 'runs', 'stopAt', 'cap', 'mode', 'steps', 'askFirst'];
+const FORM_ROWS = ['message', 'kind', 'every', 'runs', 'stopAt', 'cap', 'mode', 'steps', 'askFirst'];
 const TYPED = new Set(['message', 'every', 'runs', 'stopAt', 'cap', 'steps']);
 // The choices of a row, given what the form says now.
-export function choicesOf(row, f, now = Date.now()) {
+function choicesOf(row, f, now = Date.now()) {
   if (row === 'kind') return KINDS;
   if (row === 'every') return (f.kind ?? guessKind(f.message ?? '')) === 'debug' ? ['until done', 'own pace', '1m', '5m', '10m', '30m', '1h'] : ['own pace', '1m', '2m', '5m', '10m', '30m', '1h', '2h', '1d'];
   if (row === 'runs') return ['no limit', '1', '2', '3', '5', '10', '20', '50'];

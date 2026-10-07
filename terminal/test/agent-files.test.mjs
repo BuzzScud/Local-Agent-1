@@ -3,7 +3,7 @@
 // listed after the shipped ones and opens at RULES/<NAME>.md, and a helper agent file in its
 // agents/ folder is a helper the main model can hand work to with the Agent tool, with its own
 // instructions, tools and model. A file left in the repo's folder is not one of them.
-import { test, expect, beforeEach, afterEach, afterAll } from 'bun:test';
+import { test, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, cpSync, unlinkSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

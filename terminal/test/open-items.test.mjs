@@ -13,7 +13,7 @@ import { execute } from '../src/agent/tools.mjs';
 import { decide } from '../src/agent/permissions.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { renameInCode, planRename } from '../src/flows/rename.mjs';
-import { outline, outlineText } from '../src/tools/outline.mjs';
+import { outline } from '../src/tools/outline.mjs';
 import { runCommand } from '../src/tools/run.mjs';
 import { sandboxAvailable, forgetPorts } from '../src/tools/sandbox.mjs';
 import { createServer } from 'node:net';

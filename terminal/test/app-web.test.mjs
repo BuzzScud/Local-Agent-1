@@ -5,7 +5,7 @@
 // Keychain); the model's search then asks first and its results go back to it.
 import { test, expect, beforeAll, afterAll } from 'bun:test';
 import { createServer } from 'node:http';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';

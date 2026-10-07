@@ -14,7 +14,7 @@ process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-remote-home-'))
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
 const { streamChat, openaiBody, refusedField } = await import('../src/agent/client.mjs');
 const { decide, complete } = await import('../src/flows/llm.mjs');
-const { setEndpoint, dropEndpoint, MODELS, GENERIC_REMOTE, DEFAULT_REMOTE, HOME } = await import('../../models/index.mjs');
+const { setEndpoint, dropEndpoint, MODELS, GENERIC_REMOTE, HOME } = await import('../../models/index.mjs');
 const { openForm, rowsOf, moveRow, startEdit, editField, pasteField, commitEdit, toProfile, formWarning, connectionChanged, showValue, rowNote, rowChanged, modelChoices, savePlan, remotesOf, remoteChoices, withTest, openModelPick, movePick, commitPick, closePick } = await import('../src/app/remote-form.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 

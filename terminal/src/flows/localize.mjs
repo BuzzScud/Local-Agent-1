@@ -1,7 +1,7 @@
 // Finding the code a request is about: files named in it, files a failing
 // test run points at (stack frames, the failing tests' imports), and, when
 // neither says, the model choosing from the project's own file list.
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join, dirname, basename, normalize } from 'node:path';
 import { walk } from '../tools/fs.mjs';
 import { resolvePath, didYouMean } from '../agent/tools.mjs';

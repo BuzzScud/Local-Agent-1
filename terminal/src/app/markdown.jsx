@@ -2,7 +2,6 @@
 // `inline code`, **bold** and *italic*.
 import React from 'react';
 import { Box, Text } from 'ink';
-import { C } from '../ui/theme.mjs';
 
 const CODE = 'ansi256(152)'; // #afd7d7
 

@@ -3,7 +3,7 @@
 // secrets left out, the right note found for a request, and its part that
 // fits written into the request.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { notesDir, readNotes, leftOut, holdsSecret, pieces, bestPart, recallClaude, claudeText, notesCount, wording, foldersOf } from '../src/agent/claude-notes.mjs';

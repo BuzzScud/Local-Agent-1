@@ -222,7 +222,6 @@ test('a fixing loop that is not getting closer waits for you; a note, r or p sen
   expect(m.stuck).toEqual([a]);
   expect(m.needsYou).toEqual([]); // no run is waiting on an answer
   expect(L.describe(a, m.now())).toBe('debug · until its job is done · needs you: 2 tests still fail after runs 1 and 2: it is not getting closer');
-  expect(D.stateOf(a, m.now())).toEqual(['! needs you · stuck', 'warn b']);
   expect(m.log.at(-1)).toMatchObject({ kind: 'stuck', id: a.id });
   // The board says so above the box and on its card, counts it as needing you, and the box takes a hint.
   const board = text(D.drawBoard(m.snapshot(), B.newUi(), { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));

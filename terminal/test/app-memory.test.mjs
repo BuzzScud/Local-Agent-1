@@ -2,7 +2,7 @@
 // Here: the memory. Facts come back with a request, /memory shows them and
 // takes a save back, and what a task taught is saved after the window closed.
 import { test, expect } from 'bun:test';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { demoReplies } from './demo-script.mjs';
