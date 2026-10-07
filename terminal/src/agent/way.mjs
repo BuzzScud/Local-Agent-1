@@ -145,15 +145,6 @@ export function changeHooks(on, what, arg, env = process.env) {
   return { on: after, changed: true, text: `${said} ${what}: ${picked.length > 1 ? 'they run' : 'it runs'} from the next message while the model decides. Kept for next time (settings.json).` };
 }
 
-// The panel: one row a hook, on or off, with what it does; then how to switch them.
-export function hookRows(on, way) {
-  const rows = HOOKS.map((h, i) => [[[`${String(i + 1).padStart(2)}  ${way === 'app' || on.has(h.id) ? 'on ' : 'off'}  `], [h.label, true]], h.what]);
-  const foot = way === 'app'
-    ? 'Who decides is App (/effort): the app runs every check, as before. On Model, next-step, tests, stuck and said-done start on; /hooks switches the rest.'
-    : '/hooks on 1 · /hooks on tests · /hooks off all · kept in settings.json';
-  return [...rows, ['', foot]];
-}
-
 // The prompt on Model: the tool lines say it may send several calls and name its own tools,
 // and a question's answer says the one thing that helps next (Claude added the caller and a
 // worked example on the tax question). Everything else is the app's prompt, word for word.

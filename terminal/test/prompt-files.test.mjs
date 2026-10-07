@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 // nothing here may reach the real ~/.agentic-coder.
 const FIRST_HOME = mkdtempSync(join(tmpdir(), 'agentic-prompt-files-home-'));
 process.env.AGENTIC_HOME = FIRST_HOME;
-const { parseSkills, pickSkill, skillProblems, skillsList, skillNote, toolUseText, readSkillPath, readNearPath, readPromptFile, TOOL_USE_OLD, BUILT_IN } = await import('../src/agent/prompt-files.mjs');
+const { parseSkills, pickSkill, skillProblems, skillNote, toolUseText, readSkillPath, readNearPath, readPromptFile, TOOL_USE_OLD, BUILT_IN } = await import('../src/agent/prompt-files.mjs');
 const { systemPrompt, SESSION_MARK } = await import('../src/agent/prompt.mjs');
 const { wayPrompt, MODEL_TOOL_LINES, ONE_AT_A_TIME } = await import('../src/agent/way.mjs');
 const { prepare, execute } = await import('../src/agent/tools.mjs');

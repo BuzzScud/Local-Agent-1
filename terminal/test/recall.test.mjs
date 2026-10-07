@@ -2,11 +2,11 @@
 // model, by words without it; and in a conversation, where the facts travel
 // with the request and earn or lose trust by how the turn ends.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { recall, recallNotes, wordsOf, looksLikeEvent, usedFacts } from '../src/agent/recall.mjs';
-import { memoryDirs, applyChanges, readFacts, changeTrust, openMemory } from '../src/agent/facts.mjs';
+import { memoryDirs, applyChanges, readFacts, changeTrust } from '../src/agent/facts.mjs';
 import { digest } from '../src/agent/memory.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';

@@ -1,13 +1,13 @@
 // Who decides: the app (as before) or the model (agent/way.mjs), on the walkthrough's own
 // example, the tax question, and the pieces each way changes.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent, AUTO, MAX_CALLS } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { toolSchemas, MODEL_TOOL_DEFS } from '../src/agent/tools.mjs';
-import { wayPrompt, hooksOn, hooksFrom, changeHooks, hookRows, HOOKS, MODEL_HOOKS, MODEL_TOOL_LINES, ONE_AT_A_TIME, ANSWER_HABIT } from '../src/agent/way.mjs';
+import { wayPrompt, hooksOn, hooksFrom, changeHooks, HOOKS, MODEL_HOOKS, MODEL_TOOL_LINES, ONE_AT_A_TIME, ANSWER_HABIT } from '../src/agent/way.mjs';
 import { decide } from '../src/agent/permissions.mjs';
 import { AutoSave } from '../src/app/autosave.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
@@ -319,8 +319,6 @@ test('the hooks list, /hooks and the permission rules of the new tools', () => {
   expect(changeHooks(r.on, 'on', 'empty', {}).changed).toBe(false);
   expect(changeHooks(new Set(), 'on', 'nothing', {}).text).toMatch(/no hook "nothing"/);
   expect(changeHooks(new Set(), 'on', 'all', { AGENTIC_HOOKS: 'off' }).text).toMatch(/AGENTIC_HOOKS=off/);
-  expect(hookRows(new Set(['tests']), 'model')[3][0][0][0]).toMatch(/on/);
-  expect(hookRows(new Set(), 'model')[0][0][0][0]).toMatch(/off/);
   expect(decide('Map', {}, { mode: 'plan' }).decision).toBe('allow');
   expect(decide('Remember', {}, { mode: 'plan' }).decision).toBe('allow');
   expect(decide('TestFirst', {}, { mode: 'plan' }).decision).toBe('deny');

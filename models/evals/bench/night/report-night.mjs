@@ -1,6 +1,6 @@
 // Builds bonsai-night-<date>.html in the DOCS folder from an overnight results folder.
 //   node models/evals/bench/night/report-night.mjs models/bonsai-2-27b/results/night/<date>
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { docsPath } from '../../../../docs/tools/to-docs.mjs';

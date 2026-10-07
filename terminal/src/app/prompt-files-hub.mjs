@@ -10,7 +10,7 @@
 // editor, another session): the file's revision must match. The text before
 // each save is kept (20 a file) in ~/.agentic-coder/prompt-files/, so Undo
 // puts it back, or removes a file the save created.
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, openSync, closeSync, unlinkSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, openSync, closeSync, unlinkSync, realpathSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';

@@ -39,7 +39,7 @@ test('own service: what a window keeps for its save never holds a typed key', ()
 
 // The cost meter: its own home, so the real one is never written.
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-rw-home-'));
-const { costOf, recordSpend, todaySpend, spendLabel, windowSpend, money, dayOf } = await import('../src/agent/spend.mjs');
+const { costOf, recordSpend, todaySpend, spendLabel, money, dayOf } = await import('../src/agent/spend.mjs');
 const { footerParts } = await import('../src/app/screen.jsx');
 const { meterWords } = await import('../src/app/remote-footer.mjs');
 

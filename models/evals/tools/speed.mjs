@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, statfsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HOME, MODELS, DEFAULT_MODEL, MODELS_DIR, modelPath, SERVER_BIN, modelFolder } from '../../index.mjs';
+import { MODELS, DEFAULT_MODEL, MODELS_DIR, modelPath, SERVER_BIN, modelFolder } from '../../index.mjs';
 import { serverArgs } from '../../index.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));

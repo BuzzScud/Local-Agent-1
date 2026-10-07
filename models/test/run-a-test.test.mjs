@@ -2,8 +2,8 @@
 // plays (--set 28), the list and the command each starts from Terminal, a set on one model
 // (run-set.mjs), and the runs from Terminal stopped part way. The Arena's runner, which runs them from
 // the page: models/test/arena.test.mjs; the hub's tab in front of it: terminal/test/hub-arena.test.mjs.
-import { test, expect, beforeAll, afterAll } from 'bun:test';
-import { mkdtempSync, mkdirSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { test, expect } from 'bun:test';
+import { mkdtempSync, mkdirSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';

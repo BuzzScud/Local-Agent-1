@@ -2,7 +2,7 @@
 // before starting (src/flows/clarify.mjs), and the answers hook for runs
 // without a screen.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '../src/agent/agent.mjs';

@@ -2,11 +2,10 @@
 // with it (New 28, Work 28, Practice 28: each test fails as given and passes with its known-good answer),
 // a Practice 28 edit saved as a copy (18b), and what the app says while a battle holds the memory.
 // The runner end to end (a battle, the blind vote, the line, stop, delete): models/test/arena.test.mjs.
-import { test, expect, beforeAll, afterAll } from 'bun:test';
+import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
 
 // Everything here lives in a throwaway home and on a port of its own.
 const HOME = mkdtempSync(join(tmpdir(), 'agentic-battle-test-'));

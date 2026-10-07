@@ -10,18 +10,15 @@
 //   node models/evals/tools/web-check.mjs --rebuild <a run's folder>: draws that run's page again
 import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir, loadavg } from 'node:os';
 import { MODELS, DEFAULT_MODEL, HOME, modelFolder, contextCheck, hasDraft, recordTest, codeLabel } from '../../index.mjs';
 import { runInPty } from '../../../terminal/index.mjs';
 import { DOCS_DIR } from '../../../docs/tools/to-docs.mjs';
 import { webPage } from './web-page.mjs';
-import { BUN, CLI, llamaServers, options, pad, previousRun, rawOf, rebuildIfAsked, runCoding, short, stampOf, toolsOf as tools, writeResultsPage } from './check-kit.mjs';
+import { llamaServers, options, pad, previousRun, rawOf, rebuildIfAsked, runCoding, short, stampOf, toolsOf as tools, writeResultsPage } from './check-kit.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const root = join(here, '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
 const { opt } = options(args);
 const model = MODELS[opt('model', DEFAULT_MODEL)];

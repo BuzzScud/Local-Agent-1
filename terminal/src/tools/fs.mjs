@@ -1,7 +1,7 @@
 // List and Search: walk the project folder without node_modules, .git and
 // other bulky folders; git grep when the folder is a git repo (much faster).
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join, relative, resolve, dirname, basename } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.venv', 'venv', '__pycache__', '.cache', 'coverage', '.turbo']);

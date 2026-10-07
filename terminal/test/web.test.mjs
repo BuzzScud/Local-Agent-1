@@ -73,7 +73,7 @@ test('a web address: http and https only; a bare site gets https; the site a per
   expect(web.webUrl('example.com/a#x').href).toBe('https://example.com/a');
   expect(() => web.webUrl('file:///etc/passwd')).toThrow('only http and https');
   expect(() => web.webUrl('')).toThrow('no address');
-  expect([web.siteOf('https://www.Example.com/x'), web.siteOf('ftp://x'), web.siteOf('docs.python.org')]).toEqual(['example.com', null, 'docs.python.org']);
+  expect([siteOf('https://www.Example.com/x'), siteOf('ftp://x'), siteOf('docs.python.org')]).toEqual(['example.com', null, 'docs.python.org']); // permissions.mjs
 });
 
 test('a page as text: the main part, headings, lists, code, tables and links; no scripts, styling, menus or footer', () => {

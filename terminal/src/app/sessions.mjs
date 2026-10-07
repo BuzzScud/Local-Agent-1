@@ -178,7 +178,7 @@ export function describe(s, now = Date.now(), { mac = true } = {}) {
 // What the host runs in its pretend terminal: the `coding` launcher when this
 // is the installed app (so /update can restart it there), else this same
 // program (bun cli.jsx while developing).
-export function appCommand(args, env = process.env, self = selfCommand()) {
+function appCommand(args, env = process.env, self = selfCommand()) {
   if (env.AGENTIC_LAUNCHER && existsSync(env.AGENTIC_LAUNCHER)) return [env.AGENTIC_LAUNCHER, ...args];
   const launcher = join(homedir(), '.local', 'bin', 'coding');
   if (process.execPath === join(homedir(), '.agentic-coder', 'app', 'agentic-coder') && existsSync(launcher)) return [launcher, ...args];

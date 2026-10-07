@@ -17,7 +17,7 @@
 //   --no-record: a look only; no line in the test record and no results page
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { recordTest, codeLabel } from '../../../index.mjs';

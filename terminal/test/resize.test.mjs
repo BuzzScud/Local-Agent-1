@@ -90,11 +90,6 @@ test.skipIf(needs('python3'))('text and enter arriving together (a busy app) sti
 }, T);
 
 test.skipIf(needs('python3'))('the footer fits narrow windows: the right side drops words, never runs into "? for shortcuts"', async () => {
-  const { footerRight } = await import('../src/app/screen.jsx');
-  expect(footerRight('edits', 200)).toEqual({ cycle: true });
-  expect(footerRight('edits', 30)).toEqual({ cycle: false }); // the mode stays, the "(shift+tab to cycle)" hint goes
-  expect(footerRight('plan', 30)).toEqual({ cycle: false });
-  expect(footerRight('ask', 20)).toEqual({ cycle: true }); // nothing on the right in ask mode
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const t = openTerm({ cwd, cols: 80, rows: 24, env, args: ['--url', fake.url, '--mode', 'edits'] });

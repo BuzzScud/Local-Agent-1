@@ -5,7 +5,7 @@
 // value costs (said next to it in the panel). Saved as "limits" in
 // settings.json; only the ones moved off their default are kept, so a new
 // default reaches you.
-import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, searchBytes, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
+import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, searchBytes, EMBEDDERS, RERANKERS, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
 import { SEARCH } from '../agent/search.mjs';
 import { rulesRoomFor, upFrontFor, CHARS_PER_TOKEN, SERVICE_REPLY } from '../agent/room.mjs';
 import { LOOK_STEPS, LOOK_BACKS, lookSecs, showLook } from '../agent/look.mjs';
@@ -318,9 +318,6 @@ export function limitsToSave(values, model, keep = {}) {
   return Object.fromEntries(LIMITS.filter((l) => values[l.id] !== d[l.id] || (keep[l.id] !== undefined && keep[l.id] === values[l.id])).map((l) => [l.id, values[l.id]]));
 }
 
-// The rows big-model mode moves (models/runtime/remote.mjs BIG_HARNESS): App.jsx
-// reads them again when the model in use changes, with the rest of a model's own (OWN_ROWS).
-export const HARNESS_LIMITS = ['steps', 'tries', 'outputLines'];
 
 // One step down (dir -1) or up (+1). A value between steps (typed into
 // settings.json by hand) goes to the next step that way. Trim stays below
