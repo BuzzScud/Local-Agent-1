@@ -18,7 +18,7 @@ test('/agents demo: the agent tree takes the window, asks its questions, builds 
     { wait: 'Question 2 of 3' }, { type: '1' },
     { wait: 'Question 3 of 3' }, { type: '1' },
     { wait: 'Approve the plan', ms: 20_000 }, { sleep: 150 }, { snapshot: 'plan' }, { type: '1' },
-    { wait: 'BUILD · task', ms: 20_000 }, { sleep: 200 }, { snapshot: 'build' },
+    { wait: 'BUILD · task', ms: 20_000 }, { sleep: 200 }, { snapshot: 'build', has: ['main session', 'BUILD · task', 'session log'] },
     { key: 'esc' }, { wait: '/agents opens it' }, { sleep: 150 }, { snapshot: 'chat' },
     { key: 'esc' }, { wait: 'SECOND OPINION' },
     { wait: 'GO ·', ms: 45_000 }, { snapshot: 'go' },

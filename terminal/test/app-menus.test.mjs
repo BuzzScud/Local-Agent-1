@@ -18,7 +18,7 @@ test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', a
   const fake = await startFakeServer([{ text: 'Hi there.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome' },
-    { type: '/' }, { wait: 'Open the Help page in the browser' }, { type: 'he' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { key: 'esc' },
+    { type: '/' }, { wait: 'Open the Help page in the browser' }, { type: 'he' }, { wait: '> /he' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { key: 'esc' }, // enter once the box shows /he (a busy Mac drew it late)
     { type: '?' }, { wait: '\\ + enter for a new line' }, { key: 'esc' },
     { type: '!echo shell-ok' }, { key: 'enter' }, { wait: 'shell-ok' },
     { type: 'say hi' }, { key: 'enter' }, { wait: 'Hi there.' },
