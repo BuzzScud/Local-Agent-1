@@ -7,7 +7,7 @@
   {"q": "how are code files ranked before the model reads them", "file": "terminal/src/agent/rank.mjs", "name": "rankFiles"},
   {"q": "cache of texts the embedder already turned into numbers", "file": "models/runtime/embed.mjs", "name": "embed"},
   {"q": "server flags for a model that only compares meanings", "file": "models/runtime/server.mjs", "name": "serverArgs"},
-  {"q": "save the effort and the limits from the panel", "file": "terminal/src/app/App.jsx", "name": "saveEffortLimits"},
+  {"q": "save the effort and the limits from the panel", "file": "terminal/src/app/app-panels.mjs", "name": "saveEffortLimits"},
   {"q": "move a limit one step up or down", "file": "terminal/src/app/limits.mjs", "name": "moveLimit"},
   {"q": "switch a context helper on or off by its codename", "file": "terminal/src/app/helpers.mjs", "name": "changeHelpers"},
   {"q": "share the token ceiling between the helpers", "file": "terminal/src/agent/helpers.mjs", "name": "shareOut"},
@@ -25,7 +25,7 @@
   {"q": "the model sent a Write with the content but no file path, and the text was lost", "file": "terminal/src/agent/agent-step.mjs", "name": "keepWrite"},
   {"q": "neverRule misses the blocked command when it comes after a semicolon", "file": "terminal/src/agent/permissions.mjs", "name": "neverRule"},
   {"q": "tryUntilPass uses the same temperature on every try", "file": "terminal/src/flows/tries.mjs", "name": "tryUntilPass"},
-  {"q": "/meters on does not turn the meters on", "file": "terminal/src/app/App.jsx", "name": "runSlash", "find": "case 'meters':"},
+  {"q": "/meters on does not turn the meters on", "file": "terminal/src/app/app-slash.mjs", "name": "runSlashFn", "find": "case 'meters':"},
   {"q": "the memory should be tidied once a day, merging duplicate facts", "file": "terminal/src/agent/lessons.mjs", "name": "tidyDue"},
   {"q": "a fix quietly deleted a function we still need; catch functions that disappeared from the file", "file": "terminal/src/flows/blocks.mjs", "name": "lostNames"}
  ]
