@@ -9,7 +9,7 @@ import { decide, isReadOnly, offerFor, testRunOf } from './permissions.mjs';
 import { isHomeFolder } from './prompt.mjs';
 import { folderKind } from './folder.mjs';
 import { filesMade, madeNote } from './made.mjs';
-import { inScripts } from './scripts.mjs';
+import { commandWithScripts, inScripts } from './scripts.mjs';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { isCodeProject, runKind } from '../flows/index.mjs';
 import { changedNote, changesText } from './seen.mjs';
@@ -554,7 +554,8 @@ export class StepPart {
     // The files a command wrote (made.mjs): said in its result, kept for the page checks and the second look.
     if (this.turn && call.name === 'Bash' && out.view?.kind === 'bash' && !out.view.timedOut && !isReadOnly(args.command)) {
       let made = [];
-      try { made = filesMade(args.command, { since: t0, cwd: this.cwd, home: this.home, dirs: [this.cwd, this.turn.workFolder, this.desktopDir] }).filter((f) => !inScripts(f.abs)); } catch {}
+      // The Desktop is other sessions' too: what is new there counts when the command, its output or its script names it.
+      try { made = filesMade(args.command, { since: t0, cwd: this.cwd, home: this.home, dirs: [this.cwd, this.turn.workFolder, this.desktopDir], shared: [this.desktopDir], said: out.text, ran: commandWithScripts(args.command, this.cwd) }).filter((f) => !inScripts(f.abs)); } catch {}
       if (made.length) {
         this.turn.madeByCommand ??= new Map();
         for (const f of made) this.turn.madeByCommand.set(f.abs, f.bytes);
