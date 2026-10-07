@@ -175,7 +175,7 @@ export class Agent extends EventEmitter {
   // (mcpStale) is taken at your next message, with a line saying so.
   mcpFrozen = null;
   mcpStale = false;
-  mcpPrints = new Map();
+  mcpPrints = new Map(); // "don't ask again this session": tool id → the fingerprint it was given for
   // The Agent tool (a helper, tools.mjs AGENT_TOOL_DEF): when the model decides, on the Claude
   // API, and on the remote set once you have a helper agent file (prompt-files.mjs ownDir);
   // never inside a helper; "subagents": false in settings.json leaves it out.

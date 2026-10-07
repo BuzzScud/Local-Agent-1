@@ -10,7 +10,6 @@ import { pictureFor } from '../tools/mcp.mjs';
 import { MCP_WAIT_MS } from './agent-said.mjs';
 
 export class McpPart {
-  // "don't ask again this session": tool id → the fingerprint it was given for
   // settled: only when no server is still starting (before the model's warm-up, so what it reads
   // ahead holds the tools; a server not there yet must not be shut out of the conversation for that).
   async mcpTake({ settled = false } = {}) {
