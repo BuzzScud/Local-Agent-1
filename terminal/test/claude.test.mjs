@@ -69,6 +69,11 @@ test('the request: system hoisted, tool calls and results paired (results first)
   expect(p.tool_choice).toEqual({ type: 'auto', disable_parallel_tool_use: true });
   // When the model decides (agent/way.mjs), several calls a reply are allowed.
   expect(claudeParams({ model: 'claude-opus-5-5', messages, tools: TOOLS, parallel: true }).tool_choice).toEqual({ type: 'auto', disable_parallel_tool_use: false });
+  // The newer web tools refuse one call a reply (the API's 400 "programmatic tool calling"); the older ones take it.
+  const WEB = [...TOOLS, { type: 'function', function: { name: 'WebSearch', description: 'Search', parameters: { type: 'object', properties: {} } } }];
+  expect(claudeParams({ model: 'claude-opus-5-5', messages, tools: WEB }).tool_choice).toEqual({ type: 'auto', disable_parallel_tool_use: false });
+  expect(claudeParams({ model: 'claude-haiku-4-5', messages, tools: WEB }).tool_choice).toEqual({ type: 'auto', disable_parallel_tool_use: true });
+  expect(claudeParams({ model: 'claude-opus-5-5', messages, tools: TOOLS, drop: new Set(['serial']) }).tool_choice.disable_parallel_tool_use).toBe(false);
   expect(p.max_tokens).toBe(4500); // the answer asked for, plus room for the thinking it always does
   const high = claudeParams({ model: 'claude-opus-5-5', messages, tools: TOOLS, toolChoice: 'none', thinking: true, effort: 'high', maxTokens: 500 });
   expect([high.output_config.effort, high.thinking.display, high.tool_choice.type, high.max_tokens]).toEqual(['high', 'summarized', 'none', 16_500]);

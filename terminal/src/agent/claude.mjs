@@ -145,7 +145,10 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
     const defer = own.some((t) => t.defer) && !drop.has('toolsearch');
     params.tools = [...own.map((t) => ({ name: t.function.name, description: t.function.description ?? '', input_schema: t.function.parameters ?? { type: 'object', properties: {} }, ...(defer && t.defer ? { defer_loading: true } : {}), ...(drop.has('eager') ? {} : { eager_input_streaming: true }) })), ...web, ...(defer ? [TOOL_SEARCH] : [])];
     // Several calls a reply only when the model decides (agent/way.mjs), as with the local models.
-    params.tool_choice = toolChoice === 'none' ? { type: 'none' } : { type: 'auto', disable_parallel_tool_use: !parallel };
+    // The newer web tools run code on Anthropic's side (programmatic tool calling), which refuses
+    // one call a reply: with them in the list, or once a model refused it, several are allowed.
+    const serial = !parallel && !drop.has('serial') && !web.some((t) => /_2026/.test(t.type));
+    params.tool_choice = toolChoice === 'none' ? { type: 'none' } : { type: 'auto', disable_parallel_tool_use: serial };
   }
   if (connector.length) {
     params.mcp_servers = connector.map((s) => ({ type: 'url', url: s.url, name: s.name, ...(s.token ? { authorization_token: s.token } : {}) }));
@@ -185,6 +188,7 @@ function refusedField(message, params) {
   if (params.mcp_servers && /mcp_servers|mcp_toolset|mcp-client|mcp server/i.test(m)) return 'connector';
   if (params.tools?.some((t) => t.type) && /web_(search|fetch)/i.test(m)) return params.tools.some((t) => /_2026/.test(t.type ?? '')) ? 'webnew' : 'web';
   if (params.tools?.[0]?.eager_input_streaming && /eager_input_streaming/i.test(m)) return 'eager';
+  if (params.tool_choice?.disable_parallel_tool_use && /disable_parallel_tool_use|programmatic tool calling/i.test(m)) return 'serial';
   if (params.cache_control && /cache_control/i.test(m)) return 'cache';
   return null;
 }
