@@ -27,12 +27,21 @@ export const wayOf = (v) => (v === 'model' ? 'model' : 'app');
 // your own hooks around each step; notes when memory fills. Off with it: every one of the app's checks
 // (HOOKS), Look first, the plan's and the request's reminders, the Remember hints, and putting a failed
 // message's changes back. Its instructions gain LEAN_LINES, which say the model checks its own work.
+// Lean on the Claude API unless you chose (7 Oct 2026, the owner's pick: "turn it off on Claude now", and "make
+// the agentic coder as close to claude code as possible"): the app's checks were built for small models on this
+// Mac, and on Claude Opus 5.5 they stepped in 11 times in one 43-reply run. With nothing chosen (LEAN_AUTO) a
+// Claude model works lean and every other model keeps the checks, looked at again at each message (the Agent's
+// leanNow), so a /remote switch takes effect from the next one. /hooks lean · /hooks full save a choice
+// (settings.json "lean" true or false), which holds for every model; AGENTIC_LEAN and --lean decide as before.
 export const leanEnv = (env = process.env) => env.AGENTIC_LEAN;
+export const LEAN_AUTO = 'auto';
+export const leanForModel = (model) => model?.remote?.kind === 'claude';
 export function leanFrom(settings = {}, env = process.env) {
   const v = String(leanEnv(env) ?? '').trim().toLowerCase();
   if (v) return /^(on|1|yes|true|lean)$/.test(v);
-  return settings.lean === true;
+  return typeof settings.lean === 'boolean' ? settings.lean : LEAN_AUTO;
 }
+export const LEAN_AUTO_NOTE = "Lean harness on for Claude, like Claude Code: the model decides every step and checks its own work; the app's checks and reminders are off (/hooks full brings them back).";
 export const LEAN_NOTE = "Lean harness: the app's checks, reminders and put-back are off (/hooks full brings them back).";
 export const LEAN_LINES = `Working on your own
 - The app's checks are off here: nothing runs the tests for you, reminds you of the request or your plan, or sends an answer back. Whatever these instructions say the app checks, you check yourself.

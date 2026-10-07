@@ -4,7 +4,7 @@ import { Agent } from './agent/agent.mjs';
 import { UserHooks } from './agent/user-hooks.mjs';
 import { applyLimits, applySearch, testLimits } from './app/limits.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from './agent/prompt.mjs';
-import { wayEnv, wayOf, hooksOn, hooksEnv, leanFrom, leanEnv } from './agent/way.mjs';
+import { wayEnv, wayOf, hooksOn, hooksEnv, leanFrom, leanEnv, LEAN_AUTO } from './agent/way.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
 import { openMemory } from './agent/facts.mjs';
 import { saveLessons, worthSaving } from './agent/lessons.mjs';
@@ -56,8 +56,9 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     design: design ?? { auto: false, check: false },
     helpers: on, embedder: mem?.embedder ?? embedder ?? own,
     way: wayOf(way ?? wayEnv() ?? 'app'), hooks: hooksEnv() !== undefined ? hooksOn(hooksEnv()) : hooksOn(hooks ?? []),
-    // The lean harness (way.mjs): --lean or settings.json, AGENTIC_LEAN over both.
-    lean: leanEnv() !== undefined ? leanFrom() : Boolean(lean),
+    // The lean harness (way.mjs): --lean or settings.json, AGENTIC_LEAN over both; LEAN_AUTO (nothing chosen):
+    // on for a Claude model only.
+    lean: leanEnv() !== undefined ? leanFrom() : lean === LEAN_AUTO ? LEAN_AUTO : Boolean(lean),
     // The web tools (/web) and helpers (the Agent tool): coding -p passes them; the benches pass
     // none, so their runs measure the same every time. mcp: the hub of the user's MCP servers
     // (coding -p passes it; a tool asks, or --yes allows; a project's own servers are never

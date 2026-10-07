@@ -13,7 +13,7 @@ process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-lean-home-'));
 process.env.AGENTIC_MEMORY_SAVE = 'off';
 const { Agent } = await import('../src/agent/agent.mjs');
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
-const { leanFrom, LEAN_LINES, LEAN_NOTE, HOOKS, MODEL_HOOKS } = await import('../src/agent/way.mjs');
+const { leanFrom, LEAN_LINES, LEAN_NOTE, LEAN_AUTO, LEAN_AUTO_NOTE, HOOKS, MODEL_HOOKS } = await import('../src/agent/way.mjs');
 const { checkOn, openHooksList } = await import('../src/app/hooks-form.mjs');
 const { runHeadless } = await import('../src/headless.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
@@ -30,11 +30,45 @@ beforeEach(() => {
 const sys = () => systemPrompt({ cwd: dir, git: 'none' });
 const agentOn = (url, extra = {}) => new Agent({ url, model: remote, cwd: dir, system: sys(), memory: false, flows: false, mode: 'bypass', confirmPlan: false, way: 'model', hooks: MODEL_HOOKS, thinking: false, ctx: 131072, ask: async () => ({ choice: 'yes' }), ...extra });
 
-test('the switch: settings.json "lean", and AGENTIC_LEAN over it; off unless set', () => {
-  expect(leanFrom({}, {})).toBe(false);
+test('the switch: settings.json "lean", and AGENTIC_LEAN over it; with neither, the model decides (auto)', () => {
+  expect(leanFrom({}, {})).toBe(LEAN_AUTO);
   expect(leanFrom({ lean: true }, {})).toBe(true);
+  expect(leanFrom({ lean: false }, {})).toBe(false);
   expect(leanFrom({ lean: true }, { AGENTIC_LEAN: 'off' })).toBe(false);
   expect(leanFrom({}, { AGENTIC_LEAN: 'on' })).toBe(true);
+});
+
+// 7 Oct 2026, the owner's pick: lean on Claude unless they chose. The app's checks stepped in 11 times in
+// one 43-reply run on Claude Opus 5.5.
+const claude = { ...MODELS[DEFAULT_MODEL], id: 'remote', remote: { kind: 'claude', label: 'Claude API', model: 'claude-opus-5-5' } };
+test('auto: lean on a Claude model, the full harness on any other, and it follows the model from the next message', () => {
+  const onClaude = agentOn('http://127.0.0.1:1', { model: claude, lean: LEAN_AUTO, way: 'app' });
+  expect([onClaude.lean, onClaude.way]).toEqual([true, 'model']);
+  expect(onClaude.messages[0].content).toContain(LEAN_LINES);
+  const onService = agentOn('http://127.0.0.1:1', { lean: LEAN_AUTO, way: 'app' });
+  expect([onService.lean, onService.way]).toEqual([false, 'app']);
+  // /remote switches it to Claude: lean from the next message, with a line that says so…
+  const notes = [];
+  onService.on('note', (n) => notes.push(n.text));
+  onService.model = claude;
+  onService.leanNow();
+  expect([onService.lean, onService.way]).toEqual([true, 'model']);
+  expect(notes).toEqual([LEAN_AUTO_NOTE]);
+  onService.leanNow();
+  expect(notes).toHaveLength(1); // once, not at every message
+  // …and back to the service: the checks again, and Who decides as /effort had it.
+  onService.model = remote;
+  onService.leanNow();
+  expect([onService.lean, onService.way]).toEqual([false, 'app']);
+  expect(onService.messages[0].content).not.toContain(LEAN_LINES);
+  // A choice holds for every model: /hooks full on Claude (as the app does it) stays full.
+  onClaude.leanAuto = false;
+  onClaude.setLean(false);
+  onClaude.setWay('app');
+  onClaude.leanNow();
+  expect([onClaude.lean, onClaude.way]).toEqual([false, 'app']);
+  // A plain Agent (a test, a practice run) is as before: no lean unless asked.
+  expect(agentOn('http://127.0.0.1:1', { model: claude }).lean).toBe(false);
 });
 
 test('lean: none of the app\'s checks, no look first, no reminders, nothing put back; full: as before', () => {

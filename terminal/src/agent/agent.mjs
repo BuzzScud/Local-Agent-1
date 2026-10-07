@@ -11,7 +11,7 @@ import { lookSecs } from './look.mjs';
 import { guidePath, guidesList, harnessOf, readGuides, readHelperAgents, readSkills, rulesSetOf, skillPath, skillsList, toolUseFor } from './prompt-files.mjs';
 import { homedir } from 'node:os';
 import { isCodeProject } from '../flows/index.mjs';
-import { OPT_IN_HOOKS, hooksOn, leanPrompt, wayOf, wayPrompt } from './way.mjs';
+import { LEAN_AUTO, LEAN_AUTO_NOTE, OPT_IN_HOOKS, hooksOn, leanForModel, leanPrompt, wayOf, wayPrompt } from './way.mjs';
 import { SeenFiles } from './seen.mjs';
 import { upFrontFor } from './room.mjs';
 import { readResults, testsFailed } from '../flows/results.mjs';
@@ -47,9 +47,13 @@ export class Agent extends EventEmitter {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
-    // The lean harness (way.mjs leanFrom): the model decides, and none of the app's checks run.
-    this.lean = Boolean(lean);
-    this.way = this.lean ? 'model' : wayOf(way);
+    // The lean harness (way.mjs leanFrom): the model decides, and none of the app's checks run. LEAN_AUTO: on
+    // for a Claude model, off for any other, looked at again at each message (leanNow). wayChosen: /effort's
+    // Who decides, which comes back when lean goes off.
+    this.leanAuto = lean === LEAN_AUTO;
+    this.lean = this.leanAuto ? leanForModel(model) : Boolean(lean);
+    this.wayChosen = wayOf(way);
+    this.way = this.lean ? 'model' : this.wayChosen;
     this.hooks = hooksOn(hooks ?? []);
     // /web: { search: 'off' | 'brave' | 'tavily', fetch, claude } (null: no web tools, as in a practice run).
     this.web = web;
@@ -202,8 +206,10 @@ export class Agent extends EventEmitter {
   // /effort's Who decides row: the next message goes the new way. The prompt and the tools
   // change with it, so the next reply reads the instructions again (the app warms them up).
   setWay(way, hooks) {
-    // Lean is the model deciding: while it is on, Who decides stays Model (/hooks full ends it).
-    const next = this.lean ? 'model' : wayOf(way);
+    // Lean is the model deciding: while it is on, Who decides stays Model (/hooks full ends it); the way
+    // chosen here is kept for when it goes off (leanNow).
+    this.wayChosen = wayOf(way);
+    const next = this.lean ? 'model' : this.wayChosen;
     if (hooks !== undefined) this.hooks = hooksOn(hooks ?? []);
     if (next === this.way) return false;
     const before = tokensOf(this.messages[0].content);
@@ -218,13 +224,21 @@ export class Agent extends EventEmitter {
     const next = Boolean(on);
     if (next === this.lean) return false;
     this.lean = next;
-    if (next && this.way !== 'model') this.setWay('model');
+    if (next && this.way !== 'model') { const chosen = this.wayChosen; this.setWay('model'); this.wayChosen = chosen; }
     const before = tokensOf(this.messages[0].content);
     this.messages[0] = { role: 'system', content: leanPrompt(this.messages[0].content, next) };
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.emit('lean', next);
     return true;
+  }  // With nothing chosen (LEAN_AUTO), lean follows the model at each message: on for a Claude model, off for
+  // any other (way.mjs leanForModel). A note says so when it comes on.
+  // Off again, Who decides goes back to what /effort chose (the app's /hooks full does the same).
+  leanNow() {
+    if (!this.leanAuto || !this.setLean(leanForModel(this.model))) return;
+    if (this.lean) this.emit('note', { text: LEAN_AUTO_NOTE, tone: 'dim' });
+    else this.setWay(this.wayChosen);
   }
+
   // /effort's Rules room and Up-front reading: 0 = auto, a share of the context (room.mjs).
   // /effort's Look first (look.mjs): 'auto' follows Effort, 'off', or a number of seconds. The app
   // and coding -p set it from /effort (auto by default); a bare Agent (tests, the practice runs) does not look first.
@@ -409,6 +423,7 @@ export class Agent extends EventEmitter {
   // on the last turn, so nothing sorts it or reads ahead for it, as when the model decides.
   async send(text, { signal, shown, images, fromServer = null, wake = false } = {}) {
     this.sending = true;
+    this.leanNow();
     // Your hooks for a message you send (not the app's own wake): exit 2 stops it; what one prints
     // goes with it, as does what a SessionStart hook printed.
     if (!wake && this.userHooks?.has('UserPromptSubmit')) {
