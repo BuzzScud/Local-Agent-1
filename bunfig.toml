@@ -1,6 +1,7 @@
 [test]
-# Tests that spawn node --test several times can pass 5 s when the model server loads the Mac.
-timeout = 30000
+# Each test's time limit is not set here: bun ignores a timeout in this file (7 Oct 2026, bun 1.4.2), so
+# models/evals/tools/run-suite.mjs passes --timeout 30000 (tests that spawn node --test several times can
+# pass 5 s when the Mac is busy).
 # Only our tests: terminal/test and models/test (bun run test passes both).
 # terminal/demo-project and models/evals/bench/tasks hold practice projects with
 # their own tests, which must not run here, so the root is terminal/test and

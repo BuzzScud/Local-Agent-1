@@ -43,7 +43,9 @@ function record({ pass, fail, files, code, failed = [], why = {} }) {
 // screen; otherwise it is kept and handed back.
 function bunTest(paths, { live }) {
   return new Promise((resolve) => {
-    const child = spawn('bun', ['test', ...paths], { cwd: root, stdio: ['inherit', 'pipe', 'pipe'], env });
+    // --timeout: bun reads no timeout from bunfig.toml (checked 7 Oct 2026 on bun 1.4.2: a 6 s test failed at
+    // 5 s with timeout = 30000 there), so every test without its own limit had bun's 5 s, and a busy Mac failed them.
+    const child = spawn('bun', ['test', '--timeout', '30000', ...paths], { cwd: root, stdio: ['inherit', 'pipe', 'pipe'], env });
     let out = '';
     const keep = (to) => (d) => { out += d; if (live) to.write(d); };
     child.stdout.on('data', keep(process.stdout));
@@ -53,7 +55,9 @@ function bunTest(paths, { live }) {
   });
 }
 
-const jobs = Math.max(1, Number(process.env.AGENTIC_TEST_JOBS) || Math.min(4, cpus().length));
+// Six files at once (four until 7 Oct 2026: 315 s; eight took 170 s on a quiet Mac but failed a test in every
+// run while other sessions loaded it).
+const jobs = Math.max(1, Number(process.env.AGENTIC_TEST_JOBS) || Math.min(6, cpus().length));
 if (extra.length || jobs === 1) {
   // A file or folder named on the command line is run alone; with only flags
   // (-t "name") both parts are searched.

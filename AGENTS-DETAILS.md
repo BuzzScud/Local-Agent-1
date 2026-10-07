@@ -58,8 +58,8 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 
 ## Tests, the Arena and the test record
 
-- **Tests:** `bun run test` runs both parts, the test files side by side (four at once;
-  `AGENTIC_TEST_JOBS=6` for more, `=1` for one after the other). A test that drives the app
+- **Tests:** `bun run test` runs both parts, the test files side by side (six at once, fewer on a Mac with
+  fewer cores; `AGENTIC_TEST_JOBS=8` for more, `=1` for one after the other). A test that drives the app
   must end with the app quitting: with text left in the prompt, quit with `quitTyped`.
   Raw results of model tests stay on the Mac in `models/<model>/results/` (not in git);
   a test's working copy of another project goes outside the repo, not into `results/`.
