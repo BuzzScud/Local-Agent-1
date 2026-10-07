@@ -3443,6 +3443,7 @@ export function App({ opts, win, onRestart }) {
           if (/^(lean|full)$/i.test(what)) {
             if (leanEnv() !== undefined) { push({ type: 'note', text: `AGENTIC_LEAN=${leanEnv()} is set where Agentic Coder started, so it decides. Start it without that (unset AGENTIC_LEAN) to switch here.`, tone: 'warn' }); break; }
             const on = what.toLowerCase() === 'lean';
+            agent.leanAuto = false; // your choice from now on, for every model (way.mjs LEAN_AUTO)
             const changed = agent.setLean(on);
             if (!on) agent.setWay(limitsRef.current.way);
             settings.lean = saveSettings({ lean: on }).lean;

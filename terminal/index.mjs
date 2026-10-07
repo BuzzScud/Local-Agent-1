@@ -38,7 +38,7 @@ export { recall, recallNotes } from './src/agent/recall.mjs';
 export { notesDir, readNotes, leftOut, holdsSecret, bestPart, recallClaude, claudeText, notesCount, CUT as NOTES_CUT, MARGIN as NOTES_MARGIN } from './src/agent/claude-notes.mjs';
 export { CLAUDE_RULES } from './src/agent/claude-rules.mjs';
 export { helpersOn, HELPER_NAMES, CODENAMES, codenameOf } from './src/agent/helpers.mjs';
-export { MODEL_HOOKS } from './src/agent/way.mjs';
+export { MODEL_HOOKS, LEAN_AUTO } from './src/agent/way.mjs';
 export { CodeIndex, partsOf, partKey, CUT as CODE_CUT, MARGIN as CODE_MARGIN } from './src/tools/codeindex.mjs';
 // How the pieces that come along are chosen, for the code search check (models/evals/bench/code/).
 export { choose } from './src/agent/search.mjs';
