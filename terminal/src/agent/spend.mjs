@@ -16,13 +16,17 @@ const spendDir = () => join(process.env.AGENTIC_HOME ?? HOME, 'spend');
 export const dayOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 // Dollars for one answer: null when its price is not known.
-// usage: { prompt_tokens, completion_tokens, cached_tokens?, cost? }; price: { in, out } $ a million.
+// usage: { prompt_tokens, completion_tokens, cached_tokens?, cache_write_tokens?, cost? }; price: { in, out } $ a million.
+// Read from the prompt cache costs a tenth; written to it (the Claude API's cache_creation_input_tokens) a
+// quarter more than plain input. Until 7 Oct 2026 a write was counted as plain input, so the meter read low.
 export function costOf(usage, price) {
   if (!usage) return null;
   if (Number.isFinite(usage.cost)) return usage.cost;
   if (!price) return null;
-  const cached = Math.min(usage.cached_tokens ?? 0, usage.prompt_tokens ?? 0);
-  return (((usage.prompt_tokens ?? 0) - cached) * price.in + cached * price.in * 0.1 + (usage.completion_tokens ?? 0) * price.out) / 1e6;
+  const all = usage.prompt_tokens ?? 0;
+  const cached = Math.min(usage.cached_tokens ?? 0, all);
+  const written = Math.min(usage.cache_write_tokens ?? 0, all - cached);
+  return ((all - cached - written) * price.in + cached * price.in * 0.1 + written * price.in * 1.25 + (usage.completion_tokens ?? 0) * price.out) / 1e6;
 }
 
 // This window since it opened: dollars, and the tokens of answers whose price is not known.
