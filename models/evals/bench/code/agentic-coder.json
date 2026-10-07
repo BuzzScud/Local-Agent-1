@@ -22,7 +22,7 @@
   {"q": "add another look for the working animation next to the orbit dots", "file": "terminal/src/ui/theme.mjs", "name": "SPINNERS"},
   {"q": "find which TCP ports already have a server listening so a command cannot take them", "file": "terminal/src/tools/sandbox.mjs", "name": "listeningPorts"},
   {"q": "why does the model start with 16k context instead of 32k when little memory is free", "file": "models/runtime/memory.mjs", "name": "chooseContext"},
-  {"q": "the model sent a Write with the content but no file path, and the text was lost", "file": "terminal/src/agent/agent.mjs", "name": "keepWrite"},
+  {"q": "the model sent a Write with the content but no file path, and the text was lost", "file": "terminal/src/agent/agent-step.mjs", "name": "keepWrite"},
   {"q": "neverRule misses the blocked command when it comes after a semicolon", "file": "terminal/src/agent/permissions.mjs", "name": "neverRule"},
   {"q": "tryUntilPass uses the same temperature on every try", "file": "terminal/src/flows/tries.mjs", "name": "tryUntilPass"},
   {"q": "/meters on does not turn the meters on", "file": "terminal/src/app/App.jsx", "name": "runSlash", "find": "case 'meters':"},
