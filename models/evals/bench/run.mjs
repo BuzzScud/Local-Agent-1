@@ -10,6 +10,9 @@
 // and records what ran, as stopped.
 //     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off] [--way app|model]
 //     [--remote <address> --remote-model <name> [--big on|off] [--remote-ctx <tokens>]] [--lean] [--keep]
+// --remote claude: the Claude API as /remote saved it (settings.json "remotes.claude", its key from the
+// Keychain), --remote-model for another Claude model. A paid model's cost is kept for each task
+// (usd, from the cost meter: terminal/src/agent/spend.mjs) and added up on the summary line.
 // --helpers: the context helpers (terminal/src/agent/helpers.mjs), by codename
 // or by id (named,tests,rag,lsp); default what
 // AGENTIC_HELPERS says (unset: all). "off" is the way before them. With the code
@@ -44,7 +47,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady, connectRemote } from '../../index.mjs';
-import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf, testSettings, readLimits, MODEL_HOOKS, timeLine, slowReads } from '../../../terminal/index.mjs';
+import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf, testSettings, readLimits, MODEL_HOOKS, timeLine, slowReads, loadSettings, windowSpend } from '../../../terminal/index.mjs';
 // A run from the Tests page's control panel: its Context and Thinking cap (the rest reaches runHeadless).
 const panel = testSettings();
 import { recordTest, codeLabel } from '../record.mjs';
@@ -121,7 +124,11 @@ const bigArg = opt('big', 'on');
 if (!['on', 'off'].includes(bigArg)) { console.error(`--big on or off, not "${bigArg}"`); process.exit(1); }
 let conn = null;
 if (remoteAt) {
-  try { conn = await connectRemote({ use: true, source: 'openai', kind: 'openai', connect: 'http', address: remoteAt, model: opt('remote-model', ''), key: Boolean(process.env.AGENTIC_REMOTE_KEY), ...(Number(opt('remote-ctx', 0)) ? { context: Number(opt('remote-ctx')) } : {}) }); } catch (e) { console.error(`the remote at ${remoteAt} did not answer: ${e.message}`); process.exit(1); }
+  const claude = remoteAt === 'claude' ? loadSettings().remotes?.claude : null;
+  if (remoteAt === 'claude' && !claude) { console.error('--remote claude: no Claude API is saved in /remote'); process.exit(1); }
+  const r = claude ? { ...claude, use: true, ...(opt('remote-model', '') ? { model: opt('remote-model') } : {}) }
+    : { use: true, source: 'openai', kind: 'openai', connect: 'http', address: remoteAt, model: opt('remote-model', ''), key: Boolean(process.env.AGENTIC_REMOTE_KEY), ...(Number(opt('remote-ctx', 0)) ? { context: Number(opt('remote-ctx')) } : {}) };
+  try { conn = await connectRemote(r); } catch (e) { console.error(`the remote at ${remoteAt} did not answer: ${e.message}`); process.exit(1); }
   if (bigArg === 'off') delete conn.model.harness;
 }
 const runOn = conn ? conn.model : model;
@@ -173,6 +180,7 @@ try {
       taskAc = ac;
       if (stopping) ac.abort(); // a stop that came while the task was set up
       const timer = setTimeout(() => ac.abort(), perTaskMs);
+      const spent0 = windowSpend().usd;
       let run;
       try {
         run = await runHeadless({ prompt, cwd: work, url: server.url, model: runOn, thinking, effort, ctx: ctxUsed, lean: leanArg, limits: limitsUsed, subagents: Boolean(conn), hooks: conn ? MODEL_HOOKS : undefined, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000, way: wayArg ?? undefined,
@@ -197,11 +205,13 @@ try {
         // Past half its time it thought only briefly (the step-down, agent.mjs).
         steppedDown: Boolean(run.steppedDown),
         // Where its time went: writing, reading, tools, the app (terminal/src/agent/timing.mjs).
-        time: run.time ?? null };
+        time: run.time ?? null,
+        // What it cost on a paid service (null on a free one).
+        usd: conn?.model?.price || windowSpend().usd > spent0 ? Math.round((windowSpend().usd - spent0) * 10000) / 10000 : null };
       // The memory's save comes after the check: its own files are not the task's.
       if (withMemory && run.save) { const s = await run.save(); if (s) { row.saved = s.added.map((f) => `${f.kind}: ${f.text}`); row.refused = s.refused.map((r) => r.why); row.saveSecs = Math.round(s.secs); saves.push(s); } }
       results.push(row);
-      console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps (${row.ownSteps ?? '?'} its own)  ${row.modelCalls ?? '?'} model calls  ${row.toolErrors} errors${row.helperTokens ? `  +${row.helperTokens} helper tokens` : ''}  ${row.reads ?? '-'} reads  ~${row.thinkTokens ?? '-'} thinking  ${row.why}`);
+      console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps (${row.ownSteps ?? '?'} its own)  ${row.modelCalls ?? '?'} model calls  ${row.toolErrors} errors${row.helperTokens ? `  +${row.helperTokens} helper tokens` : ''}  ${row.reads ?? '-'} reads  ~${row.thinkTokens ?? '-'} thinking${row.usd != null ? `  $${row.usd.toFixed(2)}` : ''}  ${row.why}`);
       if (row.time) { console.log(`      ${timeLine(row.time)}`); for (const r of slowReads(run.timeline ?? [])) console.log(`        slow read · ${r}`); }
       if (keepArg) { try { cpSync(work, join(tdir, `${task}-think-${thinking ? 'on' : 'off'}${reps > 1 ? `-rep${rep}` : ''}-files`), { recursive: true, filter: (src) => !/(^|\/)(node_modules|\.git)(\/|$)/.test(src) }); } catch { /* the results stand without them */ } }
       rmSync(dir, { recursive: true, force: true });
@@ -216,7 +226,8 @@ if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, s
 writeFileSync(file, JSON.stringify({ remote: conn ? { address: remoteAt, model: conn.info.model, big: Boolean(runOn.harness) } : null, lean: leanArg, memory: withMemory, helpers: [...helpers], flows: flowsOn, way: limitsUsed?.way ?? wayUsed, prompt: promptUsed, instructions: instructionsArg ?? 'auto', set: setArg, thinkingWay: thinkingUsed, ctx: ctxUsed, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
-  console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps`);
+  const usd = rs.some((r) => r.usd != null) ? rs.reduce((s, r) => s + (r.usd ?? 0), 0) : null;
+  console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps${usd != null ? `, $${usd.toFixed(2)}` : ''}`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
   if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: conn ? `remote:${conn.info.model}` : base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length}${setArg === 'hard' ? ' hard' : ''} practice tasks${conn ? ` on ${conn.info.model} (remote), big-model mode ${runOn.harness ? 'on' : 'off'}` : ''}${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}${wayUsed === 'model' ? ', model decides' : ''}${leanArg ? ', lean harness' : ''}${instructionsArg && instructionsArg !== 'auto' ? `, ${instructionsArg} instructions` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx: ctxUsed,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() || stopping ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });

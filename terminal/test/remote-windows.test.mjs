@@ -43,10 +43,12 @@ const { costOf, recordSpend, todaySpend, spendLabel, windowSpend, money, dayOf }
 const { footerParts } = await import('../src/app/screen.jsx');
 const { meterWords } = await import('../src/app/remote-footer.mjs');
 
-test('cost: the service\'s own figure first, else its prices ($ a million; cached input a tenth), else not known', () => {
+test('cost: the service\'s own figure first, else its prices ($ a million; cached input a tenth, written to the cache a quarter more), else not known', () => {
   expect(costOf({ prompt_tokens: 1000, completion_tokens: 100, cost: 0.0123 }, { in: 4, out: 20 })).toBe(0.0123);
   expect(costOf({ prompt_tokens: 1_000_000, completion_tokens: 100_000 }, { in: 4, out: 20 })).toBeCloseTo(6, 6);
   expect(costOf({ prompt_tokens: 1_000_000, completion_tokens: 0, cached_tokens: 1_000_000 }, { in: 4, out: 20 })).toBeCloseTo(0.4, 6);
+  // The Claude API: 1M read from the cache, 1M written to it, 1M plain: 0.4 + 5 + 4.
+  expect(costOf({ prompt_tokens: 3_000_000, completion_tokens: 0, cached_tokens: 1_000_000, cache_write_tokens: 1_000_000 }, { in: 4, out: 20 })).toBeCloseTo(9.4, 6);
   expect(costOf({ prompt_tokens: 10, completion_tokens: 10 }, null)).toBe(null);
   expect(money(0.004)).toBe('$0.004');
   expect(money(0.31)).toBe('$0.31');
