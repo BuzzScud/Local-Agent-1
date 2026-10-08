@@ -751,9 +751,9 @@ const SHORTCUTS = [
   ['@ to attach a file', 'ctrl+o to expand the last output'],
   ['! to run a shell command', 'esc to interrupt Agentic Coder'],
   ['\\ + enter for a new line', 'ctrl+c twice to quit'],
-  ['↑ ↓ for earlier prompts', 'shift+arrows to select and copy'],
-  ['⌥+click to move the cursor', 'ctrl+z to undo · ctrl+y to redo'],
-  ['ctrl+t to start or stop the model', '/mouse on: click its label too'],
+  ['↑ ↓ for earlier prompts', '⌥a to select all · delete clears it'],
+  ['click or drag to move or select', 'ctrl+z to undo · ctrl+y to redo'],
+  ['ctrl+t to start or stop the model', 'or click its label'],
 ];
 // On a remote nothing loads on this Mac: ctrl+t opens the model list, and the keys for big
 // models join it (remote-footer.mjs, 2 Oct 2026).

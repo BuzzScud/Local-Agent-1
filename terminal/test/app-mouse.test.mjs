@@ -75,7 +75,7 @@ const press = async ({ write, raw }, at, cursor) => {
   write(`\x1b[${c.row};${c.col}R`);
 };
 
-test('/mouse on: a drag in the prompt box highlights across rows and copies, delete removes it, a double click takes a word, a scroll hands the mouse back, an empty box keeps it (for the footer\'s model label)', async () => {
+test('the mouse is on from the start (/mouse off gives it back); /mouse on: a drag in the prompt box highlights across rows and copies, delete removes it, a double click takes a word, a scroll hands the mouse back, an empty box keeps it (for the footer\'s model label)', async () => {
   const { cwd, env, base } = setup();
   const clip = join(base, 'clipboard.txt');
   const fake = await startFakeServer([]);
@@ -85,8 +85,11 @@ test('/mouse on: a drag in the prompt box highlights across rows and copies, del
   const seen = {};
   const r = await runInPty({ cwd, cols: 80, rows: 24, env: { ...env, AGENTIC_CLIPBOARD: clip }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { sleep: 300 },
-    // off (the default): a mouse report that arrives anyway is not typed
-    { type: 'x' }, { key: '\x1b[<0;9;9M' }, { sleep: 200 }, { snapshot: 'off' }, { fn: ({ raw }) => { seen.offAsked = raw().includes(MOUSE_ON); } },
+    { fn: ({ raw }) => { seen.start = last(raw(), MOUSE_ON, MOUSE_OFF); } }, // on from the start (7 Oct 2026)
+    { type: '/mouse off' }, { key: 'enter' }, { wait: 'Mouse off' }, { sleep: 200 },
+    { fn: ({ raw }) => { seen.offAt = raw().length; seen.turnedOff = last(raw(), MOUSE_ON, MOUSE_OFF); } },
+    // off: a mouse report that arrives anyway is not typed
+    { type: 'x' }, { key: '\x1b[<0;9;9M' }, { sleep: 200 }, { snapshot: 'off' }, { fn: ({ raw }) => { seen.offAsked = raw().slice(seen.offAt).includes(MOUSE_ON); } },
     { key: 'backspace' }, { sleep: 100 },
     { type: '/mouse on' }, { key: 'enter' }, { wait: 'Mouse on' },
     { fn: ({ raw }) => { seen.empty = last(raw(), MOUSE_ON, MOUSE_OFF); } }, // nothing in the box: still the app's (since 30 Sep), for a click on the footer's label
@@ -125,6 +128,8 @@ test('/mouse on: a drag in the prompt box highlights across rows and copies, del
   ] });
   await fake.close();
   const prompt = (snap) => snap.split('\n').filter((l) => /^│ [> ] /.test(l)).map((l) => l.replace(/^│ [> ] /, '').replace(/\s*│\s*$/, '')).join('|');
+  expect(seen.start).toBe(MOUSE_ON); // a fresh home: the mouse is the app's
+  expect(seen.turnedOff).toBe(MOUSE_OFF);
   expect(seen.offAsked).toBe(false); // off: Terminal is never asked for the mouse
   expect(prompt(r.snapshots.off)).toBe('x');
   expect(seen.empty).toBe(MOUSE_ON);

@@ -91,7 +91,7 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
   for (const g of ['Setup', 'Pages · the hub in the browser', 'Tools']) expect(m).toContain(`│ ${g}`);
   expect(m).toMatch(/❯ Permissions\s+0 saved · manual\s+what runs without asking, what never runs/); // the first row of Setup
   expect(m).toMatch(/Status bar\s+off\s+model, speed and memory under the prompt/);
-  expect(m).toMatch(/Mouse\s+off\s+drag to highlight text in the prompt box/);
+  expect(m).toMatch(/Mouse\s+on\s+drag to highlight text in the prompt box/); // on unless turned off
   expect(m).toMatch(/Model at start\s+off · \/start loads it\s+load the model as a window opens/);
   expect(m).toMatch(/Helpers\s+\d of 4 on\s/);
   expect(m).toMatch(/Hooks\s+all run: App decides\s+the app's checks, while the model decides/);

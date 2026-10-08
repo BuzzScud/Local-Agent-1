@@ -256,7 +256,7 @@ export function App({ opts, win, onRestart }) {
   const [leaving, setLeaving] = useState(false);
   const [ramGb, setRamGb] = useState(null);
   const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
-  const [mouse, setMouse] = useState(Boolean(settings.mouse)); // /mouse: drag to highlight in the prompt box (off: the mouse stays Terminal's)
+  const [mouse, setMouse] = useState(settings.mouse !== false); // /mouse: drag to highlight in the prompt box, on unless turned off (off: the mouse stays Terminal's)
   const [wheelPause, setWheelPause] = useState(false); // a scroll just came in: the mouse is Terminal's for a moment
   // /btw: a side question and its answer, in a panel in the prompt box's place
   // (Claude Code's /btw); gone when closed. The main job's own question wins
@@ -439,11 +439,12 @@ export function App({ opts, win, onRestart }) {
   S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog };
   const flash = useCallback(flashFn, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
-  // selection settles, like Claude Code's copy on select.
+  // selection settles, like Claude Code's copy on select. Not the whole of it
+  // selected by a key (⌥A): that is for deleting it or pasting over it.
   const copiedRef = useRef('');
   useEffect(() => {
     const text = selectedText(input);
-    if (!text) { copiedRef.current = ''; return undefined; }
+    if (!text || input.all) { copiedRef.current = ''; return undefined; }
     const t = setTimeout(() => {
       if (text === copiedRef.current) return;
       copiedRef.current = text;

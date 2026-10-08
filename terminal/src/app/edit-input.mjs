@@ -118,6 +118,11 @@ function rowMove(s, dir, opts) {
   return { cursor: indexAt(s.value, rows[row + dir], goalX), goalX };
 }
 
+// The whole prompt highlighted by a key (⌥A, or ctrl+a twice). all: it is not
+// copied, so ⌥A then ⌘V pastes over it. skip: the ! of shell mode stays out,
+// so a delete keeps the mode.
+const selectAll = (v, skip = 0) => ({ value: v, cursor: v.length, anchor: Math.min(skip, v.length), all: true });
+
 // The selected range [start, end), or null.
 export function selection(s) {
   if (s.anchor == null || s.anchor === s.cursor) return null;
@@ -160,8 +165,9 @@ export function editInput(s, input, key, opts) {
   if (key.rightArrow) return { value: v, cursor: key.meta ? wordRight(v, c) : Math.min(v.length, c + 1) };
   // ↑ ↓ move a row (the app takes the first and last row for earlier prompts)
   if ((key.upArrow || key.downArrow) && !key.ctrl && !key.meta) { const m = rowMove(s, key.upArrow ? -1 : 1, opts); return { value: v, ...m }; }
-  // ctrl+a goes to the start of the line; pressed again right away, it selects everything
-  if (key.ctrl && input === 'a' && s.lastKey === 'ctrl+a' && v) return { value: v, cursor: v.length, anchor: 0 };
+  // ⌥A selects everything; ctrl+a goes to the start of the line, and pressed again right away, it does too
+  if (key.meta && input === 'a') return v.length > (opts?.skip ?? 0) ? selectAll(v, opts?.skip) : s;
+  if (key.ctrl && input === 'a' && s.lastKey === 'ctrl+a' && v) return selectAll(v, opts?.skip);
   if (key.home || (key.ctrl && input === 'a')) return { value: v, cursor: lineStart(v, c), ...(key.ctrl ? { lastKey: 'ctrl+a' } : {}) };
   if (key.end || (key.ctrl && input === 'e')) return { value: v, cursor: lineEnd(v, c) };
   if (key.meta && input === 'b') return { value: v, cursor: wordLeft(v, c) };
