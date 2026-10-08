@@ -2,8 +2,8 @@
 // own tools (Map, CodeSearch, Rename, TestFirst, Remember).
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
 import { PROVIDER_NAMES, searchKey } from '../tools/web.mjs';
-import { EXPLORE_TOOLS, WHOLE_MAX, desktopDefault, display, execute, needsSight, needsText, normalizeArgs, parseArgs, patchOps, plainFetch, plainRead, prepare, resolvePath, sentArgs, syntaxError, toolNameOf } from './tools.mjs';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { EXPLORE_TOOLS, WHOLE_MAX, arrivedNote, desktopDefault, display, execute, needsSight, needsText, normalizeArgs, parseArgs, patchOps, plainFetch, plainRead, prepare, resolvePath, sentArgs, syntaxError, toolNameOf } from './tools.mjs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { repoMap } from '../tools/repomap.mjs';
 import { decide, isReadOnly, offerFor, testRunOf } from './permissions.mjs';
 import { isHomeFolder } from './prompt.mjs';
@@ -24,6 +24,9 @@ import { MAP_DIR } from '../tools/codemap.mjs';
 import { CUT } from '../tools/codeindex.mjs';
 import { MCP_TOOL, findEntry, isMcpCall, madeUpCall } from './mcp.mjs';
 import { CODE_SEARCH_CHARS, CUT_MARK, MODEL_TOOLS, countLine, failsOf, leakedCall, planLine, runLine, tokensOf } from './agent-said.mjs';
+import { rawQwenCall } from './client.mjs';
+import { readCallText } from './qwen-raw.mjs';
+import { HOME } from '../../../models/index.mjs';
 
 export class StepPart {
   // A Write with its content but no path: the content is kept, the call in the
@@ -56,6 +59,42 @@ export class StepPart {
       };
     }
     return parsed;
+  }
+
+  // A call asked for again (8 Oct 2026, the owner's pick: "read calls ourselves"). Ollama's parser leaves out a
+  // part of a call it cannot read, without a word: Qwen3.6's Writes came with only "path", its Edits without
+  // "old_text". In Ollama's raw mode (client.mjs rawQwenCall) the model writes the same call once more, from
+  // the step's own thinking and words, and it is read here (qwen-raw.mjs readCallText). Answers { call, found }:
+  // call when it now has what was missing (its arguments replace the ones in the conversation), found the names
+  // that came; null where it does not apply. What came is kept in logs/qwen-reread.jsonl: it shows whether
+  // the model or the parser lost the text.
+  async rereadCall(call, missing, signal) {
+    const at = this.messages.findIndex((m) => m.role === 'assistant' && m.tool_calls?.some((t) => t.id === call.id));
+    const ask = this.lastAsk;
+    const def = ask?.tools?.find((t) => t.function?.name === call.name);
+    if (at < 1 || !def) return null;
+    const msg = this.messages[at];
+    const started = Date.now();
+    const r = await rawQwenCall({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages.slice(0, at)), tools: ask.tools, thinking: ask.thinking, effort: ask.effort, model: this.model, sampling: ask.sampling, maxTokens: ask.maxTokens, reasoning: msg.reasoning_content ?? '', before: typeof msg.content === 'string' ? msg.content : '', name: call.name, signal,
+      onStart: () => this.emit('note', { text: `Its ${call.name} came without "${missing}": asking the model for that call once more and reading it here…`, tone: 'dim' }) });
+    if (!r) return null;
+    const args = readCallText(r.text, def);
+    const json = JSON.stringify(args);
+    const whole = !parseArgs(call.name, json, this.way).error;
+    const found = Object.keys(args);
+    try {
+      mkdirSync(join(HOME, 'logs'), { recursive: true });
+      appendFileSync(join(HOME, 'logs', 'qwen-reread.jsonl'), `${JSON.stringify({ at: new Date().toISOString(), model: this.model?.remote?.model ?? null, tool: call.name, missing, sent: call.args.slice(0, 2000), raw: r.text.slice(0, 20000), found, whole, tokens: r.tokens, finish: r.finish, secs: Math.round((Date.now() - started) / 1000) })}\n`);
+    } catch { /* the log is for looking back; the step goes on without it */ }
+    this.emit('note', whole
+      ? { text: `Its ${call.name} came without "${missing}"; asked for it once more and read it here: it was whole (${found.join(', ')}), so it runs.`, tone: 'warn' }
+      : { text: `Its ${call.name} came without "${missing}"; asked for it once more and read it here: ${found.length ? `still no "${missing}" (it came with ${found.join(', ')})` : 'nothing came'}.`, tone: 'warn' });
+    if (!whole) return { call: null, found };
+    // The conversation holds the call as it really was, so later steps read the whole of it.
+    const c = msg.tool_calls.find((t) => t.id === call.id);
+    this.ctxUsed += Math.max(0, tokensOf(json) - tokensOf(c.function.arguments ?? ''));
+    c.function.arguments = json;
+    return { call: { ...call, args: json }, found };
   }
 
   // Replace a call's arguments in the conversation (the model reads the shorter
@@ -177,7 +216,21 @@ export class StepPart {
     if (call.name === 'apply_patch') return this.applyPatch(call, signal);
     if (call.name === 'Edit' || call.name === 'Write') call = this.mendEdit(call);
     let parsed = parseArgs(call.name, call.args, this.way);
+    // A Write or Edit without a field it needs, from Qwen 3.5 or 3.6 on an Ollama service: the call is asked for
+    // once more in raw mode and read here, where nothing is left out unsaid (rereadCall). Whole now: it runs.
+    let reread = null;
+    if (parsed.error && parsed.missing && (call.name === 'Write' || call.name === 'Edit')) {
+      reread = await this.rereadCall(call, parsed.missing, signal).catch(() => null);
+      if (reread?.call) { call = reread.call; parsed = parseArgs(call.name, call.args, this.way); }
+    }
     if (call.name === 'Write') parsed = this.keepWrite(call, parsed);
+    // Still missing something: the model is told what did arrive, so a name it got wrong is not taken for text
+    // lost on the way (arrivedNote), and whether a second read found it.
+    if (parsed.error && parsed.missing) {
+      const came = arrivedNote(call.name, call.args, this.way);
+      if (came) parsed = { ...parsed, error: `${parsed.error} ${came.text}`, shown: `${call.name} needs "${parsed.missing}" · ${came.shown}` };
+    }
+    if (parsed.error && reread && !reread.call) parsed = { ...parsed, error: `${parsed.error} (Agentic Coder asked for this call once more and read it itself: ${reread.found.length ? `it came with ${reread.found.join(', ')} again` : 'nothing came'}.)` };
     const shown = display(call.name, parsed.args ?? {});
     const id = call.id;
     if (parsed.error) {

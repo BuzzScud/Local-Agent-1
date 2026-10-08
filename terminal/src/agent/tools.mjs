@@ -414,7 +414,7 @@ export function parseArgs(name, json, way = 'app') {
   // Ask's choices sent as a string of JSON are read as the list they are.
   if (name === 'Ask') for (const k of ['options', 'more']) if (typeof args[k] === 'string') { try { const v = JSON.parse(args[k]); if (Array.isArray(v)) args[k] = v; } catch {} }
   for (const req of name === 'Read' && args.paths ? [] : def.parameters.required ?? []) {
-    if (args[req] === undefined || args[req] === null || (typeof args[req] === 'string' && req !== 'new_text' && !args[req].length)) return { error: needsText(name, req) };
+    if (args[req] === undefined || args[req] === null || (typeof args[req] === 'string' && req !== 'new_text' && !args[req].length)) return { error: needsText(name, req), missing: req };
   }
   for (const [k, v] of Object.entries(args)) {
     const want = def.parameters.properties[k]?.type;
@@ -424,6 +424,32 @@ export function parseArgs(name, json, way = 'app') {
     if (want === 'boolean' && typeof v !== 'boolean') args[k] = v === 'true' || v === 1 || v === '1';
   }
   return { args };
+}
+
+// What a call missing something brought with it, for the model and the screen (8 Oct 2026, the owner: "how do
+// we make it more like you in this step?": Claude Code's own errors say what was wrong with the call as sent).
+// Each name it sent and its size, the ones this tool does not take (a name of its own, to send again under the
+// tool's names), else that nothing more came (text lost on the way). { text, shown }; null for no JSON object.
+export function arrivedNote(name, json, way = 'app') {
+  let raw;
+  try { raw = JSON.parse(json || '{}'); } catch { return null; }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const def = defOf(name, way);
+  if (!def) return null;
+  const flat = (k) => String(k).toLowerCase().replace(/[_-]/g, '');
+  const keys = Object.keys(raw);
+  const taken = new Set();
+  for (const key of Object.keys(def.parameters.properties)) {
+    const hit = aliasesOf(key).find((a) => raw[a] !== undefined) ?? keys.find((k) => aliasesOf(key).some((a) => flat(a) === flat(k)));
+    if (hit !== undefined) taken.add(hit);
+  }
+  const size = (v) => (typeof v === 'string' ? (v.includes('\n') ? `${v.split('\n').length} lines` : v.length > 60 ? `${v.length} characters` : JSON.stringify(v)) : Array.isArray(v) ? `a list of ${v.length}` : v && typeof v === 'object' ? 'an object' : JSON.stringify(v));
+  const other = keys.filter((k) => !taken.has(k));
+  const names = Object.keys(def.parameters.properties);
+  if (!keys.length) return { text: `Your ${name} call arrived with no arguments at all: if you wrote them, they were lost on the way. Its arguments are ${names.join(', ')}.`, shown: 'came with no arguments' };
+  const came = `Your ${name} call arrived with: ${keys.map((k) => `${k} (${size(raw[k])})`).join(', ')}.`;
+  if (other.length) return { text: `${came} ${name} does not take ${other.map((k) => `"${k}"`).join(' or ')}: its arguments are ${names.join(', ')}.`, shown: `came with ${keys.join(', ')}; ${other.join(', ')} not one of its names` };
+  return { text: `${came} Nothing else came: if you wrote more, it was lost on the way. Send it again; a long text in a shorter first part.`, shown: `came with only ${keys.join(', ')}` };
 }
 
 // A list of paths sent as one string: JSON ('["a.mjs", "b.mjs"]'), else split at commas and spaces.
