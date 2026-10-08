@@ -10,6 +10,7 @@ import { StartPage, TrustPage, FolderPage, folderCard, botPixels, botRows, botCe
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { setup, T, quit, quitTyped as quitTypedSteps } from './app-setup.mjs';
+import { HUE } from '../src/ui/theme.mjs';
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -106,16 +107,17 @@ test('a first prompt in capitals reads in sentence case; one that is a shell com
 });
 
 test('the bot sleeps while the model is off, looks about while it loads, and is happy when ready', () => {
-  // Its eyes: the green light on the glass in its face (rows 4–9); the chest strip is row 15.
-  const eyes = (state, k) => botPixels(state, k).flatMap((row, y) => row.map((c, x) => (y >= 4 && y <= 9 && x >= 4 && x <= 17 && [65, 71, 120, 157, 194].includes(c) ? `${x},${y}:${c}` : null))).filter(Boolean);
+  // Its eyes: the light (the app's blue, ui/theme.mjs HUE) on the glass in its face (rows 4–9); the chest strip is row 15.
+  const { deep, dim, bright, light, lighter, accent } = HUE;
+  const eyes = (state, k) => botPixels(state, k).flatMap((row, y) => row.map((c, x) => (y >= 4 && y <= 9 && x >= 4 && x <= 17 && [deep, dim, bright, light, lighter].includes(c) ? `${x},${y}:${c}` : null))).filter(Boolean);
   const strip = (state, k) => botPixels(state, k)[BOT_STRIP_ROW].slice(7, 15);
-  expect(eyes('off')).toEqual(['6,7:65', '7,7:65', '8,7:65', '13,7:65', '14,7:65', '15,7:65']); // – –
+  expect(eyes('off')).toEqual([6, 7, 8, 13, 14, 15].map((x) => `${x},7:${deep}`)); // – –
   expect(botPixels('off')[0][18]).toBe(243); // and a Z
-  expect(eyes('trust')).toContain('13,6:71'); // one eye open at the safety check
-  expect(eyes('ready')).toEqual(['7,6:157', '8,6:157', '13,6:157', '14,6:157', '6,7:157', '9,7:157', '12,7:157', '15,7:157']); // ^ ^
+  expect(eyes('trust')).toContain(`13,6:${dim}`); // one eye open at the safety check
+  expect(eyes('ready')).toEqual(['7,6', '8,6', '13,6', '14,6', '6,7', '9,7', '12,7', '15,7'].map((p) => `${p}:${light}`)); // ^ ^
   expect(strip('off', 0).every((c) => c === 236)).toBe(true);
-  expect(strip('ready', 0).every((c) => c === 114)).toBe(true);
-  expect(strip('loading', 3).filter((c) => c === 120)).toHaveLength(3); // it fills while it loads
+  expect(strip('ready', 0).every((c) => c === accent)).toBe(true);
+  expect(strip('loading', 3).filter((c) => c === bright)).toHaveLength(3); // it fills while it loads
   expect(eyes('loading', 2)).not.toEqual(eyes('loading', 0)); // it looks about
   expect(eyes('loading', 9).every((e) => e.includes(',7:'))).toBe(true); // and blinks
   expect(botPixels('loading', 0)[0][10]).not.toBe(botPixels('loading', 2)[0][10]); // the antenna's light pulses
@@ -152,7 +154,7 @@ test('the bot leaves no line through it in Terminal: each cell takes the glyph w
 });
 
 test('while you type, the awake bot looks down at the prompt box, left or right with the cursor', () => {
-  const eyes = (state, look) => botPixels(state, 0, look).flatMap((row, y) => row.map((c, x) => (y >= 4 && y <= 9 && x >= 4 && x <= 17 && [120, 157, 194].includes(c) ? `${x},${y}` : null))).filter(Boolean);
+  const eyes = (state, look) => botPixels(state, 0, look).flatMap((row, y) => row.map((c, x) => (y >= 4 && y <= 9 && x >= 4 && x <= 17 && [HUE.bright, HUE.light, HUE.lighter].includes(c) ? `${x},${y}` : null))).filter(Boolean);
   expect(eyes('ready', 0.1)).toEqual(['6,8', '7,8', '12,8', '13,8', '6,9', '7,9', '12,9', '13,9']); // down and to the left
   expect(eyes('ready', 0.9)).toEqual(['8,8', '9,8', '14,8', '15,8', '8,9', '9,9', '14,9', '15,9']); // down and to the right
   expect(eyes('loading', 0.5)).toEqual(eyes('ready', 0.5).map((e) => e)); // loading too

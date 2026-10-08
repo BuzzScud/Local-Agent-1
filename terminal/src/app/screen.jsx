@@ -41,7 +41,7 @@ const diffW = (width) => Math.max(40, Math.min(110, width - 12));
 // Long folder paths keep their end, which is the part that says where you are.
 const fitPath = (p, max) => (p.length <= max ? p : `…${p.slice(p.length - max + 1)}`);
 
-// The footer's live memory dot: Activity Monitor's green / yellow / red.
+// The footer's live memory dot: Activity Monitor's fine / tight / critical, in the app's blue, yellow and red.
 const PRESSURE_COLOR = { fine: C.ok, tight: C.warn, critical: C.bad };
 
 const webSize = (b) => (b == null ? '' : b < 1024 ? `${b} B` : b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
@@ -943,7 +943,7 @@ function Footer({ app }) {
   const p = footerParts(app);
   const ms = app.modelState;
   const on = ms?.state === 'on';
-  // A remote's dot: green on, orange while it connects or loads, red when it does not answer;
+  // A remote's dot: blue (the app's own) when on, orange while it connects or loads, red when it does not answer;
   // the model's name stands out from where it runs.
   const dot = on ? C.accent : !ms?.remote ? C.dim : ms.state === 'down' ? C.bad : C.warn;
   const named = ms?.remote && on && p.label.startsWith(`● ${ms.name}`);

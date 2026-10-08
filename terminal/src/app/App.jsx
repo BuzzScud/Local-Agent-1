@@ -898,7 +898,7 @@ export function App({ opts, win, onRestart }) {
   // Its name is remoteModel's without " · <where>" (one of ours keeps its own name, not its file's).
   const remoteName = model.remote ? model.name.replace(` · ${model.remote.label}`, '') : null;
   // The footer's gauges on a remote (remote-footer.mjs), from the model in use's own answers: none
-  // until the first has a speed. While it writes, the speed is this reply's, in green.
+  // until the first has a speed. While it writes, the speed is this reply's, in the app's blue.
   const writingNow = live.phase === 'working' && live.firstTokenAt && !live.waiting && live.liveTps ? live.liveTps : null;
   const ownStats = model.remote && stats.speedsOf === model.remote.model && (stats.tps || stats.speeds?.length);
   const server = psRef.current;

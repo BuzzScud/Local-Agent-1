@@ -11,6 +11,7 @@
 //   - While a reply runs a shine sweeps the line and its head blinks; at rest it holds still (a
 //     redraw at rest would break copying text off the screen).
 // A row is a list of { t: text, fg, bg, b }: colours as xterm-256 numbers, bg null for none.
+import { HUE } from '../ui/theme.mjs';
 
 const S = (t, fg = 252, bg = null, b = false) => ({ t, fg, bg, b });
 export const widthOf = (segs) => segs.reduce((n, s) => n + [...s.t].length, 0);
@@ -37,14 +38,14 @@ const day = (ms) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 
 const dayUtc = (ms) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const ago = (ms) => (ms < 90e3 ? `${Math.max(1, Math.round(ms / 1e3))} s ago` : ms < 5400e3 ? `${Math.round(ms / 60e3)} min ago` : ms < 129600e3 ? `${Math.round(ms / 3600e3)} h ago` : `${Math.round(ms / 86400e3)} days ago`);
 
-// The colours: the line's three ramps (plenty, a quarter to a half left, under a fifth), each
-// with the shine that sweeps it; today's amber, the faint line, the card's border, the words.
-const GREEN = [23, 29, 30, 36, 37, 43, 79, 115];
+// The colours: the line's three ramps (plenty: the app's own blue, a quarter to a half left, under
+// a fifth), each with the shine that sweeps it; today's amber, the faint line, the card's border, the words.
+const BLUE = [17, 24, 25, 31, 32, 38, 74, 117];
 const AMBER = [94, 130, 136, 172, 178, 214, 220, 221];
 const RED = [52, 88, 124, 160, 196, 203, 210];
-const rampOf = (f) => (f > 0.5 ? GREEN : f > 0.2 ? AMBER : RED);
-const SHINE = new Map([[GREEN, 195], [AMBER, 230], [RED, 224]]);
-const C = { diamond: 173, value: 255, text: 252, dim: 245, sep: 240, faint: 237, today: 94, warn: 215, bad: 203, ok: 114, label: 244, border: 240 };
+const rampOf = (f) => (f > 0.5 ? BLUE : f > 0.2 ? AMBER : RED);
+const SHINE = new Map([[BLUE, 195], [AMBER, 230], [RED, 224]]);
+const C = { diamond: 173, value: 255, text: 252, dim: 245, sep: 240, faint: 237, today: 94, warn: 215, bad: 203, ok: HUE.accent, label: 244, border: 240 };
 const rateColor = (pct) => (pct >= 50 ? C.ok : pct >= 20 ? C.warn : C.bad);
 
 // The limits as of now: each part's room (a bucket past its reset is full again), and the tightest.
