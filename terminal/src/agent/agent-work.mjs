@@ -30,7 +30,7 @@ import { alwaysRules } from './facts.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { describePictures, describedNote } from './helper-models.mjs';
 import { MCP_TOOL, callHint, isMcpCall, mcpCallInText, requestHits, requestNote } from './mcp.mjs';
-import { BYPASS_OPEN, CALL_MARK, CORRECTS, EXPLAIN, LAYOUT_ROUNDS, LOOK_TOOLS, MAX_CALLS, MCP_BACKS, MENTIONS_WALL, READ_TIP, SAME_STEP, aboutTheCode, announcesNextStep, asksForWork, asksTheUser, asksTheUserDirectly, auto, bareCallInText, beforeCall, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, cutCallNote, emptyCutNote, kTok, keptPart, keptWriteNote, keyLines, safeArgs, searchWords, tokensOf, toolCallInText, webAddresses, writesCodeInstead } from './agent-said.mjs';
+import { BYPASS_OPEN, CALL_MARK, CORRECTS, EXPLAIN, LAYOUT_ROUNDS, LOOK_TOOLS, LOST_CALL, MAX_CALLS, MCP_BACKS, MENTIONS_WALL, READ_TIP, SAME_STEP, aboutTheCode, announcesNextStep, asksForWork, asksTheUser, asksTheUserDirectly, auto, bareCallInText, beforeCall, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, cutCallNote, emptyCutNote, kTok, keptPart, keptWriteNote, keyLines, lostCall, safeArgs, searchWords, tokensOf, toolCallInText, webAddresses, writesCodeInstead } from './agent-said.mjs';
 
 export class WorkPart {
   async work(text, { signal, images, wake = false } = {}) {
@@ -501,6 +501,16 @@ export class WorkPart {
           const chasedNow = !this.turn.noteChased ? this.noteChaseDue(`${turn.reasoning ?? ''}\n${text}`) : '';
           if (chasedNow) { this.messages.push({ role: 'user', content: auto(chasedNow.replace(/^\(|\)$/g, '')) }); continue; }
           if (asksTheUser(text)) break;
+          // The server says it wrote far more than arrived, and no call came: a call lost on the way, not a
+          // step it forgot (Qwen3.6 on the service, 8 Oct 2026: 38 s of writing after "Let me write the scripts
+          // directly using Write:", only those words arrived, and "You said what you will do next" got two
+          // Writes with only a path). Once a message.
+          if (!this.turn.lostCall && lostCall(turn, text)) {
+            this.turn.lostCall = true;
+            this.emit('note', { text: `It wrote about ${kTok(turn.tokens)} tokens and its call never arrived (the server dropped it); asked it to take the step again, smaller.`, tone: 'warn' });
+            this.messages.push({ role: 'user', content: auto(LOST_CALL) });
+            continue;
+          }
           // Small models often announce the next step mid-task ("Now I will
           // update main().") and stop. Tell them to go ahead, at most twice per
           // message, and only once work is under way (a tool already ran).
