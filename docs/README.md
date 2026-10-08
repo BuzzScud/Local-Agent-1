@@ -8,8 +8,8 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 528 KB | 2026-10-08 |
 | [tests/agentic-coder-claude-lean-claude-opus-5-5-2026-10-07-1832.html](tests/agentic-coder-claude-lean-claude-opus-5-5-2026-10-07-1832.html) | page | Claude: lean vs full · claude-opus-5-5 | 17 KB | 2026-10-07 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 518 KB | 2026-10-07 |
 | [tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1103.html](tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1103.html) | page | Fewer steps: before vs after · Qwen3.6:35B-A3B | 15 KB | 2026-10-06 |
 | [tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1016.html](tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1016.html) | page | Fewer steps: before vs after · Qwen3.6:35B-A3B | 15 KB | 2026-10-06 |
 | [design rounds/agentic-coder-loops-4-designs-2026-10-04.html](design%20rounds/agentic-coder-loops-4-designs-2026-10-04.html) | page | /loops · round three | 78 KB | 2026-10-06 |
