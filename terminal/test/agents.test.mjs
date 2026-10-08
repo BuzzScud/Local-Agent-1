@@ -5,7 +5,7 @@
 // run side by side; esc stops one. Against stand-in servers (fake-server.mjs,
 // fake-anthropic.mjs); the real model does it in the Subagent check.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
@@ -15,6 +15,9 @@ process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-agents-home-'))
 const { runHeadless } = await import('../src/headless.mjs');
 const { MODELS, DEFAULT_MODEL, setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
 const { toolDefs, EXPLORE_TOOLS } = await import('../src/agent/tools.mjs');
+const { Rewind } = await import('../src/app/rewind.mjs');
+const { Agent } = await import('../src/agent/agent.mjs');
+const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const model = MODELS[DEFAULT_MODEL];
 
 function project() {
@@ -93,6 +96,35 @@ test('without a yes (coding -p with no --yes), a general helper’s change is re
   expect(readFileSync(join(cwd, 'a.mjs'), 'utf8')).toContain('export const a = 1;');
   expect(r.reason).toBe('declined'); // the no ends the turn, as a no to the conversation's own change does
   expect(r.events.find((e) => e.type === 'tool' && e.name === 'Agent').view.reason).toBe('you said no');
+});
+
+test('from the home folder, a helper sent to a project moves there ("Work in …?" yes) and works, with /rewind on (7 Oct 2026: it stopped on "this.rewind?.moved is not a function")', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-agents-fakehome-'));
+  const cwd = join(home, 'shop');
+  mkdirSync(cwd);
+  writeFileSync(join(cwd, 'a.mjs'), 'export const a = 1;\n');
+  const fake = await startFakeServer([
+    { tool: { name: 'Agent', args: { description: 'change a', prompt: `In ${cwd} change a = 1 to a = 2 in a.mjs.`, kind: 'general' } } },
+    { tool: { name: 'Read', args: { path: 'a.mjs' } } },
+    { tool: { name: 'Edit', args: { path: 'a.mjs', old_text: 'export const a = 1;', new_text: 'export const a = 2;' } } },
+    { text: 'Changed a.mjs: a = 2.' },
+    { text: 'Done: a is 2 now.' },
+  ]);
+  const rewind = new Rewind({ home: mkdtempSync(join(tmpdir(), 'agentic-agents-rewind-')), session: 's1' });
+  const asked = [];
+  // The home folder is a folder of the test's own (Bun's homedir() keeps the real one), given to the Agent, and from it to its helper.
+  const ask = async (req) => { const q = String(req.args?.question ?? ''); asked.push(q); return /^Work in /.test(q) ? { choice: 'yes', text: 'yes' } : { choice: 'yes' }; };
+  const agent = new Agent({ url: fake.url, model, cwd: home, home, system: systemPrompt({ cwd: home, git: 'test', tests: null }), thinking: false, mode: 'edits', flows: false, verify: false, confirmPlan: false, checkIns: false, way: 'model', rewind, ask });
+  const events = [];
+  agent.on('tool', (ev) => events.push(ev));
+  try {
+    const reason = await agent.send('make a 2, with a helper');
+    expect(asked.some((q) => q.startsWith('Work in ~/shop?'))).toBe(true);
+    const step = events.find((e) => e.name === 'Agent');
+    expect(step.view.content).not.toContain('It stopped');
+    expect(readFileSync(join(cwd, 'a.mjs'), 'utf8')).toBe('export const a = 2;\n');
+    expect(reason).toBe('done');
+  } finally { await fake.close(); }
 });
 
 test('esc during a helper stops it and the turn', async () => {
