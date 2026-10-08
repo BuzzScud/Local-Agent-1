@@ -13,7 +13,7 @@ import { LOOK_BACKS, LOOK_NOTE, LOOK_NOTE_DATA, lookBackNote } from './look.mjs'
 import { pageReadOn } from './page-read.mjs';
 import { pickSkill, readSkills, skillNote } from './prompt-files.mjs';
 import { mathIndex, mathNotes, sortMath } from './expertise.mjs';
-import { designNotes, designSettings, isDesignRequest, mixTurn, pickCards } from './design.mjs';
+import { briefNote, designNotes, designSettings, isDesignRequest, mixTurn, pickCards } from './design.mjs';
 import { pickPieces, studioNotes } from './studio.mjs';
 import { pagesToCheck } from '../flows/layoutcheck.mjs';
 import { basename, join, relative } from 'node:path';
@@ -312,13 +312,20 @@ export class WorkPart {
       try {
         // The design studio's pieces (studio.mjs) that fit take the example
         // card's place; the rules card still comes. No piece fits: the cards as before.
-        const studio = design.studio ? studioNotes(pickPieces(text)) : null;
-        // mix: opus and fable take turns, one page request each.
+        // A page of your picks that says the thing asked for as well wins over the pieces (8 Oct 2026).
+        const pieces = design.studio ? pickPieces(text, { ctx: this.ctx }) : null;
+        const peek = design.style === 'mix' ? mixTurn({ peek: true }) : design.style;
+        const pick = pickCards(text, { sets: design.sets, style: peek });
+        const yours = pick.examples[0]?.set === 'your picks' && pick.hits > 0 && pick.hits >= (pieces?.hits ?? 0);
+        const studio = pieces?.pieces.length && !yours ? studioNotes(pieces) : null;
+        // mix: opus and fable take turns, one page request each (the turn is taken only when the cards go).
         const style = !studio && design.style === 'mix' ? mixTurn() : design.style;
-        const pick = pickCards(text, { sets: design.sets, style });
         const cards = designNotes(studio ? { ...pick, examples: [], more: [], look: null } : pick);
         const notes = cards || studio ? { text: [cards?.text, studio?.text].filter(Boolean).join('\n\n'), names: [...(cards?.cards ?? []).map((c) => c.file.replace(/\.md$/i, '')), ...(studio?.pieces ?? []).map((p) => `studio/${p.file.replace(/^components\//, '').replace(/\.html?$/i, '')}`)] } : null;
         if (notes) {
+          // The page plan: six lines from the model before it writes (agent-pages.mjs pageBrief).
+          const brief = await this.pageBrief(text, notes.text, signal);
+          if (brief) { notes.text += `\n\n${briefNote(brief)}`; this.turn.brief = brief; }
           this.turn.design = { request, notes: notes.text, cards: notes.names };
           if (studio) this.turn.studio = { pieces: studio.pieces.map((p) => p.file) };
           this.ctxUsed += tokensOf(notes.text);
@@ -776,15 +783,19 @@ export class WorkPart {
           if ((this.turn.changed || this.madePages().length) && !layoutDone && !signal?.aborted && this.askFirst() && layoutSends < LAYOUT_ROUNDS) {
             const pages = pagesToCheck(this.cwd, [...(this.turn.startTexts?.keys() ?? []), ...this.madePages()]);
             if (pages.length) {
+              const fix = await this.polishPage(signal);
+              if (signal?.aborted) { reason = 'interrupted'; break; }
+              if (fix) { this.messages.push({ role: 'user', content: auto(fix) }); continue; }
               const a = await this.askPage(pages, signal, { again: layoutSends > 0 });
               if (a.end) { reason = a.end; break; }
               if (a.send) { if (a.fix) layoutSends++; this.messages.push({ role: 'user', content: a.send }); continue; }
               layoutDone = true;
             }
           }
-          // UI design · checks (/subagents): a picture of a page it built, looked at by a
-          // helper that sees; what looks off goes back once (after the measured layout check).
-          if (this.turn.changed && !looked && !signal?.aborted && !this.turn.pageAsked && this.helperUse('designCheck')) {
+          // A picture of a page it built, looked at by the model the window is on when it sees, or by
+          // UI design · checks (/subagents); what looks off goes back once (after the measured layout
+          // check). Asking first, it looked already, before you were asked (polishPage).
+          if (this.turn.changed && !looked && !signal?.aborted && !this.turn.pageAsked && !this.turn.polish?.reviewed && this.pageReviewer()) {
             looked = true;
             const found = await this.lookAtPages(signal);
             if (found) { this.messages.push({ role: 'user', content: auto(found) }); continue; }
@@ -937,6 +948,10 @@ export class WorkPart {
         // before anything checks it (askPage). Once a message; after that the end of it asks.
         const page = wrote.length && !this.turn.pageAsked && this.askFirst() ? this.savedPage(wrote) : null;
         if (page) {
+          // Fix + review first (agent-pages.mjs polishPage): what is broken or looks off goes back once each.
+          const fix = await this.polishPage(signal);
+          if (signal?.aborted) { reason = 'interrupted'; break; }
+          if (fix) { this.messages.push({ role: 'user', content: auto(fix) }); continue; }
           const a = await this.askPage([page], signal, { saved: true });
           if (a.end) { reason = a.end; break; }
           if (a.send) { if (a.fix) layoutSends++; this.messages.push({ role: 'user', content: a.send }); continue; }

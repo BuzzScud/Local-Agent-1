@@ -124,6 +124,8 @@ const chrome = findChrome();
 test.skipIf(needs('chrome', () => chrome))('in a real browser: "Check it for me" finds the dead Download button and asks before fixing; "Fix it" sends it back', async () => {
   const keep = process.env.AGENTIC_LAYOUT;
   process.env.AGENTIC_LAYOUT = 'on';
+  // The button's own path: with the check first (polishPage, design-pipeline.test.mjs) it would have run already.
+  process.env.AGENTIC_DESIGN_POLISH = 'off';
   try {
     const cwd = folder();
     const fake = await startFakeServer([
@@ -149,5 +151,6 @@ test.skipIf(needs('chrome', () => chrome))('in a real browser: "Check it for me"
     expect(fake.remaining()).toBe(1);
   } finally {
     if (keep === undefined) delete process.env.AGENTIC_LAYOUT; else process.env.AGENTIC_LAYOUT = keep;
+    delete process.env.AGENTIC_DESIGN_POLISH;
   }
 }, 60_000);

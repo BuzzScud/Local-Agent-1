@@ -6,7 +6,9 @@ import { parseArgs, resolvePath } from './tools.mjs';
 import { copyFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { isHomeFolder } from './prompt.mjs';
 import { emptyOf, pageReadLine, pageReadNote, readPage } from './page-read.mjs';
-import { designSettings } from './design.mjs';
+import { askedThing, briefAsk, designSettings, parseBrief, savePick } from './design.mjs';
+import { complete } from '../flows/llm.mjs';
+import { endpointOf } from '../../../models/index.mjs';
 import { buildNote, buildStyles, isBuilt } from './studio.mjs';
 import { findChrome, layoutCheck, layoutNote, needsServer, pagesToCheck } from '../flows/layoutcheck.mjs';
 import { findProjects, foldersNamed, projectsNamed } from './projects.mjs';
@@ -162,7 +164,7 @@ export class PagesPart {
       t.askedAt = mtimes();
       const opened = await this.openPages(pages);
       const canCheck = designSettings(this.designSaved).check && Boolean(findChrome());
-      const question = `${names} ${pages.length === 1 ? 'is' : 'are'} saved${opened ? ' and open in your browser' : ''}. Have a look: is ${it} right?`;
+      const question = `${names} ${pages.length === 1 ? 'is' : 'are'} saved${opened ? ' and open in your browser' : ''}${this.polishSaid()}. Have a look: is ${it} right?`;
       const id = `page_${Date.now()}`;
       this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
       const answer = await this.ask({ id, name: 'Ask', kind: 'page', args: { question, options: ['Looks good', ...(canCheck ? [CHECK_IT] : [])] }, prepared: {}, label: 'Ask', arg: question });
@@ -170,7 +172,7 @@ export class PagesPart {
       const text = (answer.text ?? answer.feedback ?? '').trim();
       if (answer.choice === 'no' && !text) return { end: 'declined' }; // "Stop here"
       this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || 'Looks good' } });
-      if (!text || looksGood(text)) return end(`Saved ${pages.join(' and ')}. You looked at ${it} and said ${it} looks good, so nothing more was checked.`);
+      if (!text || looksGood(text)) { await this.offerPick(pages, signal); return end(`Saved ${pages.join(' and ')}. You looked at ${it} and said ${it} looks good, so nothing more was checked.`); }
       if (!wantsCheck(text) || !canCheck) {
         // "No, this is wrong" and little more: what is wrong, as choices; then back with that and the request.
         let what = '';
@@ -319,34 +321,123 @@ export class PagesPart {
     }
   }
 
-  // UI design · checks (/subagents): each page this message changed, as a picture,
-  // looked at by a helper that sees. Answers the message that goes back, or null.
-  async lookAtPages(signal) {
+  // Who looks at a picture of a page (8 Oct 2026, the owner's pick "the one I'm on"): the model the window
+  // is on, when it is on another machine and can see (Qwen3.6 on the Ollama service, gemma4 on the other);
+  // else UI design · checks (/subagents), another model on the same Ollama service. Before, only that
+  // helper looked, so a main model that sees never did. Not the Claude API, not this Mac's model, for now.
+  pageReviewer() {
+    if (this.isHelper || !this.model?.remote || endpointOf(this.url)?.kind === 'claude') return null;
+    if (this.canSee) return { model: this.model, name: this.model.remote?.model ?? this.model.name };
     const use = this.helperUse('designCheck');
-    if (!use || !(this.turn?.startTexts?.size || this.madePages().length)) return null;
+    return use ? { use, name: use.model } : null;
+  }
+
+  // Fix + review, then ask (8 Oct 2026, the owner's pick): a page saved for a request is not shown to you
+  // as the model first wrote it. The layout check (under a second, no model) sends what is broken back
+  // once; then the reviewer looks at a picture of it and sends what looks off back once; then it opens and
+  // you are asked (askPage). → the text that goes back, or null when it is ready for you.
+  // /design polish off (AGENTIC_DESIGN_POLISH=off): asked at once, as before.
+  async polishPage(signal) {
+    const t = this.turn;
+    if (!t || !designSettings(this.designSaved).polish) return null;
+    t.polish ??= {};
+    if (!t.polish.checked) {
+      t.polish.checked = true;
+      const found = await this.checkLayout(false, { send: true });
+      if (found) { t.polish.broken = t.layout?.found?.length ?? 1; return found; }
+    }
+    if (!t.polish.reviewed && !signal?.aborted) {
+      t.polish.reviewed = true;
+      const found = await this.lookAtPages(signal);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  // What went before you were asked, for the question: '' when nothing ran.
+  polishSaid() {
+    const p = this.turn?.polish;
+    if (!p || (!this.turn.layout?.ran && !p.looked)) return '';
+    const parts = [p.broken ? `${p.broken} layout problem${p.broken === 1 ? '' : 's'} sent back` : this.turn.layout?.ran ? 'nothing broken' : '', p.looked ? (p.looks ? `${p.looks} design note${p.looks === 1 ? '' : 's'} from ${p.looked} sent back` : `${p.looked} saw nothing off`) : ''].filter(Boolean);
+    return parts.length ? ` (checked first: ${parts.join(', ')})` : '';
+  }
+
+  // The page plan (design.mjs briefAsk; the owner's pick "Plan before writing"): six lines from the model
+  // the window is on, before its first step on a page request. Where the review looks (the remote model,
+  // not the Claude API) and /design plan on (AGENTIC_DESIGN_BRIEF). → the plan, or null.
+  async pageBrief(request, notes, signal) {
+    if (!designSettings(this.designSaved).brief || this.isHelper || !this.model?.remote || endpointOf(this.url)?.kind === 'claude') return null;
+    this.emit('busy', { task: 'planning the page' });
+    const { system, user } = briefAsk(request, notes);
+    try {
+      const r = await complete({ url: this.url, model: this.model, system, user, maxTokens: 400, temperature: 0.2, thinking: false, signal, what: 'the page plan' });
+      const brief = parseBrief(r.text);
+      this.emit('note', brief ? { text: `Page plan (${r.secs.toFixed(1)} s): ${brief.split('\n').join(' · ')}`, tone: 'dim', fold: true } : { text: `Page plan skipped: the answer did not hold its six lines (${r.secs.toFixed(1)} s).`, tone: 'dim' });
+      return brief;
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      this.emit('note', { text: `Page plan skipped: ${e.message}.`, tone: 'dim' });
+      return null;
+    }
+  }
+
+  // Learn from "Looks good" (the owner's pick): a page made for a design request that you call good can be
+  // kept as one of your picks (design.mjs savePick): a card and the page in "your picks", which later
+  // requests for the same kind of thing get as their example. Asked once a message; never saved unasked.
+  async offerPick(pages, signal) {
+    const t = this.turn;
+    if (!t?.design || t.pickOffered || !pages.length || !designSettings(this.designSaved).learn) return;
+    t.pickOffered = true;
+    const rel = pages[0];
+    const thing = askedThing(t.request);
+    const question = `Keep ${basename(rel)} as one of your picks? Later requests for ${thing ? `a ${thing.phrase}` : 'a page like it'} get it as their example.`;
+    const id = `pagekeep_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'page', args: { question, options: ['Yes, keep it', 'No'] }, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return;
+    const said = String(answer.text ?? answer.feedback ?? '').trim();
+    const yes = answer.choice === 'yes' || /^(yes|y|keep|ok|okay|sure)\b/i.test(said);
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: said || (yes ? 'Yes, keep it' : 'No') } });
+    if (!yes) return;
+    try {
+      const kept = savePick({ abs: resolvePath(this.cwd, rel).abs, request: String(t.task ?? t.request ?? '').split('\n\n(')[0] });
+      this.emit('note', kept ? { text: `Kept as DESIGN/${kept.card}, with the page beside it.`, tone: 'dim' } : { text: 'Not kept: there is no design folder (docs/private/design examples).', tone: 'warn' });
+    } catch (e) { this.emit('note', { text: `Could not keep ${basename(rel)}: ${e.code ?? e.message}.`, tone: 'warn' }); }
+  }
+
+  // Each page this message changed, as a picture, looked at by the reviewer (pageReviewer).
+  // Answers the message that goes back, or null.
+  async lookAtPages(signal) {
+    const who = this.pageReviewer();
+    if (!who || !(this.turn?.startTexts?.size || this.madePages().length)) return null;
+    const use = who.use;
     const pages = pagesToCheck(this.cwd, [...(this.turn.startTexts?.keys() ?? []), ...this.madePages()]);
     if (!pages.length) return null;
     // No Chrome: a Mac takes the picture with Quick Look (helper-models.mjs screenshotPage).
     const chrome = findChrome();
     if (!chrome && !canQuickLook()) return null;
     const notes = [];
+    const p = (this.turn.polish ??= {});
     for (const rel of pages) {
       const abs = resolvePath(this.cwd, rel).abs;
       const image = screenshotPage(abs, chrome);
       if (!image) continue;
-      this.emit('note', { text: `UI design: ${use.model} looks at ${rel}…`, tone: 'dim' });
+      this.emit('busy', { task: `${who.name} looks at a picture of ${basename(rel)}` });
+      this.emit('note', { text: `UI design: ${who.name} looks at ${rel}…`, tone: 'dim' });
       try {
-        const r = await checkPagePicture({ url: this.url, use, image, page: rel, request: this.turn.request, signal });
-        if (r.ok) { this.emit('note', { text: `UI design: ${use.model} says ${rel} looks right (${r.secs.toFixed(0)} s).`, tone: 'dim' }); continue; }
-        this.emit('note', { text: `UI design: ${use.model} sees ${r.findings.length} thing${r.findings.length === 1 ? '' : 's'} off in ${rel}: ${r.findings.join(' · ')}`, tone: 'warn' });
+        const r = await checkPagePicture({ url: this.url, use, model: use ? undefined : who.model, image, page: rel, request: this.turn.request, brief: this.turn.brief, signal });
+        p.looked = who.name;
+        if (r.ok) { this.emit('note', { text: `UI design: ${who.name} says ${rel} looks right (${r.secs.toFixed(0)} s).`, tone: 'dim', check: { title: 'Design look', page: rel, problems: [], ok: 'looks right', where: `${r.secs.toFixed(0)} s` } }); continue; }
+        p.looks = (p.looks ?? 0) + r.findings.length;
+        this.emit('note', { text: `UI design: ${who.name} sees ${r.findings.length} thing${r.findings.length === 1 ? '' : 's'} to change in ${rel}: ${r.findings.join(' · ')}`, tone: 'warn', check: { title: 'Design look', page: rel, problems: r.findings, bad: `${r.findings.length} to change`, where: `${r.secs.toFixed(0)} s`, sent: true } });
         notes.push(`${rel}:\n${r.findings.map((f) => `- ${f}`).join('\n')}`);
       } catch (e) {
         if (signal?.aborted) throw e;
-        this.emit('note', { text: `UI design check skipped: ${use.model} did not answer (${e.message}).`, tone: 'dim' });
+        this.emit('note', { text: `UI design look skipped: ${who.name} did not answer (${e.message}).`, tone: 'dim' });
         return null;
       }
     }
-    return notes.length ? `A model that can see looked at a screenshot of the page (1440 px wide) and thinks this looks off (it can be wrong):\n${notes.join('\n')}\nFix what is real with Edit; then say what you changed in one sentence.` : null;
+    return notes.length ? `A model that can see looked at a screenshot of the page (1440 px wide) as a designer would and suggests these changes (it can be wrong):\n${notes.join('\n')}\nMake the ones that are real with Edit, keeping what already works; then say what you changed in one sentence.` : null;
   }
 
   // What a reader sees of each page this message wrote (page-read.mjs, at most 3, newest first): a line

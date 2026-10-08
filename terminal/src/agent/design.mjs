@@ -29,7 +29,7 @@
 //                 fable: the order below), opus, fable, or mix (opus and fable
 //                 take turns, one page request each; design-turn.json holds
 //                 whose turn it is)
-//   switches      settings.json "design": { auto, check, sets, style, studio }; AGENTIC_DESIGN
+//   switches      settings.json "design": { auto, check, sets, style, studio, polish, brief, learn }; AGENTIC_DESIGN
 //                 (on|off), AGENTIC_DESIGN_SETS (all | set,set), AGENTIC_DESIGN_STYLE,
 //                 AGENTIC_LAYOUT (on|off, the browser check in flows/layoutcheck.mjs)
 //                 and AGENTIC_STUDIO (on|off, the design studio's pieces in
@@ -64,7 +64,9 @@ const onOff = (v) => (v === undefined || v === '' ? undefined : !/^(off|0|false|
 // What is switched on: the saved settings, with the environment on top.
 export function designSettings(saved = {}) {
   // ask: a page saved for a request stops the turn and asks you first (agent.mjs askPage).
-  const s = { auto: true, check: true, ask: true, sets: 'all', style: 'auto', studio: true, ...(saved && typeof saved === 'object' ? saved : {}) };
+  // polish, brief, learn (8 Oct 2026, the owner's picks): check and look before asking, a plan before
+  // writing, and "Looks good" offering to keep the page (agent-pages.mjs polishPage, pageBrief, offerPick).
+  const s = { auto: true, check: true, ask: true, sets: 'all', style: 'auto', studio: true, polish: true, brief: true, learn: true, ...(saved && typeof saved === 'object' ? saved : {}) };
   const auto = onOff(process.env.AGENTIC_DESIGN);
   const check = onOff(process.env.AGENTIC_LAYOUT);
   const ask = onOff(process.env.AGENTIC_LAYOUT_ASK);
@@ -75,6 +77,11 @@ export function designSettings(saved = {}) {
   s.ask = s.ask !== false;
   if (studio !== undefined) s.studio = studio;
   s.studio = s.studio !== false;
+  for (const [k, env] of [['polish', 'AGENTIC_DESIGN_POLISH'], ['brief', 'AGENTIC_DESIGN_BRIEF'], ['learn', 'AGENTIC_DESIGN_LEARN']]) {
+    const v = onOff(process.env[env]);
+    if (v !== undefined) s[k] = v;
+    s[k] = s[k] !== false;
+  }
   const sets = process.env.AGENTIC_DESIGN_SETS?.trim();
   if (sets) s.sets = /^all$/i.test(sets) ? 'all' : sets.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (s.sets !== 'all' && !Array.isArray(s.sets)) s.sets = 'all';
@@ -197,6 +204,65 @@ export function scoreCard(card, text) {
   return score;
 }
 
+// The thing a request asks for (8 Oct 2026): "for a travel boarding-pass card", "displays a social feed
+// post", "redesign the settings page". Any word of the request counted the same before, so a part it
+// names ("a small progress indicator", "toggle play", "city codes") brought a goal card, a toggle switch
+// or a weather card to a file card, a media player and a boarding pass (3 of the owner's 5 card prompts).
+// → { phrase, words: the words that say what kind it is, head } or null.
+const HEADS = 'cards?|posts?|pass(?:es)?|players?|widgets?|forms?|tables?|lists?|dashboards?|modals?|pop-?ups?|toasts?|banners?|panels?|screens?|pages?|apps?|items?|tiles?|charts?|graphs?|timelines?|calendars?|boards?|menus?|navbars?|sidebars?|headers?|footers?|wizards?|reports?|invoices?|receipts?|galler(?:y|ies)|feeds?|maps?|games?|quiz(?:zes)?|trackers?|planners?|timers?|clocks?|calculators?|converters?|shops?|stores?|portfolios?|blogs?|resumes?|chats?|logins?|profiles?|layouts?|sites?|websites?|bars?|badges?|buttons?|views?|sections?|strips?|summar(?:y|ies)|snapshots?|feeds?|inbox(?:es)?';
+const ASK_FOR = new RegExp(`\\b(?:for|of|displays?|renders?|shows?|showing|build|create|make|write|design|redesign|restyle|is)\\s+(?:a|an|one|the|my|our)\\s+((?:[\\w-]+\\s+){0,4})(${HEADS})\\b`, 'i');
+// Words that say nothing about which kind it is.
+const PLAIN = new Set(['a', 'an', 'the', 'or', 'and', 'of', 'with', 'for', 'my', 'our', 'one', 'single', 'self', 'contained', 'html', 'file', 'css', 'compact', 'modern', 'small', 'simple', 'clean', 'mini', 'little', 'tiny', 'nice', 'new', 'minimal', 'sleek', 'basic', 'quick', 'full', 'responsive', 'beautiful', 'pretty', 'cool', 'in', 'app', 'web', 'big', 'large', 'main', 'whole', 'standalone', 'interactive', 'live', 'static', 'card', 'cards']);
+export function askedThing(text) {
+  const first = String(text ?? '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s/)[0];
+  const m = ASK_FOR.exec(first) ?? ASK_FOR.exec(String(text ?? '').replace(/\s+/g, ' '));
+  if (!m) return null;
+  const head = m[2].toLowerCase();
+  const before = clean(m[1]).trim().split(' ').filter(Boolean);
+  // "a file or document card": file is the kind there, not the "HTML file" every request is.
+  const words = before.filter((w, i) => !PLAIN.has(w) || (w === 'file' && before[i - 1] !== 'html'));
+  const headWord = clean(head).trim();
+  if (!['card', 'cards'].includes(headWord) && !words.includes(headWord)) words.push(headWord.replace(/s$/, ''));
+  return { phrase: clean(`${m[1]}${m[2]}`).trim(), words: [...new Set(words)], head: headWord };
+}
+
+// How much of the thing asked for a card (or piece) says: of its Words and its name, the one that says
+// the most kind words (2 for "media player" in "compact media player card", 1 for "dashboard"; never
+// counted twice, so a card named just "Dashboard" does not beat a closer one). Each must sit in the
+// asked-for phrase and hold one of its kind words ("media player" in "compact media player card"; never
+// "card" alone). When the thing takes two kind words or more ("boarding pass", "social feed post"), one
+// word alone does not say it (a report's "pass" as in pass or fail, a brief's "feed"), unless it is the
+// thing's own noun ("post") or one of two it offers ("billing or invoice snapshot": an invoice card).
+export function kindHits(card, thing) {
+  if (!thing?.words.length) return 0;
+  const phrase = ` ${thing.phrase} `;
+  const kind = new Set(thing.words);
+  const noun = thing.head.replace(/s$/, '');
+  const either = new Set([...thing.phrase.matchAll(/(\w+) or (\w+)/g)].flatMap((m) => [m[1], m[2]]));
+  const says = (w) => {
+    const c = clean(w).trim();
+    const parts = c ? c.split(' ') : [];
+    const n = parts.filter((x) => kind.has(x) || kind.has(x.replace(/s$/, ''))).length;
+    if (!n) return 0;
+    if (parts.length === 1 && thing.words.length > 1 && c.replace(/s$/, '') !== noun && !either.has(c)) return 0;
+    return new RegExp(` ${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:s|es)? `).test(phrase) ? n : 0;
+  };
+  return Math.max(0, ...card.words.map(says), says(card.name));
+}
+
+// scoreCard without the single Words that are only a part of the thing asked for (the "pass" of a
+// boarding pass, the "feed" of a social feed post): they say another thing (pass or fail, a news feed).
+export function plainScore(card, text, thing = askedThing(text)) {
+  if (!thing || thing.words.length < 2) return scoreCard(card, text);
+  const either = new Set([...thing.phrase.matchAll(/(\w+) or (\w+)/g)].flatMap((m) => [m[1], m[2]]));
+  const noun = thing.head.replace(/s$/, '');
+  const part = (w) => { const c = clean(w).trim(); return !c.includes(' ') && thing.words.includes(c) && c !== noun && !either.has(c); };
+  return scoreCard({ ...card, words: card.words.filter((w) => !part(w)), name: part(card.name) ? '' : card.name }, text);
+}
+
+// The fit: that score, with what says the thing asked for worth three more.
+export const fitScore = (card, text, thing = askedThing(text)) => plainScore(card, text, thing) + 3 * kindHits(card, thing);
+
 const onSet = (sets) => (c) => sets === 'all' || !sets || sets.includes(c.set);
 
 // "Add a dark mode" asks for a switch, not a dark look, and "clean up the page" asks for a tidy, not
@@ -235,11 +301,15 @@ export function pickCards(text, { dir = designDir(), sets = 'all', cards, style 
   const all = (cards ?? readCards(dir).cards).filter(onSet(sets));
   const always = all.filter((c) => c.always);
   const kinds = all.filter((c) => !c.always && !c.look);
-  const scored = kinds.map((c) => ({ c, score: scoreCard(c, text) }))
+  const thing = askedThing(text);
+  const scored = kinds.map((c) => ({ c, score: fitScore(c, text, thing), hits: kindHits(c, thing) }))
     .sort((a, b) => b.score - a.score || setRank(a.c.set) - setRank(b.c.set) || a.c.file.localeCompare(b.c.file));
   const fits = scored.filter((x) => x.score > 0);
-  let best = (style === 'opus' || style === 'fable' ? fits.find((x) => x.c.set === style)?.c : null) ?? fits[0]?.c ?? null;
+  // A style's set wins among the cards that say the thing asked for as well as the best does.
+  const top = fits[0]?.hits ?? 0;
+  let best = (style === 'opus' || style === 'fable' ? fits.find((x) => x.c.set === style && x.hits >= top)?.c : null) ?? fits[0]?.c ?? null;
   if (!best) best = scored.map((x) => x.c).filter((c) => c.default).sort((a, b) => setRank(a.set) - setRank(b.set))[0] ?? null;
+  const bestHits = scored.find((x) => x.c === best)?.hits ?? 0;
   const more = fits.filter((x) => x.c !== best).slice(0, MORE).map((x) => x.c);
   // The look comes from the example's own set; for a card of your picks or a public system, from the chosen style's set, else opus's.
   const looks = all.filter((c) => c.look);
@@ -247,7 +317,8 @@ export function pickCards(text, { dir = designDir(), sets = 'all', cards, style 
   const from = [best?.set, style === 'fable' ? 'fable' : 'opus', 'opus', 'fable'];
   const base = (c) => c.file.split('/').pop();
   const look = want ? from.map((set) => looks.find((c) => c.set === set && base(c) === base(want))).find(Boolean) ?? want : null;
-  return { always, examples: best ? [best] : [], more, look };
+  // hits: how well the example says the thing asked for, against the studio's pieces (agent-work.mjs).
+  return { always, examples: best ? [best] : [], more, look, hits: bestHits, thing };
 }
 
 // A card's "## Name" section (up to the next one), or ''.
@@ -340,4 +411,150 @@ export function designSummary(settings = designSettings(), dir = designDir()) {
     return [`${on ? '●' : '○'} ${s.name || '(top)'}${settings.style === s.name ? ' ★' : ''}`, `${kinds.length} card${kinds.length === 1 ? '' : 's'}: ${kinds.map((c) => c.file.split('/').pop().replace(/\.md$/i, '')).join(', ')}${looks.length ? ` · looks: ${looks.map((c) => c.file.split('/').pop().replace(/^look-|\.md$/gi, '')).join(', ')}` : ''}`];
   });
   return { dir, rows, style: settings.style };
+}
+
+// ── The page plan (8 Oct 2026, the owner's pick "Plan before writing") ─────────
+// Before a page request's first step, the model the window is on writes six short lines: what comes
+// first and largest, how wide it is and where it sits, the parts in order, the look, the states and the
+// phone. A small model wrote a file card as a 1,380-px strip with a green square for its sync mark
+// (gemma4, 8 Oct): it never decided how big a card is. The plan goes with the design notes.
+export const BRIEF_LINES = ['Main thing', 'Size', 'Parts', 'Look', 'States', 'Phone'];
+export const BRIEF_SYSTEM = `You plan a web page or component before another assistant writes its HTML. Answer with exactly these six lines and nothing else, each one short and concrete:
+Main thing: what the person comes for; it goes first and largest
+Size: how wide it is and where it sits (a card or widget is about 320-440 px wide, centred, or a grid of them; a full page has a centred column about 960-1200 px wide)
+Parts: the parts from top to bottom, a few words each, every part the request names
+Look: the colours, type, corners and spacing, taken from the design example when one is given
+States: hover, pressed, empty, loading or error states the parts need (or "none")
+Phone: what changes at 390 px wide`;
+
+export function briefAsk(request, notes = '') {
+  const look = cardSection(String(notes), 'Look') || (/The colours are the user's theme[^\n]*/.exec(String(notes))?.[0] ?? '');
+  return { system: BRIEF_SYSTEM, user: `The request:\n${String(request).trim().slice(0, 1600)}${look ? `\n\nThe design example's look:\n${look.slice(0, 1200)}` : ''}` };
+}
+
+// The six lines out of the answer, in order; null when fewer than four came back.
+export function parseBrief(text) {
+  const got = new Map();
+  for (const l of String(text ?? '').replace(/\*\*/g, '').split('\n')) {
+    const m = /^\s*[-*\d.)\s]*([A-Za-z ,]+?)\s*:\s*(.+)$/.exec(l);
+    const key = m && BRIEF_LINES.find((k) => k.toLowerCase() === m[1].trim().toLowerCase().replace(/,? top to bottom$/, ''));
+    if (key && !got.has(key)) got.set(key, m[2].trim().slice(0, 240));
+  }
+  if (got.size < 4) return null;
+  return BRIEF_LINES.filter((k) => got.has(k)).map((k) => `${k}: ${got.get(k)}`).join('\n');
+}
+
+export const briefNote = (brief) => `The plan for this page, made before writing it (keep to it; where the request says otherwise, the request wins):\n${brief}`;
+
+// ── Learn from "Looks good" (8 Oct 2026, the owner's pick) ────────────────────
+// A page you look at and call good can be kept as one of your picks: a card in "your picks" with the
+// page beside it (its "- Page:"), so a later request for the same kind of thing gets it as its example,
+// ahead of the other sets and of the studio's pieces (agent-work.mjs). Asked each time, never saved unasked.
+
+// The Words a kept page is found by: the thing asked for as a phrase and the phrases inside it, each
+// kind word with its noun ("file card", "document card"), never a single word (a report's "pass").
+export function pickWords(thing) {
+  if (!thing) return [];
+  const toks = thing.phrase.split(' ');
+  const kind = new Set(thing.words);
+  const out = new Set([thing.phrase]);
+  for (let i = 0; i < toks.length; i++) {
+    for (let n = 2; n <= Math.min(4, toks.length - i); n++) {
+      const g = toks.slice(i, i + n);
+      if (PLAIN.has(g[0]) && !kind.has(g[0]) || ['or', 'and', 'of'].includes(g.at(-1)) || ['or', 'and', 'of'].includes(g[0])) continue;
+      if (g.some((w) => kind.has(w))) out.add(g.join(' '));
+    }
+  }
+  // A kind word with the noun: the one next to it, and each of two it offers ("file card", "document card").
+  const either = new Set([...thing.phrase.matchAll(/(\w+) or (\w+)/g)].flatMap((m) => [m[1], m[2]]));
+  const last = thing.words.filter((w) => w !== thing.head).at(-1);
+  for (const w of thing.words) if (w !== thing.head && (w === last || either.has(w))) out.add(`${w} ${thing.head}`);
+  return [...out].slice(0, 12);
+}
+
+const slugOf = (s) => clean(s).trim().split(' ').slice(0, 6).join('-') || 'page';
+const titleOf = (html) => /<title[^>]*>([^<]{1,80})<\/title>/i.exec(html)?.[1].trim() ?? '';
+
+// The page's look in a few lines: its colour variables (light, then dark), its fonts, its widths and corners.
+function lookOf(html) {
+  const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join('\n').replace(/<style id="studio-css">[\s\S]*?<\/style>/, '');
+  const at = css.search(/prefers-color-scheme\s*:\s*dark/);
+  const varsIn = (part) => [...part.matchAll(/(--[\w-]+)\s*:\s*([^;}{]{1,40})/g)].map((m) => `${m[1]}: ${m[2].trim()}`);
+  const light = varsIn(at < 0 ? css : css.slice(0, at));
+  const dark = at < 0 ? [] : varsIn(css.slice(at));
+  const fonts = [...new Set([...css.matchAll(/font-family\s*:\s*([^;}{]{1,90})/g)].map((m) => m[1].trim()))].slice(0, 2);
+  const widths = [...new Set([...css.matchAll(/max-width\s*:\s*([^;}{]{1,30})/g)].map((m) => m[1].trim()))].slice(0, 4);
+  const radii = [...new Set([...css.matchAll(/border-radius\s*:\s*([^;}{]{1,30})/g)].map((m) => m[1].trim()))].slice(0, 4);
+  return [
+    light.length ? `- Colours: ${light.slice(0, 14).join('; ')}` : '',
+    dark.length ? `- Dark mode: ${dark.slice(0, 14).join('; ')}` : '',
+    fonts.length ? `- Type: ${fonts.join(' · ')}` : '',
+    widths.length ? `- Widths: ${widths.join(', ')}` : '',
+    radii.length ? `- Corners: ${radii.join(', ')}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+// The body as an outline of its tags and classes, three levels deep, at most `max` lines.
+function skeletonOf(html, max = 34) {
+  const body = (/<body[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1] ?? html).replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<svg[\s\S]*?<\/svg>/gi, '<svg></svg>').replace(/<!--[\s\S]*?-->/g, '');
+  const out = [];
+  let depth = 0;
+  for (const m of body.matchAll(/<(\/)?([a-z][\w-]*)([^>]*)>/gi)) {
+    const [, close, tag, attrs] = m;
+    const empty = /^(br|hr|img|input|meta|link|source|wbr)$/i.test(tag) || attrs.trim().endsWith('/');
+    if (close) { depth = Math.max(0, depth - 1); continue; }
+    if (depth <= 3 && !/^(span|b|i|em|strong|small|path|br|wbr)$/i.test(tag)) {
+      const cls = /class="([^"]{1,60})"/.exec(attrs)?.[1].trim().split(/\s+/).slice(0, 3).join('.');
+      const id = /id="([^"]{1,30})"/.exec(attrs)?.[1];
+      out.push(`${'  '.repeat(depth)}${tag.toLowerCase()}${id ? `#${id}` : ''}${cls ? `.${cls}` : ''}`);
+    }
+    if (!empty) depth++;
+    if (out.length >= max) break;
+  }
+  return out.join('\n');
+}
+
+// The card a kept page becomes (≤ CARD_CHARS), named by the thing asked for.
+export function pickCard({ html, request, page, thing = askedThing(request), day = new Date().toLocaleDateString('en-CA') }) {
+  const name = thing ? thing.phrase.replace(/^./, (c) => c.toUpperCase()) : titleOf(html) || page.replace(/\.html?$/i, '');
+  const words = pickWords(thing);
+  const first = String(request).replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s/)[0].slice(0, 160);
+  const look = lookOf(html);
+  const skeleton = skeletonOf(html);
+  const text = [
+    `# ${name}`,
+    `- For: ${first}`,
+    `- Words: ${(words.length ? words : [name.toLowerCase()]).join(', ')}`,
+    `- Page: ${page}`,
+    '',
+    '## Look',
+    look || '- The look of the page beside this card (DESIGN/your picks/' + page + ').',
+    '',
+    '## Skeleton',
+    '```',
+    skeleton,
+    '```',
+    '',
+    '## Do',
+    `- The user looked at this page and said it looks good (${day}): keep its colours, type, spacing, widths and order of parts.`,
+    `- The whole page is DESIGN/your picks/${page}; Read it when this card is not enough.`,
+    '- Write the new request\'s own content; never copy this page\'s words.',
+  ].join('\n');
+  return text.length > CARD_CHARS ? `${text.slice(0, CARD_CHARS - 4).replace(/\n[^\n]*$/, '')}\n\`\`\`` : text;
+}
+
+// Keeps a page as one of your picks: its card and a copy of the page in "your picks" (a name already
+// there gets -2, -3…). → { card, page } (paths in the folder), or null when there is no design folder.
+export function savePick({ abs, request, dir = designDir() }) {
+  if (!dir) return null;
+  const html = readFileSync(abs, 'utf8');
+  const thing = askedThing(request);
+  const into = join(dir, 'your picks');
+  mkdirSync(into, { recursive: true });
+  const base = slugOf(thing?.phrase ?? (titleOf(html) || abs.split(sep).pop().replace(/\.html?$/i, '')));
+  let slug = base;
+  for (let n = 2; existsSync(join(into, `${slug}.md`)) || existsSync(join(into, `${slug}.html`)); n++) slug = `${base}-${n}`;
+  writeFileSync(join(into, `${slug}.html`), html);
+  writeFileSync(join(into, `${slug}.md`), `${pickCard({ html, request, page: `${slug}.html`, thing })}\n`);
+  return { card: `your picks/${slug}.md`, page: `your picks/${slug}.html` };
 }

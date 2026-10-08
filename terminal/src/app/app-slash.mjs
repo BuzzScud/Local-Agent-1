@@ -376,8 +376,9 @@ export function slashPart(self) {
         // page requests; check on|off: the browser check; ask on|off: a saved
         // page asks you before it is checked (or not); sets all|a,b: which
         // sets; style auto|opus|fable|mix: which set's cards win; studio
-        // [on|off]: the design studio's pieces. Anything else is a request
-        // sent with the cards.
+        // [on|off]: the design studio's pieces; polish, plan, learn on|off: the
+        // check and the look before you are asked, the page plan, keeping a page
+        // you call good (8 Oct 2026). Anything else is a request sent with the cards.
         const saved = { ...(self.settings.design ?? {}) };
         const keep = (patch) => {
           const next = { ...saved, ...patch };
@@ -385,14 +386,14 @@ export function slashPart(self) {
           if (self.agent) self.agent.designSaved = next;
           saveSettings({ design: next });
           const now = designSettings(next);
-          self.push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${now.ask ? 'asks you first' : 'checks by itself'} · studio ${now.studio ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_LAYOUT_ASK || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
+          self.push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${now.ask ? 'asks you first' : 'checks by itself'} · studio ${now.studio ? 'on' : 'off'} · polish ${now.polish ? 'on' : 'off'} · plan ${now.brief ? 'on' : 'off'} · learn ${now.learn ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_LAYOUT_ASK || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE || process.env.AGENTIC_DESIGN_POLISH || process.env.AGENTIC_DESIGN_BRIEF || process.env.AGENTIC_DESIGN_LEARN ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
         };
         const a = arg.trim();
         if (!a) {
           const now = designSettings(saved);
           const sum = designSummary(now);
           if (!sum.dir) { self.push({ type: 'note', text: 'No design examples folder (make "design examples" in docs/private/, one subfolder per set of .md cards).', tone: 'warn' }); break; }
-          self.push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${now.ask ? 'asks you first' : 'checks by itself'} (/design ask) · studio ${now.studio ? 'on' : 'off'} (/design studio) · style: ${styleWords(now.style)} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
+          self.push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${now.ask ? 'asks you first' : 'checks by itself'} (/design ask) · studio ${now.studio ? 'on' : 'off'} (/design studio) · polish ${now.polish ? 'on' : 'off'} · plan ${now.brief ? 'on' : 'off'} · learn ${now.learn ? 'on' : 'off'} · style: ${styleWords(now.style)} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
           break;
         }
         if (/^(on|off)$/i.test(a)) { keep({ auto: /^on$/i.test(a) }); break; }
@@ -401,6 +402,10 @@ export function slashPart(self) {
         // ask on: a saved page stops the turn and asks you before any check; off: it checks by itself.
         const ask = /^ask\s+(on|off)$/i.exec(a);
         if (ask) { keep({ ask: /^on$/i.test(ask[1]) }); break; }
+        // polish: the layout check and a look at a picture before you are asked; plan: six lines before
+        // writing; learn: "Looks good" offers to keep the page as one of your picks (agent-pages.mjs).
+        const part = /^(polish|plan|learn)\s+(on|off)$/i.exec(a);
+        if (part) { keep({ [{ polish: 'polish', plan: 'brief', learn: 'learn' }[part[1].toLowerCase()]]: /^on$/i.test(part[2]) }); break; }
         const sty = /^style(?:\s+(\S+))?$/i.exec(a);
         if (sty) {
           const want = sty[1]?.toLowerCase();

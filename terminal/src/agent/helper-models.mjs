@@ -71,13 +71,24 @@ export async function reviewChange({ url, use, request, diff, signal }) {
   return { ...r, ...findingsOf(r.text) };
 }
 
-// A picture of a page, looked at by a model that sees. Answers { ok, findings, secs }.
-export async function checkPagePicture({ url, use, image, page, request, signal }) {
+// A picture of a page, looked at by a model that sees, as a designer would (8 Oct 2026: the layout check
+// already measures what is broken; what it cannot see is a card stretched across the window, a lone
+// square for a sync mark, a main thing that is not first). use: a helper on the service; model: the
+// window's own model when it sees (agent-pages.mjs pageReviewer). brief: the page's plan, when one was
+// made. Answers { ok, findings, secs }.
+export const LOOK_OVER = `You review how a web page or component looks, from a screenshot, as a careful designer would. Check:
+1. The main thing the request asks for comes first and largest; the eye knows where to start.
+2. Sizes fit what it is: a card or widget is card-sized (about 320-440 px wide, centred or in a grid), never stretched across the window; a full page keeps a centred column; nothing is oversized or squeezed.
+3. Spacing is even and roomy, and parts line up on shared edges.
+4. Every part the request names is there and looks finished: no stray coloured squares, broken image icons, empty placeholder boxes, or an emoji where a real mark belongs.
+5. Text is easy to read, buttons look like buttons, and one main action stands out.
+Report only what a person would notice at a glance, not taste you cannot point at. If it looks right, answer exactly: LGTM`;
+export async function checkPagePicture({ url, use, model, image, page, request, brief, signal }) {
   const ask = [
-    { role: 'system', content: 'You check how a web page looks, from a screenshot. Report only what a person would see as wrong: overlapping or cut-off text, things off the edge, unreadable colours, broken alignment, empty areas that should hold something. If it looks right, answer exactly: LGTM' },
-    { role: 'user', content: `The page ${page}, made for this request: "${String(request).slice(0, 600)}". The screenshot is 1440 px wide.\n\nList at most 3 problems, one per line, each starting with "- ". Or answer LGTM.`, images: [image] },
+    { role: 'system', content: LOOK_OVER },
+    { role: 'user', content: `The page ${page}, made for this request: "${String(request).slice(0, 600)}".${brief ? `\n\nIts plan:\n${brief}` : ''}\n\nThe screenshot is the page as it opens in a browser window 1440 px wide.\n\nList at most 3 fixes, one per line, each starting with "- ": name the part and what to change (a width, a size, a colour, a spacing, an order). Or answer LGTM.`, images: [image] },
   ];
-  const r = await helperText({ url, use, messages: ask, maxTokens: 400, signal });
+  const r = await helperText({ url, use, model, messages: ask, maxTokens: 500, signal });
   return { ...r, ...findingsOf(r.text) };
 }
 
