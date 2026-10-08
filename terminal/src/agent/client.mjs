@@ -135,19 +135,21 @@ async function* spilling(args, sp) {
   }
   clearTimeout(timer);
   const why = first.late ? `no first word in ${sp.after} s` : first.busy || first.value?.type === 'busy' ? 'its server said it is busy' : null;
-  if (!why) {
+  // No backup to go to (it is the same, or it cannot be reached): this request goes on waiting where it is,
+  // not sent again from the back of the line.
+  const to = why ? await sp.to(why).catch(() => null) : null;
+  if (!to) {
+    if (first.busy) { args.signal?.removeEventListener('abort', onAbort); throw first.busy; }
     try {
+      if (first.late) first = await next;
       if (!first.done) yield first.value;
       for (let r = await it.next(); !r.done; r = await it.next()) yield r.value;
-    } finally { args.signal?.removeEventListener('abort', onAbort); }
+    } finally { args.signal?.removeEventListener('abort', onAbort); it.return?.().catch?.(() => {}); }
     return;
   }
   ctl.abort();
   it.return?.().catch?.(() => {});
   args.signal?.removeEventListener('abort', onAbort);
-  const to = await sp.to(why);
-  // No backup to go to (it is the same, or it cannot be reached): this request waits as before.
-  if (!to) { yield* streamChat({ ...args, spill: null, use: args.use ? { ...args.use, spill: undefined } : args.use }); return; }
   noteSpill(sp.name);
   yield { type: 'spill', from: sp.name, to: to.name, why };
   yield* streamChat({ ...args, url: to.url, use: to.use, model: to.model ?? args.model, profile: to.name, spill: null, spilled: true });
