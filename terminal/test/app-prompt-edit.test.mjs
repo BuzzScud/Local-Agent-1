@@ -3,7 +3,7 @@
 // counted from the terminal's own cursor, so that cursor must sit on the
 // cell you type at; the arrows come all at once.
 import { test, expect } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
@@ -18,7 +18,7 @@ const where = (term) => {
 };
 const UP = '\x1b[A', DOWN = '\x1b[B', LEFT = '\x1b[D';
 
-test('the terminal cursor sits where you type, ⌥-click arrows land on the letter, ↓ moves a row, ctrl+z undoes, ctrl+a twice selects all', async () => {
+test('the terminal cursor sits where you type, ⌥-click arrows land on the letter, ↓ moves a row, ctrl+z undoes, ctrl+a twice and ⌥A select all (not copied) and delete clears it', async () => {
   const { cwd, env, base } = setup();
   const clip = join(base, 'clipboard.txt');
   const fake = await startFakeServer([]);
@@ -33,6 +33,10 @@ test('the terminal cursor sits where you type, ⌥-click arrows land on the lett
     { key: '\x1a' }, { sleep: 300 }, { snapshot: 'undone' }, // ctrl+z
     { key: DOWN }, { sleep: 200 }, { type: 'Q' }, { sleep: 300 }, { snapshot: 'down' }, // one ↓: a row down, not history
     { key: '\x01' }, { sleep: 100 }, { key: '\x01' }, { sleep: 600 }, { snapshot: 'all' }, // ctrl+a twice (sent together, the two would come in as one piece of text)
+    { type: 'new words' }, { sleep: 300 }, { snapshot: 'replaced' }, // typing replaces it
+    { key: '\x1ba' }, { sleep: 600 }, { snapshot: 'optA' }, // ⌥A (Terminal's option as meta: esc, then the letter)
+    { key: 'backspace' }, { sleep: 300 }, { snapshot: 'cleared' },
+    { type: '!ls -la' }, { sleep: 300 }, { key: '\x1ba' }, { sleep: 200 }, { key: 'backspace' }, { sleep: 300 }, { snapshot: 'shell' },
     ...quitTyped,
   ] });
   await fake.close();
@@ -52,9 +56,18 @@ test('the terminal cursor sits where you type, ⌥-click arrows land on the lett
   // from cell 12 of the first row to cell 12 of the second: the r of "november"
   expect(r.snapshots.down).toContain('novembeQr');
   expect(r.snapshots.down).toContain('bravo charlie'); // history did not replace the prompt
-  // ctrl+a twice selected all of it, and it was copied
-  expect(readFileSync(clip, 'utf8')).toBe(P.replace('november', 'novembeQr'));
-  expect(r.snapshots.all).toContain(`copied ${P.length + 1} chars to clipboard`);
+  // ctrl+a twice selected all of it (every letter on the selection's colour), and it was not copied: ⌘V would paste over it
+  const lit = (term) => { const b = term.buffer.active; let t = ''; for (let y = 0; y < b.length; y++) { const line = b.getLine(y); for (let x = 0; line && x < 80; x++) { const c = line.getCell(x); if (c?.isBgPalette() && c.getBgColor() === 24) t += c.getChars() || ' '; } } return t; };
+  expect(lit(r.terms.all)).toBe(P.replace('november', 'novembeQr'));
+  expect(r.snapshots.replaced).toContain('> new words');
+  expect(r.snapshots.replaced).not.toContain('alpha');
+  expect(lit(r.terms.optA)).toBe('new words'); // ⌥A
+  expect(r.snapshots.cleared).not.toContain('new words');
+  expect(r.snapshots.cleared).toContain('? for shortcuts'); // the prompt is empty again
+  expect(r.snapshots.shell).toContain('! shell mode'); // the command went, the ! stayed
+  expect(r.snapshots.shell).not.toContain('ls -la');
+  expect(existsSync(clip)).toBe(false);
+  expect(r.text).not.toContain('copied');
   // on the way out the cursor leaves the box: the goodbye line goes under it, not into it
   expect(r.text).toMatch(/^  Saved\. Continue this conversation/m);
 }, T);

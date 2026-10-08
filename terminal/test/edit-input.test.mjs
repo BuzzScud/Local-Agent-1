@@ -142,6 +142,22 @@ test('ctrl+a twice selects everything; once, the start of the line', () => {
   expect(selection(editInput(editInput({ value: '', cursor: 0 }, 'a', { ctrl: true }), 'a', { ctrl: true }))).toBeNull(); // nothing to select
 });
 
+test('⌥A selects everything at once (not to be copied): delete clears it, typing replaces it; in shell mode the ! stays', () => {
+  let s = editInput({ value: 'one\ntwo', cursor: 2 }, 'a', { meta: true });
+  expect([selectedText(s), s.all]).toEqual(['one\ntwo', true]);
+  expect(editInput(s, '', { backspace: true })).toEqual({ value: '', cursor: 0 });
+  expect(editInput(s, 'x', {})).toEqual({ value: 'x', cursor: 1 });
+  // ctrl+a twice selects the same way; a selection made by hand is copied as before
+  expect(editInput(editInput({ value: 'one', cursor: 3, lastKey: 'ctrl+a' }, 'a', { ctrl: true }), '', { shift: true, leftArrow: true }).all).toBeUndefined();
+  expect(editInput({ value: 'one', cursor: 3, lastKey: 'ctrl+a' }, 'a', { ctrl: true }).all).toBe(true);
+  // shell mode: the box does not draw the !, and it stays when the command is deleted
+  const sh = editInput({ value: '!ls -la', cursor: 3 }, 'a', { meta: true }, { skip: 1 });
+  expect(selectedText(sh)).toBe('ls -la');
+  expect(editInput(sh, '', { delete: true }, { skip: 1 })).toEqual({ value: '!', cursor: 1 });
+  expect(selection(editInput({ value: '!', cursor: 1 }, 'a', { meta: true }, { skip: 1 }))).toBeNull();
+  expect(editInput({ value: '', cursor: 0 }, 'a', { meta: true })).toEqual({ value: '', cursor: 0 }); // nothing to select
+});
+
 test('undo and redo: a word at a time, a run of deletes, a paste; a move ends a word', () => {
   const key = (s, input, k = {}) => withUndo(s, editInput(s, input, k));
   let s = { value: '', cursor: 0 };
