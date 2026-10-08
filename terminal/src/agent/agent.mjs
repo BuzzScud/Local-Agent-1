@@ -539,7 +539,7 @@ export class Agent extends EventEmitter {
     const helper = new Agent({
       // On a model of its own it has that model's room (OWN_HELPER_CTX), so it summarizes in time.
       url: this.url, model: this.model, cwd: this.cwd, system: helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
-      mode: this.mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash,
+      mode: this.mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash, home: this.home,
       way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, mcp: this.mcp, permissions: this.permissions, waitForServer: this.waitForServer, instructions: this.rulesSet(),
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
       ask: (req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))),
@@ -550,7 +550,8 @@ export class Agent extends EventEmitter {
     // The same MCP servers and this conversation's list of their tools (worked out for its own room), and what you allowed.
     if (this.mcpFrozen) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
-    if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn) };
+    // Its move to a project ("Work in …?") leaves your conversation's folder for /rewind as it is: edits are kept by full path.
+    if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn), moved: () => {}, whenMoved: async () => {} };
     const steps = [];
     let report = '';
     const say = (last) => this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` });
