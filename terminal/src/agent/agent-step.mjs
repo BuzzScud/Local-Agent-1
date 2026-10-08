@@ -46,6 +46,15 @@ export class StepPart {
       };
     }
     if (path && !content && this.keptWrite) return { args: { path, content: this.keptWrite.content }, fromKept: true };
+    // A Write with its path and no content at all, nothing kept: the content was most likely written
+    // and lost on the way. Qwen3.6 on the service (8 Oct 2026) wrote for 38 s and nothing arrived, then
+    // sent Write of README.md twice with only "path"; told to send "content", it sent the same call.
+    if (path && (sent.content === undefined || sent.content === null) && parsed.error === needsText('Write', 'content')) {
+      return {
+        error: 'Write needs "content": the full file content. Your call arrived with only "path": the text of the file was lost on the way (a long file in one call can be dropped by the model server), so the same call again loses it again. Write a short first version of the file now (under 80 lines: its outline and first part), then add the rest with Edit, one part at a time.',
+        shown: 'Write came without its content (lost on the way); asked for a short first version',
+      };
+    }
     return parsed;
   }
 
