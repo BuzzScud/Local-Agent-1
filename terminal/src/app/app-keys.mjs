@@ -75,20 +75,21 @@ export function keysPart(self) {
   };
 
   // A file dropped into the window (Terminal types its path) or pasted as a path: a picture or PDF
-  // becomes [Image #n] or [PDF #n] at once, copied, and the tray over the box shows it (attach.mjs).
+  // becomes [Image #n] or [PDF #n] at once, copied, and the tray over the box shows it (attach.mjs);
+  // any other file or a folder becomes [File #n] or [Folder #n] when the paste is only paths (a drop).
   // Other text comes back as it was, and so does a path for a shell command of yours (!).
   const withChips = (text) => {
     if (!/[/~'"]/.test(text) || self.S.current.input.value.startsWith('!')) return text;
     const pasted = self.pastedRef.current;
     const r = attachDropped(text, { cwd: self.cwd, pasted, dir: join(HOME, 'attachments'), id: self.sessionRef.current.id });
     if (r.failed.length) self.flash(`Could not attach ${r.failed[0].path.split('/').pop()}: ${r.failed[0].error}`, 3500);
-    else if (r.added.length) self.flash(r.added.length === 1 ? `${r.added[0].kind === 'pdf' ? 'PDF' : 'Picture'} attached as ${r.added[0].token}` : `${r.added.length} files attached`, 2500);
+    else if (r.added.length) self.flash(r.added.length === 1 ? `${{ pdf: 'PDF', image: 'Picture', folder: 'Folder' }[r.added[0].kind] ?? 'File'} attached as ${r.added[0].token}` : `${r.added.length} files attached`, 2500);
     return r.text;
   };
   // ctrl+f, or a click on a card in the tray: the attachments full size, in Quick Look.
   const openAttached = (ns) => {
     const files = ns.map((n) => self.pastedRef.current.files.get(n)).filter((f) => f && existsSync(f));
-    if (!files.length) { self.flash('No picture or PDF in the prompt to open (drag one in, or ctrl+v)', 2500); return; }
+    if (!files.length) { self.flash('Nothing attached in the prompt to open (drag a file in, or ctrl+v a picture)', 2500); return; }
     if (!quickLook(files)) self.flash('Quick Look did not open', 2500);
   };
 
@@ -574,7 +575,7 @@ export function keysPart(self) {
       } catch (e) { self.flash(`Could not paste the picture: ${e.message}`, 3000); }
       return;
     }
-    // ctrl+f: the pictures and PDFs in the prompt, full size in Quick Look (← → go through several).
+    // ctrl+f: the files in the prompt, full size in Quick Look (← → go through several).
     if (key.ctrl && ch === 'f') { openAttached(trayItems(cur.input.value, self.pastedRef.current).map((it) => it.n)); return; }
     if (key.ctrl && ch === 'c') {
       if (self.agent.busy || cur.live.phase === 'working') { self.interrupt(); return; }

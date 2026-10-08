@@ -11,7 +11,7 @@ import { buildNote, buildStyles, isBuilt } from './studio.mjs';
 import { findChrome, layoutCheck, layoutNote, needsServer, pagesToCheck } from '../flows/layoutcheck.mjs';
 import { findProjects, foldersNamed, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { wantsDesktop } from '../flows/words.mjs';
 import { canQuickLook, checkPagePicture, screenshotPage } from './helper-models.mjs';
 import { CHECK_IT, asksForWork, auto, looksGood, missingParts, wantsCheck } from './agent-said.mjs';
@@ -249,6 +249,16 @@ export class PagesPart {
     if (this.desktopInside() || dirname(abs) !== this.desktopDir) return false;
     if (this.desktopMade?.has(abs)) return name === 'Read' || name === 'Edit' || name === 'Write';
     return name === 'Write' && Boolean(this.desktopAsked) && !existsSync(abs);
+  }
+  // Files and folders you dropped into the window (app/attach.mjs) may be read where they are, outside
+  // the fence (8 Oct 2026: a big one's first part goes with the message, and the model is told where
+  // the rest is): the copy, its text, a folder and what is in it. Read, List and Search only, never a
+  // change and never a command; nothing else outside the project.
+  allowAttached(paths) { this.attachedPaths ??= new Set(); for (const p of paths ?? []) if (p) this.attachedPaths.add(resolve(p)); }
+  attachedOpen(name, abs) {
+    if (!['Read', 'List', 'Search'].includes(name) || !this.attachedPaths?.size) return false;
+    for (const p of this.attachedPaths) if (abs === p || abs.startsWith(`${p}/`)) return true;
+    return false;
   }
   tilde(p) { return p === this.home ? '~' : p.startsWith(`${this.home}/`) ? `~${p.slice(this.home.length)}` : p; }
   // The pages this message changed that are somewhere else than the Desktop

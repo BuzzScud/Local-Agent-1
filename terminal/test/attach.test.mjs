@@ -48,15 +48,15 @@ test.skipIf(needs('pictures', media.mediaTool))('a dropped screenshot (its path 
   expect(pasted.info.get(1).bytes).toBe(readFileSync(copy).length);
 });
 
-test.skipIf(needs('pictures', media.mediaTool))('a dropped PDF is [PDF #n] with its first page as the thumbnail; a text file, a missing one and a broken picture keep their paths, and a broken one uses no number', () => {
+test.skipIf(needs('pictures', media.mediaTool))('a dropped PDF is [PDF #n] with its first page as the thumbnail; among words a text file keeps its path (a drop of only paths: attach-files.test.mjs), and so do a missing one and a broken picture, which uses no number', () => {
   const pdf = join(dir, 'invoice.pdf');
   media.textPdf(pdf, ['Invoice 7731\nTotal due: 1,240 dollars', 'Page two']);
   const notes = join(dir, 'notes.txt'); writeFileSync(notes, 'just text');
   const broken = join(dir, 'broken.png'); writeFileSync(broken, 'not a picture at all');
   const gone = join(dir, 'gone.png');
   const pasted = fresh();
-  const r = A.attachDropped(`'${pdf}' ${notes} ${gone} ${broken}`, { ...to('s2'), pasted });
-  expect(r.text).toBe(`[PDF #1] ${notes} ${gone} ${broken}`);
+  const r = A.attachDropped(`compare '${pdf}' with ${notes} ${gone} ${broken}`, { ...to('s2'), pasted });
+  expect(r.text).toBe(`compare [PDF #1] with ${notes} ${gone} ${broken}`);
   expect(r.added.map((a) => [a.token, a.kind, a.pages])).toEqual([['[PDF #1]', 'pdf', 2]]);
   expect(r.added[0].thumb.h).toBe(10); // a page is taller than wide
   expect(r.failed).toEqual([{ path: broken, error: expect.stringContaining('not a picture') }]);
