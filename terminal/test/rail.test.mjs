@@ -4,10 +4,11 @@
 import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
-import { machineWords, writingWhat, doingWords, EndLine, CheckNode, ToolNode, UserStrip, WritingNode, ThinkingLive, ThoughtNode, gist, writtenSoFar, shortPath, shortCommand } from '../src/app/rail.jsx';
+import { machineWords, writingWhat, doingWords, EndLine, CheckNode, ToolNode, UserStrip, WritingNode, ThinkingLive, ThoughtNode, gist, writtenSoFar, shortPath, shortCommand, foldSteps, LooksNode, outcome, MadeNode } from '../src/app/rail.jsx';
 import { Markdown } from '../src/app/markdown.jsx';
+import { C } from '../src/ui/theme.mjs';
 import { homedir } from 'node:os';
-import { ItemFrame, gapUnder } from '../src/app/screen.jsx';
+import { ItemFrame, gapUnder, gapOver } from '../src/app/screen.jsx';
 import { runInPty } from './pty.mjs';
 import { setup, quit } from './app-setup.mjs';
 import { startFakeServer } from './fake-server.mjs';
@@ -34,10 +35,11 @@ test('while a tool call is written, the working line names the file and counts i
   expect(writingWhat(null)).toBeNull();
 });
 
-test('the end line closes the turn: its time and counts, the layout problems left, or why it stopped', () => {
+test('the end line closes the turn: how it went in one row, its counts in a row under it; the layout problems left, or why it stopped', () => {
   const at = new Date('2026-09-29T22:30:18').getTime();
-  expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Cooked', secs: 252, at, left: 0 }, counts: ' · 5 steps' }))).toBe('  ╰─ ⠿ Cooked for 4m 12s · 5 steps · done 10:30 PM');
-  expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Cooked', secs: 252, at, left: 2 }, counts: ' · 5 steps' }))).toBe('  ╰─ ✗ Ended with 2 layout problems left · Cooked for 4m 12s · 5 steps · done 10:30 PM');
+  expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Cooked', secs: 252, at, left: 0 }, counts: ' · 5 steps' }))).toBe('  ╰─ ⠿ Cooked for 4m 12s · done 10:30 PM\n     5 steps');
+  expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Cooked', secs: 252, at, left: 2 }, counts: ' · 5 steps' }))).toBe('  ╰─ ✗ Ended with 2 layout problems left · Cooked for 4m 12s · done 10:30 PM\n     5 steps');
+  expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Juggled', secs: 2059, at, usd: 4.84 }, counts: ' · 60 steps · 31 reads' }))).toBe('  ╰─ ⠿ Juggled for 34m 19s · done 10:30 PM · $4.84 for this request\n     60 steps · 31 reads');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'interrupted', text: 'Interrupted · What should Agentic Coder do instead?', at } }))).toBe('  ╰─ ■ Interrupted · What should Agentic Coder do instead?');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'stuck', text: 'Stopped: it was stuck', secs: 61, at } }))).toBe('  ╰─ Stopped: it was stuck · 1m 01s · 10:30 PM');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Worked', secs: 0.4, at } }))).toBe('  ╰─ ⠿ done 10:30 PM');
@@ -91,13 +93,19 @@ test('the layout check is a step that names each problem; after the fix it says 
   expect(draw(h(CheckNode, { check: { page: 'card.html', problems: [], secs: 0.5, again: false } }), 200)).toContain('◎ Layout check  card.html  ✓ nothing broken · 1440 px, phone, dark · 0.5 s');
 });
 
-test('a new file shows its first 8 lines plain; a change shows only its changed lines', () => {
+test('a new file shows its first 4 lines plain; a change shows only its changed lines, 6 at most', () => {
   const hunk = Array.from({ length: 20 }, (_, i) => ({ type: '+', newNo: i + 1, text: `line ${i + 1}` }));
   const made = draw(h(ToolNode, { it: { label: 'Write', arg: '/x/page.html', view: { kind: 'diff', created: true, path: 'page.html', hunk, additions: 20, removals: 0 } } }));
   expect(made).toContain('✎ Created  page.html · 20 lines · 151 B'); // 131 characters and 20 line ends
-  expect(made).toContain('  │    8  line 8');
-  expect(made).not.toContain('line 9');
-  expect(made).toContain('… 12 more lines  (ctrl+o to see it)');
+  expect(made).toContain('  │    4  line 4');
+  expect(made).not.toContain('line 5');
+  expect(made).toContain('… 16 more lines');
+  expect(made).not.toContain('ctrl+o');
+  const many = Array.from({ length: 9 }, (_, i) => ({ type: '+', newNo: i + 1, text: `new ${i + 1}` }));
+  const big = draw(h(ToolNode, { it: { label: 'Update', arg: 'a.mjs', view: { kind: 'diff', path: 'a.mjs', additions: 9, removals: 0, hunk: many } } }));
+  expect(big).toContain('+ new 6');
+  expect(big).not.toContain('+ new 7');
+  expect(big).toContain('… 3 more lines');
   const edit = draw(h(ToolNode, { it: { label: 'Update', arg: '/x/page.html', view: { kind: 'diff', created: false, path: 'page.html', additions: 1, removals: 1, hunk: [
     { type: ' ', oldNo: 1, newNo: 1, text: 'keep' }, { type: '-', oldNo: 2, text: 'color:#fff;' }, { type: '+', newNo: 2, text: 'color:#e8f1ff;' }, { type: ' ', oldNo: 3, newNo: 3, text: 'keep too' }] } } }));
   expect(edit).toContain('✎ Changed  page.html · 1 line');
@@ -106,17 +114,20 @@ test('a new file shows its first 8 lines plain; a change shows only its changed 
   expect(edit).not.toContain('keep');
 });
 
-test('a turn\'s steps hang on the rail with no blank line between them; your message is a strip as wide as the window', () => {
-  const step = { key: 'i1', type: 'text', text: 'Done.', rail: true };
-  expect(draw(h(ItemFrame, { it: step, width: 60 })).split('\n')).toEqual(['  │', '  ● Done.']);
-  expect([gapUnder(step), gapUnder({ type: 'done', rail: true }), gapUnder({ type: 'user' }), gapUnder({ type: 'note' })]).toEqual([0, 1, 0, 1]);
-  // (without colours Ink trims the spaces; on screen all three rows are the window's width, on grey)
+test('a turn\'s steps sit on consecutive rows, no empty rail row between them; a reply has room around it; your message is one grey row', () => {
+  const step = { key: 'i1', type: 'tool', rail: true, label: 'Read', arg: 'a.mjs', view: { kind: 'read', lines: 3, total: 3 } };
+  expect(draw(h(ItemFrame, { it: step, width: 60 })).split('\n')).toEqual(['  ○ Read  a.mjs · 3 lines']);
+  const reply = { key: 'i2', type: 'text', text: 'Done.', rail: true };
+  expect(draw(h(ItemFrame, { it: reply, width: 60 })).split('\n')).toEqual(['', '  ● Done.', '']);
+  expect([gapUnder(step), gapUnder(reply), gapUnder({ type: 'done', rail: true }), gapUnder({ type: 'user' }), gapUnder({ type: 'note' })]).toEqual([0, 1, 1, 1, 1]);
+  expect([gapOver(step), gapOver(reply), gapOver({ type: 'user' }), gapOver({ type: 'user', rail: true })]).toEqual([0, 1, 1, 0]);
+  // (without colours Ink trims the spaces; on screen the row is the window's width, on grey)
   const strip = draw(h(UserStrip, { text: 'make a card', width: 40 }), 40).split('\n');
-  expect(strip).toEqual(['', ' › make a card', '']);
+  expect(strip).toEqual([' › make a card']);
   // What went with it, one line, each as its card said it, cut at the strip's edge.
   const cards = [{ n: 2, text: '▣ [File #2] budget.xlsx · Excel · 3 sheets · 48 KB' }, { n: 3, text: '▣ [Folder #3] src · Folder · 23 files · 4.5 MB' }];
-  expect(draw(h(UserStrip, { text: 'fix the totals in [File #2]', cards, width: 110 }), 110).split('\n')[2].trim()).toBe('▣ [File #2] budget.xlsx · Excel · 3 sheets · 48 KB   ▣ [Folder #3] src · Folder · 23 files · 4.5 MB');
-  expect(draw(h(UserStrip, { text: 'fix it', cards, width: 50 }), 50).split('\n')[2].trim()).toBe('▣ [File #2] budget.xlsx · Excel · 3 sheets · …');
+  expect(draw(h(UserStrip, { text: 'fix the totals in [File #2]', cards, width: 110 }), 110).split('\n')[1].trim()).toBe('▣ [File #2] budget.xlsx · Excel · 3 sheets · 48 KB   ▣ [Folder #3] src · Folder · 23 files · 4.5 MB');
+  expect(draw(h(UserStrip, { text: 'fix it', cards, width: 50 }), 50).split('\n')[1].trim()).toBe('▣ [File #2] budget.xlsx · Excel · 3 sheets · …');
 });
 
 // The real app, with a stand-in model that writes a page slowly: while the file is being written,
@@ -161,7 +172,13 @@ test('thinking, live: a meter against its cap and the last three lines with its 
   expect(out).not.toContain('I need to look into this further'); // only the last three lines
   expect(gist('I need to look into this further. Let me check the details.\n\nMy notes claim that Desktop/countdown-card.html has already been created. But wait')).toBe('My notes claim that Desktop/countdown-card.html has already been created');
   expect(gist('I have thought enough. Now I act on it.')).toBe('');
-  expect(plain(draw(h(ThoughtNode, { it: { text: 'countdown-card.html already exists in the Desktop. Let me check it.', secs: 4.2 } })))).toContain('◇ thought 4s · countdown-card.html already exists in the Desktop  (ctrl+o)');
+  expect(plain(draw(h(ThoughtNode, { it: { text: 'countdown-card.html already exists in the Desktop. Let me check it.', secs: 4.2 } })))).toBe('  ◇ countdown-card.html already exists in the Desktop  4s');
+  // A ? inside quotes does not end the sentence (8 Oct 2026: 'The app tests all wait for the "').
+  expect(gist('The app tests all wait for the "? for shortcuts" hint. Inside a window it may never show.')).toBe('The app tests all wait for the "? for shortcuts" hint');
+  // A long one is cut to its row; its seconds stay whole.
+  const long = plain(draw(h(ThoughtNode, { it: { text: 'This sandbox restriction on browsers and spawning is probably tied to how the home folder is set up.', secs: 3 } }), 60));
+  expect(long).toMatch(/^ {2}◇ This sandbox restriction on browsers and spawning \S*…  3s$/);
+  expect(long.length).toBeLessThanOrEqual(60);
 });
 
 // The screenshot of 1 Oct: a Write cut off at the reply limit left its "Writing … lines so far" row
@@ -183,3 +200,55 @@ test('a Write cut off at the reply limit leaves no Writing row behind; its whole
   expect(r.snapshots.after).not.toContain('✎ Writing');
   expect(r.snapshots.after).toMatch(/✎ Created {2}card\.html · 30 lines/);
 }, 60_000);
+
+// ————— Tight rail (8 Oct 2026, the owner's pick of two designs drawn on their own session) —————
+const read = (key, path, lines = 10) => ({ key, rail: true, type: 'tool', label: 'Read', arg: path, view: { kind: 'read', lines, total: lines } });
+
+test('reads, lists and searches in a row are one row; a run still open while the turn works is held for the live area', () => {
+  const search = { key: 's', rail: true, type: 'tool', label: 'Search', arg: 'for shortcuts', view: { kind: 'search', count: 4 } };
+  const ran = { key: 'b', rail: true, type: 'tool', label: 'Bash', arg: 'ls', view: { kind: 'bash', code: 0, lines: ['a'] } };
+  const items = [read('r1', 'test/pty.mjs'), read('r2', 'test/app-setup.mjs'), search, read('r3', 'src/screen.jsx'), ran, read('r4', 'a.mjs'), read('r5', 'a.mjs')];
+  const done = foldSteps(items);
+  expect(done.printed.map((it) => it.type)).toEqual(['looks', 'tool', 'looks']);
+  expect(done.printed[0].key).toBe('gr1');
+  expect(done.held).toBeNull();
+  const row = plain(draw(h(LooksNode, { list: done.printed[0].list }), 120));
+  expect(row).toBe('  ○ Read  pty.mjs, app-setup.mjs  ·  Searched  “for shortcuts” 4  ·  Read  screen.jsx');
+  expect(plain(draw(h(LooksNode, { list: done.printed[2].list }), 120))).toBe('  ○ Read  a.mjs ×2');
+  // Working: the last run is not printed yet (a printed row never changes), it is held.
+  const working = foldSteps(items, true);
+  expect(working.printed.map((it) => it.type)).toEqual(['looks', 'tool']);
+  expect(working.held.list.map((it) => it.key)).toEqual(['r4', 'r5']);
+  // One look alone is itself, with its counts; an error is never folded.
+  expect(foldSteps([read('r6', 'b.mjs')]).printed[0].key).toBe('r6');
+  const failed = { ...read('r7', 'c.mjs'), error: true };
+  expect(foldSteps([read('r8', 'd.mjs'), failed, read('r9', 'e.mjs')]).printed.map((it) => it.key)).toEqual(['r8', 'r7', 'r9']);
+});
+
+test('a command is one row with what it came to at its end: a test run\'s counts, an exit code, else its lines; two lines of its output under it', () => {
+  expect(outcome('bun test ./terminal/test/rail.test.mjs', { code: 0, lines: ['bun test v1.4.2', '', ' 13 pass', ' 0 fail', ' 75 expect() calls'] })).toEqual({ end: '13 pass · 0 fail', color: C.ok });
+  expect(outcome('node --test', { code: 1, lines: ['ℹ tests 4', 'ℹ pass 3', 'ℹ fail 1'] })).toEqual({ end: '3 pass · 1 fail · exit 1', color: C.bad });
+  expect(outcome('grep -c x a.txt', { code: 1, lines: [] }).end).toBe('exit 1');
+  expect(outcome('ls', { code: 0, lines: ['a', 'b', '… 120 lines cut …', 'y', 'z'] }).end).toBe('124 lines');
+  expect(outcome('ls', { code: 0, lines: [] }).end).toBe('no output');
+  // Words that look like counts in what a command that is no test printed are just its lines.
+  expect(outcome('cat notes.txt', { code: 0, lines: ['22 passed, 2 failed last week'] }).end).toBe('1 line');
+  expect(outcome('sleep 200', { timedOut: true, after: '2 minutes', lines: [] }).end).toBe('stopped after 2 minutes');
+  const long = `sleep 100; grep -E " pass$| fail$|^Ran " SCRIPTS/unit-run.txt; grep -E "^\\(fail\\)" SCRIPTS/unit-run.txt | sort -u`;
+  const out = plain(draw(h(ToolNode, { it: { label: 'Bash', arg: long, view: { kind: 'bash', code: 0, lines: ['(fail) one', '(fail) two', '(fail) three', ' 3 pass', ' 3 fail'] } } }), 80)).split('\n');
+  expect(out.length).toBe(3); // the command's row and two lines of output, nothing wrapped
+  expect(out[0]).toMatch(/^ {2}❯ Ran {2}sleep 100; grep .*… · 5 lines$/);
+  expect(out.slice(1)).toEqual(['  │ (fail) one', '  │ (fail) two']);
+  // A failed one shows its last two lines, where the error is.
+  const failed = plain(draw(h(ToolNode, { it: { label: 'Bash', arg: 'node x.mjs', view: { kind: 'bash', code: 1, lines: ['start', 'at line 3', 'Error: boom'] } } }), 80)).split('\n');
+  expect(failed).toEqual(['  ❯ Ran  node x.mjs · exit 1', '  │ at line 3', '  │ Error: boom']);
+});
+
+test('the fixes found on the way: a file outside the project by its own path, a job\'s row says its name once, Made is one row', () => {
+  const tmp = plain(draw(h(ToolNode, { it: { label: 'Write', arg: '/tmp/agentic-replay.mjs', view: { kind: 'diff', created: true, path: '../../../../tmp/agentic-replay.mjs', hunk: [{ type: '+', newNo: 1, text: 'x' }], additions: 1 } } }), 100));
+  expect(tmp).toContain('✎ Created  /tmp/agentic-replay.mjs · 1 line');
+  const job = plain(draw(h(ToolNode, { it: { label: 'Jobs', arg: 'job2', view: { kind: 'job', what: 'job2 · running 1 min 56 s', lines: [] } } }), 100));
+  expect(job).toBe('  ❯ Jobs  job2 · running 1 min 56 s');
+  const made = plain(draw(h(MadeNode, { files: [{ path: '/tmp/a.mjs', bytes: 700, created: true }, { path: 'terminal/src/agent/tools.mjs', bytes: 121800, created: false }, { path: 'docs/b.md', bytes: 900, created: false }] }), 100));
+  expect(made).toBe('  ▣ Made  1 new, 2 changed · a.mjs, tools.mjs, b.md');
+});

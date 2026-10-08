@@ -45,8 +45,8 @@ test('the model reads a page: it asks first (the site and the address shown); â€
   expect(ask).toContain("Yes, and don't ask again for 127.0.0.1 this session");
   expect(ask).toContain('Yes, and always allow 127.0.0.1 in this folder');
   // The second page of that site did not ask: nothing answered a second question, and both were read.
-  expect(r.snapshots.done).toMatch(/Fetched\s+http:\/\/127\.0\.0\.1:\d+\/notes/);
-  expect(r.snapshots.done).toMatch(/Fetched\s+http:\/\/127\.0\.0\.1:\d+\/other/);
+  // (two fetches in a row are one row: Tight rail, 8 Oct 2026)
+  expect(r.snapshots.done).toMatch(/Fetched\s+http:\/\/127\.0\.0\.1:\d+\/notes, http:\/\/127\.0\.0\.1:\d+\/other/);
   expect(told(fake, 'The magic number is 8812.')).toBe(true);
   expect(told(fake, 'The second page.')).toBe(true);
   expect(fake.requests.find((q) => q.stream)?.tools.map((t) => t.function.name)).toContain('WebFetch');

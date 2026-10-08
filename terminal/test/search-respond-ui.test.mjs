@@ -125,9 +125,9 @@ test('the page check and the second look draw as checks; a long command shows it
   expect(cmdShown("python3 - <<'PYEOF'\nimport json\nprint(1)\nPYEOF", 'SCRIPTS/1-script.py')).toBe("python3 - <<'PYEOF' … +3 lines · SCRIPTS/1-script.py");
   expect(cmdShown('ls -la')).toBe('ls -la');
   const made = renderToString(React.createElement(MadeNode, { files: [{ path: '~/Desktop/math.html', bytes: 40160, created: true, page: 'page check: 0 of 8 sections show text', empty: true }, { path: 'src/cart.mjs', bytes: 512, created: false }] }), { columns: 140 });
-  expect(made).toContain('Made  ~/Desktop/math.html · 40.2 KB · new');
-  expect(made).toContain('page check: 0 of 8 sections show text');
-  expect(made).toContain('src/cart.mjs · 0.5 KB · changed');
+  // One row of names (Tight rail, 8 Oct 2026); a page the check found empty gets a row of its own.
+  expect(made).toContain('Made  1 new, 1 changed · math.html, cart.mjs');
+  expect(made).toContain('math.html: page check: 0 of 8 sections show text');
 });
 
 test('in the window: the Made lines under the answer', async () => {
@@ -137,7 +137,7 @@ test('in the window: the Made lines under the answer', async () => {
     { wait: '? for shortcuts' }, { type: 'write made-here.txt' }, { key: 'enter' }, { wait: 'Wrote it.' }, { wait: 'Made' }, { sleep: 300 }, ...quit,
   ] });
   await fake.close();
-  expect(r.text).toMatch(/Made\s+made-here\.txt · 0\.0 KB · new/);
+  expect(r.text).toMatch(/Made\s+1 new · made-here\.txt/);
   expect(readFileSync(join(cwd, 'made-here.txt'), 'utf8')).toBe('hi there\n');
 }, T);
 
