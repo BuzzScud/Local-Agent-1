@@ -326,8 +326,21 @@ export function normalizeArgs(name, raw, way = 'model') {
   }
   // repo_browser.open_file's last line, and container.exec's command as a list (["bash", "-lc", "…"]).
   if (name === 'Read' && out.offset !== undefined && out.limit === undefined && Number(raw.line_end) >= Number(out.offset)) out.limit = Number(raw.line_end) - Number(out.offset) + 1;
-  // Several commands as a list ("commands": ["cd src", "ls"]) run one after the other; one command in pieces is joined.
-  if (name === 'Bash' && Array.isArray(out.command)) out.command = /^(ba|z)?sh$/.test(out.command[0]) && /^-l?c$/.test(out.command[1] ?? '') ? String(out.command.slice(2).join(' ')) : out.command.join(Array.isArray(raw.commands) && raw.command === undefined && raw.cmd === undefined ? ' && ' : ' ');
+  // A list sent as a string of JSON is read as the list it is, and a step of it may be an object with
+  // its own command (Qwen3.6 on the service, 8 Oct 2026: "commands": '[{"command": "python3 --version",
+  // "name": "check-python"}]' four times; zsh ran the text and said "bad pattern: [{command:").
+  if (name === 'Bash' && typeof out.command === 'string' && /^\s*\[[\s\S]*\]\s*$/.test(out.command)) {
+    try { const v = JSON.parse(out.command); if (Array.isArray(v) && v.length && v.every((x) => typeof x === 'string' || typeof (x?.command ?? x?.cmd) === 'string')) out.command = v; } catch {}
+  }
+  // Several commands as a list ("commands": ["cd src", "ls"], or steps each with its own "command") run one
+  // after the other; one command in pieces is joined.
+  if (name === 'Bash' && Array.isArray(out.command)) {
+    const list = out.command;
+    const steps = list.some((x) => x && typeof x === 'object');
+    const several = steps || (raw.commands !== undefined && raw.command === undefined && raw.cmd === undefined);
+    out.command = !steps && /^(ba|z)?sh$/.test(list[0]) && /^-l?c$/.test(list[1] ?? '') ? String(list.slice(2).join(' '))
+      : list.map((x) => (x && typeof x === 'object' ? x.command ?? x.cmd ?? '' : x)).filter((x) => String(x).trim()).join(several ? ' && ' : ' ');
+  }
   if (name === 'TodoWrite' && Array.isArray(out.todos)) {
     out.todos = out.todos.map((t) => (typeof t === 'string' ? { text: t, status: 'pending' } : {
       text: String(t.text ?? t.content ?? t.title ?? t.task ?? ''),
