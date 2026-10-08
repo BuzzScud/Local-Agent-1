@@ -60,9 +60,39 @@ test('/profiles is in the / menu on a service, /subagents opens it; a profile ch
   expect(steps.slice(1).every((b) => b.model === 'thinker:35b')).toBe(true);
   expect(readFileSync(join(cwd, 'notes.txt'), 'utf8')).toContain('Hello world');
   expect(s.done).toMatch(/Main: coder:30b → thinker:35b, from this step/);
-  expect(s.done).toMatch(/thinker:35b/);
+  // the window follows: its footer names the new model (onRoute), not the one the task started on
+  const footer = s.done.trimEnd().split('\n').at(-1);
+  expect(footer).toMatch(/● thinker:35b on /);
+  expect(footer).not.toMatch(/coder:30b/);
   // /profiles afterwards: Main on thinker:35b, with today's requests on its meter
   expect(s.panel).toMatch(/Main\s+◀ thinker:35b\s+▶/);
   expect(s.panel).toMatch(/Main\s+◀ thinker:35b\s+▶\s+service\s+none\s+\d+ today/);
   await svc.close();
 }, T * 3);
+
+test('on the Claude API (this Mac\'s set-up): ←→ on Main in /profiles picks another Claude model, saved at once, and the next message asks for it', async () => {
+  const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
+  const { cwd, env, base } = setup();
+  const claude = await startFakeAnthropic([{ text: 'From the first model.' }, { text: 'From the second model.' }]); // no warm-up on the Claude API
+  const r0 = { source: 'claude', address: claude.url, port: null, connect: 'http', kind: 'claude', model: 'claude-opus-5-5', context: 0, key: true, keyEnd: '6789', keyId: 'claude' };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { claude: r0 } }));
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_REMOTE_KEY: 'test-anthropic-key-0123456789' }, args: ['--no-flows'], timeoutMs: 90_000, steps: [
+    { wait: 'On the remote:', ms: 25_000 }, { sleep: 500 },
+    // greetings: answered in a sentence with no tools (no look-first), the conversation's profile all the same
+    { type: 'hello' }, { key: 'enter' }, { wait: 'From the first model.', ms: 20_000 }, { sleep: 300 },
+    { type: '/profiles' }, { key: 'enter' }, { wait: 'Profiles' }, { sleep: 300 }, { snapshot: 'panel' },
+    { key: 'right' }, { sleep: 600 }, { snapshot: 'stepped' }, { key: 'esc' },
+    { wait: 'Main: claude-opus-5-5 → claude-sonnet-5-5.', ms: 10_000 }, { sleep: 300 },
+    { type: 'thanks' }, { key: 'enter' }, { wait: 'From the second model.', ms: 20_000 }, { sleep: 400 }, { snapshot: 'after' },
+    ...quit,
+  ] });
+  const asked = claude.seen.filter((x) => x.path.startsWith('/v1/messages') && x.body?.stream).map((x) => x.body.model);
+  // Main is the Claude API's own profile: one profile, the model the window had
+  expect(r.snapshots.panel).toMatch(/Main\s+◀ claude-opus-5-5\s+▶\s+Claude API/);
+  expect(r.snapshots.stepped).toMatch(/Main\s+◀ claude-sonnet-5-5\s+▶\s+Claude API/);
+  expect(JSON.parse(readFileSync(join(base, 'home', 'profiles.json'), 'utf8')).profiles.Main.model).toBe('claude-sonnet-5-5');
+  expect(asked.at(-2)).toBe('claude-opus-5-5');
+  expect(asked.at(-1)).toBe('claude-sonnet-5-5');
+  expect(r.snapshots.after.trimEnd().split('\n').at(-1)).toMatch(/Sonnet 5\.5|claude-sonnet-5-5/);
+  await claude.close();
+}, T * 2);
