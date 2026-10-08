@@ -441,7 +441,7 @@ export class Loops {
     this.handles.delete(l.id);
     const end = readEnding(ev.final);
     run.endedAt = this.now();
-    // A run is green when it finished and the tests it ran last passed; a stop or a miss is red.
+    // A run is ok (the app's blue) when it finished and the tests it ran last passed; a stop or a miss is red.
     const tests = ev.tests ?? run.tests ?? null;
     run.ok = ev.reason === 'done' && (tests ? tests.ok : true);
     run.summary = run.redo ? 'stopped to start over' : run.stopped ? 'stopped by you' : summaryOf(end.said, ev.reason);

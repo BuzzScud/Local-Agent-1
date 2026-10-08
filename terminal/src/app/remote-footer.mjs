@@ -21,7 +21,7 @@ export function gaugesOf(setting) {
 }
 
 // A piece of the line: its text and its tone (screen.jsx gives each tone its colour):
-// dim, value (white), live (green, while it writes), bar, warn, bad.
+// dim, value (white), live (the app's blue, while it writes), bar, warn, bad.
 const t = (text, tone = 'dim') => ({ text, tone });
 export const widthOf = (segs) => segs.reduce((n, s) => n + s.text.length, 0);
 export const textOf = (segs) => segs.map((s) => s.text).join('');

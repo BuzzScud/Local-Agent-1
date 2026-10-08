@@ -14,7 +14,7 @@
 // SmallPage: the model, the conversations, the keys.
 import React from 'react';
 import { Box, Text, renderToString } from 'ink';
-import { C } from '../ui/theme.mjs';
+import { C, HUE } from '../ui/theme.mjs';
 import { wrap } from '../ui/parts.jsx';
 import { RAIL } from './rail.jsx';
 import { VERSION } from './help.mjs';
@@ -91,7 +91,7 @@ export const tipsOn = (env = process.env) => !/^(off|0|false|no)$/i.test(env.AGE
 export const startTip = (start, pick = (xs) => xs[Math.floor(Math.random() * xs.length)]) => (!tipsOn() ? null : start?.notes?.includes('AGENTS.md') ? pick(process.env.AGENTIC_IN_HOST ? [...TIPS, BG_TIP] : TIPS) : INIT_TIP);
 
 // The Visor bot II (1 Oct 2026, the user's pick "1 · Studio"): a white helmet with a dark glass
-// visor, its eyes in green light, an antenna whose light pulses while the model loads, ear lights,
+// visor, its eyes in blue light (the app's hue, ui/theme.mjs HUE), an antenna whose light pulses while the model loads, ear lights,
 // a chest strip that fills, arms and feet; shaded with light from the top left. It says what the
 // model is doing: asleep (– – and a Z) while it is off, looking about while it loads, happy (^ ^)
 // when it is ready, one eye open at the safety check. Drawn from shapes, 22 × 20 pixels, two to a
@@ -140,8 +140,8 @@ export function botPixels(state, k = 0, look = null) {
   const asleep = state === 'off' || state === 'trust', ready = state === 'ready';
   const P = asleep ? ASLEEP : AWAKE;
   const pulse = (steps) => steps[k % steps.length];
-  fill(px, roundRect(10, 0, 11, 1), asleep ? 240 : ready ? 114 : pulse([71, 114, 120, 157, 120, 114])); // the antenna's light
-  const ear = asleep ? 239 : ready ? 114 : (k % 4 < 2 ? 120 : 71);
+  fill(px, roundRect(10, 0, 11, 1), asleep ? 240 : ready ? HUE.accent : pulse([HUE.dim, HUE.accent, HUE.bright, HUE.light, HUE.bright, HUE.accent])); // the antenna's light
+  const ear = asleep ? 239 : ready ? HUE.accent : (k % 4 < 2 ? HUE.bright : HUE.dim);
   fill(px, roundRect(1, 4, 1, 9), P.pod); fill(px, roundRect(BOT_W - 2, 4, BOT_W - 2, 9), P.podShade);
   for (const x of [0, BOT_W - 1]) fill(px, [[x, 6], [x, 7]], ear);
   shade(px, roundRect(2, 2, 19, 11, 4), P.helm);
@@ -153,7 +153,7 @@ export function botPixels(state, k = 0, look = null) {
   fill(px, roundRect(9, 12, 12, 13), P.neck);
   shade(px, roundRect(5, 14, 16, 17), P.body);
   const lit = ready ? 8 : asleep ? 0 : k % 9;
-  for (let i = 0; i < 8; i++) fill(px, [[7 + i, BOT_STRIP_ROW], [7 + i, BOT_STRIP_ROW + 1]], i < lit ? (ready ? 114 : 120) : P.stripOff);
+  for (let i = 0; i < 8; i++) fill(px, [[7 + i, BOT_STRIP_ROW], [7 + i, BOT_STRIP_ROW + 1]], i < lit ? (ready ? HUE.accent : HUE.bright) : P.stripOff);
   for (const x of [2, 18]) { shade(px, roundRect(x, 14, x + 1, 17), P.arm); fill(px, roundRect(x, 18, x + 1, 19), P.hand); }
   fill(px, roundRect(4, 14, 4, 15), P.arm[3]); fill(px, roundRect(17, 14, 17, 15), P.arm[3]);
   for (const x of [5, 12]) { fill(px, roundRect(x, 18, x + 3, 19), P.foot[1]); fill(px, roundRect(x + 4, 18, x + 4, 19), P.foot[4]); }
@@ -161,21 +161,21 @@ export function botPixels(state, k = 0, look = null) {
   const eyes = (pts, c) => fill(px, pts, c);
   const SHUT = [[6, 7], [7, 7], [8, 7], [13, 7], [14, 7], [15, 7]];
   if (state === 'off') {
-    eyes(SHUT, 65);
+    eyes(SHUT, HUE.deep);
     fill(px, [[18, 0], [19, 0], [20, 0], [21, 0], [20, 1], [19, 2], [18, 3], [19, 3], [20, 3], [21, 3]], 243); // Z
   } else if (state === 'trust') {
-    eyes(SHUT.slice(0, 3), 65);
-    eyes(roundRect(13, 6, 14, 7), 71);
+    eyes(SHUT.slice(0, 3), HUE.deep);
+    eyes(roundRect(13, 6, 14, 7), HUE.dim);
   } else if (look != null) {
     const dx = look < 0.34 ? -1 : look < 0.67 ? 0 : 1;
-    for (const x of [7 + dx, 13 + dx]) { eyes(roundRect(x, 8, x + 1, 9), ready ? 157 : 120); eyes([[x, 8]], ready ? 194 : 157); }
+    for (const x of [7 + dx, 13 + dx]) { eyes(roundRect(x, 8, x + 1, 9), ready ? HUE.light : HUE.bright); eyes([[x, 8]], ready ? HUE.lighter : HUE.light); }
   } else if (ready) {
-    eyes([[6, 7], [7, 6], [8, 6], [9, 7], [12, 7], [13, 6], [14, 6], [15, 7]], 157);
+    eyes([[6, 7], [7, 6], [8, 6], [9, 7], [12, 7], [13, 6], [14, 6], [15, 7]], HUE.light);
   } else if (k % 10 === 9) {
-    eyes([[7, 7], [8, 7], [13, 7], [14, 7]], 120); // a blink
+    eyes([[7, 7], [8, 7], [13, 7], [14, 7]], HUE.bright); // a blink
   } else {
     const dx = [0, 0, 1, 1, 0, 0, -1, -1][k % 8]; // it looks right, then left
-    for (const x of [7 + dx, 13 + dx]) { eyes(roundRect(x, 6, x + 1, 7), 120); eyes([[x, 6]], 157); } // a glint in each eye
+    for (const x of [7 + dx, 13 + dx]) { eyes(roundRect(x, 6, x + 1, 7), HUE.bright); eyes([[x, 6]], HUE.light); } // a glint in each eye
   }
   return px;
 }

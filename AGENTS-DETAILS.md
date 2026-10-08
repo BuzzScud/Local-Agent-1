@@ -890,6 +890,20 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   with limits and at the cap, the / menu) and `app-usage.test.mjs` (the real window: the bar before and after a
   reply, /usage from the menu, r, esc; and none of it off the Claude API). `fake-anthropic.mjs` takes `limits`.
 
+## The app's colours: Ocean (8 Oct 2026)
+
+- **What and why.** The owner: "i want to change the green to something else"; shown four palettes on real captured
+  screens (`docs/private/design rounds/agentic-coder-palettes-4-2026-10-08.html`), they picked **1 · Ocean** (sky
+  blue), only that one (no theme switch), diffs following it. The hub's pages already used a blue accent.
+- **Where.** `terminal/src/ui/theme.mjs` `HUE` holds the shades by job (accent 75, dim 68, deep 60, bright 81, light
+  117, lighter 153) and `C` is built from it (`accent`, `accentDim`, `ok`; `addBg` 24 under added lines, removed lines
+  stay red 52). What draws by number reads `HUE`: the bot in start.jsx (and so the hub's icon, favicon.mjs), the loop
+  board's `STYLE` (loops-draw.mjs), the spinners, and the usage line's ramp (usage-bar.mjs `BLUE`). The modes keep
+  theirs: plan teal 73, auto gold 179, accept edits 141, bypass and errors red 203, warnings 215. Until then the app was
+  green (114, 71, 65, 120, 157, 194, 22).
+- **Tests**: `terminal/test/theme.test.mjs` (the numbers, and no green anywhere the app draws by number: the theme,
+  every pose of the bot, the loop board, the spinners, the usage line), and start.test.mjs's bot reads `HUE`.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

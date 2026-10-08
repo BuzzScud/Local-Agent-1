@@ -9,11 +9,12 @@
 // `cols` wide. state: what the window wrote (loops.mjs snapshot). linesOf(loop, n) → that run's lines.
 // Plain data in, rows out: tested on its own (loops.test.mjs).
 import { everyWord as secsWord, limitWords, modeName, kindWord, guessKind } from './loops.mjs';
+import { HUE } from '../ui/theme.mjs';
 
 // Styles: a foreground (xterm-256, the app's own colours in ui/theme.mjs), "b" for bold, "on <bg>".
 export const STYLE = {
-  accent: 114, accentDim: 71, dim: 245, faint: 240, border: 242, white: 255, text: 252, ask: 147, ok: 114, bad: 203, warn: 215,
-  debug: 209, test: 111, web: 73, task: 141, okDim: 65, badDim: 131,
+  accent: HUE.accent, accentDim: HUE.dim, dim: 245, faint: 240, border: 242, white: 255, text: 252, ask: 147, ok: HUE.accent, bad: 203, warn: 215,
+  debug: 209, test: 111, web: 73, task: 141, okDim: HUE.deep, badDim: 131,
 };
 export const BG = { sel: 236, user: 237, needs: 58, chipDebug: 52, chipTest: 17, chipWeb: 23, chipTask: 53 };
 const KIND = { debug: ['FIX', 'chipDebug'], test: ['TEST', 'chipTest'], web: ['WEB', 'chipWeb'], task: ['TASK', 'chipTask'] };

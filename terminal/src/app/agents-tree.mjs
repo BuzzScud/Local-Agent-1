@@ -1,7 +1,7 @@
 // The /agents screen: the agent tree (2 Oct 2026, the owner's pick, after the agent-tree screen of
 // Claude Code's /advisor; the design round is docs/design rounds/agents-tree-design-2026-10-02.html).
 // One tree from the main model down to its helpers and back: the main session (orange), the stage's
-// four steps as bars (green), three helpers (blue), back to the main session, the second opinion on
+// four steps as bars (the app's blue), three helpers (blue), back to the main session, the second opinion on
 // call down the left (purple), then the session log, the prompt and one status line.
 // drawTree(state, { cols, rows, now }) → rows of { t, s } pieces, each row exactly `cols` wide;
 // s is a style: 'c-<colour>' words, 'b' for bold, 'hl' for the highlighted rail row
