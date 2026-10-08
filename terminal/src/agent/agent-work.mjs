@@ -20,6 +20,7 @@ import { basename, join, relative } from 'node:path';
 import { isSmallTalk, routeByRules, runFlows } from '../flows/index.mjs';
 import { LEAN_NOTE } from './way.mjs';
 import { STOP_BACKS } from './user-hooks.mjs';
+import { appCodeChanged } from './self.mjs';
 import { clarify } from '../flows/clarify.mjs';
 import { isFollowUp, wantsDesktop } from '../flows/words.mjs';
 import { checkInText } from '../flows/fix.mjs';
@@ -30,7 +31,7 @@ import { alwaysRules } from './facts.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { describePictures, describedNote } from './helper-models.mjs';
 import { MCP_TOOL, callHint, isMcpCall, mcpCallInText, requestHits, requestNote } from './mcp.mjs';
-import { BYPASS_OPEN, CALL_MARK, CORRECTS, EXPLAIN, LAYOUT_ROUNDS, LOOK_TOOLS, LOST_CALL, MAX_CALLS, MCP_BACKS, MENTIONS_WALL, READ_TIP, SAME_STEP, aboutTheCode, announcesNextStep, asksForWork, asksTheUser, asksTheUserDirectly, auto, bareCallInText, beforeCall, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, cutCallNote, emptyCutNote, kTok, keptPart, keptWriteNote, keyLines, lostCall, safeArgs, searchWords, tokensOf, toolCallInText, webAddresses, writesCodeInstead } from './agent-said.mjs';
+import { BYPASS_OPEN, CALL_MARK, CORRECTS, EXPLAIN, LAYOUT_ROUNDS, LOOK_TOOLS, LOST_CALL, MAX_CALLS, MCP_BACKS, MENTIONS_WALL, READ_TIP, SAME_STEP, SELF_OPEN, aboutTheCode, announcesNextStep, asksForWork, asksTheUser, asksTheUserDirectly, auto, bareCallInText, beforeCall, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, cutCallNote, emptyCutNote, kTok, keptPart, keptWriteNote, keyLines, lostCall, safeArgs, searchWords, tokensOf, toolCallInText, webAddresses, writesCodeInstead } from './agent-said.mjs';
 
 export class WorkPart {
   async work(text, { signal, images, wake = false } = {}) {
@@ -287,7 +288,7 @@ export class WorkPart {
     // kept word for word (the service's cache), so the request says what is true while it is on.
     if (this.mode === 'bypass' && request?.role === 'user' && typeof request.content === 'string') {
       // With where the user's own folders are: it does not know their name, and guessed /Users/Shared/Desktop (5 Oct 2026).
-      this.turn.open = { request, notes: `${BYPASS_OPEN} The user's home folder is ${this.home}; their Desktop is ${this.desktopDir}.` };
+      this.turn.open = { request, notes: `${this.selfOn() ? SELF_OPEN : BYPASS_OPEN} The user's home folder is ${this.home}; their Desktop is ${this.desktopDir}.` };
     }
     if (math && request?.role === 'user' && typeof request.content === 'string') {
       try {
@@ -849,6 +850,18 @@ export class WorkPart {
               this.emit('note', { text: `Your stop hook sent it back: ${(r.reason || 'it said no').split('\n')[0].slice(0, 160)}`, tone: 'dim' });
               this.messages.push({ role: 'user', content: auto(`A hook of the user's says the work is not done: ${r.reason || 'it said no'}. Carry on, then report.`) });
               continue;
+            }
+          }
+          // Working on itself (agent.mjs selfOn; the owner's pick, 8 Oct 2026): the app's own code changed
+          // in this message and the tests passed after it, so the window starts again on that code once
+          // the answer is in (app-self.mjs restart; the restarted conversation says what changed). Not
+          // when the model already asked for it with the App tool, not after a failed or missing test run.
+          if (this.turn.changed && this.turn.testedAfterChange && this.turn.checkOk && !this.turn.restarted && this.app?.restart && !this.isHelper && !signal?.aborted && this.selfOn()) {
+            const files = appCodeChanged(this.cwd, this.happened?.files ?? []);
+            if (files.length) {
+              this.turn.restarted = true;
+              const r = await this.app.restart(`${files.length === 1 ? files[0] : `${files.length} files of the app`} changed and the tests pass`);
+              if (r?.error) this.emit('note', { text: `Not restarted on the new code: ${r.error}`, tone: 'warn' });
             }
           }
           break;

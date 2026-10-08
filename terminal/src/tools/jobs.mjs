@@ -86,7 +86,7 @@ export class Jobs {
         job.ended = Date.now();
         job.code = code;
         clearTimeout(job.force);
-        if (fenced) job.out += fenceHint(job.out, { open: Boolean(sandbox?.open), command });
+        if (fenced) job.out += fenceHint(job.out, { open: Boolean(sandbox?.open), self: Boolean(sandbox?.self), command });
         if (!this.running().length) live.delete(this);
         resolve();
         this.onEnd?.(job);

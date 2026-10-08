@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { endpointOf } from '../../../models/index.mjs';
 import { focusedInstructions, readInstructions } from './instructions.mjs';
 import { EXPLORE_TOOLS, resolvePath, toolSchemas } from './tools.mjs';
-import { ownBy, protectedBy, testRunOf } from './permissions.mjs';
+import { isSelf, ownBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
 import { gitSummary, isHomeFolder, notesRoom, projectNotes, promptSetOf, systemPrompt, testCommand } from './prompt.mjs';
 import { lookSecs } from './look.mjs';
 import { guidePath, guidesList, harnessOf, readGuides, readHelperAgents, readSkills, rulesSetOf, skillPath, skillsList, toolUseFor } from './prompt-files.mjs';
@@ -148,7 +148,7 @@ export class Agent extends EventEmitter {
   // The tools the model is offered: the app's eight, and its own five when it decides.
   tools() {
     const agents = this.agentsOn();
-    const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [] });
+    const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [], self: this.selfOn() && !this.isHelper });
     // CodeSearch only when it can run (4 Oct 2026: qwen3-coder-next called it twice, was told twice
     // "the code search is off here", and those two errors helped stop it at five in a row).
     // The same for the four never called in 40 runs on a service (5 Oct 2026): Map not in the home
@@ -183,6 +183,11 @@ export class Agent extends EventEmitter {
   // Your helper agents (prompt-files.mjs readHelperAgents): read from their folder each time, so a
   // new file is offered at the next step. None inside a helper, none on the local set.
   helperAgents() { return this.isHelper ? [] : readHelperAgents(this.rulesSetUsed ?? this.rulesSet()); }
+  // Self (permissions.mjs isSelf, the owner's pick 8 Oct 2026): Bypass permissions on the Claude API.
+  // The app works on itself: its own settings, rules, hooks and memory may change (a copy kept first,
+  // self.mjs), git push and stopping its own processes run, and the App tool is offered (runs a slash
+  // command, a setting, a restart on new code; not inside a helper). A local model never gets it.
+  selfOn() { return isSelf(this.mode, endpointOf(this.url)?.kind); }
   // The Screen tool (tools/screen.mjs): on a Mac, for a model that can look at pictures now or
   // once its vision is turned on (visionOn); "screen": false in settings.json leaves it out.
   // mayLook: the app says whether this model can turn its vision on (App.jsx).
@@ -390,7 +395,7 @@ export class Agent extends EventEmitter {
       setMode: (m) => this.setMode(m),
       // A protected file always asks (permissions.mjs), even on auto-accept; in Bypass only the
       // app's own settings still do (the tool loop refuses those; here the path asks).
-      protectedBy: (rel) => { const at = resolvePath(this.cwd, rel); return this.mode === 'bypass' ? ownBy([rel, at.realRel]) : protectedBy([rel, at.realRel], this.savedRules()?.protect); },
+      protectedBy: (rel) => { const at = resolvePath(this.cwd, rel); return this.selfOn() ? selfLockedBy([rel, at.realRel]) : this.mode === 'bypass' ? ownBy([rel, at.realRel]) : protectedBy([rel, at.realRel], this.savedRules()?.protect); },
       tool,
       note: (text, tone = 'dim') => this.emit('note', { text, tone }),
       // What a path found before handing over to the step-by-step way: a check

@@ -312,6 +312,12 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   The rail says "Auto let it run" or "Auto asks you" with that reason. Commits and protected files still ask.
 - **Bypass:** never asks, but the hard stops stay (rm -rf, sudo, git push, kill, the never-list) and so does
   the sandbox (inside the project, no internet). `OWN` (Agentic Coder's own settings) is refused there too.
+- **Self** (`isSelf`: Bypass on the Claude API, the owner's pick 8 Oct 2026): Agentic Coder works on
+  itself. `OWN` opens (a copy kept first, `agent/self.mjs` keepOwnCopy); only `SELF_LOCKED` (door.key,
+  trust.json) stays shut; the `BLOCKED` entries marked `self` (the push, kill) run; the sandbox closes only
+  those two files. The App tool (`tools.mjs` appTool, `app/app-self.mjs` appBridge) runs a slash command, a
+  setting, a restart on new code; `agent-work.mjs` restarts by itself after a turn that changed app code
+  (`isAppCode`) with passing tests. A helper never gets it. `SELF_OPEN` is the note sent with the request.
 - **Screen** (`terminal/src/tools/screen.mjs` + `media-tool.swift`, macOS `screencapture`): a picture of one
   app's front window or the whole screen. It only looks; nothing is clicked or typed. The first look at an
   app asks (this time, this session, always for this folder, no). macOS must let the terminal record the

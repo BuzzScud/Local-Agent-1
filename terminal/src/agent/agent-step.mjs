@@ -14,6 +14,7 @@ import { basename, isAbsolute, join, relative } from 'node:path';
 import { isCodeProject, runKind } from '../flows/index.mjs';
 import { changedNote, changesText } from './seen.mjs';
 import { toolInput } from './user-hooks.mjs';
+import { copyNote, keepOwnCopy } from './self.mjs';
 import { readResults, testsFailed } from '../flows/results.mjs';
 import { tallies } from '../flows/llm.mjs';
 import { toolTiming } from './timing.mjs';
@@ -330,7 +331,7 @@ export class StepPart {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, home: this.home, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, todos: () => this.todos, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, home: this.home, jobs: this.jobs, app: this.isHelper ? null : this.app ?? null, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes, self: this.selfOn() }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, todos: () => this.todos, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
     // A new file goes to the Desktop unless the request says where (tools.mjs desktopDefault); a new code
     // file at the top of a code project is asked about once a message. AGENTIC_DESKTOP_DEFAULT=off: as before (the tests).
     // The page the request names, not read yet (Look before answering; 5 Oct 2026: asked to scrape a link, Qwen3.6
@@ -434,7 +435,7 @@ export class StepPart {
     const away = Boolean(at && !at.inside && this.desktopOpen(call.name, at.abs)); // on the Desktop (desktopOpen)
     const inside = at ? at.inside || away : true;
     const rules = this.savedRules();
-    let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel });
+    let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel, self: this.selfOn() });
     // Your PreToolUse hook's answer (runTool): allow skips the question, ask asks; a hard stop still holds.
     if (call.pre?.allow && d.decision !== 'deny') d = { decision: 'allow' };
     else if (call.pre?.ask && d.decision !== 'deny') d = { ...d, decision: 'ask' };
@@ -522,11 +523,16 @@ export class StepPart {
     const aside = call.name === 'Bash' && this.turn?.question && !isReadOnly(args.command);
     // /rewind: the text before the model's edit, and a copy around its commands.
     if ((call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.rewind?.edited(prepared.abs, prepared.created ? null : prepared.before);
+    // The app's own file, changed because it works on itself (self.mjs): a dated copy first.
+    const ownCopy = d.self && (call.name === 'Edit' || call.name === 'Write') && prepared.abs ? keepOwnCopy(prepared.abs) : null;
     try {
       out = aside ? await this.runAside(args.command, signal)
         : call.name === 'Bash' && this.rewind ? await this.rewind.around(() => execute(call.name, args, prepared, env))
         : await execute(call.name, args, prepared, env);
     } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
+    if (ownCopy && !out.error) out.text += `\n${copyNote(ownCopy)}`;
+    // The model asked the App tool for the restart itself: the end of the turn does not ask again (agent-work.mjs).
+    if (out.restarted && this.turn) this.turn.restarted = true;
     // A command the fence stopped, in a message a note of Claude's came with: back to the note.
     if (out.error && /outside the project folder/.test(String(out.text)) && String(args.command ?? args.path ?? '').split(/[\s'"]+/).some((w) => w.includes('/') && this.noteNames(w))) out.text += ' If the note that came with the request answers it, answer from the note now.';
     if (readKey && !out.error) {
