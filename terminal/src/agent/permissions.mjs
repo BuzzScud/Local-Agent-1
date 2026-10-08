@@ -33,10 +33,11 @@ const at = (words) => new RegExp(`${CMD}(?:${words})\\b`);
 export const BLOCKED = [
   { re: /\brm\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*(?:r[a-zA-Z]*f|f[a-zA-Z]*r)|\brm\s+(?:.*\s)?-r\b.*\s-f\b|\brm\s+(?:.*\s)?-f\b.*\s-r\b|\brm\s+.*--recursive.*--force|\brm\s+.*--force.*--recursive/, why: 'rm -rf deletes files for good' },
   { re: at('sudo|doas'), why: 'sudo runs as administrator' },
-  { re: /\bgit\s+push\b/, why: 'git push sends your code off this Mac' },
+  // self: lifted when the app works on itself (SELF below); the rest hold in every mode.
+  { re: /\bgit\s+push\b/, why: 'git push sends your code off this Mac', self: true },
   { re: /\bgit\s+reset\s+--hard\b/, why: 'git reset --hard throws away uncommitted work' },
   { re: /\bgit\s+clean\s+-[a-zA-Z]*f/, why: 'git clean -f deletes untracked files for good' },
-  { re: at('kill|pkill|killall'), why: 'stopping processes could stop your running servers' },
+  { re: at('kill|pkill|killall'), why: 'stopping processes could stop your running servers', self: true },
   { re: /\blaunchctl\s+(stop|unload|bootout|kill|remove|disable)\b/, why: 'stopping services could stop your running servers' },
   { re: /\bbrew\s+services\s+(stop|restart|kill)\b/, why: 'stopping services could stop your running servers' },
   { re: /\bpm2\s+(stop|delete|kill|restart)\b/, why: 'stopping services could stop your running servers' },
@@ -304,10 +305,22 @@ export function testRunOf(command, { testCmd = null, check = null } = {}) {
   return found;
 }
 
-export function blockedReason(command) {
-  for (const b of BLOCKED) if (b.re.test(command)) return b.why;
+// self: the app works on itself (SELF): git push and stopping its own processes run (the sandbox
+// still refuses a signal to anything it did not start, sandbox.mjs).
+export function blockedReason(command, { self = false } = {}) {
+  for (const b of BLOCKED) if (!(self && b.self) && b.re.test(command)) return b.why;
   return null;
 }
+
+// Self (the owner's pick, 8 Oct 2026): Bypass permissions with the Claude API as the model. The app
+// is then let work on itself: its own code (always a project like any other), and its own settings,
+// rules, hooks and memory in ~/.agentic-coder and .agentic/, which Bypass alone refuses (OWN); a copy
+// of each own file is kept before it changes (self.mjs). What stays locked even then: the door's
+// key and who may come through it (another Mac could join), and every secret (SECRET_FILES).
+// A local model never gets this: the guards below were written for one.
+export const SELF_LOCKED = ['door.key', 'trust.json'];
+export const isSelf = (mode, kind) => mode === 'bypass' && kind === 'claude';
+export const selfLockedBy = (rel) => protectedBy(rel, [], SELF_LOCKED);
 
 // A commit always asks first, every time (the user's pick, 29 Sep 2026):
 // "don't ask again" for a command's first two words, or a commit chained
@@ -448,7 +461,7 @@ export const ownBy = (rel) => protectedBy(rel, [], OWN);
 // an SSH key or another project's .env would go to a model on another machine.
 export const SECRET_FILES = ['.ssh', '.ssh/**', '.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*'];
 const secretBy = (paths) => protectedBy(paths, [], SECRET_FILES);
-const namesOwn = (command) => { for (const w of shellWords(String(command ?? ''))) { const g = ownBy(String(w)); if (g) return g; } return null; };
+const namesOwn = (command, list = OWN) => { for (const w of shellWords(String(command ?? ''))) { const g = protectedBy(String(w), [], list); if (g) return g; } return null; };
 
 // The files a part writes with > or >> (not /dev/null, not >&2), as typed.
 function writeTargets(part) {
@@ -478,14 +491,16 @@ function writeTargets(part) {
 // that does more than read, or written with >; after a cd, the names are taken from that folder too.
 // A part that only reads may name them: 7 Oct 2026, a grep of the test record (~/.agentic-coder/tests)
 // piped on into another command was refused as if it changed the app's own settings.
-function ownChanged(command) {
+// list: the files looked for (OWN; SELF_LOCKED when the app works on itself).
+function ownChanged(command, list = OWN) {
   const s = splitCommand(command);
-  if (s.nested || s.open || s.background) return namesOwn(command);
+  if (s.nested || s.open || s.background) return namesOwn(command, list);
   let dir = '';
+  const by = (w) => protectedBy(w, [], list);
   for (const raw of s.parts) {
     const part = raw.trim();
     const words = shellWords(part).map(String);
-    const own = (list) => { for (const w of list) { const g = ownBy(w) ?? (dir ? ownBy(join(dir, w)) : null); if (g) return g; } return null; };
+    const own = (names) => { for (const w of names) { const g = by(w) ?? (dir ? by(join(dir, w)) : null); if (g) return g; } return null; };
     if (words[0] === 'cd' || words[0] === 'pushd') { const to = words[1] ?? '~'; dir = !dir || to.startsWith('/') || to.startsWith('~') ? to : join(dir, to); continue; }
     const hit = readerPart(part) ? own(writeTargets(part)) : own(words);
     if (hit) return hit;
@@ -557,8 +572,10 @@ const hasRule = (list, rule) => [...(list ?? [])].some((r) => String(r).toLowerC
 // panel prints it). decide() below is the same without the reason.
 //   rules: { allow, never, protect } from /permissions; rel: the path from the project folder.
 //   mcp: for a tool of an MCP server, what the app knows of it: { server, tool, reads, changed }.
-export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel, mcp } = {}) {
+//   self: Bypass with the Claude API (isSelf): the app's own files, git push and its own processes are open.
+export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel, mcp, self = false } = {}) {
   const bypass = mode === 'bypass';
+  self = bypass && Boolean(self);
   // A tool of an MCP server (agent/mcp.mjs): a program or a service of the user's, which can do
   // whatever its server lets it. Each tool asks before its first use, in every mode but Bypass,
   // until a rule allows it. reads: the user marked it in /mcp as one that only reads (the server's
@@ -578,6 +595,8 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     return { decision: 'ask', rule, ...(mcp.changed ? { changed: true } : {}), why: mcp.changed ? 'the tool changed since you allowed it' : mode === 'auto' ? 'Auto cannot tell what an MCP tool changes, so it asks' : `no rule allows ${mcp.server}'s ${mcp.tool} yet` };
   }
   if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow', why: 'it changes nothing' };
+  // The app itself (tools.mjs APP_TOOL_DEF): only when it works on itself.
+  if (name === 'App') return self ? { decision: 'allow', why: 'Bypass on Claude: the app may drive itself', self: true } : { decision: 'deny', reason: 'the App tool runs only in Bypass permissions on the Claude API' };
   // A background command's output, or a stop of it: the command itself was asked about when it started.
   if (name === 'Jobs') return { decision: 'allow', why: 'it reads or stops a command you already let run' };
   // The model's own tools when it decides (agent/way.mjs): two read, one writes to the memory,
@@ -626,6 +645,10 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     const guard = protectedBy(rel ?? args?.path, rules?.protect);
     if (bypass) {
       const own = ownBy(rel ?? args?.path);
+      if (own && self) {
+        const locked = selfLockedBy(rel ?? args?.path);
+        return locked ? { decision: 'deny', reason: `${locked} is the door's own file (who may reach this Mac), which stays locked even when Agentic Coder works on itself` } : { decision: 'allow', why: `Bypass on Claude: Agentic Coder's own file (${own}) may change; a copy is kept first`, self: true };
+      }
       return own ? { decision: 'deny', reason: `${own} holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on' };
     }
     if (guard) return { decision: 'ask', once: true, protectedBy: guard, why: `it is a protected file (${guard}); protected files always ask` };
@@ -635,7 +658,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
   }
   if (name === 'Bash') {
     const command = args?.command ?? '';
-    const why = blockedReason(command);
+    const why = blockedReason(command, { self });
     if (why) return { decision: 'deny', reason: `blocked: ${why}` };
     // Bypass lifts the fence: a command may name any folder, but not a secret outside the
     // project (SECRET_FILES), and not the app's own settings (below).
@@ -651,7 +674,11 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     if (mode === 'plan') return isReadOnly(command) ? { decision: 'allow', why: 'it only reads' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
     if (bypass) {
       const own = ownChanged(command);
-      return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on (any folder and the internet; what already runs on this Mac stays out of reach)' };
+      if (own && self) {
+        const locked = ownChanged(command, SELF_LOCKED);
+        return locked ? { decision: 'deny', reason: `it names ${locked}, the door's own file (who may reach this Mac), which stays locked even when Agentic Coder works on itself` } : { decision: 'allow', why: `Bypass on Claude: it may change Agentic Coder's own file (${own})`, self: true };
+      }
+      return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: `Bypass permissions is on (any folder and the internet; what already runs on this Mac stays out of reach${self ? '; git push and stopping its own processes may run' : ''})` };
     }
     // once: no "don't ask again" for it.
     if (runsGitCommit(command)) return { decision: 'ask', once: true, why: 'a commit always asks' };
@@ -693,9 +720,10 @@ const STEPS = {
 };
 // "Right now": a table of what runs, asks or is refused in this mode, with the user's own rules,
 // added to PERMISSIONS.md when the model reads it, so the guide never disagrees with the app.
-export function permissionsTable({ mode = 'ask', rules = null, session = [] } = {}) {
+export function permissionsTable({ mode = 'ask', rules = null, session = [], self = false } = {}) {
   const m = MODES.includes(mode) ? mode : 'ask';
-  const blocked = [...new Set(BLOCKED.map((b) => b.why))];
+  self = m === 'bypass' && Boolean(self);
+  const blocked = [...new Set(BLOCKED.filter((b) => !(self && b.self)).map((b) => b.why))];
   const list = (xs) => (xs?.length ? xs.map((x) => `"${x}"`).join(', ') : 'none');
   const rows = [
     ['Read, List and Search inside the project', 'runs'],
@@ -708,11 +736,12 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [] } = 
     ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', or a rule allows it' : ''}`],
     ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
     ['Other files or commands outside the project, the internet from a command', m === 'bypass' ? 'runs (Bypass lifts the fence), except secrets outside the project (keys, .ssh, .env); what already runs on this Mac stays out of reach' : 'refused (the sandbox)'],
-    ['Agentic Coder\'s own settings and rules', 'refused'],
+    ['Agentic Coder\'s own settings and rules (~/.agentic-coder, .agentic/)', self ? 'runs: you work on Agentic Coder itself (a copy of each own file is kept first); only door.key and trust.json stay locked' : 'refused'],
+    ...(self ? [['The App tool: a slash command, a setting, a restart on new code', 'runs']] : []),
   ];
   return `## Right now (from the app, as you read this)
 
-Mode: ${MODE_NAMES[m]}.
+Mode: ${MODE_NAMES[m]}${self ? ' on the Claude API: Agentic Coder may work on itself (its code, its own settings, git push, stopping its own processes, the App tool)' : ''}.
 
 | Step | Here |
 |---|---|

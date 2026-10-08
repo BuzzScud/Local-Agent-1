@@ -49,6 +49,7 @@ import { panelsPart } from './app-panels.mjs';
 import { profilesPart } from './app-profiles.mjs';
 import { runPart } from './app-run.mjs';
 import { slashPart } from './app-slash.mjs';
+import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
 export { remoteConfOf } from './app-common.mjs';
 let seq = 0;
@@ -121,7 +122,7 @@ export function App({ opts, win, onRestart }) {
     stats: () => stats, stopFnRef: () => stopFnRef, submit: () => submit, switchBackRef: () => switchBackRef,
     switchModel: () => switchModel, switchService: () => switchService, thinking: () => thinking,
     timeDone: () => timeDone, timeLoad: () => timeLoad, timeLoaded: () => timeLoaded, timeWarmed: () => timeWarmed,
-    timesRef: () => timesRef, timing: () => timing, toggleArmed: () => toggleArmed, toggleFnRef: () => toggleFnRef,
+    tapRef: () => tapRef, timesRef: () => timesRef, timing: () => timing, toggleArmed: () => toggleArmed, toggleFnRef: () => toggleFnRef,
     trayRef: () => trayRef, tty: () => tty, turnSpend: () => turnSpend, update: () => update, updateNow: () => updateNow,
     updateRef: () => updateRef, useLocal: () => useLocal, useRemote: () => useRemote,
     visionWaitRef: () => visionWaitRef, waitForBattle: () => waitForBattle, waitForOthers: () => waitForOthers,
@@ -308,6 +309,8 @@ export function App({ opts, win, onRestart }) {
   // as one line before the next item, not a line each (4 Oct 2026, the owner's pick: fewer lines in a
   // long turn). A printed line cannot change, so they are joined before they print.
   const heldNotes = useRef([]);
+  // The App tool's command (app-self.mjs appBridge) listens for the notes it causes: a list while it runs, else null.
+  const tapRef = useRef(null);
   const push = useCallback(pushFn, []);
   const serverRef = useRef(null);
   const restartRef = useRef(null);
@@ -431,6 +434,8 @@ export function App({ opts, win, onRestart }) {
     applySearch(agentRef.current, limitsRef.current);
   }
   const agent = agentRef.current;
+  // The window as the model drives it when Agentic Coder works on itself (app-self.mjs): the App tool's bridge.
+  agent.app = appBridge(self);
   const mcpHub = mcpRef.current?.hub ?? null;
   // Saving on its own (autosave.mjs): a little after a task, and on quit.
   const autoRef = useRef(null);

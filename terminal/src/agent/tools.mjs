@@ -172,6 +172,25 @@ const SCREEN_TOOL_DEF = {
   description: "Take a picture of the user's screen to look at: one app's window (app: its name, like Safari, Mail or TextEdit), or the whole screen (no app). It only looks; nothing is clicked or typed. When the user asks about an app, a window or what is on their screen, use this first: other apps' files are outside the project and cannot be read. If that app has no window open, the answer lists the apps that do. The user is asked before you see an app the first time.",
   parameters: { type: 'object', properties: { app: str("Optional: the app whose front window to look at (Safari, TextEdit, Google Chrome…); leave it out for the whole screen") }, required: [] },
 };
+// Agentic Coder itself (self.mjs; the owner's pick, 8 Oct 2026): offered only when the app works on
+// itself (Bypass permissions on the Claude API, permissions.mjs isSelf). command runs a slash command
+// as the user would type it; setting reads or changes one key of settings.json; restart starts the
+// app again on the code in its repo as it is now (the launcher rebuilds it) and picks this
+// conversation back up. Commands that would end or replace the conversation are refused (APP_NOT).
+export const APP_TOOL_DEF = {
+  name: 'App',
+  description: "Agentic Coder itself, the app you run in: drive it as the user would. action command: run a slash command as typed (\"/mode auto\", \"/effort high\", \"/hooks lean\", \"/permissions allow npm test\", \"/rules\", \"/helpers off 2\"); its answer comes back as the notes the screen showed. action setting: with key alone, that key's value from the app's settings.json (no key: every key); with value too, set it (a JSON value: true, \"low\", 3) and say what changed. action restart: after you changed the app's own code and its tests pass, start the app again on that code (it is built first, in about a second) and pick this conversation back up; a build that fails leaves the last good version running and the conversation says so. Available only while the user runs Agentic Coder in Bypass permissions on the Claude API.",
+  parameters: { type: 'object', properties: {
+    action: { type: 'string', enum: ['command', 'setting', 'restart'], description: 'command, setting or restart' },
+    command: str('For command: the slash command as the user would type it, starting with /'),
+    key: str('For setting: the key in settings.json (dotted for a nested one: remote.kind); none lists them all'),
+    value: { description: 'For setting: the new value, as JSON (a string, number, true/false, a list or an object). Left out: read only' },
+    reason: str('For restart: one line on what changed and which test passed; shown to the user'),
+  }, required: ['action'] },
+};
+// Slash commands the App tool never runs: they end, replace or rewind the conversation it runs in,
+// or wait for a key of the user's. restart is the App tool's own action.
+export const APP_NOT = new Set(['clear', 'exit', 'quit', 'compact', 'resume', 'rewind', 'update', 'agents', 'loop', 'loops', 'jumptomac', 'btw', 'math', 'design', 'init', 'morning', 'test', 'start', 'stop']);
 // The tools an explore helper is given (the others are left out of its list and refused).
 export const EXPLORE_TOOLS = new Set(['Read', 'List', 'Search', 'Map', 'CodeSearch', 'WebFetch', 'WebSearch', 'TodoWrite']);
 
@@ -185,7 +204,8 @@ const READ_MANY = {
 // web: { search, fetch } (/web): the web tools join them.
 // agents: the Agent tool joins them (a helper's own list never has it); helpers: your own helper agents in it.
 // screen: the Screen tool joins them (a model that can look at pictures, on a Mac).
-export const toolDefs = (way = 'app', web = null, { agents = false, screen = false, helpers = [] } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), JOBS_TOOL_DEF, ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [agentToolDef(helpers)] : [])];
+// self: the App tool joins them (the app works on itself, permissions.mjs isSelf).
+export const toolDefs = (way = 'app', web = null, { agents = false, screen = false, helpers = [], self = false } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), JOBS_TOOL_DEF, ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [agentToolDef(helpers)] : []), ...(self ? [APP_TOOL_DEF] : [])];
 export const toolSchemas = (way = 'app', web = null, opts = {}) => toolDefs(way, web, opts).map((d) => ({ type: 'function', function: d }));
 
 // Other agents' names for a tool here that takes the same arguments (Claude Code's Glob, Grep and
@@ -305,7 +325,7 @@ const TODO_TEXT = ['text', 'content', 'title', 'task', 'value', 'description', '
 const TODO_NOT_TEXT = ['status', 'id', 'priority'];
 
 // A tool's definition, on either way (Read's own takes paths only on Model).
-const defOf = (name, way = 'app') => [...toolDefs(way), ...WEB_TOOL_DEFS, SCREEN_TOOL_DEF, AGENT_TOOL_DEF].find((d) => d.name === name);
+const defOf = (name, way = 'app') => [...toolDefs(way), ...WEB_TOOL_DEFS, SCREEN_TOOL_DEF, AGENT_TOOL_DEF, APP_TOOL_DEF].find((d) => d.name === name);
 
 export function normalizeArgs(name, raw, way = 'model') {
   const def = defOf(name, way);
@@ -478,6 +498,7 @@ export function display(name, args = {}) {
     case 'WebSearch': return { label: 'Web Search', arg: `"${String(args.query ?? '').replace(/\s+/g, ' ').trim()}"` };
     case 'WebFetch': return { label: 'Fetch', arg: String(args.url ?? '') };
     case 'Screen': return { label: 'Screen', arg: String(args.app ?? '').trim() || 'whole screen' };
+    case 'App': return { label: 'App', arg: args.action === 'command' ? String(args.command ?? '').trim() : args.action === 'setting' ? `setting ${args.key ?? '(all)'}${args.value !== undefined ? ' = ' + JSON.stringify(args.value) : ''}` : 'restart on the new code' };
     case 'Agent': { const d = String(args.description || args.prompt || '').replace(/\s+/g, ' ').trim(); const k = String(args.kind ?? '').toLowerCase(); return { label: k === 'general' ? 'Agent' : !k || k === 'explore' ? 'Explore' : k, arg: d.length > 70 ? `${d.slice(0, 69)}…` : d }; }
     default: return { label: name, arg: '' };
   }
@@ -1200,12 +1221,14 @@ export async function execute(name, args, prepared, env) {
       const timeoutMs = own ? own * 1000 : env.bash?.timeoutMs ?? 120_000;
       // A model on another machine gets a test run's passing tests folded into one line (squeezeTests).
       // Bypass permissions lifts the folder fence and the internet block (sandbox.mjs open).
-      const open = env.permissionsNow?.().mode === 'bypass';
+      const now = env.permissionsNow?.() ?? {};
+      const open = now.mode === 'bypass';
       // A long script typed in as a heredoc is saved as SCRIPTS/… too; SCRIPTS/… in a command is the
       // real folder, which the sandbox may read (scripts.mjs). The command itself runs as typed.
       const saved = saveScript(args.command, env.cwd);
       const scripts = Boolean(saved) || usesScripts(args.command, env.cwd);
-      const sandbox = open ? { open: true } : scripts ? { readOnly: [scriptsDir()] } : null;
+      // self: the app works on itself (permissions.mjs isSelf): its own folder is open too.
+      const sandbox = open ? { open: true, self: Boolean(now.self) } : scripts ? { readOnly: [scriptsDir()] } : null;
       const r = await runCommand(commandWithScripts(args.command, env.cwd), { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal, squeeze: env.rulesSet === 'remote', ...(sandbox ? { sandbox } : {}) });
       if (scripts) r.lines = r.lines.map(outputWithScripts);
       const body = r.lines.join('\n');
@@ -1221,6 +1244,7 @@ export async function execute(name, args, prepared, env) {
       return { text: cut(body || '(no output)', max) + status + (after ? `\n${after}` : ''), error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut, ...(r.timedOut ? { after: took } : {}), ...(saved ? { saved: saved.name } : {}) }, ...(saved ? { saved } : {}) };
     }
     case 'Jobs': return jobsTool(args, env, max);
+    case 'App': return appTool(args, env, max);
     case 'WebSearch': return webSearch(args, env);
     case 'WebFetch': return webFetch(args, env, max);
     case 'Screen': {
@@ -1260,10 +1284,11 @@ export function secsOf(v) {
 async function startJob(args, env, max) {
   if (!env.jobs) return { text: 'Background jobs are not available here. Run the command without background; timeout gives it up to 600 seconds.', error: true, view: { kind: 'error', message: 'no background jobs here' } };
   // Bypass permissions lifts the folder fence and the internet block here too (sandbox.mjs open).
-  const open = env.permissionsNow?.().mode === 'bypass';
+  const now = env.permissionsNow?.() ?? {};
+  const open = now.mode === 'bypass';
   // SCRIPTS/… is the real folder of saved scripts, which the sandbox may read (scripts.mjs).
   const scripts = usesScripts(args.command, env.cwd);
-  const sandbox = open ? { open: true } : scripts ? { readOnly: [scriptsDir()] } : null;
+  const sandbox = open ? { open: true, self: Boolean(now.self) } : scripts ? { readOnly: [scriptsDir()] } : null;
   const r = await env.jobs.start(commandWithScripts(args.command, env.cwd), { cwd: env.cwd, description: args.description ?? '', ...(sandbox ? { sandbox } : {}) });
   if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: 'too many background jobs' } };
   const { job } = r;
@@ -1299,6 +1324,41 @@ async function jobsTool(args, env, max) {
   const head = jobs.line(job);
   const body = lines.length ? `New output since you last looked${dropped ? ` (${dropped} older characters were not kept)` : ''}:\n${cut(lines.join('\n'), max)}` : 'No new output since you last looked.';
   return { text: `${head}\n${body}`, view: { kind: 'job', what: head, lines } };
+}
+
+// ---- the app itself (APP_TOOL_DEF) ----------------------------------------------------------------
+
+// env.app: the window's bridge (app/app-self.mjs): command(line) → the notes it showed, setting(key, value?),
+// restart(reason). Without it (headless, a helper), or outside self, the tool refuses.
+async function appTool(args, env, max) {
+  const app = env.app;
+  const err = (message, text = message) => ({ text, error: true, view: { kind: 'error', message } });
+  if (!env.permissionsNow?.().self) return err('the App tool runs only in Bypass permissions on the Claude API', 'The App tool is not available: it runs only while the user runs Agentic Coder in Bypass permissions on the Claude API. Tell the user what you wanted to do, and they can do it.');
+  if (!app) return err('no window to drive here', 'The App tool has no window to drive here (a helper, or a run without the terminal). Do it another way, or tell the user.');
+  const action = String(args.action ?? '').trim();
+  if (action === 'command') {
+    const line = String(args.command ?? '').trim();
+    const m = /^\/(\S+)/.exec(line);
+    if (!m) return err('command must start with /', 'Send command as the user would type it, starting with /: "/mode auto".');
+    if (APP_NOT.has(m[1].toLowerCase())) return err(`/${m[1]} is not run by the App tool`, `/${m[1]} is not run by the App tool: it would end, replace or rewind the conversation you run in, or wait for the user's keys. ${m[1] === 'update' ? 'To start the app again on new code, use action restart.' : 'Tell the user to type it.'}`);
+    const r = await app.command(line);
+    const notes = (r.notes ?? []).map((t) => String(t).trim()).filter(Boolean);
+    const body = notes.length ? notes.join('\n') : `${line} ran; the screen showed no note (a command that opens a panel shows it to the user).`;
+    return { text: cut(body, max), view: { kind: 'app', what: line, lines: notes.slice(0, 6) } };
+  }
+  if (action === 'setting') {
+    const key = String(args.key ?? '').trim();
+    const r = await app.setting(key, args.value);
+    if (r.error) return err(r.error);
+    const text = args.value === undefined ? (key ? `${key} = ${JSON.stringify(r.value)}` : JSON.stringify(r.value, null, 2)) : `${key} was ${JSON.stringify(r.was)}, now ${JSON.stringify(r.value)}.${r.note ? ` ${r.note}` : ''}`;
+    return { text: cut(text, max), view: { kind: 'app', what: args.value === undefined ? `setting ${key || '(all)'}` : `setting ${key} = ${JSON.stringify(args.value)}`, lines: text.split('\n').slice(0, 6) } };
+  }
+  if (action === 'restart') {
+    const r = await app.restart(String(args.reason ?? '').trim());
+    if (r.error) return err(r.error);
+    return { restarted: true, text: 'Agentic Coder restarts now on the code in its repo (built first). This conversation is saved and picked back up by the new version, which tells you it restarted; then say what changed and check it works.', view: { kind: 'app', what: 'restart on the new code', lines: [] } };
+  }
+  return err('action must be command, setting or restart');
 }
 
 // ---- the web ------------------------------------------------------------------------------------

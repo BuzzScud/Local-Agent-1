@@ -118,6 +118,8 @@ export function modelPart(self) {
     return () => { clearTimeout(t); process.off('exit', tidy); tidy(); };
   };
   const pushFn = (...its) => {
+    // The App tool's command (app-self.mjs) listens for the notes it causes.
+    if (self.tapRef?.current) for (const it of its) if (typeof it.text === 'string') self.tapRef.current.push(it.text);
     const fold = its.filter((it) => it.type === 'note' && it.fold);
     let list = its.filter((it) => !(it.type === 'note' && it.fold));
     if (fold.length) self.heldNotes.current.push(...fold.map((it) => it.text));

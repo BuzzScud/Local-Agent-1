@@ -8,6 +8,7 @@ import { startModeFor } from './perm-store.mjs';
 import { modeOf } from '../agent/permissions.mjs';
 
 const SETTINGS = join(HOME, 'settings.json');
+export const SETTINGS_FILE = SETTINGS;
 const DEFAULTS = { thinking: null, model: DEFAULT_MODEL };
 
 // A trusted folder may set these in <folder>/.agentic/settings.json; they

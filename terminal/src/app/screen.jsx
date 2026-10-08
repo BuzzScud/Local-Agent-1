@@ -82,6 +82,8 @@ function ToolView({ it, width }) {
       break;
     }
     // A background command (tools/jobs.mjs): started, looked at, or stopped, and its newest lines.
+    // The App tool (the app driven by the model, agent/tools.mjs appTool) is drawn the same way.
+    case 'app':
     case 'job': {
       const shown = v.lines.slice(-4);
       body = (

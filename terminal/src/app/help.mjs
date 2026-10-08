@@ -12,7 +12,7 @@ export const MODE_OPTIONS = [
   { id: 'ask', label: 'Manual', note: 'Always asks before making changes' },
   { id: 'edits', label: 'Accept edits', note: 'Automatically accepts file edits; commands still ask' },
   { id: 'plan', label: 'Plan', note: 'Reads and searches, then replies with a plan' },
-  { id: 'bypass', label: 'Bypass permissions', note: 'Never asks; blocked commands and the project fence still hold' },
+  { id: 'bypass', label: 'Bypass permissions', note: 'Never asks; blocked commands and the project fence still hold. On the Claude API, Agentic Coder may work on itself' },
 ];
 
 // Keys, grouped the way you meet them. [keys, what they do]

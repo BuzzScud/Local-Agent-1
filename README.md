@@ -337,6 +337,20 @@ coding serve --https cert.pem key.pem   # https with your certificate (tailscale
 With a remote in use, your prompts, your code and the files Agentic Coder reads go to that
 machine. The memory's small search models still run on this Mac.
 
+### Agentic Coder working on itself
+
+In **Bypass permissions** on the **Claude API** (`/remote` → Claude, `/mode bypass`), Agentic Coder
+may work on itself, settings and code included (the owner's pick, 8 Oct 2026). Its own files
+(`~/.agentic-coder/…`, a project's `.agentic/…`) may change, with a copy of each as it was kept
+first under `~/.agentic-coder/memory-backups/self/<day>/`; a push runs, and a process of its own
+may be stopped. Only `door.key` and `trust.json` (who may reach this Mac) stay locked, with the
+never-list and the destructive commands. The model gets one more tool, **App**: it runs a slash
+command as you would type it (`/mode auto`, `/hooks lean`), reads or sets a key of `settings.json`,
+and restarts the app on the code in its repo. When a request changed the app's own code and the
+tests passed after it, the window restarts on that code by itself once the answer is in, and the
+conversation picks up where it was. `/permissions` shows the rows that open. A local model, or any
+other mode, works as before.
+
 ## Background sessions, and opening them from another Mac
 
 Like Claude Code's `claude --bg` and `claude attach`. Each `coding` window runs its app in a
