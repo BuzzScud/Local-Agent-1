@@ -20,7 +20,8 @@ test('isSelf: Bypass on the Claude API only; selfLockedBy names the door\'s two 
 test('blockedReason: the push and stopping processes lift in self; the rest hold', () => {
   expect(blockedReason('git push origin main', { self: true })).toBeNull();
   expect(blockedReason('pkill -f agentic', { self: true })).toBeNull();
-  expect(blockedReason('git push origin main')).toContain('sends your code off this Mac');
+  expect(blockedReason('git push origin main')).toBeNull(); // a plain push asks instead (8 Oct 2026)
+  expect(blockedReason('git push -f origin main')).toContain('force push');
   expect(blockedReason('kill 123')).toContain('stopping processes');
   for (const c of ['rm -rf build', 'sudo ls', 'git reset --hard HEAD', 'shutdown -h now']) expect(blockedReason(c, { self: true })).not.toBeNull();
 });
@@ -44,12 +45,12 @@ test('judge in self: own files, the push, its own processes and the App tool run
 
 test('outside self nothing opens: Bypass on a local model, or self asked for in another mode', () => {
   expect(d('Write', { path: '.agentic/settings.json' }, { self: false, rel: '.agentic/settings.json' })).toBe('deny');
-  expect(d('Bash', { command: 'git push origin main' }, { self: false })).toBe('deny');
+  expect(d('Bash', { command: 'git push origin main' }, { self: false })).toBe('ask');
   expect(d('App', { action: 'restart' }, { self: false })).toBe('deny');
   expect(decide('App', { action: 'restart' }, ctx({ self: false })).reason).toContain('only in Bypass permissions on the Claude API');
   // self means nothing without Bypass
   expect(d('Write', { path: '.agentic/settings.json' }, { mode: 'auto', rel: '.agentic/settings.json' })).not.toBe('allow');
-  expect(d('Bash', { command: 'git push origin main' }, { mode: 'auto' })).toBe('deny');
+  expect(d('Bash', { command: 'git push origin main' }, { mode: 'auto' })).toBe('ask');
   expect(d('App', { action: 'restart' }, { mode: 'auto' })).toBe('deny');
 });
 
@@ -62,7 +63,7 @@ test('permissionsTable in self says what opens, and the blocked list no longer n
   expect(t).not.toContain('stopping processes could stop');
   const plain = permissionsTable({ mode: 'bypass' });
   expect(plain).not.toContain('The App tool');
-  expect(plain).toContain('sends your code off this Mac');
+  expect(plain).toContain('| git push (only when the user asks; a force push is refused) | asks first, every time');
   // self is a Bypass thing: asked for in Auto it changes nothing
   expect(permissionsTable({ mode: 'auto', self: true })).not.toContain('The App tool');
 });

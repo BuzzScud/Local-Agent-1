@@ -157,7 +157,7 @@ export function harnessPage(d) {
     <p class="sub">${THE_MODEL} asks for one tool at a time. The harness decides whether it runs.</p>
     <ol class="chain arrows">
       ${li('m', sw('The model picks one tool:', '{short} picks one tool:'), `${tools.slice(0, -1).join(', ')}, or ${tools.at(-1)}.`)}
-      ${li('h', '3 safety gates.', 'Blocked words (rm -rf, sudo, git push). Your OK. A fence that keeps commands inside the project.')}
+      ${li('h', '3 safety gates.', 'Blocked words (rm -rf, sudo, a force push). Your OK. A fence that keeps commands inside the project.')}
       ${li('h', 'The harness runs it', `and hands the result back to ${the_model}.`)}
     </ol>
     <p class="round">Round and round, <b>up to ${S.steps} steps</b>. It ends when ${the_model} answers instead of asking for a tool. It stops itself if it <b>repeats the same step</b> or hits <b>5 errors in a row</b>.</p></section></div>

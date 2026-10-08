@@ -318,8 +318,8 @@ test('the second round (2 Oct): CONTEXT, PERMISSIONS, DEBUGGING, RECOVERY and SE
 });
 
 test('PERMISSIONS comes with the table of right now, and the table says what the app really decides, in every mode', async () => {
-  const row = { edit: 'Edit or Write a file', protect: 'A protected file', readCmd: 'A command that only reads', cmd: 'Any other command', commit: 'git commit', web: 'WebSearch and WebFetch' };
-  const steps = { edit: ['Edit', { path: 'a.js', old_text: 'a', new_text: 'b' }, 'a.js'], protect: ['Edit', { path: '.env', old_text: 'a', new_text: 'b' }, '.env'], readCmd: ['Bash', { command: 'git status' }], cmd: ['Bash', { command: 'npm run build' }], commit: ['Bash', { command: 'git commit -m x' }], web: ['WebFetch', { url: 'https://example.com' }] };
+  const row = { edit: 'Edit or Write a file', protect: 'A protected file', readCmd: 'A command that only reads', cmd: 'Any other command', commit: 'git commit', push: 'git push', web: 'WebSearch and WebFetch' };
+  const steps = { edit: ['Edit', { path: 'a.js', old_text: 'a', new_text: 'b' }, 'a.js'], protect: ['Edit', { path: '.env', old_text: 'a', new_text: 'b' }, '.env'], readCmd: ['Bash', { command: 'git status' }], cmd: ['Bash', { command: 'npm run build' }], commit: ['Bash', { command: 'git commit -m x' }], push: ['Bash', { command: 'git push origin main' }], web: ['WebFetch', { url: 'https://example.com' }] };
   const kind = (d) => ({ allow: 'runs', deny: 'refused', check: 'check' }[d.decision] ?? 'ask');
   const said = (cell) => (/^refused/.test(cell) ? 'refused' : /^runs/.test(cell) ? 'runs' : /checks/.test(cell) ? 'check' : 'ask');
   for (const mode of MODES) {
@@ -333,7 +333,7 @@ test('PERMISSIONS comes with the table of right now, and the table says what the
   expect(t).toContain('Mode: Plan.');
   expect(t).toContain('allowed without asking: "npm test"; never: "npm publish"; protected: "secrets/**"');
   expect(t).toContain('Allowed for this session: "git add".');
-  expect(t).toContain('git push sends your code off this Mac');
+  expect(t).toContain('a force push rewrites what is already on GitHub');
   // read through the tool: the guide, then the table; without the app's side, the guide alone
   const env = { cwd: proj, rulesSet: 'remote', agents: false, permissionsNow: () => ({ mode: 'edits', rules: { never: ['npm publish'] }, session: [] }) };
   const r = (await execute('Read', { path: 'RULES/PERMISSIONS.md' }, null, env)).text;

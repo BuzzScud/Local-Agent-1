@@ -665,7 +665,7 @@ export function panelsPart(self) {
         ask: 'Mode is manual: Agentic Coder asks before every change and every command that can change things.',
         edits: 'Mode is accept edits: file edits go through without asking; commands still ask.',
         plan: 'Mode is plan: it only reads and searches, then replies with a plan.',
-        bypass: 'Bypass permissions is on: nothing asks. Still never: rm -rf, sudo, git push, stopping processes, a change to Agentic Coder’s own settings, your never-list, secrets outside the project (keys, .ssh, .env), or reaching what already runs on this Mac. Files and commands may use any folder, and commands the internet. shift+tab goes back to manual.',
+        bypass: 'Bypass permissions is on: nothing asks. A git push asks first (unless the model is Claude). Still never: rm -rf, sudo, a force push, stopping processes, a change to Agentic Coder’s own settings, your never-list, secrets outside the project (keys, .ssh, .env), or reaching what already runs on this Mac. Files and commands may use any folder, and commands the internet. shift+tab goes back to manual.',
       };
       self.push({ type: 'note', text: MODE_SAYS[o.id], tone: o.id === 'bypass' ? 'warn' : 'dim' });
     } else if (id === 'meters') {

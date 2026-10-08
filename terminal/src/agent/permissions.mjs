@@ -34,7 +34,9 @@ export const BLOCKED = [
   { re: /\brm\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*(?:r[a-zA-Z]*f|f[a-zA-Z]*r)|\brm\s+(?:.*\s)?-r\b.*\s-f\b|\brm\s+(?:.*\s)?-f\b.*\s-r\b|\brm\s+.*--recursive.*--force|\brm\s+.*--force.*--recursive/, why: 'rm -rf deletes files for good' },
   { re: at('sudo|doas'), why: 'sudo runs as administrator' },
   // self: lifted when the app works on itself (SELF below); the rest hold in every mode.
-  { re: /\bgit\s+push\b/, why: 'git push sends your code off this Mac', self: true },
+  // A plain git push asks first (runsGitPush below, the owner's pick, 8 Oct 2026); a force push,
+  // which can wipe what is already on GitHub, stays blocked.
+  { re: /\bgit\s+push\b[^;&|\n]*?\s(?:-f|-[a-zA-Z]*f[a-zA-Z]*|--force(?:-with-lease)?(?:=\S*)?|\+[^\s'"`);]+)(?=[\s'"`);]|$)/, why: 'a force push rewrites what is already on GitHub', self: true },
   { re: /\bgit\s+reset\s+--hard\b/, why: 'git reset --hard throws away uncommitted work' },
   { re: /\bgit\s+clean\s+-[a-zA-Z]*f/, why: 'git clean -f deletes untracked files for good' },
   { re: at('kill|pkill|killall'), why: 'stopping processes could stop your running servers', self: true },
@@ -259,6 +261,11 @@ export function splitCommand(command) {
 function readerPart(part) {
   const p = part.trim();
   if (/^sed\s+-n\s+'?\d+(,\d+)?p'?(\s|$)/.test(p) && !/\s-i\b/.test(p)) return true; // sed -n '24p' file
+  // A filter in a pipeline reads: sed without -i (-Ei, --in-place), jq, and awk unless its program
+  // could write a file (>), run a command (system, a | inside it) or edit in place (gawk -i inplace).
+  if (/^sed\b/.test(p) && !/\s-[A-Za-z]*i\b|--in-place/.test(p)) return true;
+  if (/^jq\b/.test(p)) return true;
+  if (/^g?awk\b/.test(p) && !/[>|]|system|\s-i\b|--in-?place/.test(p)) return true;
   if (!READERS.test(p)) return false;
   return !(/^find\b/.test(p) && /\s-(exec|execdir|ok|okdir|delete|fprint|fprintf|fls)\b/.test(p));
 }
@@ -308,8 +315,55 @@ export function testRunOf(command, { testCmd = null, check = null } = {}) {
 // self: the app works on itself (SELF): git push and stopping its own processes run (the sandbox
 // still refuses a signal to anything it did not start, sandbox.mjs).
 export function blockedReason(command, { self = false } = {}) {
-  for (const b of BLOCKED) if (!(self && b.self) && b.re.test(command)) return b.why;
+  const run = shellText(command);
+  for (const b of BLOCKED) if (!(self && b.self) && b.re.test(run)) return b.why;
   return null;
+}
+
+// What the shell runs, without the text that is only data: the quoted words of a program that
+// searches or prints (grep 'rm -rf' logs, echo "git push"), and the body of a script handed to
+// python, node and the like (python3 - <<'EOF' … EOF), but a body's line that calls the shell
+// (os.system, subprocess, execSync, `…`, $(…)) stays. On 8 Oct 2026 two Python scripts that only
+// edited text naming "rm -rf" and "git push" were blocked, and so was a grep of the logs for them.
+// Text that goes on to a shell (| sh, eval, xargs, source) is all kept, and so is "$(…)" in quotes.
+const TEXT_ONLY = /^(?:grep|egrep|fgrep|rg|ag|ack|echo|printf|jq)$/;
+const SCRIPT_RUNNER = /^(?:python[\d.]*|node|bun|deno|ruby|perl|php|cat|tee)$/;
+const CALLS_SHELL = /\b(?:system|subprocess|popen|exec\w*|spawn\w*|run)\s*\(|\bsubprocess\b/;
+// `…` and $(…) run a command when the shell expands the body (<<EOF, not <<'EOF'), and `…` in Ruby,
+// Perl and PHP; in a quoted Python or Node body they are text (Markdown's `code`, a template string).
+const EXPANDS = /[`]|\$\(/;
+const FEEDS_SHELL = /\|\s*(?:\S*\/)?(?:ba|z|da|k)?sh\b|\b(?:eval|xargs|source)\b|\b(?:ba|z)?sh\s+-c\b/;
+function shellText(command) {
+  const cmd = String(command ?? '');
+  if (FEEDS_SHELL.test(cmd)) return cmd;
+  const bodies = cmd.replace(/(^|[;&|(\n])([^;&|(\n]*?)<<-?[ \t]*(['"]?)([A-Za-z_][\w.-]*)\3([^\n]*\n)([\s\S]*?)(\n\t*\4(?=\n|$)|$)/g, (all, sep, head, q, end, rest, body, close) => {
+    const program = basename(head.trim().split(/\s+/)[0] ?? '');
+    if (!SCRIPT_RUNNER.test(program)) return all;
+    const expands = !q || /^(?:ruby|perl|php)$/.test(program);
+    const keep = (l) => CALLS_SHELL.test(l) || (expands && EXPANDS.test(l));
+    return `${sep}${head}<<${q}${end}${q}${rest}${body.split('\n').filter(keep).join('\n')}${close}`;
+  });
+  let out = '';
+  let first = null; // the first word of the command part we are in
+  let word = '';
+  for (let i = 0; i < bodies.length; i++) {
+    const c = bodies[i];
+    if (c === "'" || c === '"') {
+      const j = bodies.indexOf(c, i + 1);
+      const end = j < 0 ? bodies.length : j;
+      const inside = bodies.slice(i + 1, end);
+      const data = TEXT_ONLY.test(first ?? word) && !(c === '"' && /\$\(|`/.test(inside));
+      out += data ? `${c}${c}` : bodies.slice(i, end + 1);
+      word += 'x';
+      i = end;
+      continue;
+    }
+    out += c;
+    if (/[;&|(\n`]/.test(c)) { first = null; word = ''; continue; }
+    if (/\s/.test(c)) { if (word && first === null) first = basename(word); word = ''; continue; }
+    word += c;
+  }
+  return out;
 }
 
 // Self (the owner's pick, 8 Oct 2026): Bypass permissions with the Claude API as the model. The app
@@ -329,6 +383,11 @@ export const selfLockedBy = (rel) => protectedBy(rel, [], SELF_LOCKED);
 // too often is cheap, a commit made without asking is not.
 const GIT_COMMIT = new RegExp(`(?:${CMD}|["'])\\s*git(?:\\s+(?:-[cC]\\s+\\S+|--?[\\w-]+(?:=\\S+)?))*\\s+commit\\b`);
 export const runsGitCommit = (command) => GIT_COMMIT.test(String(command ?? ''));
+// A push asks every time too, in every mode and on every model (the owner's pick, 8 Oct 2026: changes
+// go to GitHub from here, but never unseen); Bypass on the Claude API lets it run (SELF). Text that
+// only names it (grep 'git push' log) does not ask: shellText drops it.
+const GIT_PUSH = new RegExp(`(?:${CMD}|["'])\\s*git(?:\\s+(?:-[cC]\\s+\\S+|--?[\\w-]+(?:=\\S+)?))*\\s+push\\b`);
+export const runsGitPush = (command) => GIT_PUSH.test(shellText(command));
 
 // ---- What you save with /permissions: commands that run without asking,
 // commands that never run, and files that always ask. Rules are plain words.
@@ -539,6 +598,7 @@ export function checkRule(kind, text, { protect = [] } = {}) {
   if (kind === 'allow') {
     if (why) return { error: `That is never allowed (${why}), so no rule can allow it.` };
     if (runsGitCommit(bare) || /^git\s+commit\b/.test(bare)) return { error: 'A commit always asks first, so no rule can allow it.' };
+    if (runsGitPush(bare) || /^git\s+push\b/.test(bare)) return { error: 'A push always asks first, so no rule can allow it.' };
     if (isReadOnly(bare)) return { error: `"${bare}" only reads, so it already runs without asking.` };
     const guard = namesProtected(bare, protect);
     if (guard) return { error: `That names a protected file (${guard}): a command that changes one always asks, so no rule can allow it.` };
@@ -672,6 +732,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     const mine = neverRule(command, rules?.never);
     if (mine) return { decision: 'deny', reason: `blocked by your rule "${mine}" (/permissions)` };
     if (mode === 'plan') return isReadOnly(command) ? { decision: 'allow', why: 'it only reads' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
+    if (bypass && !self && runsGitPush(command)) return { decision: 'ask', once: true, why: 'a push sends your code to GitHub, so it always asks (even in Bypass, unless the model is Claude)' };
     if (bypass) {
       const own = ownChanged(command);
       if (own && self) {
@@ -682,6 +743,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     }
     // once: no "don't ask again" for it.
     if (runsGitCommit(command)) return { decision: 'ask', once: true, why: 'a commit always asks' };
+    if (runsGitPush(command)) return { decision: 'ask', once: true, why: 'a push sends your code to GitHub, so it always asks' };
     if (isReadOnly(command)) return { decision: 'allow', why: 'it only reads' };
     const c = coverage(command, { saved: rules?.allow, session: allowedPrefixes, protect: rules?.protect });
     if (c.allowed) {
@@ -732,6 +794,7 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [], sel
     ['A command that only reads (ls, cat, git status, git diff…)', STEPS.readCmd[m]],
     ['Any other command', `${STEPS.cmd[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', unless a rule below allows it' : ''}`],
     ['git commit', STEPS.commit[m]],
+    ['git push (only when the user asks; a force push is refused)', m === 'plan' ? 'refused' : m === 'bypass' && self ? 'runs' : 'asks first, every time (it then reaches GitHub)'],
     ['WebSearch and WebFetch (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the site' : ''}`],
     ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', or a rule allows it' : ''}`],
     ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
