@@ -109,7 +109,7 @@ test.skipIf(!S.canHost())('through the keeper: /clear wipes the screen and shows
     ] });
     expect(r.snapshots.before).toContain('PINEAPPLE-42');
     expect(r.snapshots.cleared).not.toContain('PINEAPPLE-42');
-    expect(r.snapshots.cleared).toContain('Recent activity');
+    expect(r.snapshots.cleared).toContain('Pick up where you left off');
     expect(r.snapshots.cleared).toContain('? for shortcuts');
     expect(r.code).toBe(0);
     await ranInKeeper(home, seen);
@@ -136,7 +136,7 @@ test.skipIf(!S.canHost())('through the keeper: enter through where to start and 
     { wait: '? for shortcuts', ms: 30_000 }, { fn: () => { seen.record = records(appHome); } }, { sleep: 1000 },
     { type: 'hello there' }, { wait: '> hello there' }, { snapshot: 'typed' }, ...quitTyped,
   ] });
-  expect(r.snapshots.typed).toMatch(/where\s+~ · your home folder/);
+  expect(r.snapshots.typed).toContain('~ · your home folder');
   expect(seen.record).toHaveLength(1); // the app, its menus too, ran in a keeper (named after the folder)
   expect(r.code).toBe(0);
   expect(await until(() => records(appHome).length === 0)).toBe(true);

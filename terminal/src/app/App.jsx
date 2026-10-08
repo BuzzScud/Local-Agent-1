@@ -6,7 +6,7 @@ import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { join } from 'node:path';
 import { existsSync, statSync, writeSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { Screen, permissionOptions, primeRows, heldRows, MENU_ROWS, shortcutRows, footerParts } from './screen.jsx';
+import { Screen, permissionOptions, primeRows, heldRows, MENU_ROWS, menuHeight, shortcutRows, footerParts } from './screen.jsx';
 import { startTip, START_MIN, START_BIG } from './start.jsx';
 import { loadTimes, startLeft, typicalStart } from './start-times.mjs';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
@@ -246,10 +246,11 @@ export function App({ opts, win, onRestart }) {
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
   // The start page (start.jsx): the tip under the prompt box until your first message, the
   // conversations it lists, and whether it is still held live (until your first message, so it
-  // follows the model on this Mac: off, loading after /start, ready).
+  // follows the model: off, loading after /start, connecting to a remote, ready; and so its bot can
+  // walk, 7 Oct 2026, a start on a remote is held too). With --url it is printed at once.
   const [tip, setTip] = useState(() => startTip(opts.start));
   const recentRef = useRef(opts.start?.recent ?? []);
-  const holdRef = useRef(!opts.url && !remoteAtStart);
+  const holdRef = useRef(!opts.url);
   // The start page's room as it was last shown held ({ room, rows }), kept for its printed copy.
   const pageRoomRef = useRef(null);
   // Quitting or restarting: the terminal's cursor leaves the prompt box for the
@@ -668,6 +669,20 @@ export function App({ opts, win, onRestart }) {
   const weightsRef = useRef(null);
   useEffect(resumeAtStart, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // What a saved conversation shows again: not an earlier window's own lines (its resume line, the
+  // mode it started in, the remote it connected to: this window says its own), and a note only the
+  // first time (7 Oct 2026: a resumed conversation showed "resumed" twice and a note each turn).
+  function replayed(items) {
+    const seen = new Set();
+    return items.map(({ key, ...rest }) => rest).filter((x) => {
+      if (x.type === 'divider' && /^resumed: /.test(x.text ?? '')) return false;
+      if (x.type !== 'note') return true;
+      if (/^Started in .*, as the last window left it|^On the remote: /.test(x.text ?? '')) return false;
+      if (seen.has(x.text)) return false;
+      seen.add(x.text);
+      return true;
+    });
+  }
   function resumeSession(id) {
     try {
       const s = loadSession(cwd, id);
@@ -676,7 +691,7 @@ export function App({ opts, win, onRestart }) {
       sessionRef.current = { id: s.id, title: s.title, items: s.items ?? [] };
       rewindRef.current?.setSession(s.id);
       agent.startSession('resume').catch(() => {});
-      push({ type: 'divider', text: `resumed: ${s.title}` }, ...(s.items ?? []).map(({ key, ...rest }) => rest));
+      push({ type: 'divider', text: `resumed: ${s.title}` }, ...replayed(s.items ?? []));
       if (s.mode) setMode(s.mode);
     } catch (e) { push({ type: 'note', text: `Could not open that conversation: ${e.message}`, tone: 'error' }); }
   }
@@ -746,6 +761,16 @@ export function App({ opts, win, onRestart }) {
   const pageRef = useRef(null);
   const startShown = holdRef.current || (items[0]?.type === 'welcome' && !items.some((it) => it.type === 'user'));
   const startClicks = Boolean(startShown && recentRef.current?.length);
+  // The bot on the start page walks like Pac-Man (7 Oct 2026, the owner's ask) while the page is up
+  // and waiting: the model ready, nothing typed and nothing open. Four steps a second; it stops where
+  // it is the moment you type or open a menu. AGENTIC_BOT_WALK=off keeps it standing (the tests).
+  const [walkStep, setWalkStep] = useState(0);
+  const walking = holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff && !input.value && !menu && !picker && !popup && !perm && !btw && !leaving && !tooSmall;
+  useEffect(() => {
+    if (!walking) return undefined;
+    const id = setInterval(() => setWalkStep((n) => n + 1), 250);
+    return () => clearInterval(id);
+  }, [walking]);
   const mouseArmed = (mouse || startClicks) && !perm && !picker && !btwShown && !wheelPause && !leaving && !tooSmall;
   const mouseRef = useRef({ armed: false, asked: null, waiting: [], origin: null, down: false, last: null, wheel: null });
   const footerRef = useRef(null);
@@ -810,7 +835,7 @@ export function App({ opts, win, onRestart }) {
   // it, a line and a gap each: the mode the last window left, and on a remote where it runs, its
   // Big-model mode and its load. Once printed it keeps the room it was shown with, until the window
   // changes size.
-  const underRows = heldRows(items, measure.current) + (menu ? Math.min(menu.rows ?? MENU_ROWS, menu.items.length) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
+  const underRows = heldRows(items, measure.current) + (menu ? menuHeight({ ...menu, index: menuIdx }, width) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
   const heldRoom = (rows ?? 40) - 7 - underRows;
   if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRoom >= START_MIN)) holdRef.current = false;
   if (holdRef.current) pageRoomRef.current = { room: heldRoom, rows: rows ?? 40 };
@@ -879,7 +904,7 @@ export function App({ opts, win, onRestart }) {
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     loopsFrame, loopsLine: loopsShown ? null : loopsSegs,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
-    items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip: tipOnPage ? null : tip,
+    items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, walk: holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff ? walkStep : null, tip: tipOnPage ? null : tip,
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,

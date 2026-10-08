@@ -9,7 +9,7 @@ import { Box, Text, Static, renderToString, measureElement, useCursor } from 'in
 import { cursorCell, rowText, selection, promptTextWidth } from './edit-input.mjs';
 import { C, MARK, spinFrame, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { money } from '../agent/spend.mjs';
-import { wrap, Row, Result, ToolHead, Diff, Todos, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
+import { wrap, Row, Result, ToolHead, Diff, diffParts, Todos, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { AgentsView, AgentsLine } from './agents-view.jsx';
@@ -281,7 +281,7 @@ export function Item({ it, width, model, cwd, loaded, start }) {
     // The line a finished turn leaves behind: "⠿ Worked for 41s · done 12:58 PM".
     case 'done': return it.rail ? <EndLine it={it} counts={doneCounts(it)} /> : <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}{it.usd > 0 ? ` · ${money(it.usd)} for this request` : ''}</Text></Text>;
     case 'text': return it.rail ? <ReplyNode text={it.text} /> : <Row><Markdown text={it.text} /></Row>;
-    case 'tool': return it.rail ? <ToolNode it={it} /> : <ToolView it={it} width={width} />;
+    case 'tool': return it.rail ? <ToolNode it={it} cwd={cwd} /> : <ToolView it={it} width={width} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
     case 'made': return <MadeNode files={it.files} />;
     case 'note': {
@@ -606,10 +606,13 @@ function PermissionPrompt({ app }) {
   // Two lines more slack than the sum suggests: at 22 of 24 rows Ink still cleared the whole screen.
   const perFile = Math.max(1, Math.floor((room - 3 - 3 * nFiles) / nFiles));
   const cmdLines = String(req.args?.command ?? '').split('\n');
-  return (
-    <Box borderStyle="round" borderColor={C.ask} flexDirection="column" paddingX={1} width={width}>
-      <Text bold color={C.ask}>{title}{req.helper ? <Text color={C.dim}>  · asked by the {req.helper} helper</Text> : null}{req.kind === 'mcp' ? <Text color={C.dim}>  · while {req.tool} runs · your answer goes to that server</Text> : null}</Text>
-      {req.name === 'Mcp' ? (
+  // A change's lines, as many as fit the room (a long line takes a row per wrap).
+  const fit = (lines, w, n) => { let used = 0, i = 0; for (; i < lines.length; i++) { used += diffParts(lines[i].text, w).length; if (used > n) break; } return lines.slice(0, Math.max(1, i)); };
+  const side = width >= 120 && Boolean(req.prepared?.hunk) && !['Mcp', 'Rename', 'Ask'].includes(req.name);
+  const leftW = Math.floor((width - 4) * 0.62);
+  const shownHunk = fit(hunk, side ? leftW - 4 : diffW(width) - 4, cap);
+  const what = (
+      req.name === 'Mcp' ? (
         <Box flexDirection="column" paddingX={2} marginY={1}>
           <Text bold wrap="truncate-end">{req.mcp.tool}</Text>
           {argLines.slice(0, Math.max(1, room - 6)).map((l, i) => <Text key={i} wrap="truncate-end">{l}</Text>)}
@@ -669,14 +672,24 @@ function PermissionPrompt({ app }) {
       ) : (
         <Box borderStyle="round" borderColor={C.faint} flexDirection="column" paddingX={1}>
           <Text bold>{req.prepared.rel}</Text>
-          <Diff hunk={hunk.slice(0, cap)} width={diffW(width) - 4} />
-          {hunk.length > cap ? <Text color={C.dim}>… +{hunk.length - cap} more lines</Text> : null}
+          <Diff hunk={shownHunk} width={side ? leftW - 4 : diffW(width) - 4} />
+          {hunk.length > shownHunk.length ? <Text color={C.dim}>… +{hunk.length - shownHunk.length} more lines</Text> : null}
         </Box>
-      )}
+      )
+  );
+  const choices = req.name === 'Ask' ? <AskChoices perm={perm} width={width} /> : perm.options.map((o, i) => (
+    <Text key={i} color={i === perm.selected ? C.ask : undefined}>{i === perm.selected ? '❯' : ' '} {i + 1}. {o.label ?? o}</Text>
+  ));
+  const notes = (
+    <>
       {req.protectedBy ? <Text color={C.warn}>Protected: {req.protectedBy} always asks before a change, even in Accept edits and Auto.</Text> : null}
       {req.autoReason ? <Text color={C.auto} wrap="truncate-end">Auto asks you: {req.autoReason}</Text> : null}
       {req.mcp?.changed ? <Text color={C.warn} wrap="truncate-end">This tool changed since you allowed it: its description or its arguments are not what they were.</Text> : null}
       {req.mcp?.note ? <Text color={C.warn} wrap="truncate-end">{req.mcp.note}</Text> : null}
+    </>
+  );
+  const ask = (
+    <>
       {req.name === 'Ask' ? null
         : req.name === 'Bash' ? <Text>Do you want to proceed?</Text>
         : req.name === 'WebSearch' ? <Text>Search the web for this?</Text>
@@ -688,9 +701,19 @@ function PermissionPrompt({ app }) {
         : req.name === 'Rename' ? <Text>Rename <Text bold>{req.args.from}</Text> to <Text bold>{req.args.to}</Text>: {req.prepared.total} use{req.prepared.total === 1 ? '' : 's'} in {req.prepared.files.length} file{req.prepared.files.length === 1 ? '' : 's'}?</Text>
         : req.name === 'Test' ? <Text>Use this test to decide when the change is done? <Text color={C.dim}>(it fails today, as it should)</Text></Text>
         : <Text>Do you want to {req.name === 'Write' && req.prepared.created ? 'create' : 'make this edit to'} <Text bold>{req.prepared.rel}</Text>?</Text>}
-      {req.name === 'Ask' ? <AskChoices perm={perm} width={width} /> : perm.options.map((o, i) => (
-        <Text key={i} color={i === perm.selected ? C.ask : undefined}>{i === perm.selected ? '❯' : ' '} {i + 1}. {o.label ?? o}</Text>
-      ))}
+    </>
+  );
+  return (
+    <Box borderStyle="round" borderColor={C.ask} flexDirection="column" paddingX={1} width={width}>
+      <Text bold color={C.ask}>{title}{req.helper ? <Text color={C.dim}>  · asked by the {req.helper} helper</Text> : null}{req.kind === 'mcp' ? <Text color={C.dim}>  · while {req.tool} runs · your answer goes to that server</Text> : null}</Text>
+      {side ? (
+        // a wide window (7 Oct 2026, "3 · Launcher"): the change on the left, the question beside it
+        <Box>
+          <Box width={leftW} flexShrink={0} flexDirection="column">{what}</Box>
+          <Box flexDirection="column" paddingLeft={2} marginTop={1} flexGrow={1}>{ask}<Text> </Text>{choices}</Box>
+        </Box>
+      ) : null}
+      {side ? notes : <>{what}{notes}{ask}{choices}</>}
     </Box>
   );
 }
@@ -723,9 +746,51 @@ function AskChoices({ perm, width }) {
   );
 }
 
+// A thin rule with a name in it: ── Commands · 22 · type to filter ──────
+const NamedRule = ({ name, more = '', width }) => <Text color={C.faint} wrap="truncate-end">── <Text color={C.dim}>{name}</Text>{more ? <Text color={C.faint}> · {more}</Text> : null} {'─'.repeat(Math.max(2, width - 5 - name.length - (more ? more.length + 3 : 0)))}</Text>;
+// The / menu as a list and a card (7 Oct 2026, the owner's pick "3 · Launcher"): the names on the
+// left, the command you are on in full on the right, with what enter does.
+// The card of the command you are on: its name, what it does, what enter does.
+function menuCard(menu, width) {
+  const on = menu.items[menu.index] ?? menu.items[0];
+  const leftW = Math.max(16, (menu.pad ?? 14) + 3);
+  const rightW = Math.max(20, width - 4 - leftW);
+  const how = on?.picker ? 'enter opens its menu' : on?.takesArg ? 'enter, then type what it needs' : 'enter runs it';
+  return { on, leftW, rightW, lines: [['label', on?.label], ['gap'], ...wrap(on?.desc ?? '', rightW - 3).map((l) => ['desc', l]), ['gap'], ['how', `${how} · tab fills it in`]] };
+}
+// Its rows (App counts them for the page above it): the list or the card, whichever is taller,
+// within the rows the menu has.
+export function menuHeight(menu, width) {
+  const most = menu.rows ?? MENU_ROWS;
+  if (menu.kind !== 'slash') return Math.min(most, menu.items.length);
+  return Math.min(most, Math.max(menu.items.length, menuCard(menu, width).lines.length));
+}
+function MenuSplit({ app }) {
+  const { menu, width } = app;
+  const tall = menuHeight(menu, width);
+  const start = Math.max(0, Math.min(menu.index - 5, menu.items.length - tall));
+  const shown = menu.items.slice(start, start + tall);
+  const { on, leftW, rightW, lines } = menuCard(menu, width);
+  // short of rows, the card keeps the name and the description; the gaps and "enter …" go first
+  const fit = lines.length <= tall ? lines : lines.filter(([k]) => k === 'label' || k === 'desc').slice(0, tall);
+  const card = fit.map(([k, t]) => (k === 'label' ? <Text bold color={C.accent}>{t}</Text> : k === 'how' ? <Text color={C.dim}>{t}</Text> : <Text>{t ?? ' '}</Text>));
+  return (
+    <Box flexDirection="column" paddingX={2}>
+      <Box>
+        <Box flexDirection="column" width={leftW} flexShrink={0}>
+          {shown.map((m, i) => { const sel = start + i === menu.index; return <Text key={m.label} color={sel ? C.accent : undefined} bold={sel} wrap="truncate-end">{sel ? '❯ ' : '  '}{m.label}</Text>; })}
+        </Box>
+        <Box flexDirection="column" borderStyle="single" borderTop={false} borderRight={false} borderBottom={false} borderColor={C.faint} paddingLeft={2} width={rightW} height={tall}>
+          {card.map((el, i) => React.cloneElement(el, { key: i, wrap: 'truncate-end' }))}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
 function Menu({ app }) {
   const { menu } = app;
   if (!menu || !menu.items.length) return null;
+  if (menu.kind === 'slash') return <MenuSplit app={app} />;
   const SHOW = menu.rows ?? MENU_ROWS; // a taller window holds more (App.jsx)
   const start = Math.max(0, Math.min(menu.index - 5, menu.items.length - SHOW));
   const shown = menu.items.slice(start, start + SHOW);
@@ -1129,47 +1194,43 @@ function RewindPicker({ app }) {
 // with what it holds now. ↑↓ to choose, enter opens it, esc goes back.
 function SettingsPicker({ app }) {
   const pk = app.picker;
-  const lw = Math.max(...pk.rows.map((r) => r.label.length)) + 2;
-  const vw = Math.max(...pk.rows.map((r) => r.value.length)) + 3;
-  // 29 lines with the gaps; a short window (24 rows at the least) drops them,
-  // and the line under the title too, then the title's own line (it joins the first group's:
-  // "Settings · Setup"), and then the key hint, when the status bar or the memory note takes
-  // a line under the menu: the whole menu always shows, top edge to last row.
-  const tight = app.rows < 30;
+  const all = pk.groups.flatMap((g) => g.rows);
+  const on = all[pk.index];
+  const lw = Math.max(...all.map((r) => r.label.length)) + 2;
+  const vw = Math.min(26, Math.max(...all.map((r) => r.value.length)) + 2);
+  const leftW = 2 + lw + vw;
+  const rightW = Math.max(20, app.width - 4 - leftW);
+  // 22 rows: the rule, then each group's heading and rows; a short window (24 rows, with the status
+  // bar or the memory note under it) drops the last group's heading (its rows follow the ones above)
   const under = app.meters || memoryWarning(app.stats.ctxUsed ?? 0, app.ctx, app.stats.replyRoom ?? 0) ? 1 : 0;
-  const need = (lines) => tight && pk.rows.length + pk.groups.length + lines + under + 1 > app.rows;
-  const noBlurb = need(5);
-  const noTitle = need(4);
-  // Still one line short (18 rows at 24): the key hint at the bottom goes too; and with the
-  // status bar as well, the last group's heading ("Tools": its rows follow the ones above).
-  const noFoot = need(3);
-  const noLastHead = need(2);
-  let at = 0;
+  const noLastHead = all.length + pk.groups.length + 1 + under + 1 > app.rows;
+  const blurb = all.length + pk.groups.length + 2 + under + 1 <= app.rows;
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      {noTitle ? null : <Text bold>{pk.title ?? 'Settings'}</Text>}
-      {noBlurb ? null : <Text color={C.dim}>{pk.blurb ?? 'Everything not in the / menu. Each still works typed in full, like /doctor.'}</Text>}
-      {pk.groups.map((g, gi) => (
-        <Box key={g.group} flexDirection="column" marginTop={tight ? 0 : 1}>
-          {noLastHead && gi === pk.groups.length - 1 ? null : <Text bold>{noTitle && gi === 0 ? `${pk.title ?? 'Settings'} · ${g.group}` : g.group}</Text>}
-          {g.rows.map((r) => {
-            const on = at++ === pk.index;
-            return (
-              <Text key={r.name} wrap="truncate-end">
-                <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {r.label.padEnd(lw)}</Text>
-                <Text color={on ? C.accent : undefined}>{r.value.padEnd(vw)}</Text>
-                <Text color={C.dim}>{r.note}</Text>
-              </Text>
-            );
-          })}
+    <Box flexDirection="column" paddingX={2}>
+      <NamedRule name={pk.title ?? 'Settings'} more="↑↓ choose · enter open · esc back" width={app.width - 4} />
+      {blurb ? <Text color={C.dim} wrap="truncate-end">{pk.blurb ?? 'Everything not in the / menu. Each still works typed in full, like /doctor.'}</Text> : null}
+      <Box>
+        <Box flexDirection="column" width={leftW} flexShrink={0}>
+          {pk.groups.flatMap((g, gi) => [
+            ...(noLastHead && gi === pk.groups.length - 1 ? [] : [<Text key={g.group} bold color={C.dim}>{g.group.split(' · ')[0]}</Text>]),
+            ...g.rows.map((r) => {
+              const sel = r === on;
+              return <Text key={r.name} wrap="truncate-end"><Text color={sel ? C.accent : undefined} bold={sel}>{sel ? '❯ ' : '  '}{r.label.padEnd(lw)}</Text><Text color={sel ? C.accent : C.dim}>{r.value.length > vw - 1 ? `${r.value.slice(0, vw - 2)}…` : r.value}</Text></Text>;
+            }),
+          ])}
         </Box>
-      ))}
-      {tight ? null : <Text> </Text>}
-      {noFoot ? null : <Text color={C.dim}>↑↓ to choose · enter to open · esc to go back</Text>}
+        <Box flexDirection="column" borderStyle="single" borderTop={false} borderRight={false} borderBottom={false} borderColor={C.faint} paddingLeft={2} width={rightW}>
+          <Text bold color={C.accent}>{on?.label}</Text>
+          <Text color="ansi256(255)">{on?.value}</Text>
+          <Text> </Text>
+          {wrap(on?.note ?? '', rightW - 3).map((l, i) => <Text key={i}>{l}</Text>)}
+          <Text> </Text>
+          <Text color={C.dim}>enter opens it</Text>
+        </Box>
+      </Box>
     </Box>
   );
 }
-
 // /effort, one panel: the Effort row, then the search's rows (Embedder,
 // Retriever, Reranker) and every limit that can move, each under its heading,
 // each value between ◀ ▶ with what it costs. ↻ marks the two that restart
@@ -2100,7 +2161,7 @@ export function Screen({ app }) {
       <Box flexDirection="column" flexShrink={0}>
       {app.hold ? (
         <Box flexDirection="column">
-          <Box ref={app.pageRef} marginBottom={1}><StartPage start={app.start} width={width} loading={app.starting || app.battle || app.waiting ? { phase: app.battle || app.waiting ? 'waiting' : app.startPhase, secs: Math.max(0, (app.now - app.startedAt) / 1000), left: app.startLeft } : null} typing={app.input?.value && !app.menu ? (4 + (app.input.cursor % promptTextWidth(width))) / width : null} /></Box>
+          <Box ref={app.pageRef} marginBottom={1}><StartPage start={app.start} width={width} loading={app.starting || app.battle || app.waiting ? { phase: app.battle || app.waiting ? 'waiting' : app.startPhase, secs: Math.max(0, (app.now - app.startedAt) / 1000), left: app.startLeft } : null} typing={app.input?.value && !app.menu ? (4 + (app.input.cursor % promptTextWidth(width))) / width : null} walk={app.walk} /></Box>
           {items.slice(1).map((it) => <ItemFrame key={it.key} it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} start={app.start} />)}
           {app.battle ? <Box marginBottom={1}><Text color={C.warn}>⏸ Waiting for {/^a test/.test(app.battle) ? 'a test run' : 'a battle'}: {app.battle}. Only one model fits, so {modelName} loads by itself when it is over; a message you send now waits for it.</Text></Box> : null}
           {app.waiting ? <Box marginBottom={1}><Text color={C.warn}>{app.waiting} has {modelName} loaded, and two copies do not fit. It starts by itself when that is done · <Text bold>esc</Text> starts anyway</Text></Box> : null}

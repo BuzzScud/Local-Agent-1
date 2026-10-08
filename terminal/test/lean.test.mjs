@@ -134,6 +134,23 @@ test('a change in a project whose tests fail: on lean the answer stands and the 
   } finally { await fake.close(); }
 });
 
+test('the lean note is said once a session, not every turn; again only after it was off (7 Oct 2026)', async () => {
+  const fake = await startFakeServer([{ text: 'one' }, { text: 'two' }, { text: 'three' }, { text: 'four' }]);
+  try {
+    const a = agentOn(fake.url, { lean: true });
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    await a.send('first');
+    await a.send('second');
+    expect(notes.filter((t) => t === LEAN_NOTE)).toHaveLength(1);
+    a.lean = false;
+    await a.send('third');
+    a.lean = true;
+    await a.send('fourth');
+    expect(notes.filter((t) => t === LEAN_NOTE)).toHaveLength(2); // off and on again: said again
+  } finally { await fake.close(); }
+});
+
 test('coding -p and the benches: lean runs say so', async () => {
   const fake = await startFakeServer([{ text: 'Hello.' }, { text: 'Hello.' }]);
   try {

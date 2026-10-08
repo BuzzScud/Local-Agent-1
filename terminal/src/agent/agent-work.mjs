@@ -248,7 +248,8 @@ export class WorkPart {
     }
     const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
     let lookBacks = 0;
-    if (this.lean && !this.isHelper && !follow) this.emit('note', { text: LEAN_NOTE, tone: 'dim', fold: true });
+    // said once a session, and again only after it was off (7 Oct 2026: it was printed every turn)
+    if (!this.isHelper && !follow) { if (this.lean && !this.leanSaid) this.emit('note', { text: LEAN_NOTE, tone: 'dim', fold: true }); this.leanSaid = this.lean; }
     if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.look = { request, notes: folder?.kind === 'data' ? LOOK_NOTE_DATA : LOOK_NOTE };
       this.emit('note', { text: `Looking first: at least ${lookFloor} s of searching and reading before it answers (/effort Look first).`, tone: 'dim', fold: true });

@@ -139,7 +139,8 @@ test('Level 1 in the window: sign in to a server (s), attach a resource (@shop:)
   expect(asked).toContain('<resource server=\\"shop\\" uri=\\"shop://notes/release\\">');
   expect(asked).toContain('Release 4.2: the magic number is 8812.');
   // /shop: listed its prompt; typed in full, it went as the message.
-  expect(flat(r.snapshots.prompts)).toMatch(/\/shop:review-pr\s+Review a pull request · number/);
+  expect(flat(r.snapshots.prompts)).toMatch(/❯ \/shop:review-pr\s+│\s+\/shop:review-pr/); // the server's prompt in the list, its card beside it
+  expect(flat(r.snapshots.prompts)).toContain('Review a pull request · number');
   expect(flat(r.snapshots.reviewed)).toContain('shop\'s prompt “review-pr” with number 57 · sent as your message');
   expect(JSON.stringify(fake.requests.filter((q) => q.stream).at(-1).messages)).toContain('Review pull request 57 of the shop, briefly.');
 }, T * 2);

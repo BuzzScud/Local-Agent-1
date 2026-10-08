@@ -193,27 +193,30 @@ test('"/" menu like Claude Code: the 18 commands of a window on this Mac (no /bt
     ...quitTyped,
   ] });
   await fake.close();
-  const rows = (s) => s.split('\n').filter((l) => /^\s{2}\/[a-z]+\s{2,}\S/.test(l));
-  expect(rows(small.snapshots.all)).toHaveLength(18);
-  expect(small.snapshots.all).toMatch(/\/exit\s+Quit Agentic Coder/);
-  expect(small.snapshots.all).toMatch(/^\s{2}\/jumptomac\s+Jump this window to your other/m);
-  expect(small.snapshots.all).not.toMatch(/^\s{2}\/btw\s/m); // a side question is for a remote: not listed here
-  expect(small.snapshots.all).not.toMatch(/^\s{2}\/loops?\s/m); // no room for them at 80 × 24: typed, they are found
-  expect(rows(small.snapshots.j)).toHaveLength(2); // /jumptomac, then /jobs (3 Oct 2026)
-  expect(small.snapshots.j).toMatch(/\/jumptomac\s+Jump this window to your other/);
-  expect(rows(r.snapshots.all)).toHaveLength(22); // with /loop, /loops, /mcp and /jobs where they fit
-  expect(r.snapshots.all).toMatch(/\/remote\s+[^\n]*\n\s{2}\/jumptomac\s+Jump this window to your other Mac/);
-  expect(r.snapshots.all).toMatch(/\/jumptomac\s+[^\n]*\n\s{2}\/loop\s+Send a message again by itself[^\n]*\n\s{2}\/loops\s+Open the loop board/);
-  expect(r.snapshots.all).toMatch(/^\s{2}\/mcp\s+Your MCP servers: tools from programs on this Mac/m);
-  expect(small.snapshots.all).not.toMatch(/^\s{2}\/mcp\s/m); // 80 × 24 has no row for it: typed in full it opens
-  expect(r.snapshots.all).toMatch(/^\s{2}\/jobs\s+The commands the model runs in the background/m); // /jobs (3 Oct 2026) where it fits
-  expect(small.snapshots.j).toMatch(/^\s{2}\/jobs\s+The commands the model runs/m); // and found by its first letter at 80 × 24
-  expect(r.snapshots.all).not.toMatch(/^\s{2}\/btw\s/m);
-  expect(r.snapshots.all).toMatch(/\/settings\s+Everything else in one menu/);
-  expect(r.snapshots.all).toMatch(/\/exit\s+Quit Agentic Coder/); // the last one shows too: nothing scrolls
-  expect(r.snapshots.all).not.toMatch(/^\s{2}\/(doctor|weights|meters)\s/m); // those live in /settings
+  // the list holds the names (7 Oct 2026, "3 · Launcher"); the card beside it says the one you are on in full
+  const names = (t) => t.split('\n').map((l) => /^\s{2}(?:❯ | {2})(\/[a-z]+)\s/.exec(l)?.[1]).filter(Boolean);
+  const all = names(small.snapshots.all);
+  expect(all).toHaveLength(18);
+  expect(all.at(-1)).toBe('/exit'); // the last one shows too: nothing scrolls
+  expect(all).toContain('/jumptomac');
+  expect(all).not.toContain('/btw'); // a side question is for a remote: not listed here
+  expect(all.filter((n) => /^\/loops?$/.test(n))).toEqual([]); // no room for them at 80 × 24: typed, they are found
+  expect(all).not.toContain('/mcp'); // 80 × 24 has no row for it: typed in full it opens
+  expect(small.snapshots.all).toMatch(/❯ \/help\s+│\s+\/help/); // the first one is on, its card beside it
+  expect(small.snapshots.all).toContain('Open the Help page in the browser');
+  expect(names(small.snapshots.j)).toEqual(['/jumptomac', '/jobs']); // /jumptomac, then /jobs (3 Oct 2026), found by their first letter
+  expect(small.snapshots.j).toContain('Jump this window to your other');
+  const wide = names(r.snapshots.all);
+  expect(wide).toHaveLength(22); // with /loop, /loops, /mcp and /jobs where they fit
+  expect(wide.slice(wide.indexOf('/remote'), wide.indexOf('/remote') + 4)).toEqual(['/remote', '/jumptomac', '/loop', '/loops']);
+  for (const n of ['/mcp', '/jobs', '/settings']) expect(wide).toContain(n);
+  expect(wide).not.toContain('/btw');
+  expect(wide.at(-1)).toBe('/exit');
+  for (const n of ['/doctor', '/weights', '/meters']) expect(wide).not.toContain(n); // those live in /settings
   expect(r.snapshots.all).not.toContain('? for shortcuts');
-  expect(rows(r.snapshots.mo)[0]).toMatch(/\/model\s+Pick the model and its effort/);
+  expect(names(r.snapshots.mo)[0]).toBe('/model');
+  expect(r.snapshots.mo).toMatch(/❯ \/model\s+│\s+\/model/);
+  expect(r.snapshots.mo).toContain('Pick the model and its effort');
   expect(r.snapshots.tab).toMatch(/> \/model/);
 }, T);
 
@@ -245,7 +248,7 @@ test('/meters shows the status bar; off by default, like Claude Code', async () 
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Recent activity' }, { sleep: 300 }, { snapshot: 'off' },
+    { wait: 'Pick up where you left off' }, { sleep: 300 }, { snapshot: 'off' },
     { type: '/meters on' }, { key: 'enter' }, { wait: 'Status bar on' }, { sleep: 300 }, { snapshot: 'on' },
     { type: '/meters off' }, { key: 'enter' }, { wait: 'Status bar off' }, { sleep: 300 }, { snapshot: 'offAgain' },
     { type: 'exit' }, { key: 'enter' }, { sleep: 300 },

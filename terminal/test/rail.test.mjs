@@ -4,7 +4,9 @@
 import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
-import { machineWords, writingWhat, doingWords, EndLine, CheckNode, ToolNode, UserStrip, WritingNode, ThinkingLive, ThoughtNode, gist, writtenSoFar } from '../src/app/rail.jsx';
+import { machineWords, writingWhat, doingWords, EndLine, CheckNode, ToolNode, UserStrip, WritingNode, ThinkingLive, ThoughtNode, gist, writtenSoFar, shortPath, shortCommand } from '../src/app/rail.jsx';
+import { Markdown } from '../src/app/markdown.jsx';
+import { homedir } from 'node:os';
 import { ItemFrame, gapUnder } from '../src/app/screen.jsx';
 import { runInPty } from './pty.mjs';
 import { setup, quit } from './app-setup.mjs';
@@ -39,6 +41,42 @@ test('the end line closes the turn: its time and counts, the layout problems lef
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'interrupted', text: 'Interrupted · What should Agentic Coder do instead?', at } }))).toBe('  ╰─ ■ Interrupted · What should Agentic Coder do instead?');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'stuck', text: 'Stopped: it was stuck', secs: 61, at } }))).toBe('  ╰─ Stopped: it was stuck · 1m 01s · 10:30 PM');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Worked', secs: 0.4, at } }))).toBe('  ╰─ ⠿ done 10:30 PM');
+});
+
+test('a long end line wraps under itself, not back at the window\'s edge (7 Oct 2026)', () => {
+  const at = new Date('2026-09-29T22:30:18').getTime();
+  const it = { type: 'done', reason: 'done', past: 'Whittled', secs: 10, at, left: 0, usd: 0.1 };
+  const lines = renderToString(h(EndLine, { it, counts: ' · 1 step · ~99 thinking tokens · ↓ 525 tokens this session' }), { columns: 60 }).split('\n').map((l) => l.replace(/\x1b\[[0-9;]*m/g, ''));
+  expect(lines.length).toBeGreaterThan(1);
+  expect(lines[0]).toMatch(/^  ╰─ ⠿ Whittled for 10s/);
+  for (const l of lines.slice(1)) expect(l).toMatch(/^ {5}\S/); // every word of it, in its own column
+  expect(lines.map((l) => l.trim()).join(' ')).toContain('$0.10 for this request');
+});
+
+test('paths and commands as short as they read the same: from the project inside it, from ~ elsewhere; a cd into the project left off', () => {
+  const home = homedir(), proj = `${home}/Desktop/agentic-coder`;
+  expect(shortPath(`${proj}/docs/map/MAP.md`, proj)).toBe('docs/map/MAP.md');
+  expect(shortPath(`${proj}/docs/map/MAP.md`, home)).toBe('~/Desktop/agentic-coder/docs/map/MAP.md'); // working in the home folder: from ~
+  expect(shortPath('/etc/hosts', proj)).toBe('/etc/hosts');
+  expect(shortPath('export.mjs', proj)).toBe('export.mjs');
+  expect(shortCommand(`cd ${proj} && git log -3`, proj)).toBe('git log -3');
+  expect(shortCommand(`cd ${proj} && git log -3`, home)).toBe('cd ~/Desktop/agentic-coder && git log -3'); // elsewhere the cd says where, shorter
+  expect(shortCommand(`ls -d ${home}/Desktop/x ${home}/.local/bin`, '/tmp')).toBe('ls -d ~/Desktop/x ~/.local/bin');
+  const read = renderToString(h(ToolNode, { it: { type: 'tool', rail: true, label: 'Read', arg: `${proj}/docs/map/MAP.md`, view: { kind: 'read', lines: 8, total: 8 } }, cwd: proj }), { columns: 100 });
+  expect(read).toContain('docs/map/MAP.md');
+  expect(read).not.toContain(home);
+  const ran = renderToString(h(ToolNode, { it: { type: 'tool', rail: true, label: 'Bash', arg: `cd ${proj} && bun test`, view: { kind: 'bash', lines: [], exit: 0 } }, cwd: proj }), { columns: 100 });
+  expect(ran).toContain('bun test');
+  expect(ran).not.toContain('cd ');
+});
+
+test('code in a reply keeps its indent when a long line wraps (7 Oct 2026)', () => {
+  const md = 'Look:\n\n```js\nexport function toCsv(rows) {\n  return [HEADER, ...rows.map((r) => [r.symbol, r.side, r.qty, r.price].join(\',\'))].join(\'\\n\');\n}\n```';
+  const lines = renderToString(h(Markdown, { text: md }), { columns: 50 }).split('\n').map((l) => l.replace(/\x1b\[[0-9;]*m/g, ''));
+  const code = lines.slice(lines.findIndex((l) => l.includes('export function')));
+  expect(code.length).toBeGreaterThan(3); // the long line took more than one row
+  for (const l of code.filter((x) => x.trim())) expect(l).toMatch(/^ {2}\S|^ {4}\S/); // none back at the edge
+  expect(code.find((l) => l.includes('return'))).toMatch(/^ {4}return/); // its own indent kept
 });
 
 test('the layout check is a step that names each problem; after the fix it says what is left, or that nothing broke', () => {

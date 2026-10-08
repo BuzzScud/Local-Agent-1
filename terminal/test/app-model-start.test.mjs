@@ -167,11 +167,11 @@ test('the start page stays live until your first message: /start wakes the bot i
   expect(r.snapshots.ready).toMatch(new RegExp(`${name}[\\s│]+● ready · effort `));
   expect(r.snapshots.ready).not.toContain('○ off ·');
   expect(r.snapshots.ready).not.toContain('Starting');
-  expect(r.snapshots.ready.match(/This folder/g)).toHaveLength(1);
+  expect(r.snapshots.ready.match(/Or start something new/g)).toHaveLength(1);
   // the first message printed it once, above the message
   const all = r.text;
-  expect(all.match(/This folder/g)).toHaveLength(1);
-  expect(all.indexOf('This folder')).toBeLessThan(all.indexOf('Hello from the stand-in model.'));
+  expect(all.match(/Or start something new/g)).toHaveLength(1);
+  expect(all.indexOf('Or start something new')).toBeLessThan(all.indexOf('Hello from the stand-in model.'));
 }, 100_000);
 
 test('each start is timed: the page says how long it took, and the next window how long /start takes', async () => {
@@ -194,7 +194,7 @@ test('each start is timed: the page says how long it took, and the next window h
 
 test('the / menu under the live start page: the 18 of this Mac (with /jumptomac, without /btw) fit under it, so the page stays live and /start still changes it in place', async () => {
   const { cwd, env } = withStandInModel();
-  const rowsOf = (t) => t.split('\n').filter((l) => /^\s{2}\/[a-z]+\s{2,}\S/.test(l));
+  const rowsOf = (t) => t.split('\n').map((l) => /^\s{2}(?:❯ | {2})(\/[a-z]+)\s/.exec(l)?.[1]).filter(Boolean); // the names in the list (7 Oct 2026)
   for (const [cols, rows] of [[155, 43], [173, 55]]) {
     const r = await runInPty({ cwd, env, cols, rows, args: ['--no-flows'], timeoutMs: 90_000, steps: [
       { wait: '? for shortcuts' }, { sleep: 800 }, { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 300 }, { snapshot: 'menu' },
@@ -204,10 +204,11 @@ test('the / menu under the live start page: the 18 of this Mac (with /jumptomac,
     // 18 at 155 × 43: no more fit under the page. At 173 × 55 four more do, so /loop, /loops,
     // /mcp and /jobs (3 Oct 2026) are listed there too; either way the page stays live.
     expect(rowsOf(r.snapshots.menu)).toHaveLength(rows === 43 ? 18 : 22);
-    expect(r.snapshots.menu).toMatch(/\/remote\s+[^\n]*\n\s{2}\/jumptomac\s+Jump this window to your other Mac/);
-    if (rows === 43) expect(r.snapshots.menu).not.toMatch(/^\s{2}\/(loops?|mcp)\s/m);
-    else expect(r.snapshots.menu).toMatch(/\/jumptomac\s+[^\n]*\n\s{2}\/loop\s+[^\n]*\n\s{2}\/loops\s+Open the loop board[^\n]*\n\s{2}\/mcp\s+Your MCP servers/);
-    expect(r.snapshots.menu).not.toMatch(/^\s{2}\/btw\s/m);
-    expect(r.snapshots.ready.match(/This folder/g)).toHaveLength(1); // changed in place, not printed again
+    const names = rowsOf(r.snapshots.menu);
+    expect(names[names.indexOf('/remote') + 1]).toBe('/jumptomac');
+    if (rows === 43) expect(names.filter((n) => /^\/(loops?|mcp)$/.test(n))).toEqual([]);
+    else expect(names.slice(names.indexOf('/jumptomac'), names.indexOf('/jumptomac') + 4)).toEqual(['/jumptomac', '/loop', '/loops', '/mcp']);
+    expect(names).not.toContain('/btw');
+    expect(r.snapshots.ready.match(/Or start something new/g)).toHaveLength(1); // changed in place, not printed again
   }
 }, 200_000);

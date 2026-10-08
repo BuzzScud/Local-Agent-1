@@ -47,7 +47,8 @@ test('/test opens the Arena with this model as who runs it; a name or a task num
   ] });
   await fake.close();
   const text = r.text.replace(/\s+/g, ' ');
-  expect(r.snapshots.menu).toMatch(/\/test\s+Pick a test in the Arena for this model/);
+  expect(r.snapshots.menu).toMatch(/❯ \/test\s+│\s+\/test/); // the one typed is on, and its card beside it says it in full
+  expect(r.snapshots.menu).toContain('Pick a test in the Arena for this model');
   expect(text).toMatch(new RegExp(`\\?tab=arena&run=1&model=${D.id} · pick a test on ${DN}, then press Run · while it runs, ${DN} here is unloaded`));
   expect(text).toMatch(new RegExp(`&model=${D.id}&test=practice28 · Practice 28 is picked on ${DN}`));
   expect(text).toMatch(new RegExp(`&model=${D.id}&test=task&n=12 · One practice task 12 is picked on ${DN}`));

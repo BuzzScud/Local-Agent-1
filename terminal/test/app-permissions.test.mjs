@@ -89,7 +89,8 @@ test('/permissions: six rows with what they hold, enter opens a list, test says 
   expect(p).toMatch(/Never runs\s+12 fixed · 1 yours\s/);
   expect(p).toMatch(/Protected files\s+12 built in · 0 yours\s/); // .agentic/mcp.json and .agentic/hooks.json in, the old .bonsai/settings.json out (3 Oct)
   expect(p).toMatch(/Trusted folders\s+1 trusted\s/);
-  expect(p).toMatch(/Screen\s+(allowed|not allowed yet) · model is blind\s+the model may look at an app or the whole screen/); // a --url server shows no vision
+  expect(p).toMatch(/Screen\s+(allowed|not allowed yet) · model is blind/); // a --url server shows no vision
+  expect(p).toContain('what it starts in; /mode changes one conversation'); // the row you are on, in full beside the list
   expect(r.snapshots.allow).toMatch(/1\s+node --test\s+this folder/);
   expect(r.snapshots.test).toContain('REFUSED blocked by your rule "npm publish" (/permissions)');
   expect(r.snapshots.modes).toMatch(/❯ Not saved\s+✓ 6/); // the five modes, then Not saved, the one in use
