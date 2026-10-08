@@ -111,10 +111,20 @@ export function thumbnail(path, { cols = 24, rows = 5 } = {}) {
   }
   const r = run(['thumb', path, String(cols), String(rows)]);
   if (r.code !== 0) throw new Error(r.err || 'macOS could not open the picture');
-  const t = JSON.parse(r.out);
+  return dotsOf(JSON.parse(r.out));
+}
+function dotsOf(t) {
   const px = [];
   for (let i = 0; i < t.w * t.h; i++) { const c = t.px.slice(i * 6, i * 6 + 6); px.push(c === '------' ? null : c); }
-  return { w: t.w, h: t.h, srcW: t.srcW, srcH: t.srcH, px };
+  return { w: t.w, h: t.h, srcW: t.srcW, srcH: t.srcH, px, ...(t.icon ? { icon: true } : {}) };
+}
+
+// Any other file or folder as dots, from Quick Look's own thumbnail (a document's first page, a
+// video's frame) or its Finder icon (icon: true). Throws when Quick Look makes none in 5 s.
+export function fileThumb(path, { cols = 24, rows = 5 } = {}) {
+  const r = run(['qlthumb', path, String(cols), String(rows)], { timeout: 10_000 });
+  if (r.code !== 0) throw new Error(r.err || 'Quick Look made no picture of it');
+  return dotsOf(JSON.parse(r.out));
 }
 
 // Black text on white at `out` (the tests' pictures, the vision check's).

@@ -202,4 +202,7 @@ test('a picture’s or PDF’s chip goes in one piece with one delete, and ctrl+
   expect(editInput({ value: '[Image #1] x', cursor: 12 }, '', { backspace: true }).value).toBe('[Image #1] ');
   expect(editInput({ value: '[Image #1', cursor: 9 }, '', { backspace: true }).value).toBe('[Image #');
   expect(editInput({ value: '[Image #1] x', cursor: 11 }, '', { backspace: true }).value).toBe('[Image #1]x');
+  // any other file's chip and a folder's, the same
+  expect(editInput({ value: 'see [File #3]', cursor: 13 }, '', { backspace: true }).value).toBe('see ');
+  expect(editInput({ value: 'in [Folder #14]', cursor: 15 }, '', { backspace: true }).value).toBe('in ');
 });

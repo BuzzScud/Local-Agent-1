@@ -20,11 +20,12 @@
 // host in frames: one byte for the kind, four for the length, then the bytes.
 import net from 'node:net';
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, chmodSync, renameSync, lstatSync, openSync, closeSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, chmodSync, renameSync, lstatSync, openSync, closeSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
+import { droppedFiles, pathsOnly } from '../agent/images.mjs';
 
 const home = () => process.env.AGENTIC_HOME ?? HOME;
 export const BG_DIR = () => join(home(), 'background');
@@ -41,12 +42,25 @@ export const DETACH_LABEL = 'ctrl+b';
 // nothing, so each side learns it from the silence (door.mjs).
 // JUMP (/jumptomac): from the app to its own host, on a connection of its own with no hello: send the
 // window that typed last to another Mac (JSON: mac); and from the host to that window.
-export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, PING: 6, JUMP: 7, OUTPUT: 10, ENDED: 11, NOTE: 12, LIST: 13, NAMED: 14, PONG: 15, DRAWN: 16 };
+// FILE and PASTE (8 Oct 2026): a file dropped into a window on another Mac, whose path means nothing
+// here. FILE (JSON: id, name, part, last, data in base64) brings it a piece at a time and the host
+// saves it in <home>/attachments/door/<id>/<name>; PASTE (JSON: keys in base64, files [{ raw, id }])
+// is the paste itself, each path swapped for the saved copy's before the app reads it (attach.mjs
+// then makes the chip). A window sends them only to a host whose DRAWN says `files`.
+export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, PING: 6, JUMP: 7, FILE: 8, PASTE: 9, OUTPUT: 10, ENDED: 11, NOTE: 12, LIST: 13, NAMED: 14, PONG: 15, DRAWN: 16 };
 // What a window and a door say they speak (v in their hello, list and named). 2: the check-in,
 // a folder for a new session, opening the same session again after a lost link. One without it
 // is an app from before 3 Oct 2026: it is served as before.
 export const PROTO = 2;
 const MAX_FRAME = 8 * 1024 * 1024;
+// A dropped file goes in pieces of this (its base64 stays under MAX_FRAME), up to DROP_MAX in all.
+export const DROP_PIECE = 4 * 1024 * 1024;
+const DROP_MAX = 200 * 1024 * 1024;
+
+// Where a file dropped on another Mac is saved here: its own folder, its own name (no path in it).
+const dropPath = (id, name) => join(home(), 'attachments', 'door', String(id), basename(String(name ?? '')).replace(/^\.+/, '').slice(0, 200) || 'file');
+// A path as Terminal types a drop: every sign a shell would read escaped with \.
+export const escapedPath = (p) => String(p).replace(/[^A-Za-z0-9_./~+@%:,-]/g, (c) => `\\${c}`);
 
 export function frame(kind, body = {}) {
   const b = typeof body === 'string' ? Buffer.from(body, 'utf8') : body instanceof Uint8Array ? Buffer.from(body) : Buffer.from(JSON.stringify(body));
@@ -292,7 +306,7 @@ export async function runHost(spec, env = process.env) {
   // Each window is told the size the app is drawn at, and whether it is the one drawn for (a window
   // from before this does not listen).
   const tell = (only = null) => {
-    for (const v of only ? [only] : viewers) { try { v.sock.write(frame(F.DRAWN, { cols, rows, yours: v === led })); } catch {} }
+    for (const v of only ? [only] : viewers) { try { v.sock.write(frame(F.DRAWN, { cols, rows, yours: v === led, files: true })); } catch {} }
   };
   const fit = ({ redraw = false } = {}) => {
     const sized = [...viewers].filter((v) => v.cols && v.rows);
@@ -362,6 +376,30 @@ export async function runHost(spec, env = process.env) {
         // Every window answers the app's cursor question; only the first answer goes in.
         keys = keys.replace(/\x1b\[\d+;\d+R/g, (m) => (asks > 0 ? (asks--, m) : ''));
         if (keys) { try { proc.terminal.write(Buffer.from(keys, 'latin1')); } catch {} }
+      } else if (kind === F.FILE) {
+        const f = json(body);
+        if (!/^[0-9a-f]{12}$/.test(String(f.id)) || typeof f.data !== 'string') return;
+        const got = (v.files ??= new Map()).get(f.id) ?? { path: dropPath(f.id, f.name), bytes: 0, whole: false, bad: false };
+        v.files.set(f.id, got);
+        if (got.bad || got.whole) return;
+        try {
+          const piece = Buffer.from(f.data, 'base64');
+          got.bytes += piece.length;
+          if (got.bytes > DROP_MAX) { got.bad = true; return; }
+          mkdirSync(join(got.path, '..'), { recursive: true, mode: 0o700 });
+          if (Number(f.part) === 0) writeFileSync(got.path, piece, { mode: 0o600 }); else appendFileSync(got.path, piece);
+          if (f.last) { got.whole = true; log(`a file came from ${v.from || 'a window'}: ${basename(got.path)} (${got.bytes} bytes)`); }
+        } catch { got.bad = true; }
+      } else if (kind === F.PASTE) {
+        typedLast = v;
+        const p = json(body);
+        let keys = Buffer.from(String(p.keys ?? ''), 'base64').toString('utf8');
+        for (const d of Array.isArray(p.files) ? p.files : []) {
+          const got = v.files?.get(String(d.id));
+          if (got?.whole && typeof d.raw === 'string' && d.raw) keys = keys.split(d.raw).join(escapedPath(got.path));
+        }
+        if (v.at !== uses) { v.at = ++uses; fit(); }
+        if (keys) { try { proc.terminal.write(Buffer.from(keys, 'utf8')); } catch {} }
       } else if (kind === F.SIZE) {
         const s = json(body);
         v.cols = Number(s.cols) || v.cols;
@@ -476,6 +514,7 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
     let lostAt = 0; // when the link was lost; 0 while it is up
     let retry = null;
     let drawnAt = null; // the size the app is drawn at and whether for this window, as its host says (one from before 4 Oct 2026 never does)
+    let takesFiles = false; // its host saves a file dropped here (F.FILE): one from before 8 Oct 2026 does not
     let cut = false; // this window's lines are cut at its edge
     let sizing = null;
     const raw = input.isTTY;
@@ -521,7 +560,32 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
         finish(0, `\x1b[2m  Still running in the background: ${name}. Open it again with: ${reopen()}\x1b[0m`);
         return;
       }
+      // A file dragged into this window from another Mac: the host there has no such path, so the
+      // file goes with the paste (sendDrop). Through the door only; anything else is sent as typed.
+      if (where && takesFiles && sendDrop(keys)) return;
       send(F.INPUT, keys);
+    };
+    const sendDrop = (keys) => {
+      const text = keys.toString('utf8');
+      const open = text.indexOf('\x1b[200~');
+      const close = text.indexOf('\x1b[201~', open + 6);
+      if (open === -1 || close === -1) return false;
+      const pasted = text.slice(open + 6, close);
+      const files = droppedFiles(pasted, homedir(), { any: pathsOnly(pasted) }).filter((d) => d.kind !== 'folder' && statSync(d.path).isFile() && statSync(d.path).size <= DROP_MAX);
+      if (!files.length) return false;
+      const sent = [];
+      for (const d of files) {
+        let data;
+        try { data = readFileSync(d.path); } catch { continue; }
+        const id = randomBytes(6).toString('hex');
+        for (let at = 0, part = 0; at < data.length || part === 0; at += DROP_PIECE, part++) {
+          send(F.FILE, { id, name: basename(d.path), part, last: at + DROP_PIECE >= data.length, data: data.subarray(at, at + DROP_PIECE).toString('base64') });
+        }
+        sent.push({ raw: d.raw, id });
+      }
+      if (!sent.length) return false;
+      send(F.PASTE, { keys: keys.toString('base64'), files: sent });
+      return true;
     };
     // Keys are read with 'readable' and read(), never 'data' and pause(), like the menus
     // before it (pick.mjs: under Bun 1.4.2 a pause can leave the next reader with no keys).
@@ -599,6 +663,7 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
         else if (kind === F.DRAWN) {
           const d = json(body);
           if (Number(d.cols) > 0 && Number(d.rows) > 0) { drawnAt = { cols: Number(d.cols), rows: Number(d.rows), yours: Boolean(d.yours) }; edge(); }
+          takesFiles = Boolean(d.files);
         }
         else if (kind === F.NAMED) {
           const n = json(body);

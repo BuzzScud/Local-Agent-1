@@ -158,14 +158,26 @@ A debugging run that ends with fewer failing tests than it started with, and non
 newly, keeps its changes for the next run; any other run that ends on failing tests has its
 changes put back, as a message in the window does.
 
-### Pictures and PDFs
+### Pictures, PDFs and other files
 
 Drag a screenshot or a PDF into the window, name it with `@shot.png`, or copy a screenshot
 (ctrl+shift+cmd+4) and press **ctrl+v**: it goes with your message. A dragged or pasted one becomes
 `[Image #1]` (a PDF `[PDF #1]`) in the prompt at once, copied, so moving the file afterwards changes
 nothing, and a card over the prompt box shows it: a small picture of it, its name and its size.
 **ctrl+f** (or a click on the card) opens it full size in Quick Look; delete takes a chip away in
-one piece and ctrl+z brings it back. The model looks at a picture
+one piece and ctrl+z brings it back.
+
+Any other file or folder dragged in becomes `[File #2]` or `[Folder #3]` the same way, its card
+drawn from Quick Look's own thumbnail (a document's first page, a folder's icon). The model gets
+text, code, CSV and JSON as numbered lines (400 at most), a Word, RTF or OpenDocument file as its
+text (macOS's `textutil`), an Excel workbook's sheets as comma-separated rows, a zip's and a
+folder's list of what is inside, and anything else by name and size. A big one sends its first
+part and tells the model where the rest is, which it may then read with Read even outside the
+project (only what you dropped, and only to read). A folder, and a file over 200 MB, are not
+copied. Only a paste that is nothing but paths, as a drop is, turns a file that is not a picture
+or PDF into a chip, so pasting a stack trace attaches nothing. Your sent message keeps one line
+naming what went with it, and /resume shows it again. Dropped into a window on another Mac (the
+door), the file itself goes over to the Mac running the session. The model looks at a picture
 once its vision add-on is loaded: the first picture you attach loads it (the model reloads once,
 about 20 s; it is downloaded then if `coding setup` has not got it yet: Qwen's is 0.92 GB, Gemma's
 0.18 GB). The model can also look at a picture it finds by itself with Read: its vision is

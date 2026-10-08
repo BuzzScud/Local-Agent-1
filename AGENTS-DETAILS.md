@@ -752,6 +752,47 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   `AGENTIC_TEST_QUICKLOOK` names a file the tests read in Quick Look's place; with
   `AGENTIC_NO_OPEN` (every test window) nothing opens.
 
+## Any file or folder dropped in (8 Oct 2026)
+
+- **What and why.** The owner asked again to drop in "screenshots and attachments"; pictures and PDFs
+  already worked, every other file stayed a typed path the model had to open itself (and could
+  not, for Word or Excel, or outside the project). Their picks (all recommended): A, any file fully;
+  text, Word, Excel, folders and zips read in; a big one's first part with where the rest is; one
+  line under the sent message.
+- **Which paste is a drop** (`pathsOnly` in images.mjs): only a paste (or keys all at once) that is
+  nothing but paths turns a file that is not a picture or PDF into `[File #n]` or `[Folder #n]`
+  (`droppedFiles(…, { any })`). Words that name a file on the way keep it as a path, so a pasted
+  stack trace attaches nothing; a picture or PDF among words is attached as before.
+- **What each kind is** (`terminal/src/tools/office.mjs` `fileKind`): text by its first 8 KB (UTF-8,
+  no NUL, next to no control characters; films, archives and the like never), Word/RTF/OpenDocument/
+  .webarchive (`textutil`), Excel .xlsx/.xlsm (unzipped with `/usr/bin/unzip`, its sheets read as
+  comma-separated rows with dates by their style and a formula's saved value: `sheetsOf`), a zip
+  (`zipinfo -1`), a folder (`walkFolder`: node_modules, .git and the like named, not gone into; 5,000
+  entries or 1.5 s at most), a package (.pages, .key, .rtfd) counted as one file. `.html` is code.
+- **The cards** take Quick Look's own thumbnail from media-tool.swift's `qlthumb`
+  (QLThumbnailGenerator; `qlmanage -t` never returns for a folder or a zip) and say what the file
+  holds (`sizeLine`: lines, ~words, sheets, files). A folder and a file over `COPY_MAX` (200 MB) are
+  not copied. A drop takes 10–220 ms a file.
+- **What the model gets** (`terminal/src/app/attach-read.mjs` `fileForModel`, from `expandMentions`):
+  text as numbered lines (`TEXT_LINES`, 400, and the result size), a Word file's or workbook's text up
+  to the result size (the whole text saved as `<attachments>/<copy>.txt` when it is longer), a zip's
+  and a folder's list, anything else by name and size. Each says where the rest is. `@report.docx`
+  and `@budget.xlsx` in the project are read the same way (before, they were left out).
+- **Reading what you dropped** (agent-pages.mjs `allowAttached`, `attachedOpen`): what the message
+  named (the copies, the saved text, a folder and what is in it) may be read with Read, List and
+  Search outside the project, in every mode; never changed, never by a command, nothing else.
+- **Your message keeps one line** (rail.jsx `UserStrip` `cards`, built in app-run.mjs from the tray's
+  `compactText`), saved with the conversation, so /resume shows it.
+- **From another Mac** (sessions.mjs `F.FILE`, `F.PASTE`): a window through the door sends a dropped
+  file itself, in 4 MB pieces (200 MB at most), when its host's DRAWN says `files`; the host saves it
+  in `<home>/attachments/door/<id>/<name>` and gives the app the paste with that path (`escapedPath`).
+  A folder is not sent. A window on this Mac and an older host get the keys as typed.
+- **Tests**: `attach-files.test.mjs` (which paste is a drop, the kinds, a hand-made workbook, a Word
+  file, a zip, a folder, a drop of every kind, what the model gets, a big file, the fence),
+  `sessions.test.mjs` (a file from another Mac through a real host; the window side against an older
+  host), `app-vision.test.mjs` (a CSV and a folder dragged into the real window), `rail.test.mjs`,
+  `edit-input.test.mjs`.
+
 ## Profiles: which server and model each request goes to (8 Oct 2026)
 
 - **What and why.** The owner's shared Ollama service is busy (6 Oct: 77 s of a 201 s task was waiting in line), and

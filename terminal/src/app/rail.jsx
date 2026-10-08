@@ -8,6 +8,7 @@
 import React from 'react';
 import { homedir } from 'node:os';
 import { Box, Text } from 'ink';
+import stringWidth from 'string-width';
 import { C, MARK, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { wrap } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
@@ -40,14 +41,21 @@ const Head = ({ verb, c, what, detail, hint }) => (
 );
 
 // Your message: a grey strip across the window, a line of padding above and below.
-export function UserStrip({ text, attached, width }) {
+// Text cut to `w` columns, with … where it was cut.
+const fitTo = (s, w) => { if (stringWidth(s) <= w) return s; let out = ''; for (const ch of s) { if (stringWidth(`${out}${ch}…`) > w) break; out += ch; } return `${out}…`; };
+// cards: the files dropped or pasted with it ([File #2] …), one line, each as the tray's card said
+// it (attach.mjs compactText: "▣ [File #2] budget.xlsx · Excel · 3 sheets · 48 KB"); kept with the
+// conversation, so /resume shows it again.
+export function UserStrip({ text, attached, cards, width }) {
   const inner = Math.max(10, width - 4);
   const lines = String(text).split('\n').flatMap((l) => (l.trim() ? wrap(l, inner) : ['']));
   const row = (content, key) => <Text key={key} backgroundColor={STRIP}>{content}</Text>;
+  const cardLine = cards?.length ? fitTo(cards.map((c) => c.text).join('   '), inner) : '';
   return (
     <Box flexDirection="column" width={width}>
       {row(' '.repeat(width), 'top')}
       {lines.map((l, i) => row(<>{' '}<Text color={C.accent}>{i === 0 ? '›' : ' '}</Text>{' '}<Text color="ansi256(255)">{l.padEnd(inner)}</Text>{' '}</>, i))}
+      {cardLine ? row(<>{'   '}<Text color={C.dim}>{cardLine}{' '.repeat(Math.max(0, inner - stringWidth(cardLine)))}</Text>{' '}</>, 'cards') : null}
       {attached?.length ? row(<>{'   '}<Text color={C.dim}>{`Attached ${attached.map((a) => `${a.path} (${a.label ?? plural(a.lines, 'line')})`).join(', ')}`.slice(0, inner).padEnd(inner)}</Text>{' '}</>, 'att') : null}
       {row(' '.repeat(width), 'bottom')}
     </Box>

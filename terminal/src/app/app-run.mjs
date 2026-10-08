@@ -27,6 +27,7 @@ import { agentDriver } from '../agent/agents-driver.mjs';
 import { demoDriver } from '../agent/agents-demo.mjs';
 import { canResize, growTo, resizeSeq } from './agents-window.mjs';
 import { expandMentions, pick, PLACEHOLDERS, VERBS, IDLE, END_WORDS, exited, letGo, short, home } from './app-common.mjs';
+import { compactText, shortName, trayItems } from './attach.mjs';
 
 export function runPart(self) {
   // fromServer: the message is a prompt of one of your MCP servers (/server:prompt), its own words.
@@ -48,8 +49,15 @@ export function runPart(self) {
     }
     const dropped = new Map([...self.pastedRef.current.info].filter(([, a]) => a.from).map(([n, a]) => [n, a.from]));
     const expanded = expandMentions(value, self.cwd, self.agent.maxResultChars, self.pastedRef.current.files, dropped);
-    const { attached, images } = expanded;
+    const { images } = expanded;
     let { text } = expanded;
+    // What the model was told it may read where it is (a dropped file's copy, a folder): open to Read.
+    self.agent.allowAttached?.(expanded.reads);
+    // Your message keeps one line of what went with it (rail.jsx): each chip as its card says it,
+    // a chip that could not be read with why; and the @files as before.
+    const notRead = new Map(expanded.attached.filter((a) => a.chip && /^not /.test(a.label ?? '')).map((a) => [a.chip, a.label]));
+    const cards = trayItems(value, self.pastedRef.current).map((it) => ({ n: it.n, text: notRead.has(it.n) ? `▣ ${it.token} ${shortName(it.name, 22)} · ${notRead.get(it.n)}` : compactText(it) }));
+    const attached = expanded.attached.filter((a) => !a.chip);
     for (const p of mcpRead ?? []) {
       if (p.error) { attached.push({ path: p.token, label: `not read: ${p.error}` }); continue; }
       attached.push({ path: p.token, label: p.label });
@@ -62,7 +70,7 @@ export function runPart(self) {
     // Not seen, unless a Pictures helper describes it (agent.work, /subagents).
     const blind = images.length && !self.agent.canSee && !self.agent.helperUse?.('pictures');
     self.holdRef.current = false; // your first message prints the start page above it
-    self.push({ type: 'user', text: shown, attached });
+    self.push({ type: 'user', text: shown, attached, ...(cards.length ? { cards } : {}) });
     let content = blind ? `${text}\n\n(The user attached ${images.length === 1 ? 'a picture' : `${images.length} pictures`} (${images.map((i) => i.path).join(', ')}), but this model is not looking at pictures now.)` : text;
     if (self.pendingContext.current.length) { content = `${self.pendingContext.current.join('\n\n')}\n\n${content}`; self.pendingContext.current = []; }
     if (self.agent.mode === 'plan') content += '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]';

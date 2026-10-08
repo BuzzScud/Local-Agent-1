@@ -432,7 +432,8 @@ export class StepPart {
       }
     }
     const at = args.path ? resolvePath(this.cwd, args.path) : null;
-    const away = Boolean(at && !at.inside && this.desktopOpen(call.name, at.abs)); // on the Desktop (desktopOpen)
+    // On the Desktop (desktopOpen), or a file you dropped into the window (attachedOpen).
+    const away = Boolean(at && !at.inside && (this.desktopOpen(call.name, at.abs) || this.attachedOpen?.(call.name, at.abs)));
     const inside = at ? at.inside || away : true;
     const rules = this.savedRules();
     let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel, self: this.selfOn() });

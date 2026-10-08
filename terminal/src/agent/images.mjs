@@ -9,6 +9,7 @@ import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import { isImage, isPdf } from '../tools/media.mjs';
+import { fileKind } from '../tools/office.mjs';
 
 export const KEEP_IMAGES = 3;
 // About what one picture costs a request, for the context estimate (a 1280 px
@@ -82,20 +83,31 @@ const argsOf = (a) => {
 // Pictures and PDFs named in what you typed. A file dragged into Terminal
 // arrives as its path, with spaces and brackets escaped by \ (or in quotes);
 // a macOS screenshot's name has a narrow space before AM/PM (U+202F).
-// Answers [{ raw (as typed), path (absolute), kind: 'image' | 'pdf' }].
-export function droppedFiles(text, cwd) {
+// any: every file and folder there is, not only pictures and PDFs (a drop: `pathsOnly`).
+// Answers [{ raw (as typed), path (absolute), kind: 'image' | 'pdf' | 'file' | 'folder', sub? }].
+const PATH_RE = /'([^'\n]+)'|"([^"\n]+)"|((?:~\/|\/)(?:\\.|[^\s\\]| )+)/g;
+export function droppedFiles(text, cwd, { any = false } = {}) {
   const found = [];
-  const re = /'([^'\n]+)'|"([^"\n]+)"|((?:~\/|\/)(?:\\.|[^\s\\]| )+)/g;
-  for (const m of String(text ?? '').matchAll(re)) {
+  for (const m of String(text ?? '').matchAll(PATH_RE)) {
     const raw = m[1] ?? m[2] ?? m[3];
     const p = (m[3] ? raw.replace(/\\(.)/g, '$1') : raw).replace(/^~(?=\/)/, homedir());
-    if (!isImage(p) && !isPdf(p)) continue;
+    if (!any && !isImage(p) && !isPdf(p)) continue;
     const abs = isAbsolute(p) ? p : resolve(cwd, p);
-    try { if (existsSync(abs) && statSync(abs).isFile()) found.push({ raw: m[0], path: abs, kind: isImage(abs) ? 'image' : 'pdf' }); } catch { /* not a file */ }
+    try {
+      if (!existsSync(abs)) continue;
+      const k = fileKind(abs);
+      if (any || ((k.kind === 'image' || k.kind === 'pdf') && statSync(abs).isFile())) found.push({ raw: m[0], path: abs, ...k });
+    } catch { /* not a file */ }
   }
   return found;
 }
+// Text that is only paths and spaces, the way Terminal types a drop. Pasted words that name a file
+// on the way ("the bug in /Users/…/a.js") keep their paths: a stack trace would attach every file in it.
+export function pathsOnly(text) {
+  const t = String(text ?? '');
+  return /\S/.test(t) && !/\S/.test(t.replace(PATH_RE, ''));
+}
 
-// Where a pasted or dropped picture sits in the prompt, "[Image #2]", and a dropped PDF, "[PDF #3]"
-// (app/attach.mjs): the kind, then the number.
-export const ATTACH_TOKEN = /\[(Image|PDF) #(\d+)\]/g;
+// Where a pasted or dropped picture sits in the prompt, "[Image #2]", a dropped PDF, "[PDF #3]",
+// any other file "[File #4]" and a folder "[Folder #5]" (app/attach.mjs): the kind, then the number.
+export const ATTACH_TOKEN = /\[(Image|PDF|File|Folder) #(\d+)\]/g;

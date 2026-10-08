@@ -194,10 +194,40 @@ test.skipIf(needs('pictures', mediaTool))('a dragged screenshot is [Image #1] at
   expect(r.snapshots.deleted).not.toContain('PDF · 1 page');
   expect(box(r.snapshots.undone)).toBe('what is wrong here [Image #1] [PDF #2]');
   expect(r.snapshots.undone).toContain('PDF · 1 page');
-  expect(r.snapshots.sent).not.toContain('Screenshot 10.12 AM'); // the tray goes with the message
+  // The tray goes with the message; the message keeps one line of what went with it.
+  expect(r.snapshots.sent).not.toContain('ctrl+f: open');
+  expect(r.snapshots.sent).toMatch(/▣ \[Image #1\] Screenshot 10\.12 AM · 1440×900 · \d+ KB {3}▣ \[PDF #2\] invoice\.pdf · PDF · 1 page/);
   const req = chatWith(fake, 'what is wrong here [Image #1]');
   expect(imageParts(req)).toHaveLength(1);
   const said = JSON.stringify(req.messages);
   expect(said).toContain('Total due: 1,240 dollars');
   expect(said).toContain('dropped into the window.');
+}, T);
+
+test.skipIf(needs('pictures', mediaTool))('any other file and a folder dragged in: [File #1] and [Folder #2] at once with their cards; the model gets the file\'s lines and the folder\'s list, and may read the folder outside the project; the message keeps one line of them', async () => {
+  const { cwd, env, base } = project();
+  const away = join(base, 'Desktop stuff');
+  mkdirSync(join(away, 'notes'), { recursive: true });
+  const csv = join(away, 'q3 sales.csv');
+  writeFileSync(csv, 'region,total\nnorth,1200\nsouth,950\n');
+  writeFileSync(join(away, 'notes', 'todo.md'), '- call the bank\n');
+  const fake = await startFakeServer([{ tool: { name: 'Read', args: { path: join(away, 'notes', 'todo.md') } } }, { text: 'North sold the most.' }]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { sleep: 300 }, { type: 'which region sold most? ' },
+    { key: PASTE(`${dragged(csv)}${dragged(join(away, 'notes'))}`) }, { wait: '[Folder #2]' }, { sleep: 400 }, { snapshot: 'dropped' },
+    { key: 'enter' }, { wait: 'North sold the most.' }, { sleep: 300 }, { snapshot: 'sent' }, ...quit,
+  ] });
+  await fake.close();
+  const box = (snap) => snap.split('\n').filter((l) => /^│ [> ] /.test(l)).map((l) => l.replace(/^│ [> ] /, '').replace(/\s*│\s*$/, '')).join('|');
+  expect(box(r.snapshots.dropped)).toBe('which region sold most? [File #1] [Folder #2]');
+  expect(r.snapshots.dropped).toContain('2 files attached');
+  expect(r.snapshots.dropped).toContain('CSV · 3 lines · 34 B');
+  expect(r.snapshots.dropped).toContain('Folder · 1 file · 16 B');
+  const said = JSON.stringify(chatWith(fake, 'which region sold most?').messages);
+  expect(said).toContain('north,1200');
+  expect(said).toContain('todo.md (16 B)');
+  // The Read of a file in the dropped folder ran (outside the project, in Manual too: you dropped it).
+  const after = JSON.stringify(fake.requests.at(-1).messages);
+  expect(after).toContain('call the bank');
+  expect(r.snapshots.sent).toMatch(/▣ \[File #1\] q3 sales\.csv · CSV · 3 lines · 34 B {3}▣ \[Folder #2\] notes · Folder · 1 file · 16 B/);
 }, T);

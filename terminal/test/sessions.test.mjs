@@ -781,7 +781,7 @@ test.skipIf(!S.canHost())('the app is drawn for the window used last (opened, ty
     const aOpened = Date.now();
     expect(await until(() => now(a) === '120×40', 5000)).toBe(true);
     expect(await until(() => a.drawn.length > 0, 3000)).toBe(true);
-    expect(a.drawn.at(-1)).toEqual({ cols: 120, rows: 40, yours: true });
+    expect(a.drawn.at(-1)).toEqual({ cols: 120, rows: 40, yours: true, files: true });
     // The window the door opens by itself: smaller, and settling on a size as it opens. The app stays drawn for a
     // (before 4 Oct it shrank to the smallest window), and that window is told the size, to cut its lines.
     const m = await open({ cols: 80, rows: 24, mirror: true });
@@ -789,7 +789,7 @@ test.skipIf(!S.canHost())('the app is drawn for the window used last (opened, ty
     expect(await until(() => m.drawn.length > 0, 3000)).toBe(true);
     await sleep(400);
     expect(now(a)).toBe('120×40');
-    expect(m.drawn.at(-1)).toEqual({ cols: 120, rows: 40, yours: false });
+    expect(m.drawn.at(-1)).toEqual({ cols: 120, rows: 40, yours: false, files: true });
     // A window back after a lost link, or one that only watches (huge, as a watch-only window opens): not used yet.
     const w = await open({ cols: 400, rows: 200, via: 'door', again: true });
     await sleep(400);
@@ -933,3 +933,102 @@ test.skipIf(!S.canHost() || needs('python3'))('through the door the app is drawn
     await fake.close();
   }
 }, 120_000);
+
+test.skipIf(!S.canHost())('a file dropped into a window on another Mac goes over with the paste: the host saves it and the app gets the saved copy\'s path; a window on this Mac sends the keys as typed', async () => {
+  const home = process.env.AGENTIC_HOME;
+  // The app: a program that says back every paste it is given (its brackets, its text).
+  const h = await plainHost('drop-1', ['/bin/sh', '-c', 'stty raw -echo; exec cat'], home);
+  const rec = h.record();
+  const away = mkdtempSync(join(tmpdir(), 'agentic-other-mac-'));
+  const shot = join(away, 'Screenshot 2026-10-08 at 2.54.31 PM.png');
+  const big = Buffer.alloc(S.DROP_PIECE + 1234, 7); // two pieces
+  writeFileSync(shot, big);
+  const paste = (p) => `\x1b[200~${p.replace(/ /g, '\\ ')} \x1b[201~`;
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.columns = 100; output.rows = 30;
+  let shown = '';
+  output.on('data', (c) => { shown += c; });
+  try {
+    const view = S.viewSession({ connect: S.localConnect(rec), name: 'drop-1', where: 'mac-mini', input, output });
+    expect(await until(() => h.record()?.viewers === 1, 5000)).toBe(true);
+    await sleep(300); // the host's DRAWN (with `files`) has come
+    input.write(paste(shot));
+    const saved = () => readdirSync(join(home, 'attachments', 'door'), { recursive: true }).find((f) => String(f).endsWith('.png'));
+    expect(await until(() => { try { return Boolean(saved()) && shown.includes('attachments/door/'); } catch { return false; } }, 5000)).toBe(true);
+    const copy = join(home, 'attachments', 'door', String(saved()));
+    expect(readFileSync(copy).equals(big)).toBe(true);
+    // The app was given the copy's path, escaped as Terminal types one, and nothing of the other Mac's.
+    expect(shown).toContain(S.escapedPath(copy));
+    expect(shown).not.toContain(away);
+    expect(S.escapedPath('/a b/x (1) PM.png')).toBe('/a\\ b/x\\ \\(1\\)\\ PM.png');
+    // Words with a path in them, and a path that is not on this Mac: as typed.
+    shown = '';
+    input.write('\x1b[200~see /nowhere/x.png\x1b[201~');
+    expect(await until(() => shown.includes('see /nowhere/x.png'), 5000)).toBe(true);
+    input.write('\x02');
+    await view;
+  } finally { h.stop(); }
+  // A window on this Mac (no `where`) sends the path itself: the file is right there.
+  const h2 = await plainHost('drop-2', ['/bin/sh', '-c', 'stty raw -echo; exec cat'], home);
+  const in2 = new PassThrough();
+  const out2 = new PassThrough();
+  out2.columns = 100; out2.rows = 30;
+  let shown2 = '';
+  out2.on('data', (c) => { shown2 += c; });
+  try {
+    const view = S.viewSession({ connect: S.localConnect(h2.record()), name: 'drop-2', input: in2, output: out2 });
+    expect(await until(() => h2.record()?.viewers === 1, 5000)).toBe(true);
+    await sleep(300);
+    in2.write(paste(shot));
+    expect(await until(() => shown2.includes(away), 5000)).toBe(true);
+    in2.write('\x02');
+    await view;
+  } finally { h2.stop(); }
+}, 40_000);
+
+test('a window on another Mac sends a dropped file only to a host that takes files (its DRAWN says so); to an older one, the keys as typed', async () => {
+  const got = [];
+  let conn = null;
+  const server = net.createServer((sock) => {
+    conn = sock;
+    const read = S.frameReader((kind, body) => {
+      if (kind === S.F.HELLO) { sock.write(S.frame(S.F.NAMED, { name: 'demo-1', v: 2, mac: 'server-1' })); sock.write(S.frame(S.F.DRAWN, { cols: 100, rows: 30 })); }
+      else got.push([kind, kind === S.F.INPUT ? Buffer.from(body).toString('utf8') : S.json(body)]);
+    });
+    sock.on('data', (c) => read(c));
+    sock.on('error', () => {});
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const away = mkdtempSync(join(tmpdir(), 'agentic-other-mac-'));
+  const notes = join(away, 'my notes.txt');
+  writeFileSync(notes, 'remember the milk');
+  const paste = `\x1b[200~${notes.replace(/ /g, '\\ ')} \x1b[201~`;
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.columns = 100; output.rows = 30;
+  try {
+    const view = S.viewSession({ name: 'demo-1', where: 'server-1', input, output, connect: () => net.connect({ host: '127.0.0.1', port: server.address().port }), hello: { key: 'k', v: 2, op: 'attach', name: 'demo-1' } });
+    expect(await until(() => conn !== null, 3000)).toBe(true);
+    await sleep(200);
+    input.write(paste); // an older host: no `files`
+    expect(await until(() => got.length === 1, 3000)).toBe(true);
+    expect(got[0]).toEqual([S.F.INPUT, paste]);
+    conn.write(S.frame(S.F.DRAWN, { cols: 100, rows: 30, files: true }));
+    await sleep(200);
+    input.write(paste);
+    expect(await until(() => got.length === 3, 3000)).toBe(true);
+    const [file, pasted] = [got[1], got[2]];
+    expect(file[0]).toBe(S.F.FILE);
+    expect([file[1].name, file[1].part, file[1].last, Buffer.from(file[1].data, 'base64').toString()]).toEqual(['my notes.txt', 0, true, 'remember the milk']);
+    expect(pasted[0]).toBe(S.F.PASTE);
+    expect(Buffer.from(pasted[1].keys, 'base64').toString()).toBe(paste);
+    expect(pasted[1].files).toEqual([{ raw: notes.replace(/ /g, '\\ '), id: file[1].id }]);
+    // Words with a path in them are not a drop: as typed.
+    input.write(`\x1b[200~look at ${notes.replace(/ /g, '\\ ')} please\x1b[201~`);
+    expect(await until(() => got.length === 4, 3000)).toBe(true);
+    expect(got[3][0]).toBe(S.F.INPUT);
+    conn.end(S.frame(S.F.ENDED, { code: 0 }));
+    expect(await view).toBe(0);
+  } finally { server.close(); }
+}, 15_000);

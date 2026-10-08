@@ -177,8 +177,8 @@ export function editInput(s, input, key, opts) {
   if ((key.ctrl && input === 'w') || (key.meta && (key.backspace || key.delete))) { const st = wordLeft(v, c); return { value: v.slice(0, st) + v.slice(c), cursor: st }; }
   if (key.backspace || key.delete) {
     if (c <= 0) return s;
-    // a picture's or PDF's chip ([Image #1], [PDF #2]: app/attach.mjs) goes in one piece
-    const chip = /\[(?:Image|PDF) #\d+\]$/.exec(v.slice(0, c));
+    // an attachment's chip ([Image #1], [PDF #2], [File #3], [Folder #4]: app/attach.mjs) goes in one piece
+    const chip = /\[(?:Image|PDF|File|Folder) #\d+\]$/.exec(v.slice(0, c));
     if (chip) return { value: v.slice(0, chip.index) + v.slice(c), cursor: chip.index };
     return { value: v.slice(0, c - 1) + v.slice(c), cursor: c - 1 };
   }

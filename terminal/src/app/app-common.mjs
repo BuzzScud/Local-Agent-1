@@ -7,6 +7,8 @@ import { liveUsers, stopServer, scanServers } from '../../../models/index.mjs';
 import { droppedFiles, ATTACH_TOKEN } from '../agent/images.mjs';
 import { isImage, isPdf, preparedImage, pdfText } from '../tools/media.mjs';
 import { readFile } from '../tools/read.mjs';
+import { fileKind } from '../tools/office.mjs';
+import { fileForModel } from './attach-read.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
@@ -52,12 +54,15 @@ export const remoteConfOf = (r) => (r ? { ...r, key: Boolean(r.key) } : null);
 
 // "@path" in a prompt attaches that file for the model.
 // @picture.png and @doc.pdf too: a picture is attached as a picture (images), a
-// PDF as its text. A file dragged into the window (its path) and a pasted or
-// dropped one ([Image #n], [PDF #n]: `pasted`, n → its copy) count the same way;
-// `from` (n → where a dropped one was) tells the model where it came from.
+// PDF as its text, a Word file or a workbook as its text (attach-read.mjs). A file dragged into
+// the window (its path) and a pasted or dropped one ([Image #n], [PDF #n], [File #n], [Folder #n]:
+// `pasted`, n → its copy, or the folder) count the same way; `from` (n → where a dropped one was)
+// tells the model where it came from. reads: the files and folders it was told it may Read, outside
+// the project too (agent.allowAttached). An attached entry from a chip carries it (`chip`: its n).
 export function expandMentions(value, cwd, maxChars, pasted = new Map(), from = new Map()) {
   const attached = [];
   const images = [];
+  const reads = [];
   let extra = '';
   const addPdf = (abs, shown) => {
     try {
@@ -70,6 +75,14 @@ export function expandMentions(value, cwd, maxChars, pasted = new Map(), from = 
   const addImage = (abs, shown) => {
     try { const img = preparedImage(abs); images.push({ ...img, path: shown }); attached.push({ path: shown, label: `picture, ${img.srcW}×${img.srcH}` }); } catch (e) { attached.push({ path: shown, label: `not a picture it can open: ${e.message}` }); }
   };
+  const addFile = (abs, token, shown) => {
+    try {
+      const f = fileForModel(abs, { token, shown, maxChars });
+      attached.push({ path: shown ?? token, label: f.label });
+      reads.push(...f.reads);
+      extra += `\n\n${f.text}`;
+    } catch (e) { attached.push({ path: shown ?? token, label: `not read: ${e.message}` }); }
+  };
   const chips = new Set();
   for (const m of value.matchAll(ATTACH_TOKEN)) {
     const n = Number(m[2]);
@@ -78,8 +91,11 @@ export function expandMentions(value, cwd, maxChars, pasted = new Map(), from = 
     chips.add(n);
     const was = from.get(n);
     const shown = was?.startsWith(homedir()) ? `~${was.slice(homedir().length)}` : was;
-    if (isPdf(file)) addPdf(file, shown ?? m[0]); else addImage(file, m[0]);
-    if (shown) extra += `\n\n(${m[0]} is ${shown}, dropped into the window.)`;
+    const before = attached.length;
+    if (m[1] === 'File' || m[1] === 'Folder') addFile(file, m[0], shown);
+    else if (isPdf(file)) addPdf(file, shown ?? m[0]); else addImage(file, m[0]);
+    for (const a of attached.slice(before)) a.chip = n;
+    if (shown && m[1] !== 'Folder') extra += `\n\n(${m[0]} is ${shown}, dropped into the window.)`; // a folder's own line says where
   }
   for (const d of droppedFiles(value, cwd)) {
     const shown = d.path.startsWith(homedir()) ? `~${d.path.slice(homedir().length)}` : d.path;
@@ -92,12 +108,15 @@ export function expandMentions(value, cwd, maxChars, pasted = new Map(), from = 
     if (!p.inside || !existsSync(p.abs) || statSync(p.abs).isDirectory()) continue;
     if (isImage(p.abs)) { addImage(p.abs, p.rel); continue; }
     if (isPdf(p.abs)) { addPdf(p.abs, p.rel); continue; }
+    // @report.docx, @budget.xlsx: their text, where before a file that is not text was left out.
+    const sub = (() => { try { return fileKind(p.abs).sub; } catch { return null; } })();
+    if (sub === 'doc' || sub === 'sheet') { addFile(p.abs, `@${p.rel}`, p.rel); continue; }
     const r = readFile(p.abs, { limit: 400 });
     if (r.text.includes('\u0000')) continue;
     attached.push({ path: p.rel, lines: r.lineCount });
     extra += `\n\n<file path="${p.rel}">\n${r.numbered.slice(0, maxChars)}\n</file>`;
   }
-  return { text: value + extra, attached, images };
+  return { text: value + extra, attached, images, reads };
 }
 
 // The App's names for the functions in its parts (App.jsx's self): each a getter that reads the name when a

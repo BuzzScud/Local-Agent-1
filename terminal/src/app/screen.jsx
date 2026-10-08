@@ -278,7 +278,7 @@ export function Item({ it, width, model, cwd, loaded, start }) {
     // Your message on its grey strip; an answer you typed to its question mid-turn is a step of the turn.
     case 'user': return it.rail
       ? <Node g="›" c={C.accent}><Text><Text color={C.dim}>You: </Text>{it.text}</Text></Node>
-      : <UserStrip text={it.text} attached={it.attached} width={width} />;
+      : <UserStrip text={it.text} attached={it.attached} cards={it.cards} width={width} />;
     case 'machine': return <MachineLine it={it} />;
     case 'thinking': return it.rail ? <ThoughtNode it={it} /> : <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
     // The line a finished turn leaves behind: "⠿ Worked for 41s · done 12:58 PM".

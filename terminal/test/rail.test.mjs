@@ -113,6 +113,10 @@ test('a turn\'s steps hang on the rail with no blank line between them; your mes
   // (without colours Ink trims the spaces; on screen all three rows are the window's width, on grey)
   const strip = draw(h(UserStrip, { text: 'make a card', width: 40 }), 40).split('\n');
   expect(strip).toEqual(['', ' › make a card', '']);
+  // What went with it, one line, each as its card said it, cut at the strip's edge.
+  const cards = [{ n: 2, text: '▣ [File #2] budget.xlsx · Excel · 3 sheets · 48 KB' }, { n: 3, text: '▣ [Folder #3] src · Folder · 23 files · 4.5 MB' }];
+  expect(draw(h(UserStrip, { text: 'fix the totals in [File #2]', cards, width: 110 }), 110).split('\n')[2].trim()).toBe('▣ [File #2] budget.xlsx · Excel · 3 sheets · 48 KB   ▣ [Folder #3] src · Folder · 23 files · 4.5 MB');
+  expect(draw(h(UserStrip, { text: 'fix it', cards, width: 50 }), 50).split('\n')[2].trim()).toBe('▣ [File #2] budget.xlsx · Excel · 3 sheets · …');
 });
 
 // The real app, with a stand-in model that writes a page slowly: while the file is being written,

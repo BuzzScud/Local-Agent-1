@@ -562,7 +562,7 @@ export class Agent extends EventEmitter {
     });
     // Its tools: the app's, and of the MCP tools those its file names (mcp__github__get_* names several).
     const toolFilter = own ? helperToolFilter(own.tools, [...this.tools().map((t) => t.function.name), ...this.mcpEntries().map((e) => e.name)]) : kind === 'explore' ? EXPLORE_TOOLS : null;
-    Object.assign(helper, { jobs: this.jobs, userHooks: this.userHooks, isHelper: true, router: ownUse ? null : this.router, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
+    Object.assign(helper, { jobs: this.jobs, userHooks: this.userHooks, isHelper: true, router: ownUse ? null : this.router, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, attachedPaths: this.attachedPaths, setMode: () => {} });
     // The same MCP servers and this conversation's list of their tools (worked out for its own room), and what you allowed.
     if (this.mcpFrozen) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
