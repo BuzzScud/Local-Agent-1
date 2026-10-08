@@ -172,10 +172,13 @@ export class ModelPart {
     // of Qwen3.6 thought for 14 minutes, 28.4k tokens, to the end of its reply room, in a 25-minute task).
     const serviceCap = thinking && endpointOf(this.url)?.ollama ? this.model?.thinkingBudget ?? 4096 : 0;
     this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : serviceCap ? serviceCap : !this.capsThinking() ? maxTokens : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama) });
+    // What this step was asked with, for a call of it asked for again (agent-step.mjs rereadCall).
+    const sentTools = focus ? this.mcpFocusTools(focus) : this.tools();
+    this.lastAsk = { thinking, effort, sampling, maxTokens, tools: sentTools };
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: focus ? this.mcpFocusTools(focus) : this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: (() => { const conn = textOnly ? [] : this.mcpConnectors(); return textOnly || conn.length ? { ...(textOnly ? { stop: CALL_STOPS } : {}), ...(conn.length ? { mcpServers: conn } : {}) } : undefined; })(), thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
+      const stream = streamChat({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: sentTools, toolChoice: textOnly ? 'none' : 'auto', extra: (() => { const conn = textOnly ? [] : this.mcpConnectors(); return textOnly || conn.length ? { ...(textOnly ? { stop: CALL_STOPS } : {}), ...(conn.length ? { mcpServers: conn } : {}) } : undefined; })(), thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {

@@ -16,6 +16,7 @@ import { openAIMessages, ollamaMessages } from './images.mjs';
 import { splitThink } from './think-tags.mjs';
 import { withBusyRetry, retryAfterHeader } from './busy.mjs';
 import { recordSpend } from './spend.mjs';
+import { qwenRawFits, renderQwen35, callOpening } from './qwen-raw.mjs';
 
 // What only llama.cpp's server reads: the slot, its prompt cache, the
 // thinking switch and cap, its extra sampling. Not sent to another kind.
@@ -268,4 +269,30 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
   }
   yield* read(buf);
   yield { type: 'done', finish, usage, timings };
+}
+
+// One call of a step asked for again on an Ollama service's Qwen 3.5 family, in Ollama's raw mode, so its
+// parser does not stand between the model and us (qwen-raw.mjs): the prompt is the step's own (rendered as
+// Ollama does), then the step's thinking and words and the opening of a call to `name`. Answers { text,
+// tokens }: the call's parameters as the model wrote them, up to </function>; null where it does not apply
+// (another model or service, a picture in the conversation: raw mode would need its placeholders).
+export async function rawQwenCall({ url, conversation, messages, tools, thinking, effort, model, sampling, maxTokens, reasoning, before, name, signal, onStart }) {
+  const ep = endpointOf(url);
+  if (!qwenRawFits(ep)) return null;
+  const sent = ollamaMessages(ownStartOn(ep) ? ownStart(messages, conversation) : messages);
+  if (sent.some((m) => m.images?.length)) return null;
+  // Whether the step thought, as streamOllama decided it (Ollama's renderer takes no value as yes).
+  const lv = thinkingLevel(model ?? {}, Boolean(thinking), effort);
+  const think = ep.think !== undefined ? ep.think : lv.effort ? true : ep.thinks ? false : undefined;
+  const thinks = think === undefined ? true : Boolean(think);
+  const prompt = renderQwen35(sent, tools ?? [], { thinking: thinks }) + callOpening({ thinking: thinks && Boolean(String(reasoning ?? '').trim()), reasoning, before, name });
+  const options = { stop: ['</function>', '<|im_end|>'] };
+  for (const k of SAMPLING) if (sampling?.[k] !== undefined) options[k] = sampling[k];
+  if (maxTokens) options.num_predict = maxTokens;
+  if (ep.numCtx) options.num_ctx = ep.numCtx;
+  onStart?.();
+  const res = await fetch(`${url}/api/generate`, { method: 'POST', signal, timeout: false, headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify({ model: ep.model, prompt, raw: true, stream: false, options, ...(ep.keepAlive !== undefined ? { keep_alive: ep.keepAlive } : {}) }) });
+  if (!res.ok) throw serverError(`remote model server (${ep.label ?? url}) ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`, res.status, res);
+  const j = await res.json();
+  return { text: String(j.response ?? ''), tokens: j.eval_count ?? 0, finish: j.done_reason ?? null };
 }
