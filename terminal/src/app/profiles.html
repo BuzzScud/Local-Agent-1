@@ -38,6 +38,7 @@ section h2 small { color: var(--ink3); font-weight: 400; }
 .row .note { color: var(--ink3); font-size: 12.5px; }
 .row.inherit select { color: var(--ink3); }
 select { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; max-width: 100%; }
+select:disabled { opacity: .45; }
 .tabs { display: flex; gap: 4px; padding: 8px 14px 0; flex-wrap: wrap; }
 .tabs button { font: inherit; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ink2); padding: 4px 8px; cursor: pointer; }
 .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
@@ -66,7 +67,7 @@ async function load() {
   const r = await fetch('/profiles.json', { cache: 'no-store' });
   state = await r.json();
   draw();
-  for (const p of state.profiles ?? []) if (!models[p.source]) {
+  for (const p of state.profiles ?? []) if (p.models) models[p.source] = p.models; else if (!models[p.source]) {
     models[p.source] = [];
     fetch(`/remote.json?service=${encodeURIComponent(p.source)}`, { cache: 'no-store' }).then((x) => x.json()).then((l) => { models[p.source] = (l.models ?? []).map((m) => m.id); draw(); }).catch(() => {});
   }

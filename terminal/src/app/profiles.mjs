@@ -90,7 +90,8 @@ export const serverWord = (s) => (!s ? 'no server' : s.kind === 'claude' ? 'Clau
 
 // The first profiles, from what runs today, so nothing changes on day one: Main = the remote in use,
 // one profile per /subagents helper model (jobs: the agent's helperJobs, { id: { on, model } }),
-// named by the job, and the Claude API, when it is saved and not in use, as a profile nothing uses yet.
+// named by the job, and each other server saved in /remote (the Claude API, a service, your other
+// computer) as a profile nothing uses yet, ready to be given jobs or be a backup.
 const JOB_PROFILE = { side: 'Fast', review: 'Review', pictures: 'Vision', search: 'Search', designCheck: 'Vision', designWrite: 'Writer' };
 const JOB_ROW = { side: ['ai:side', 'ai:btw'], review: ['ai:review'], pictures: ['ai:pictures'], search: ['ai:search'], designCheck: ['ai:designCheck'], designWrite: ['ai:designWrite'] };
 export function seedProfiles(settings = {}, jobs = null) {
@@ -113,8 +114,12 @@ export function seedProfiles(settings = {}, jobs = null) {
     }
     for (const k of JOB_ROW[id]) uses[k] = name;
   }
-  const claude = settings.remotes?.claude;
-  if (r.kind !== 'claude' && claude?.model) profiles.Claude = { server: serverOf(claude), model: claude.model, backup: null, spillAfter: 0 };
+  const SAVED_NAME = { claude: 'Claude', openai: 'Service', machine: 'Computer' };
+  for (const [src, saved] of Object.entries(settings.remotes ?? {})) {
+    if (!saved?.model || sameServer(serverOf(saved), serverOf(r)) || Object.values(profiles).some((p) => sameServer(p.server, serverOf(saved)))) continue;
+    const name = SAVED_NAME[src] ?? src;
+    if (!profiles[name]) profiles[name] = { server: serverOf(saved), model: saved.model, backup: null, spillAfter: 0 };
+  }
   return { profiles, uses };
 }
 
