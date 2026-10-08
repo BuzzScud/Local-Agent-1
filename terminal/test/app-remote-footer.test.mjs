@@ -31,7 +31,8 @@ test('on an Ollama service: gauges after the first answer with GPU spilling in a
   ] });
   await svc.close();
   const s = r.snapshots;
-  const footer = (t) => t.trimEnd().split('\n').filter((l) => l.trim()).at(-1);
+  // the footer's row, inside the prompt box over its bottom edge (the "Panel", 8 Oct 2026)
+  const footer = (t) => t.trimEnd().split('\n').filter((l) => l.trim() && !l.startsWith('╰')).at(-1);
   // before the first answer: the hint, and no Mac's memory
   expect(footer(s.start)).toContain('? for shortcuts');
   expect(s.start).not.toMatch(MAC);
@@ -47,6 +48,6 @@ test('on an Ollama service: gauges after the first answer with GPU spilling in a
   expect(s.keys).toContain('ctrl+p to compact now');
   expect(s.keys).not.toContain('ctrl+t to start or stop the model');
   // ctrl+p: too short at first, said in the gauges' place; then the summary on the service
-  expect(footer(s.short)).toMatch(/^\s*Nothing to summarize yet.*● coder:30b/);
+  expect(footer(s.short)).toMatch(/^│ Nothing to summarize yet.*● coder:30b/);
   expect(svc.chats().some((b) => /summarize a coding session/i.test(String(b.messages?.find((m) => m.role === 'system')?.content ?? '')))).toBe(true);
 }, 70_000);

@@ -33,16 +33,19 @@ test('on the Claude API: the bar under the footer with the footer’s ends, /usa
     ...quit,
   ] });
   await claude.close();
+  // Inside the prompt box (the "Panel", 8 Oct 2026): under its dotted rule, the footer, then the bar,
+  // each one cell in from the box's border, and the box's bottom edge under them.
   // Before a reply: the bar is there (its row counted, nothing scrolled), the cap not known yet
   const start = lines(r.snapshots.start).filter(Boolean);
-  expect(start.at(-1)).toMatch(/^ {2}◆ ─+ {2}\$9\.85 this month · today \$0\.00 · the cap shows after a reply$/);
-  // After it: the footer, then the bar under it, both ending two cells from the edge
+  expect(start.at(-1)).toBe(`╰${'─'.repeat(150)}╯`);
+  expect(start.at(-2)).toMatch(/^│ ◆ \$9\.85 this month · today \$0\.00 · the cap shows after a reply {2}─+ │$/);
+  // After it: the rule, the footer, then the bar under it: all four rows end at the box's edges
   const after = lines(r.snapshots.after).filter(Boolean);
-  const [footer, bar] = after.slice(-2);
-  expect(footer).toMatch(/● (Opus 5\.5|claude-opus-5-5)/);
-  expect(bar).toMatch(/^ {2}◆ [━╸─]{12,} {2}\$490\.1\d left of \$500 · today \$0\.01 · limits 99%( · full in \d+s)?$/);
-  expect(footer.length).toBe(150);
-  expect(bar.length).toBe(150);
+  const [rule, footer, bar] = after.slice(-4, -1);
+  expect(rule).toBe(`├${'╌'.repeat(150)}┤`);
+  expect(footer).toMatch(/^│ \? for shortcuts .*● (Opus 5\.5|claude-opus-5-5).* │$/);
+  expect(bar).toMatch(/^│ ◆ \$490\.1\d left of \$500 · today \$0\.01 · limits 99%( · full in \d+s)? {2}[━╸─]{12,} │$/);
+  for (const l of [rule, footer, bar, after.at(-1)]) expect(l.length).toBe(152);
   expect(r.snapshots.menu).toMatch(/\/usage/);
   // The card: the prompt box's width and corners, the month first
   const card = lines(r.snapshots.card);
@@ -61,7 +64,7 @@ test('on the Claude API: the bar under the footer with the footer’s ends, /usa
   expect(tiny[0].body.messages).toEqual([{ role: 'user', content: 'Reply with the single word: ok' }]);
   // esc: the card goes, the footer and the bar come back
   expect(r.snapshots.closed).not.toContain('THIS MONTH');
-  expect(lines(r.snapshots.closed).filter(Boolean).at(-1)).toMatch(/^ {2}◆ /);
+  expect(lines(r.snapshots.closed).filter(Boolean).at(-2)).toMatch(/^│ ◆ /);
 }, T * 2);
 
 test('on a model that is not the Claude API: no bar, no /usage in the menu, and typed in full it says where it works', async () => {
@@ -74,7 +77,7 @@ test('on a model that is not the Claude API: no bar, no /usage in the menu, and 
     ...quit,
   ] });
   await srv.close();
-  expect(lines(r.snapshots.start).filter(Boolean).at(-1)).toContain('? for shortcuts');
+  expect(lines(r.snapshots.start).filter(Boolean).at(-2)).toContain('? for shortcuts'); // inside the box, over its bottom edge
   expect(r.snapshots.start).not.toContain('◆');
   expect(r.snapshots.menu).not.toMatch(/\/usage\s/);
   expect(r.snapshots.typed.replace(/\s+/g, ' ')).toContain('/remote claude connects it');

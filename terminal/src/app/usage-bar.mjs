@@ -93,8 +93,11 @@ const thinMeter = (w, frac) => fuelLine(w, frac, 0);
 // at ~$33/day · limits 100%". width: the window's; it starts and ends two cells in, as the footer.
 // The words shorten as the window narrows; the line always stays (at least MIN_LINE cells).
 export const MIN_LINE = 12;
-export function usageRow(u, width, { now = Date.now(), live = false } = {}) {
-  const avail = width - 4;
+// pad: the cells left empty at each end (2, as the footer once was; 0 inside the prompt box's frame).
+// wordsFirst: the words, then the line to the row's end (the "Panel" pick, 8 Oct 2026: its words start
+// in the footer's column and its line ends where the footer's words do).
+export function usageRow(u, width, { now = Date.now(), live = false, pad = 2, wordsFirst = false } = {}) {
+  const avail = width - 2 * pad;
   const r = rateOf(u.limits, now);
   const capped = Boolean(u.capped);
   const known = u.cap != null;
@@ -117,7 +120,7 @@ export function usageRow(u, width, { now = Date.now(), live = false } = {}) {
   for (const t of tries) { const w = t.flat(); if (avail - widthOf(mark) - 2 - widthOf(w) >= least) { words = w; break; } }
   const lineW = Math.max(1, avail - widthOf(mark) - 2 - widthOf(words));
   const line = capped ? [S('─'.repeat(lineW), C.bad)] : known ? fuelLine(lineW, u.left / u.cap, Math.min(u.spent, u.today.usd) / u.cap, { now, live }) : [S('─'.repeat(lineW), C.faint)];
-  return [...gap(2), ...exact([...mark, ...line, ...gap(2), ...words], avail), ...gap(2)];
+  return [...gap(pad), ...exact(wordsFirst ? [...mark, ...words, ...gap(2), ...line] : [...mark, ...line, ...gap(2), ...words], avail), ...gap(pad)];
 }
 
 const SPARK = '▁▂▃▄▅▆▇█';
