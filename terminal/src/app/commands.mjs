@@ -25,6 +25,8 @@ export const COMMANDS = [
   { name: 'start', desc: "Load the model (ctrl+t too): it takes the Mac's memory until /stop or you quit" },
   { name: 'stop', desc: 'Unload the model and give its memory back to the Mac (ctrl+t too); /start loads it again' },
   { name: 'subagents', desc: 'The helper models, one per job (pictures, side jobs, code search, a second opinion, UI design): opens /profiles on its AIs group' },
+  // On the Claude API only (8 Oct 2026): what is left of the month's spend cap, today, and the limits each minute.
+  { name: 'usage', desc: 'What the Claude API has left: this month against your spend cap, today’s dollars, and the limits each minute (r asks Anthropic now)' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
   { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone: a box of your saved Macs, online or not)', arg: '[mac]', picker: true },
   { name: 'loop', desc: 'Send a message again by itself, every so often or until its job is done: /loop test 5m, /loop debug, /loop web 30m <what to read>, /loop 10m <message>; alone: this window’s loops', arg: '[debug|test|web] [10m] [message]' },
@@ -90,6 +92,9 @@ export const TYPED_ONLY = new Set(['morning', 'subagents']);
 // On a remote only (8 Oct 2026): profiles are servers and models on /remote, so on this Mac's own model
 // /profiles is not in the menu (typed in full it says so).
 const REMOTE_MENU = new Set(['profiles']);
+// On the Claude API only (8 Oct 2026): /usage reads what Anthropic sends with its replies; typed in full
+// on another model it says so.
+const CLAUDE_MENU = new Set(['usage']);
 // In the / menu where it fits (3 Oct 2026, the owner: "i dont see the new command?"; it had been
 // typed only, so nothing showed it, not even /jump): listed in the whole menu in a window with room
 // for one more row than the 18 an 80 × 24 window holds, and found in any window once its name is typed.
@@ -106,12 +111,12 @@ export const REMOTE_ONLY = new Set(['btw']);
 
 // The / menu: every command but the ones /settings holds. service: on an Ollama service now.
 // room: the rows the menu may take in this window (18 at 80 × 24). side: a side question can be
-// taken here (a remote, or a server with a second lane).
-export function matchCommands(value, { service = false, room = 18, side = false, remote = false } = {}) {
+// taken here (a remote, or a server with a second lane). claude: on the Claude API now (/usage).
+export function matchCommands(value, { service = false, room = 18, side = false, remote = false, claude = false } = {}) {
   const m = /^\/(\S*)$/.exec(value);
   if (!m) return [];
   const q = m[1].toLowerCase();
-  const all = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name) && (side || !REMOTE_ONLY.has(c.name)) && (remote || !REMOTE_MENU.has(c.name)));
+  const all = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name) && (side || !REMOTE_ONLY.has(c.name)) && (remote || !REMOTE_MENU.has(c.name)) && (claude || !CLAUDE_MENU.has(c.name)));
   // Too many for the window: the when-there-is-room ones go, the last of them first.
   const free = room - all.filter((c) => !WHEN_ROOM.has(c.name)).length;
   const kept = new Set([...WHEN_ROOM].slice(0, Math.max(0, free)));

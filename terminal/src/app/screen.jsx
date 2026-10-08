@@ -16,6 +16,7 @@ import { AgentsView, AgentsLine } from './agents-view.jsx';
 import { LoopsView, LoopsLine } from './loops-view.jsx';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { gaugesOf, gaugeLine, fitRemote, meterWords } from './remote-footer.mjs';
+import { usageRow, usagePanel } from './usage-bar.mjs';
 import { showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
 import { jumpRows, rowStatus, jumpInfo } from './jump-box.mjs';
 import { DETACH_LABEL } from './sessions.mjs';
@@ -921,6 +922,15 @@ function remoteParts(app, left, badges) {
 }
 
 const WHITE = 'ansi256(255)'; // the start page's white (start.jsx)
+// A row of usage-bar.mjs's pieces ({ t, fg, bg, b }, colours as xterm-256 numbers), one cell each.
+function Segs({ segs }) {
+  return <Text wrap="truncate-end">{segs.map((s, i) => <Text key={i} color={`ansi256(${s.fg})`} backgroundColor={s.bg == null ? undefined : `ansi256(${s.bg})`} bold={s.b}>{s.t}</Text>)}</Text>;
+}
+// /usage (app-slash.mjs): the card over the prompt, live while it is open; esc closes it.
+function UsagePanel({ app }) {
+  if (!app.usage) return null;
+  return <Box flexDirection="column" width={app.width}>{usagePanel(app.usage, app.width, { now: app.now, live: app.usageLive, asking: app.picker?.asking }).map((r, i) => <Segs key={i} segs={r} />)}</Box>;
+}
 // The gauges' tones (remote-footer.mjs) as colours.
 const TONE = { dim: C.dim, value: WHITE, live: C.accent, bar: C.accentDim, warn: C.warn, bad: C.bad };
 
@@ -958,6 +968,8 @@ function Footer({ app }) {
         </Box>
         <Box flexShrink={0}><Text wrap="truncate-start">{pieces.map((el, i) => <React.Fragment key={i}>{i ? <Text color={C.dim}> · </Text> : null}{el}</React.Fragment>)}</Text></Box>
       </Box>
+      {/* On the Claude API, what is left of the month under the footer: the same ends as the footer's row (usage-bar.mjs). */}
+      {app.usage ? <Box width={width} height={1} overflow="hidden"><Segs segs={usageRow(app.usage, width, { now: app.now, live: app.usageLive })} /></Box> : null}
       {app.showShortcuts ? (
         <Box flexDirection="column" paddingX={2} marginTop={1}>
           {shortcutsOf(ms?.remote).map(([a, b], i) => <Text key={i} color={C.dim}>{a.padEnd(36)}{b}</Text>)}
@@ -2090,7 +2102,7 @@ const heightOf = (it, app) => itemHeights.get(rowsKey(it, app));
 export const heldRows = (items, ctx) => items.slice(1).reduce((n, it) => n + (itemHeights.get(rowsKey(it, ctx)) ?? Infinity), 0);
 // Rows the held page leaves under it: the window less the page (18 until it is measured), the
 // prompt box, the blank row above the footer, the footer and the cursor's line.
-export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 18) - 6;
+export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 18) - 6 - (ctx?.foot ?? 0);
 // Rows the conversation fills from the top of the window (at most the
 // window). An item not measured yet counts as a full window: no space, never
 // a prompt box pushed below the window.
@@ -2170,6 +2182,8 @@ export function Screen({ app }) {
       <Box flexDirection="column" flexShrink={0}>
       {app.picker?.kind === 'model' ? (
         <ModelPicker app={app} />
+      ) : app.picker?.kind === 'usage' ? (
+        <UsagePanel app={app} />
       ) : app.picker?.kind === 'service' ? (
         <ServicePicker app={app} />
       ) : app.picker?.kind === 'profile-step' ? (

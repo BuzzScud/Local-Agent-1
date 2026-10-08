@@ -557,6 +557,12 @@ export function slashPart(self) {
         self.openProfilesPanel({ group: 'ai' });
         break;
       }
+      case 'usage': {
+        // The Claude API's usage (claude-usage.mjs, usage-bar.mjs): a card over the prompt, esc closes it.
+        if (self.model.remote?.kind !== 'claude') { self.push({ type: 'note', text: `/usage shows what the Claude API has left; this window runs on ${self.model.remote ? self.model.remote.label : 'this Mac'}. /remote claude connects it.`, tone: 'dim' }); break; }
+        self.setPicker({ kind: 'usage', asking: false });
+        break;
+      }
       case 'stats':
         self.push({ type: 'panel', title: 'Stats', pad: 20, rows: [
           ['model', `${self.model.name}${self.model.edited ? ` · ${self.model.edited.edits.length} edit${self.model.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(self.model.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`],
