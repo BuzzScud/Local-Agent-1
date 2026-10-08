@@ -14,7 +14,7 @@
 //   when      a page request that gets the design examples (design.mjs), with the
 //             studio on; the pieces then take the place of the example card, and
 //             the rules card still comes
-//   how much  the PIECES best pieces by their Words (scoreCard, as the cards), at
+//   how much  the best piece that says the thing asked for, and a second for a part named, at
 //             most STUDIO_CHARS together; others that fit are named by path, and
 //             the model may Read them under STUDIO/ (read-only). The folder's size
 //             never changes the reading: the app picks, the model reads two pieces
@@ -30,10 +30,9 @@ import { join, resolve, sep, relative, isAbsolute, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { findPrivateDir, mainFolder } from '../app/docs-dir.mjs';
-import { scoreCard } from './design.mjs';
+import { askedThing, fitScore, kindHits, plainScore, scoreCard } from './design.mjs';
 
 export const FOLDER = 'design studio';
-const PIECES = 2; // pieces that go along with a request
 export const MORE = 3; // other fitting pieces named by path
 export const PIECE_CHARS = 2600; // of one piece: a longer one is named, never cut (cut HTML is broken HTML)
 export const STUDIO_CHARS = 6400; // the head and the pieces together
@@ -134,14 +133,23 @@ export function readPieces(dir = studioDir()) {
 // words of its name), and the next best only when it fits nearly as well (at
 // least 2, and half the best's score: a notification card's "inbox item" once
 // brought the product card along); then up to MORE others that fit, by path.
-export function pickPieces(text, { dir = studioDir(), pieces } = {}) {
+// A piece is real code the model copies, so a wrong one misleads more than none (8 Oct 2026: a file
+// card got a goal card and a toggle switch, and the page used neither). When the request says what it
+// asks for (askedThing), the first piece must say that thing (kindHits); with none that does, no piece
+// goes and the design cards come instead. The second still comes for a part the request names ("a stat
+// card … in a page with tabs"), as before. ctx: a model with 32k or less gets the first only.
+export function pickPieces(text, { dir = studioDir(), pieces, ctx } = {}) {
   const all = pieces ?? readPieces(dir).pieces;
-  const fits = all.map((p) => ({ p, score: scoreCard(p, text) })).filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score || a.p.file.localeCompare(b.p.file));
-  const top = fits[0]?.score ?? 0;
-  const close = (x, i) => i === 0 || (x.score >= 2 && x.score * 2 >= top);
-  const sent = fits.filter(close).slice(0, PIECES);
-  return { pieces: sent.map((x) => x.p), more: fits.filter((x) => !sent.includes(x)).slice(0, MORE).map((x) => x.p) };
+  const thing = askedThing(text);
+  const scored = all.map((p) => ({ p, score: plainScore(p, text, thing), hits: kindHits(p, thing) })).filter((x) => x.score > 0 || x.hits > 0);
+  const lead = scored.filter((x) => !thing || x.hits > 0)
+    .sort((a, b) => fitScore(b.p, text, thing) - fitScore(a.p, text, thing) || a.p.file.localeCompare(b.p.file))[0];
+  if (!lead) return { pieces: [], more: [], hits: 0 };
+  const rest = scored.filter((x) => x !== lead && x.score > 0).sort((a, b) => b.score - a.score || a.p.file.localeCompare(b.p.file));
+  // Nearly as well as the first by its words, measured as before (scoreCard), so no second comes that did not.
+  const near = scoreCard(lead.p, text);
+  const second = ctx && ctx <= 32_768 ? null : rest.find((x) => x.score >= 2 && x.score * 2 >= near);
+  return { pieces: [lead, second].filter(Boolean).map((x) => x.p), more: rest.filter((x) => x !== second).slice(0, MORE).map((x) => x.p), hits: lead.hits };
 }
 
 const SHELL = '<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>…</title></head>\n<body class="min-h-screen bg-paper text-ink font-sans antialiased">…</body>\n</html>';
