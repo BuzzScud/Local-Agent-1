@@ -161,8 +161,8 @@ const PLACES = [
 // How Agentic Coder keeps you safe, in plain words.
 const SAFETY = [
   'The first time you start Agentic Coder in a folder it asks whether you trust it. Nothing there is read before you say yes.',
-  'It asks before every edit and before commands that change things, unless you switch the mode. A git commit always asks.',
-  'Some commands are always refused: deleting folders wholesale, sudo, git push, resetting git, stopping other programs or services.',
+  'It asks before every edit and before commands that change things, unless you switch the mode. A git commit and a git push always ask (a push in Bypass on Claude runs); a push you say yes to may reach GitHub.',
+  'Some commands are always refused: deleting folders wholesale, sudo, a force push, resetting git, stopping other programs or services.',
   'Files like .env, keys and .git always ask before a change, even in Accept edits and Auto.',
   '/permissions adds your own rules on top (commands that run without asking, commands that never run, more protected files). They never lift the ones above.',
   'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, reach services already running, or open a connection off this Mac.',

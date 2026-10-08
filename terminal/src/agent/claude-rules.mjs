@@ -5,7 +5,7 @@
 // the user gave Agentic Coder directly (FIRST_FACTS in facts.mjs). Saved once: a
 // line the user removed afterwards does not come back. The user read the
 // fifteen and dropped two (28 Sep): "never rm -rf" and "commit only on my word"
-// (the app's own blocks still refuse rm -rf and git push).
+// (the app's own blocks still refuse rm -rf, and a commit or a push asks every time).
 const from = "Claude's notes on how you like things done (28 Sep 2026)";
 export const CLAUDE_RULES = [
   'Explain simply: the result first, then a few short steps. No file names or code unless the user asks.',

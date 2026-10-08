@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 const cases = {
   'rm -rf build': true, 'rm -fr x': true, 'rm -r -f x': true, 'rm --recursive --force x': true, 'rm -r x': false, 'rm file.txt': false,
   'sudo ls': true, 'npm test; sudo rm x': true, 'echo sudo': false,
-  'git push origin main': true, 'git reset --hard HEAD': true, 'git clean -fd': true, 'git status': false,
+  'git push origin main': false, 'git push --force origin main': true, 'git push -f': true, 'git push -uf origin x': true, 'git push origin +main': true, 'git push --force-with-lease': true, 'git push -u origin main': false, 'git reset --hard HEAD': true, 'git clean -fd': true, 'git status': false,
   'kill 123': true, 'lsof -ti:17391 | xargs kill -9': true, 'lsof -ti:1 | xargs -r kill': true, 'pkill node': true, 'cd x && killall node': true, '(kill 1)': true, 'nohup kill 3': true, 'echo `kill 1`': true,
   'grep -r kill .': false, 'echo skill': false, 'cat killer.txt': false,
   'launchctl unload x': true, 'brew services stop postgresql': true, 'docker stop web': true,
@@ -16,6 +16,25 @@ const cases = {
 
 test('blocked commands (and look-alikes that are fine)', () => {
   for (const [cmd, blocked] of Object.entries(cases)) expect([cmd, !!blockedReason(cmd)]).toEqual([cmd, blocked]);
+});
+
+// 8 Oct 2026: a grep of the logs for "rm -rf", and Python scripts that only edited text naming
+// rm -rf and git push, were blocked. Words that are only data pass; what the shell runs is still checked.
+const textCases = {
+  "grep -n -E 'rm -rf|git push' log.txt": false, 'echo "never run git push here"': false, "cd x && rg 'sudo ' src": false,
+  "python3 - <<'EOF'\ns = s.replace('rm -rf build', 'clean')\nprint('git push')\nEOF": false,
+  "cd w && node <<'JS'\nconst t = 'kill 1';\nJS\nnpm test": false,
+  "python3 - <<'EOF'\nimport os\nos.system('rm -rf build')\nEOF": true,
+  "node <<'JS'\nrequire('child_process').execSync('git push -f')\nJS": true,
+  "python3 - <<EOF\nx = '$(rm -rf build)'\nEOF": true, "perl <<'EOF'\nprint `rm -rf build`;\nEOF": true,
+  "python3 - <<'EOF'\nnew = 'the `git push` runs, and `rm -rf` never'\nEOF": false,
+  "bash <<'EOF'\nrm -rf build\nEOF": true, "cat <<'EOF' | sh\nrm -rf build\nEOF": true,
+  "echo 'rm -rf build' | sh": true, 'echo "$(rm -rf build)"': true, "grep x f; rm -rf build": true,
+  "eval 'rm -rf build'": true, 'git commit -m "x" && git push -f': true, "psql -c 'select pg_terminate_backend(1)'": true,
+};
+
+test('text that is only data does not block; what the shell runs still does', () => {
+  for (const [cmd, blocked] of Object.entries(textCases)) expect([cmd, !!blockedReason(cmd)]).toEqual([cmd, blocked]);
 });
 
 test('modes', () => {
@@ -164,7 +183,8 @@ test('saved rules never lift the fixed lists: blocked commands, a commit, plan m
   const cwd = `${homedir()}/Desktop/agentic-coder/demo-project`;
   const rules = { allow: ['git push', 'git commit', 'npm test', 'sudo ls', 'ls ~'] };
   const d = (command, mode = 'ask') => decide('Bash', { command }, { mode, cwd, rules });
-  expect(d('git push origin main').decision).toBe('deny');
+  expect(d('git push origin main')).toEqual({ decision: 'ask', once: true }); // a push asks every time, a saved rule or not
+  expect(d('git push --force origin main').decision).toBe('deny');
   expect(d('sudo ls').decision).toBe('deny');
   expect(d('ls ~').decision).toBe('deny');
   expect(d('git commit -m x')).toEqual({ decision: 'ask', once: true });
@@ -229,7 +249,8 @@ test('what a typed rule may be (/permissions allow | never | protect)', () => {
   expect(checkRule('allow', 'bun run *')).toEqual({ rule: 'bun run *' });
   expect(checkRule('allow', 'make').note).toBe('"make *" would cover anything after it.');
   expect(checkRule('allow', 'make *')).toEqual({ rule: 'make *' });
-  expect(checkRule('allow', 'git push').error).toMatch(/never allowed/);
+  expect(checkRule('allow', 'git push').error).toMatch(/push always asks/);
+  expect(checkRule('allow', 'git push --force').error).toMatch(/never allowed/);
   expect(checkRule('allow', 'sudo ls').error).toMatch(/never allowed/);
   expect(checkRule('allow', 'git commit -m x').error).toMatch(/commit always asks/);
   expect(checkRule('allow', 'ls -la').error).toMatch(/only reads/);
@@ -238,7 +259,8 @@ test('what a typed rule may be (/permissions allow | never | protect)', () => {
   expect(checkRule('allow', 'x'.repeat(121)).error).toMatch(/too long/);
   expect(checkRule('allow', '').error).toMatch(/Say which command/);
   expect(checkRule('never', 'npm publish')).toEqual({ rule: 'npm publish' });
-  expect(checkRule('never', 'git push').error).toMatch(/already never allowed/);
+  expect(checkRule('never', 'git push -f').error).toMatch(/already never allowed/);
+  expect(checkRule('never', 'git push')).toEqual({ rule: 'git push' }); // you may still refuse every push
   expect(checkRule('protect', 'config/prod.*')).toEqual({ rule: 'config/prod.*' });
   for (const bad of ['/etc/passwd', '~/x', '../x', 'a/../b', '*', '**', '?']) expect([bad, !!checkRule('protect', bad).error]).toEqual([bad, true]);
   expect(checkRule('protect', '').error).toMatch(/Say which file/);
@@ -256,7 +278,8 @@ test('judge says why: the /permissions test panel prints it; decide() is the sam
   expect(why('npm test && ./x.sh').why).toBe('"./x.sh" is not covered by any rule');
   expect(why('make deploy').why).toBe('it can change things and no rule covers it');
   expect(why('npm test > out.txt').why).toMatch(/cannot be trusted/);
-  expect(why('git push').reason).toBe('blocked: git push sends your code off this Mac');
+  expect(why('git push')).toEqual({ decision: 'ask', once: true, why: 'a push sends your code to GitHub, so it always asks' });
+  expect(why('git push --force').reason).toBe('blocked: a force push rewrites what is already on GitHub');
   for (const c of ['npm test', 'git commit -m x', 'make deploy', 'git status', 'git push']) expect('why' in decide('Bash', { command: c }, ctx)).toBe(false);
   expect(judge('Edit', { path: 'src/a.js' }, { mode: 'edits' }).why).toBe('Accept edits is on');
   expect(judge('Edit', { path: 'src/a.js' }, { mode: 'ask' }).why).toBe('Manual is on');
@@ -297,6 +320,17 @@ test('the question: four choices with "always allow … in this folder"; a prote
 const ctx5 = (mode, extra = {}) => ({ mode, cwd: '/p', inside: true, ...extra });
 const d5 = (name, args, mode, extra) => decide(name, args, ctx5(mode, extra)).decision;
 
+// 8 Oct 2026, the owner's pick: changes may go to GitHub from here, but a push asks every time,
+// in every mode and on every model (Bypass on the Claude API lets it run); a force push stays blocked.
+test('git push asks first in every mode but plan, alone or in a chain; naming it in text does not', () => {
+  for (const mode of ['ask', 'edits', 'auto', 'bypass'])
+    for (const c of ['git push', 'git push -u origin main', 'git fetch && git push origin main', 'git commit -m x -- a.mjs && git push', 'cd sub; git -C . push', 'sh -c "git push"'])
+      expect([mode, c, decide('Bash', { command: c }, ctx5(mode))]).toEqual([mode, c, { decision: 'ask', once: true }]);
+  expect(d5('Bash', { command: 'git push' }, 'plan')).toBe('deny');
+  expect(d5('Bash', { command: 'git push' }, 'bypass', { self: true })).toBe('allow');
+  for (const c of ["grep -n 'git push' notes.md", 'git log --oneline -3']) expect([c, d5('Bash', { command: c }, 'auto')]).toEqual([c, 'allow']);
+});
+
 test('the five modes by name: Claude Code\'s words and the old ones; shift+tab walks four and never lands on Bypass', () => {
   expect(MODES).toEqual(['auto', 'ask', 'edits', 'plan', 'bypass']);
   expect(['Manual', 'accept', 'auto-edit', 'AUTO', 'bypass-permissions', 'plan', 'yolo'].map(modeOf)).toEqual(['ask', 'edits', 'edits', 'auto', 'bypass', 'plan', null]);
@@ -325,7 +359,8 @@ test('Bypass permissions: nothing asks, but the blocked commands, your never-lis
   for (const c of ['npm install left-pad', 'git commit -m x', 'cp x .env', 'node build.mjs > out.txt']) expect(d5('Bash', { command: c }, 'bypass')).toBe('allow');
   expect(d5('Write', { path: '.env' }, 'bypass', { rel: '.env' })).toBe('allow');
   expect(d5('Edit', { path: 'src/a.js' }, 'bypass')).toBe('allow');
-  for (const c of ['rm -rf build', 'sudo ls', 'git push', 'pkill node', 'cat ~/.ssh/id_rsa']) expect(d5('Bash', { command: c }, 'bypass')).toBe('deny');
+  for (const c of ['rm -rf build', 'sudo ls', 'git push --force', 'pkill node', 'cat ~/.ssh/id_rsa']) expect(d5('Bash', { command: c }, 'bypass')).toBe('deny');
+  expect(d5('Bash', { command: 'git push' }, 'bypass')).toBe('ask'); // a local model in Bypass: a push still asks
   expect(d5('Bash', { command: 'npm publish' }, 'bypass', { rules: { never: ['npm publish'] } })).toBe('deny');
   expect(decide('Write', { path: '.agentic/settings.json' }, ctx5('bypass', { rel: '.agentic/settings.json' }))).toEqual({ decision: 'deny', reason: ".agentic/settings.json holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions" });
   expect(d5('Bash', { command: 'cp x .agentic-coder/permissions.json' }, 'bypass')).toBe('deny');
@@ -334,6 +369,12 @@ test('Bypass permissions: nothing asks, but the blocked commands, your never-lis
   // (7 Oct 2026: a grep of the test record piped on into another command was refused as a change).
   for (const c of ['grep -c suite ~/.agentic-coder/tests/record.jsonl | jq .', 'cd ~/.agentic-coder/tests && grep -n suite record.jsonl | tail -3', 'grep x ~/.agentic-coder/tests/record.jsonl > rows.txt'])
     expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'allow']);
+  // A filter in the pipeline (sed without -i, awk, jq) reads too (8 Oct 2026: after a cd into the
+  // logs, a grep piped into sed -E was refused: every word of the sed part was joined to that folder).
+  for (const c of ["cd ~/.agentic-coder/logs && grep -i error server.log | sed -E 's/^[^ ]+ //' | cut -c1-110 | sort | uniq -c", 'cd ~/.agentic-coder/tests; jq -r .suite record.jsonl | sort | uniq -c', "cd ~/.agentic-coder/tests && awk -F, '{print $1}' record.jsonl | head"])
+    expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'allow']);
+  for (const c of ["cd ~/.agentic-coder/tests && sed -i '' 's/a/b/' record.jsonl", "cd ~/.agentic-coder/tests && sed -Ei 's/a/b/' record.jsonl", "cd ~/.agentic-coder/tests && awk '{print > \"record.jsonl\"}' x", "cd ~/.agentic-coder/tests && awk '{system(\"rm record.jsonl\")}' x"])
+    expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'deny']);
   for (const c of ['grep x a | tee ~/.agentic-coder/settings.json', 'cd ~/.agentic-coder/tests; mv record.jsonl old.jsonl', 'cd .agentic && echo x > settings.json', 'grep x a.txt >> ~/.agentic-coder/tests/record.jsonl', 'echo $(rm ~/.agentic-coder/settings.json)'])
     expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'deny']);
   expect(d5('WebFetch', { url: 'https://example.org/' }, 'bypass')).toBe('allow');

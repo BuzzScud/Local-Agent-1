@@ -69,7 +69,8 @@ test('the five modes from the keyboard: /mode 1 is Auto, /mode 5 Bypass (red, wi
   await fake.close();
   expect(r.snapshots.auto).toContain('Mode is auto: reading, searching and edits inside the project go through');
   expect(r.snapshots.auto).toContain('⏵⏵ auto mode on (shift+tab to cycle)');
-  expect(r.snapshots.bypass).toContain('Bypass permissions is on: nothing asks. Still never: rm -rf, sudo, git push');
+  expect(r.snapshots.bypass).toContain('Bypass permissions is on: nothing asks. A git push asks first (unless the model is Claude).');
+  expect(r.snapshots.bypass).toContain('Still never: rm -rf, sudo, a force push');
   expect(r.snapshots.bypass).toContain('⏵⏵ bypass permissions on (shift+tab to cycle)');
   expect(r.snapshots.manual.split('\n').slice(-6).join('\n')).not.toMatch(/mode on|edits on|permissions on/); // Manual shows no label, as Claude Code
 }, T);

@@ -276,7 +276,7 @@ ${tooling}
 
 ${list ? `${list}\n\n` : ''}${now ? `${WORK_HABITS}\n\n` : ''}${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\n\n` : ''}Rules
 ${now ? stayRule(cwd) : STAY_OLD}
-- These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
+- These commands are blocked: rm -rf, sudo, git push --force, git reset --hard, kill, pkill, killall. A git commit or git push asks the user first, every time.
 - If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.
 
 ${math ? `${math}\n\n` : ''}${sessionPart({ cwd, notes, git, today, tests, now })}`;

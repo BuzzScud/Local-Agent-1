@@ -7,7 +7,7 @@
 //   { open: 'panel' | 'mode' }   the picker to open
 //   { mode }              switch to this mode now (the start-up mode was saved)
 import { homedir } from 'node:os';
-import { BLOCKED, PROTECTED, checkRule, judge, coverage, runsGitCommit, ruleFor, modeOf } from '../agent/permissions.mjs';
+import { BLOCKED, PROTECTED, checkRule, judge, coverage, runsGitCommit, runsGitPush, ruleFor, modeOf } from '../agent/permissions.mjs';
 import { MAX_RULES, entries, addRule, removeRule, promoteRule, setStartMode, startModeFor, readState, permissionsFile } from './perm-store.mjs';
 import { trustedFolders, forgetTrust, realFolder } from './trust.mjs';
 
@@ -75,6 +75,7 @@ export function section(what, cwd, { session } = {}) {
       ['Fixed, in every mode; no rule can lift them:'],
       ...FIXED.map((why) => ['', why]),
       ['', 'a git commit always asks first'],
+      ['', 'a git push always asks first'],
       ['Yours, in every mode too (also `coding -p --yes`):'],
       ...(list.length ? list : [['', 'none yet: /permissions never <command>']]),
       ['/permissions never <command> · /permissions remove never <n> · /permissions everywhere never <n>'],
@@ -102,7 +103,7 @@ export function section(what, cwd, { session } = {}) {
   return null; // the start-up mode is a picker (/permissions mode), not a list
 }
 
-const part = (c) => c.by === 'reads' ? 'only reads' : c.by === 'cd' ? 'stays in the folder' : c.by === 'saved' ? `runs · your saved rule "${c.rule}"` : c.by === 'session' ? `runs · "${c.rule}" for this session` : c.protectedBy ? `asks · names a protected file (${c.protectedBy})` : runsGitCommit(c.part) ? 'asks · a commit always asks' : 'asks · no rule covers it';
+const part = (c) => c.by === 'reads' ? 'only reads' : c.by === 'cd' ? 'stays in the folder' : c.by === 'saved' ? `runs · your saved rule "${c.rule}"` : c.by === 'session' ? `runs · "${c.rule}" for this session` : c.protectedBy ? `asks · names a protected file (${c.protectedBy})` : runsGitCommit(c.part) ? 'asks · a commit always asks' : runsGitPush(c.part) ? 'asks · a push always asks' : 'asks · no rule covers it';
 
 // /permissions test <command> · test edit <path>: the real check, and why.
 function tryIt(cwd, text, { mode, session }) {

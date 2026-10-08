@@ -250,7 +250,7 @@ export function flowPage(d, { dated = '' } = {}) {
     f.box(600, 210, 230, 72, { k: 't1', t: 'Permission gate', s: ['edit or command: Yes · Yes for', 'this session · No, and say what'] });
     f.box(310, 210, 230, 72, { k: 't1', t: 'Run the tool', s: half(d.tools) });
     f.box(20, 210, 230, 72, { k: 't1', t: 'Result comes back', s: ['folded on screen (ctrl+o opens it)', 'and added to the conversation'] });
-    f.box(600, 340, 230, 84, { k: 'bad', t: 'Refused', s: ['rm -rf · sudo · git push · reset --hard', 'kill · pipe-to-shell · outside project'] });
+    f.box(600, 340, 230, 84, { k: 'bad', t: 'Refused', s: ['rm -rf · sudo · push --force · reset --hard', 'kill · pipe-to-shell · outside project'] });
     f.arrow([[250, 86], [310, 86]], { m: true, label: 'streams', lp: [280, 78] });
     f.arrow([[540, 86], [600, 86]]);
     f.arrow([[830, 86], [890, 86]], { label: 'no', lp: [860, 78] });
@@ -410,7 +410,7 @@ ${M.map((m) => `│  ├─ ${esc(`${d.folders[m.id]}/`.padEnd(19))}<em>${esc(m.
     ['sort', 'Sorting', 'Step 2 in detail: where a request goes', 'Rules look at your words first. The model is asked only when no rule fits.',
       fig(f2b, 'Sorting: rules decide first; the model decides only when no rule fits; seven possible destinations; the sorting check for each model.') + legend + cap('Under your request a dim line says where it went, for example Sorted as: change · shortcut. A rule change that moves any of the 101 test requests to another path fails the sort test.')],
     ['loop', 'The loop', 'The step-by-step loop', 'When no shortcut fits, the model works one tool at a time, and you approve each edit or command.',
-      fig(f3, 'The agent loop: send, stream, permission gate, run one tool, result back, repeat; guards and the memory-full path.') + legend + cap('Built for small local models: one tool at a time, plain-text reads, edits that forgive small slips. Always blocked in every mode: rm -rf, sudo, git push, git reset --hard, git clean -f, kill, stopping services, piping the internet into a shell.')],
+      fig(f3, 'The agent loop: send, stream, permission gate, run one tool, result back, repeat; guards and the memory-full path.') + legend + cap('Built for small local models: one tool at a time, plain-text reads, edits that forgive small slips. Always blocked in every mode: rm -rf, sudo, a force push, git reset --hard, git clean -f, kill, stopping services, piping the internet into a shell.')],
     ['paths', 'Focused paths', 'Focused paths: fixed recipes for common jobs', `A recipe leaves the small model less to guess.${P ? ` <b>${many ? sw('Each lane says how every model did on it', 'Each lane says how {name} did on it') : 'Each lane says how the model did on it'}</b>: tasks passed and the time they took.` : ' Anything a recipe can’t finish drops to the loop.'}`,
       fig(f4, `Five focused paths, each a short chain of steps that falls back to the step-by-step loop${P ? ', with how each model did on it' : ''}.`) + legend + cap(`Tries happen in a scratch copy of the project, not in your own files.${P ? ` The numbers: ${runLine}.` : ` ${run ? 'The newest run is from before the paths were kept: run it again to see how each model did on each lane.' : noRun}`}`)],
     ['mem', 'Memory', 'Memory: the model stays the same, what it knows changes', 'Facts about you and each project are saved after tasks, brought back when they fit, and scored by how the next task went.',

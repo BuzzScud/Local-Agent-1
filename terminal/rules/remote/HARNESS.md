@@ -41,5 +41,5 @@ Longer guides for some kinds of work (planning, testing, design, git…). When o
 
 ## Rules the app enforces
 
-- These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
+- These commands are blocked: rm -rf, sudo, git push --force, git reset --hard, kill, pkill, killall. A git commit or git push asks the user first, every time.
 - If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.

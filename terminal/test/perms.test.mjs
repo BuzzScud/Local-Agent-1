@@ -33,7 +33,7 @@ test('a rule is saved for this folder, listed, refused when it cannot be one, an
   expect(store.entries(proj, 'allow')).toEqual([{ text: 'npm test', where: 'folder', key: expect.any(String), at: 0, here: true }]);
   expect(say(proj, 'allow npm test').text).toBe('Already saved for this folder: "npm test".');
   expect(say(proj, 'allow').panel.title).toBe('Runs without asking · 1 saved · 0 this session'); // alone, it lists
-  for (const [cmd, why] of [['allow git push', /never allowed/], ['allow git commit -m x', /commit always asks/], ['allow ls', /only reads/], ['allow npm test && rm x', /one command/], ['never git push', /already never allowed/], ['protect /etc/x', /named from the project folder/], ['protect *', /every file/]])
+  for (const [cmd, why] of [['allow git push', /push always asks/], ['allow git push -f', /never allowed/], ['allow git commit -m x', /commit always asks/], ['allow ls', /only reads/], ['allow npm test && rm x', /one command/], ['never git push --force', /already never allowed/], ['protect /etc/x', /named from the project folder/], ['protect *', /every file/]])
     expect([cmd, say(proj, cmd).text]).toEqual([cmd, expect.stringMatching(why)]);
   expect(say(proj, 'allow make').text).toContain('"make *" would cover anything after it.');
   expect(say(proj, 'never npm publish').text).toBe('Saved for this folder: "npm publish" never runs, in any mode.');
@@ -123,7 +123,8 @@ test('the panels number the lists, say where each rule applies, and the picker r
   expect(allow.rows.find((r) => r[0] === 'now')[1]).toContain('node --test');
   const never = perms.section('never', proj);
   expect(never.title).toMatch(/^Never runs · 12 fixed · 1 yours$/);
-  expect(never.rows.map((r) => r[1]).filter(Boolean)).toContain('git push sends your code off this Mac');
+  expect(never.rows.map((r) => r[1]).filter(Boolean)).toContain('a force push rewrites what is already on GitHub');
+  expect(never.rows.map((r) => r[1])).toContain('a git push always asks first');
   expect(never.rows.map((r) => r[1])).toContain('a git commit always asks first');
   expect(perms.section('protect', proj).rows.map((r) => r[0]).find((t) => t.startsWith('Built in:'))).toContain('.env  .env.*');
   const folders = perms.section('folders', proj);
@@ -155,7 +156,8 @@ test('/permissions test runs the real check and says why, part by part, and runs
   expect(p.rows).toEqual([['', 'npm test && ./scripts/deploy.sh'], ['ASKS', '"./scripts/deploy.sh" is not covered by any rule'], ['part 1', 'npm test   runs · your saved rule "npm test"'], ['part 2', './scripts/deploy.sh   asks · no rule covers it'], ['in manual mode, this folder\'s rules and this session\'s. Nothing was run.']]);
   expect(run('npm test -- foo').rows.slice(0, 2)).toEqual([['', 'npm test -- foo'], ['RUNS', 'every part is covered: "npm test" (saved)']]);
   expect(run('git commit -m x').rows[1]).toEqual(['ASKS', 'a commit always asks']);
-  expect(run('git push').rows[1]).toEqual(['REFUSED', 'blocked: git push sends your code off this Mac']);
+  expect(run('git push').rows[1]).toEqual(['ASKS', 'a push sends your code to GitHub, so it always asks']);
+  expect(run('git push -f').rows[1]).toEqual(['REFUSED', 'blocked: a force push rewrites what is already on GitHub']);
   expect(run('npm publish --tag x').rows[1]).toEqual(['REFUSED', 'blocked by your rule "npm publish" (/permissions)']);
   expect(run('ls').rows[1]).toEqual(['RUNS', 'it only reads']);
   expect(run('ls\nrm notes.txt').rows[1][0]).toBe('ASKS');

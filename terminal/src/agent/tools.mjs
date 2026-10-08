@@ -18,7 +18,7 @@ import { designPathFor, designDir, inDesignDir } from './design.mjs';
 import { studioPathFor, studioDir, inStudioDir, hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
 import { scriptsPathFor, inScripts, saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint, nodeHint } from './scripts.mjs';
-import { permissionsTable } from './permissions.mjs';
+import { permissionsTable, runsGitPush } from './permissions.mjs';
 
 const str = (description) => ({ type: 'string', description });
 // One choice of an Ask (agent/questions.mjs reads a bare string too).
@@ -1220,9 +1220,11 @@ export async function execute(name, args, prepared, env) {
       const own = secsOf(args.timeout);
       const timeoutMs = own ? own * 1000 : env.bash?.timeoutMs ?? 120_000;
       // A model on another machine gets a test run's passing tests folded into one line (squeezeTests).
-      // Bypass permissions lifts the folder fence and the internet block (sandbox.mjs open).
+      // Bypass permissions lifts the folder fence and the internet block (sandbox.mjs open). So does a
+      // push you said yes to (it always asks, permissions.mjs runsGitPush): it needs GitHub and the
+      // Keychain's sign-in; the app's own folder stays closed.
       const now = env.permissionsNow?.() ?? {};
-      const open = now.mode === 'bypass';
+      const open = now.mode === 'bypass' || runsGitPush(args.command);
       // A long script typed in as a heredoc is saved as SCRIPTS/… too; SCRIPTS/… in a command is the
       // real folder, which the sandbox may read (scripts.mjs). The command itself runs as typed.
       const saved = saveScript(args.command, env.cwd);
@@ -1283,9 +1285,10 @@ export function secsOf(v) {
 
 async function startJob(args, env, max) {
   if (!env.jobs) return { text: 'Background jobs are not available here. Run the command without background; timeout gives it up to 600 seconds.', error: true, view: { kind: 'error', message: 'no background jobs here' } };
-  // Bypass permissions lifts the folder fence and the internet block here too (sandbox.mjs open).
+  // Bypass permissions lifts the folder fence and the internet block here too (sandbox.mjs open), and
+  // so does a push you said yes to (permissions.mjs runsGitPush).
   const now = env.permissionsNow?.() ?? {};
-  const open = now.mode === 'bypass';
+  const open = now.mode === 'bypass' || runsGitPush(args.command);
   // SCRIPTS/… is the real folder of saved scripts, which the sandbox may read (scripts.mjs).
   const scripts = usesScripts(args.command, env.cwd);
   const sandbox = open ? { open: true, self: Boolean(now.self) } : scripts ? { readOnly: [scriptsDir()] } : null;
