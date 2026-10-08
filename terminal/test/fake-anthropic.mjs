@@ -6,6 +6,8 @@
 // stop? ('refusal', 'pause_turn'), error?: { status, type, message } }. search and fetch: Anthropic's own web tools, done on its side;
 // toolSearch: { query, found }: its tool search, loading deferred tools.
 // seen: every request's path, its key, beta and version headers, and its body.
+// limits: { requests, input, output: [limit, remaining] }, sent as Anthropic's rate-limit headers with each
+// message (claude-usage.mjs); an error's details (the spend cap's error_code) go in its body.
 import { createServer } from 'node:http';
 
 export const FAKE_MODELS = [
@@ -13,7 +15,7 @@ export const FAKE_MODELS = [
   { type: 'model', id: 'claude-haiku-4-5', display_name: 'Claude Haiku 4.5', created_at: '2025-10-01T00:00:00Z', max_input_tokens: 200_000, max_tokens: 64_000 },
 ];
 
-export function startFakeAnthropic(replies, { key = 'test-anthropic-key-0123456789' } = {}) {
+export function startFakeAnthropic(replies, { key = 'test-anthropic-key-0123456789', limits = null } = {}) {
   const queue = [...replies];
   const seen = [];
   let n = 0;
@@ -24,13 +26,15 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
     const entry = { path: req.url, method: req.method, key: req.headers['x-api-key'] ?? null, beta: req.headers['anthropic-beta'] ?? null, version: req.headers['anthropic-version'] ?? null, body, at: Date.now(), end: null };
     seen.push(entry);
     res.on('finish', () => { entry.end = Date.now(); });
-    const json = (status, obj) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
-    const error = (status, type, message) => json(status, { type: 'error', error: { type, message } });
+    const reset = new Date(Date.now() + 30_000).toISOString();
+    const rate = limits && req.url.startsWith('/v1/messages') ? Object.fromEntries(Object.entries({ requests: 'requests', input: 'input-tokens', output: 'output-tokens' }).filter(([k]) => limits[k]).flatMap(([k, h]) => [[`anthropic-ratelimit-${h}-limit`, String(limits[k][0])], [`anthropic-ratelimit-${h}-remaining`, String(limits[k][1])], [`anthropic-ratelimit-${h}-reset`, reset]])) : {};
+    const json = (status, obj) => { res.writeHead(status, { 'content-type': 'application/json', ...rate }); res.end(JSON.stringify(obj)); };
+    const error = (status, type, message, details) => json(status, { type: 'error', error: { type, message, ...(details ? { details } : {}) } });
     if (req.headers['x-api-key'] !== key) return error(401, 'authentication_error', 'invalid x-api-key');
     if (req.method === 'GET' && req.url.startsWith('/v1/models')) return json(200, { data: FAKE_MODELS, has_more: false, first_id: FAKE_MODELS[0].id, last_id: FAKE_MODELS.at(-1).id });
     if (req.method !== 'POST' || !req.url.startsWith('/v1/messages')) return error(404, 'not_found_error', `no ${req.url}`);
     const reply = queue.shift() ?? { text: 'Done.' };
-    if (reply.error) return error(reply.error.status, reply.error.type, reply.error.message);
+    if (reply.error) return error(reply.error.status, reply.error.type, reply.error.message, reply.error.details);
     const id = `msg_${++n}`;
     const blocks = [];
     if (reply.thinking) blocks.push({ type: 'thinking', thinking: reply.thinking, signature: `sig-${n}` });
@@ -59,7 +63,7 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
     if (reply.delayMs) await new Promise((r) => setTimeout(r, reply.delayMs));
     const usage = { input_tokens: 1200 + n, output_tokens: 30, cache_read_input_tokens: 900, cache_creation_input_tokens: 0 };
     if (!body.stream) return json(200, { id, type: 'message', role: 'assistant', model: body.model, content: blocks, stop_reason: stop, stop_sequence: null, usage });
-    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.writeHead(200, { 'content-type': 'text/event-stream', ...rate });
     const send = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
     send('message_start', { message: { id, type: 'message', role: 'assistant', model: body.model, content: [], stop_reason: null, stop_sequence: null, usage: { ...usage, output_tokens: 1 } } });
     blocks.forEach((b, i) => {

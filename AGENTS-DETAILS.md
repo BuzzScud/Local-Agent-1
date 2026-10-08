@@ -838,6 +838,47 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   cool-down) and `app-profiles.test.mjs` (the real window: the / menu, /subagents, /model's steps while a task works,
   its next step on the new model).
 
+## /usage and the usage bar on the Claude API (8 Oct 2026)
+
+- **What and why.** The owner asked to see what usage is left while a window runs on the Claude API, as a
+  `/usage` command and a small bar under the footer; they picked "1 · Fuel line" from two live designs
+  (`docs/private/design rounds/agentic-coder-usage-2-designs-2026-10-08.html`): "use design 1 and ensure proper
+  spacing and uniformity". What an API key can know, found by trying: every paid reply carries the limits a minute
+  (`anthropic-ratelimit-*` headers; a free call such as a token count carries none), no API gives the prepaid
+  credit balance, and the bill needs an Admin key (the app's key gets 401). So "left" is the month's spend cap.
+- **The numbers** (`terminal/src/agent/claude-usage.mjs`): each reply's limits are kept by model in
+  `<home>/usage/claude.json` (`noteLimits`, from claude.mjs after `finalMessage` and from an error's headers), so
+  every window shows the newest. The cap is the tier's, told from the requests a minute (`tierOf`: Start $500,
+  Build $1,000, Scale $200,000; Fable has its own numbers); a lower limit set in the Console is not seen, and a
+  Custom tier shows the month without a cap. The month is the cost meter's: `recordSpend` now keeps `byService`
+  and `byKind` in each day's file, and `daySpend(day, { kind: 'claude' })` counts the Claude API's dollars at any
+  address (a file from before counts whole when its one service was api.anthropic.com). The pace is dollars a
+  day since the month's first day with any; `runsOut` the day the cap is gone at that pace. `usageNow` puts it
+  together.
+- **At the cap** Anthropic answers 429 with `error_code: enforced_spend_limit_reached` and no retry-after (a limit
+  set in the Console: 400 "You have reached your specified API usage limits"). `capOf` tells it, `friendly` says it
+  plainly with the day it answers again (00:00 UTC on the 1st) and marks it `busy: false`, so busy.mjs does not
+  wait and ask again (the SDK's own two retries still happen); `noteCapped` makes the bar say paused until a
+  reply comes.
+- **The drawing** (`terminal/src/app/usage-bar.mjs`, pure): the bar (`usageRow`) is one row under the footer
+  with the footer's ends (two cells in, the words ending two cells from the edge): ◆, the line of what is left
+  (a gradient brightening to its head, today's part amber, the rest faint), then "$433.44 left of $500 · today ·
+  out by Oct 22 at ~$33/day · limits 100%"; the words shorten as the window narrows and the line keeps a fifth of
+  the row (`MIN_LINE` at least). The /usage card (`usagePanel`) has the prompt box's ends: the whole width, round
+  corners, the title in the top border, text one cell in, one label column (`LABEL_W`), the numbers ending at one
+  edge, the three meters ending together, one blank row between sections. While a reply runs a shine sweeps the
+  line; at rest it holds still (a redraw at rest breaks copying text off the screen). App.jsx counts the bar's
+  row wherever the footer's are counted (`footRows`: the / menu's room, the start page's room, `holdRoom`), and
+  reads the numbers again after each answer, every window's, and each minute.
+- **/usage** is in the / menu on the Claude API only (`CLAUDE_MENU`, the `claude` flag of `matchCommands`);
+  typed elsewhere it says where it works. The card is a picker (`kind: 'usage'`): r asks Anthropic once
+  (`askLimits`: one tiny request, its cost on the meter), esc, enter or q closes it; the clock ticks once a second
+  while it is open.
+- **Tests**: `terminal/test/usage.test.mjs` (the headers, the tiers, the cap's answer, the meter by service and
+  kind, the month, paused and cleared, the bar's ends at seven widths, the card's ends, the stand-in Claude API
+  with limits and at the cap, the / menu) and `app-usage.test.mjs` (the real window: the bar before and after a
+  reply, /usage from the menu, r, esc; and none of it off the Claude API). `fake-anthropic.mjs` takes `limits`.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

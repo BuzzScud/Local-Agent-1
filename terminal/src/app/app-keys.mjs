@@ -545,6 +545,12 @@ export function keysPart(self) {
       else if (key.ctrl && ch === 'c') self.setPicker(null);
       return;
     }
+    // /usage: r asks Anthropic for the limits now (one tiny request); esc, enter or q closes it.
+    if (cur.picker?.kind === 'usage') {
+      if (ch === 'r' && !cur.picker.asking) self.askUsage();
+      else if (key.escape || key.return || ch === 'q' || (key.ctrl && ch === 'c')) self.setPicker(null);
+      return;
+    }
     // /settings: ↑↓ a row, enter runs its command, esc goes back
     if (cur.picker?.kind === 'settings') {
       const pk = cur.picker;

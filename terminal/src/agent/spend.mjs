@@ -8,7 +8,7 @@
 import { EventEmitter } from 'node:events';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
-import { HOME } from '../../../models/index.mjs';
+import { HOME, CLAUDE_HOST } from '../../../models/index.mjs';
 
 export const spendEvents = new EventEmitter();
 const spendDir = () => join(process.env.AGENTIC_HOME ?? HOME, 'spend');
@@ -49,11 +49,18 @@ export function recordSpend(ep, usage, { dir = spendDir(), pid = process.env.AGE
     const file = join(day, `${pid}.json`);
     let kept = {};
     try { kept = JSON.parse(readFileSync(file, 'utf8')); } catch {}
+    // Each service's own dollars too (byService), and the Claude API's whatever its address (byKind), so
+    // /usage counts only the Claude API's against its cap. A file from before keeps its one service's.
+    const label = ep.label ?? null;
+    const by = { ...(kept.byService ?? (kept.service && kept.usd ? { [kept.service]: kept.usd } : {})) };
+    const kinds = { ...(kept.byKind ?? (kept.service === CLAUDE_HOST && kept.usd ? { claude: kept.usd } : {})) };
+    if (label && usd) by[label] = (by[label] ?? 0) + usd;
+    if (ep.kind && usd) kinds[ep.kind] = (kinds[ep.kind] ?? 0) + usd;
     const next = {
       usd: (kept.usd ?? 0) + (usd ?? 0),
       tokensIn: (kept.tokensIn ?? 0) + (usd == null ? usage.prompt_tokens ?? 0 : 0),
       tokensOut: (kept.tokensOut ?? 0) + (usd == null ? usage.completion_tokens ?? 0 : 0),
-      service: ep.label ?? null, updated: now.toISOString(),
+      service: label, byService: by, byKind: kinds, updated: now.toISOString(),
     };
     writeFileSync(`${file}.tmp`, JSON.stringify(next));
     renameSync(`${file}.tmp`, file);
@@ -73,6 +80,23 @@ export function todaySpend({ dir = spendDir(), now = new Date() } = {}) {
       const j = JSON.parse(readFileSync(join(day, f), 'utf8'));
       if ((j.usd ?? 0) > 0 || (j.tokensIn ?? 0) > 0) windows++;
       usd += j.usd ?? 0;
+    } catch {}
+  }
+  return { usd, windows };
+}
+
+// One day's dollars over every window: { usd, windows }, of one kind of service (byKind: 'claude') or one
+// service by its label. A file from before byKind and byService (7 Oct 2026) counts whole when its one
+// service is that one (the Claude API's: api.anthropic.com).
+export function daySpend(day, { kind = null, service = kind === 'claude' ? CLAUDE_HOST : null } = {}, { dir = spendDir() } = {}) {
+  let usd = 0, windows = 0;
+  let files = [];
+  try { files = readdirSync(join(dir, day)).filter((f) => f.endsWith('.json')); } catch {}
+  for (const f of files) {
+    try {
+      const j = JSON.parse(readFileSync(join(dir, day, f), 'utf8'));
+      const v = kind && j.byKind ? j.byKind[kind] ?? 0 : !kind && j.byService ? j.byService[service] ?? 0 : j.service === service ? j.usd ?? 0 : 0;
+      if (v > 0) { usd += v; windows++; }
     } catch {}
   }
   return { usd, windows };

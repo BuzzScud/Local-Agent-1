@@ -16,8 +16,9 @@ import { hooksFrom, leanFrom } from '../agent/way.mjs';
 import { UserHooks } from '../agent/user-hooks.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, thinkingLevel, readEditedAll, modelById, Embedder, embedderReady, HOME, remoteLabel, remoteModel, withVision, visionPath, authHeaders } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, thinkingLevel, readEditedAll, modelById, Embedder, embedderReady, HOME, remoteLabel, remoteModel, withVision, visionPath, authHeaders, endpointOf } from '../../../models/index.mjs';
 import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
+import { usageNow, usageEvents, askLimits } from '../agent/claude-usage.mjs';
 import { webSettings } from './web-form.mjs';
 import { walk } from '../tools/fs.mjs';
 import { mentionAt, selectedText } from './edit-input.mjs';
@@ -85,7 +86,7 @@ export function App({ opts, win, onRestart }) {
     openHub: () => openHub, openJumpBox: () => openJumpBox, openLoops: () => openLoops,
     openMcpPicker: () => openMcpPicker, openModelPicker: () => openModelPicker, openOwnSettings: () => openOwnSettings,
     openPermissions: () => openPermissions, openRemoteForm: () => openRemoteForm, openRewind: () => openRewind,
-    openSettings: () => openSettings, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, followProfiles: () => followProfiles, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
+    openSettings: () => openSettings, askUsage: () => askUsage, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, followProfiles: () => followProfiles, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
     pendingContext: () => pendingContext, pendingSaveRef: () => pendingSaveRef, pickHere: () => pickHere,
     pickLevel: () => pickLevel, pickLevels: () => pickLevels, pre: () => pre, preloadRemote: () => preloadRemote,
@@ -296,6 +297,30 @@ export function App({ opts, win, onRestart }) {
     t.unref?.();
     return () => { spendEvents.off('change', show); clearInterval(t); };
   }, []);
+  // The Claude API's usage (claude-usage.mjs): the bar under the footer and /usage, while this window
+  // runs on the Claude API. Worked out again after each answer (every window's), and every minute
+  // for a new day; read at once, so the first frame already has the bar's row.
+  const claudeModel = model.remote?.kind === 'claude' ? model.remote.model : null;
+  const [usage, setUsage] = useState(() => (claudeModel ? usageNow({ model: claudeModel }) : null));
+  useEffect(() => {
+    if (!claudeModel) { setUsage(null); return undefined; }
+    const show = () => setUsage(usageNow({ model: claudeModel }));
+    show();
+    usageEvents.on('change', show);
+    spendEvents.on('change', show);
+    const t = setInterval(show, 60_000);
+    t.unref?.();
+    return () => { usageEvents.off('change', show); spendEvents.off('change', show); clearInterval(t); };
+  }, [claudeModel]);
+  // r in /usage: one tiny request for the limits now.
+  const askUsage = async () => {
+    const url = agent.url;
+    const ep = endpointOf(url);
+    if (!claudeModel || ep?.kind !== 'claude') return;
+    setPicker((p) => (p?.kind === 'usage' ? { ...p, asking: true } : p));
+    try { await askLimits({ url, ep }); } catch (e) { flash(`could not ask Anthropic: ${String(e.message ?? e).slice(0, 120)}`, 4000); }
+    setPicker((p) => (p?.kind === 'usage' ? { ...p, asking: false } : p));
+  };
   // Several windows in one project (copies.mjs): this window's own copy (null: the folder itself),
   // the other windows found there as it opened, and the changes last asked about.
   const copyRef = useRef(null);
@@ -553,11 +578,14 @@ export function App({ opts, win, onRestart }) {
   const setThinking = useCallback(setThinkingFn, [agent]);
   // Clock for spinners and timers, only while something is moving.
   const btwMoving = btw?.phase === 'answering' || btw?.phase === 'writing';
+  // /usage open: once a second, for its "full in" and "min ago" (nothing moves at rest otherwise).
+  const usageOpen = picker?.kind === 'usage';
   useEffect(() => {
-    if (!(starting || live.phase === 'working' || btwMoving)) return;
-    const id = setInterval(() => setNow(Date.now()), 100);
+    const moving = starting || live.phase === 'working' || btwMoving;
+    if (!moving && !usageOpen) return;
+    const id = setInterval(() => setNow(Date.now()), moving ? 100 : 1000);
     return () => clearInterval(id);
-  }, [starting, live.phase, btwMoving]);
+  }, [starting, live.phase, btwMoving, usageOpen]);
 
   // The Mac's memory for the footer, read every 5 s (a few ms). A new figure is
   // drawn with the next redraw (a key, a spinner), not with one of its own: that
@@ -718,6 +746,8 @@ export function App({ opts, win, onRestart }) {
   const { submitFn, onPaste, onTerminalReply, flushArrows, onKey } = keysPart(self);
   const submit = useCallback(submitFn, [agent, cwd, push, quit, runShell, runSlash, sendPrompt]);
 
+  // The bar under the footer on the Claude API: one more row wherever the footer's are counted.
+  const footRows = claudeModel && usage ? 1 : 0;
   // Menu under the prompt: slash commands or @files.
   const inputMode = input.value.startsWith('!') ? 'bash' : 'prompt';
   let menu = null;
@@ -726,9 +756,9 @@ export function App({ opts, win, onRestart }) {
     // The rows the / menu may take: 18 as ever, and more in a window with room for them (the box, the
     // footer and their gaps take 6). Under the start page while it is still live, the rows it can give
     // up and still show its bot (2 + START_BIG and its blank line; start.room, below, shrinks it to fit).
-    const fits = holdRef.current ? (rows ?? 40) - 7 - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 6;
+    const fits = holdRef.current ? (rows ?? 40) - 7 - footRows - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 6 - footRows;
     const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
-    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined), remote: Boolean(model.remote) }) : [];
+    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined), remote: Boolean(model.remote), claude: Boolean(claudeModel) }) : [];
     if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
     // /shop: lists that MCP server's prompts (typed in full they run: /shop:review-pr 57).
     const slashServer = inputMode === 'prompt' && mcpHub ? /^\/([A-Za-z0-9][A-Za-z0-9-]{0,31}):(\S*)$/.exec(input.value) : null;
@@ -847,17 +877,17 @@ export function App({ opts, win, onRestart }) {
   // Big-model mode and its load. Once printed it keeps the room it was shown with, until the window
   // changes size.
   const underRows = heldRows(items, measure.current) + (menu ? menuHeight({ ...menu, index: menuIdx }, width) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
-  const heldRoom = (rows ?? 40) - 7 - underRows;
+  const heldRoom = (rows ?? 40) - 7 - footRows - underRows;
   if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRoom >= START_MIN)) holdRef.current = false;
   if (holdRef.current) pageRoomRef.current = { room: heldRoom, rows: rows ?? 40 };
   const kept = pageRoomRef.current;
   const comingNotes = (startedIn.from === 'last' && startedIn.mode !== 'ask' ? 2 : 0) + (remoteAtStart ? 6 : 0);
-  const pageRoom = holdRef.current ? heldRoom : kept?.rows === (rows ?? 40) ? kept.room : Math.max(START_MIN, (rows ?? 40) - 7 - comingNotes);
+  const pageRoom = holdRef.current ? heldRoom : kept?.rows === (rows ?? 40) ? kept.room : Math.max(START_MIN, (rows ?? 40) - 7 - footRows - comingNotes);
   // What primeRows needs to measure items as they are printed. The tip (startTip) is on the page while
   // it has room for its Try rows, else on the footer.
   const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running };
   const tipOnPage = Boolean(tip) && pageRoom - 2 >= START_BIG;
-  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start };
+  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, foot: footRows };
   itemsRef.current = items;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
@@ -916,6 +946,8 @@ export function App({ opts, win, onRestart }) {
     loopsFrame, loopsLine: loopsShown ? null : loopsSegs,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, walk: holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff ? walkStep : null, tip: tipOnPage ? null : tip,
+    // The Claude API's usage (usage-bar.mjs): the bar under the footer, and /usage; the shine runs while a reply does.
+    usage: claudeModel ? usage : null, usageLive: live.phase === 'working',
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'profiles' || picker?.kind === 'profile-step' || picker?.own?.profile ? { profilesCtx: { models: catalog?.models ?? [], busy: agent.busy, where: model.remote?.label ?? '' } } : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,

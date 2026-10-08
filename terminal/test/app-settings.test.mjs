@@ -62,7 +62,7 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac', 'jobs']);
   expect(matchCommands('/jo').map((c) => c.name)).toEqual(['jobs']);
   expect(matchCommands('/jump').map((c) => c.name)).toEqual(['jumptomac']);
-  expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size + WHEN_ROOM.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /profiles, on a remote only)
+  expect(menu.length + IN_SETTINGS.size + 2 + TYPED_ONLY.size + WHEN_ROOM.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /profiles, on a remote only, and /usage, on the Claude API only)
   // /profiles on any remote (the Claude API too), under /model; not on this Mac's own model
   expect(matchCommands('/', { side: true, remote: true }).map((c) => c.name)).toContain('profiles');
   expect(menu).not.toContain('profiles');
