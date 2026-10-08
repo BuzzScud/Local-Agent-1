@@ -298,6 +298,10 @@ const ALIASES = {
 const MORE_ALIASES = { old_text: ['original', 'pattern', 'old_content'], new_text: ['new_content', 'updated'] };
 const aliasesOf = (key) => [...(ALIASES[key] ?? [key]), ...(oldSteps() ? [] : MORE_ALIASES[key] ?? [])];
 
+// Where a plan's step keeps its words, in the order looked at, and what is never its words.
+const TODO_TEXT = ['text', 'content', 'title', 'task', 'value', 'description', 'step', 'name', 'item', 'activeForm'];
+const TODO_NOT_TEXT = ['status', 'id', 'priority'];
+
 // A tool's definition, on either way (Read's own takes paths only on Model).
 const defOf = (name, way = 'app') => [...toolDefs(way), ...WEB_TOOL_DEFS, SCREEN_TOOL_DEF, AGENT_TOOL_DEF].find((d) => d.name === name);
 
@@ -341,10 +345,12 @@ export function normalizeArgs(name, raw, way = 'model') {
     out.command = !steps && /^(ba|z)?sh$/.test(list[0]) && /^-l?c$/.test(list[1] ?? '') ? String(list.slice(2).join(' '))
       : list.map((x) => (x && typeof x === 'object' ? x.command ?? x.cmd ?? '' : x)).filter((x) => String(x).trim()).join(several ? ' && ' : ' ');
   }
+  // A step's words under another name ({"value": "…", "complete": false}, Qwen3.6 on the service, 8 Oct 2026:
+  // six steps shown as empty boxes), else its first other words; done as a flag counts too.
   if (name === 'TodoWrite' && Array.isArray(out.todos)) {
     out.todos = out.todos.map((t) => (typeof t === 'string' ? { text: t, status: 'pending' } : {
-      text: String(t.text ?? t.content ?? t.title ?? t.task ?? ''),
-      status: ['pending', 'in_progress', 'done'].includes(t.status) ? t.status : t.status === 'completed' ? 'done' : 'pending',
+      text: String(TODO_TEXT.map((k) => t?.[k]).find((v) => typeof v === 'string' && v.trim()) ?? Object.entries(t ?? {}).find(([k, v]) => typeof v === 'string' && v.trim() && !TODO_NOT_TEXT.includes(k))?.[1] ?? ''),
+      status: ['pending', 'in_progress', 'done'].includes(t?.status) ? t.status : t?.status === 'completed' || t?.complete === true || t?.done === true || t?.completed === true ? 'done' : 'pending',
     }));
   }
   return out;
