@@ -19,6 +19,13 @@ const WRITE_TPS = 13;
 
 const mb = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`);
 
+// Qwen3.6 on an Ollama service starts on its maker's values for precise coding (temperature 0.6, presence
+// penalty 0), not the service's own (its Modelfile: 1 and 1.5, the maker's for general chat). 8 Oct 2026, on
+// 1 and 1.5: five Writes in six came with only "path", the plan's steps came under "value", and Bash came as
+// a JSON list. Steering it off words it just used works against a tool call, which repeats its tags and names.
+// Not measured yet. A value picked in /model or /effort still wins.
+const qwenCoding = (m) => Boolean(m?.remote?.ollama) && /^qwen3\.6(:|$)/i.test(String(m?.remote?.model ?? ''));
+
 export const LIMITS = [
   // Who decides (agent/way.mjs, 30 Sep 2026): the app, as before, or the model, as in Claude
   // Code. Right under the Effort row, with no heading of its own (group 'Effort').
@@ -118,17 +125,17 @@ export const LIMITS = [
   },
   {
     id: 'temperature', label: 'Temperature', model: true, choice: true,
-    steps: () => ['own', 0, 0.2, 0.4, 0.7, 1],
-    def: () => 'own',
+    steps: () => ['own', 0, 0.2, 0.4, 0.6, 0.7, 1],
+    def: (m) => (qwenCoding(m) ? 0.6 : 'own'),
     show: (v) => (v === 'own' ? 'its own' : String(v)),
     note: (v) => (v === 'own' ? 'the model’s own on the service' : v <= 0.2 ? 'steadier: much the same answer each time' : 'more varied: other wordings and ideas'),
   },
   {
     id: 'presence', label: 'Presence penalty', model: true, choice: true,
-    steps: () => ['own', 0.5, 1, 1.5, 2],
-    def: () => 'own',
+    steps: () => ['own', 0, 0.5, 1, 1.5, 2],
+    def: (m) => (qwenCoding(m) ? 0 : 'own'),
     show: (v) => (v === 'own' ? 'its own' : String(v)),
-    note: (v) => (v === 'own' ? 'the model’s own · raise it if it repeats itself or loops' : 'steers it off words it has used · too high and it drifts'),
+    note: (v) => (v === 'own' ? 'the model’s own · raise it if it repeats itself or loops' : v === 0 ? 'off: words it has used are not held against it · raise it if it loops' : 'steers it off words it has used · too high and it drifts'),
   },
   {
     // keep_alive: how long the service keeps it loaded after a request (open: while this window is open,
