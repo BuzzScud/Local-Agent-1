@@ -294,8 +294,10 @@ const ALIASES = {
   stop: ['stop', 'kill', 'cancel'],
 };
 // Fewer steps lost (6 Oct 2026, off with AGENTIC_STEPS=old): Qwen3.6 on the service sent Edit
-// {"pattern", "replacement"} twice and {"original", "replacement"} once, each turned back.
-const MORE_ALIASES = { old_text: ['original', 'pattern', 'old_content'], new_text: ['new_content', 'updated'] };
+// {"pattern", "replacement"} twice and {"original", "replacement"} once, each turned back. And the names of
+// the str_replace editor many coding models learn on, old_str and new_str (8 Oct 2026: Qwen3.6's Edits
+// came back three times as 'Edit needs "old_text"'; which names it sent is not known yet).
+const MORE_ALIASES = { old_text: ['original', 'pattern', 'old_content', 'old_str'], new_text: ['new_content', 'updated', 'new_str'] };
 const aliasesOf = (key) => [...(ALIASES[key] ?? [key]), ...(oldSteps() ? [] : MORE_ALIASES[key] ?? [])];
 
 // Where a plan's step keeps its words, in the order looked at, and what is never its words.
