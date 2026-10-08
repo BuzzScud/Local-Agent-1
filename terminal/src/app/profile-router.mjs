@@ -10,7 +10,7 @@
 //                   itself while the profile cools down after a spill
 // Every server is connected once (the window's own is lent to it) and kept until the window closes.
 import { statSync } from 'node:fs';
-import { connectRemote, ollamaCatalog } from '../../../models/index.mjs';
+import { connectRemote, ollamaCatalog, endpointOf } from '../../../models/index.mjs';
 import { readProfiles, profilesSaved, profileFor, PROFILES_FILE, MAIN_PROFILE } from './profiles.mjs';
 import { HELPER_CTX, HELPER_KEEP } from '../agent/helper-models.mjs';
 
@@ -60,8 +60,16 @@ export class ProfileRouter {
     const saved = Object.values(this.settings()?.remotes ?? {}).find((r) => serverKey(r) === serverKey(server)) ?? {};
     return { ...saved, ...server, model, context: saved.context ?? 0 };
   }
+  // A pooled connection still in use: one whose address another part of the window closed (a /remote move
+  // closes the window's old one, which may share it) is forgotten, and reached again.
+  live(server) {
+    const k = serverKey(server);
+    const e = this.pool.get(k);
+    if (e && !endpointOf(e.url)) { this.pool.delete(k); return undefined; }
+    return e;
+  }
   urlNow(server) {
-    const have = this.pool.get(serverKey(server));
+    const have = this.live(server);
     if (have) return have.url;
     this.reach(server).catch(() => {});
     return null;
@@ -69,7 +77,7 @@ export class ProfileRouter {
   // Connected once; a profile's first request waits for it.
   async reach(server, model = null) {
     const k = serverKey(server);
-    const have = this.pool.get(k);
+    const have = this.live(server);
     if (have) return have;
     if (!this.waiting.has(k)) {
       this.waiting.set(k, (async () => {
@@ -97,7 +105,7 @@ export class ProfileRouter {
     const { name } = profileFor(q, d);
     const p = name ? d.profiles[name] : null;
     if (!p?.server || !p.model) return null;
-    const have = this.pool.get(serverKey(p.server));
+    const have = this.live(p.server);
     if (have && have.url === now.url && p.model === now.model) return { name, same: true };
     // Its own connection for this model: the server's address then names it (the conversation's
     // own calls name no model; every helper's call names its own).

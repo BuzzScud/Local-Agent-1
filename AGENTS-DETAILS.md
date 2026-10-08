@@ -763,8 +763,8 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   and a wait (`spillAfter`), by name, in `~/.agentic-coder/profiles.json` with `uses`: a row's key (`ai:btw`,
   `type:fix`, `cat:coding`, `skill:write-a-test`) → a profile. The most specific wins (`profileFor`): skill › task
   type › its category › the AI › its category › Main. Nothing changes until a file exists: the first one is made from
-  what runs today (`seedProfiles`: Main = the remote in use, one profile per /subagents helper model, a saved Claude
-  API as one nothing uses), and only a window makes it (it knows the helpers); the hub's tab waits for one.
+  what runs today (`seedProfiles`: Main = the remote in use, one profile per /subagents helper model, each other
+  server saved in /remote as one nothing uses), and only a window makes it (it knows the helpers); the hub's tab waits for one.
 - **The router** (`terminal/src/app/profile-router.mjs`) reads the file again whenever its time changed, at each
   request. The conversation moves between steps (`agent-model.mjs followProfile`, called before `fitContext` in the
   step loop and in `chat`): the step under way never moves; the new model reads the conversation once, made to fit
