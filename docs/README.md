@@ -8,10 +8,12 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [design rounds/agentic-coder-chat-look-built-2026-10-08.html](design%20rounds/agentic-coder-chat-look-built-2026-10-08.html) | page | Chat Screen Designs | 1.1 MB | 2026-10-08 |
+| [design rounds/agentic-coder-chat-look-2-designs-2026-10-08.html](design%20rounds/agentic-coder-chat-look-2-designs-2026-10-08.html) | page | Chat Screen Designs | 1.4 MB | 2026-10-08 |
+| [design rounds/agentic-coder-profiles-2-designs-2026-10-08.html](design%20rounds/agentic-coder-profiles-2-designs-2026-10-08.html) | page | Profiles · two designs | 473 KB | 2026-10-08 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 543 KB | 2026-10-08 |
 | [design rounds/agentic-coder-terminal-look-2-designs-2026-10-07-v2.html](design%20rounds/agentic-coder-terminal-look-2-designs-2026-10-07-v2.html) | page | Terminal Look Designs | 564 KB | 2026-10-08 |
 | [reports/agentic-coder-profiles-built-2026-10-08.html](reports/agentic-coder-profiles-built-2026-10-08.html) | page | Profiles · built | 160 KB | 2026-10-08 |
-| [design rounds/agentic-coder-profiles-2-designs-2026-10-08.html](design%20rounds/agentic-coder-profiles-2-designs-2026-10-08.html) | page | Profiles · two designs | 473 KB | 2026-10-08 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 185 KB | 2026-10-08 |
 | [design rounds/agentic-coder-terminal-look-2-designs-2026-10-07.html](design%20rounds/agentic-coder-terminal-look-2-designs-2026-10-07.html) | page | Terminal Look Designs | 379 KB | 2026-10-08 |
 | [tests/agentic-coder-claude-lean-claude-opus-5-5-2026-10-07-1832.html](tests/agentic-coder-claude-lean-claude-opus-5-5-2026-10-07-1832.html) | page | Claude: lean vs full · claude-opus-5-5 | 17 KB | 2026-10-07 |
 | [tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1103.html](tests/agentic-coder-fewer-steps-qwen3-6-35b-a3b-2026-10-06-1103.html) | page | Fewer steps: before vs after · Qwen3.6:35B-A3B | 15 KB | 2026-10-06 |
