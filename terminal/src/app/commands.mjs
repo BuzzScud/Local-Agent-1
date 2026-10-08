@@ -89,7 +89,7 @@ const SERVICE_ONLY = new Set([]);
 export const TYPED_ONLY = new Set(['morning', 'subagents']);
 // On a remote only (8 Oct 2026): profiles are servers and models on /remote, so on this Mac's own model
 // /profiles is not in the menu (typed in full it says so).
-export const REMOTE_MENU = new Set(['profiles']);
+const REMOTE_MENU = new Set(['profiles']);
 // In the / menu where it fits (3 Oct 2026, the owner: "i dont see the new command?"; it had been
 // typed only, so nothing showed it, not even /jump): listed in the whole menu in a window with room
 // for one more row than the 18 an 80 × 24 window holds, and found in any window once its name is typed.
