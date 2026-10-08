@@ -89,3 +89,41 @@ test('only the hub page may change the memory: a request sent by another site is
   expect(o.get).toBe(404);
   expect(o.left).toBe(2);
 });
+
+test('written by you (8 Oct 2026): a rule and a fact from scratch, a fact made a rule and back again; each is in the log', () => {
+  const o = inChild(`
+    out.rule = await post('/memory/add', { where: 'you', text: 'Always run the tests before you say a change is done.', always: true });
+    out.fact = await post('/memory/add', { where: 'project', text: 'The desk server runs on port 8811.', kind: 'mistake' });
+    out.youKind = await post('/memory/add', { where: 'project', text: 'Release notes live in docs/reports.', kind: 'you' });
+    out.again = await post('/memory/add', { where: 'project', text: 'The desk server runs on port 8811.' });
+    out.short = await post('/memory/add', { where: 'you', text: 'ok' });
+    out.secret = await post('/memory/add', { where: 'project', text: 'The api key is sk-abcdefghijklmnopqrstuvwxyz123456' });
+    out.nowhere = await post('/memory/add', { where: 'elsewhere', text: 'Somewhere that is not a memory at all.' });
+    out.made = await post('/memory/always', { where: 'project', id: out.fact.added, always: true });
+    out.asRule = (await get('/memory.json')).parts[1].facts.find((f) => f.id === out.fact.added);
+    out.back = await post('/memory/always', { where: 'project', id: out.fact.added, always: false });
+    out.missing = await post('/memory/always', { where: 'project', id: 'no-such-fact', always: true });
+    out.end = await get('/memory.json');
+    out.page = await (await fetch(s.url.replace(/\\/$/, '') + '/memory')).text();
+  `);
+  expect([o.rule.status, o.fact.status, o.youKind.status]).toEqual([200, 200, 200]);
+  const you = o.end.parts[0].facts.find((f) => f.id === o.rule.added);
+  expect(you).toMatchObject({ kind: 'you', always: true, text: 'Always run the tests before you say a change is done.', from: 'written by you in the hub' });
+  const proj = o.end.parts[1].facts;
+  expect(proj.find((f) => f.id === o.fact.added)).toMatchObject({ kind: 'mistake', always: false, trust: 0 });
+  // "about you" is not a kind a project fact can have: it is a note there
+  expect(proj.find((f) => f.id === o.youKind.added).kind).toBe('project');
+  expect([o.again.status, o.again.error]).toEqual([400, 'saved already']);
+  expect([o.short.status, o.short.error]).toEqual([400, 'too short to mean anything']);
+  expect([o.secret.status, o.secret.error]).toEqual([400, 'looks like a key or a password']);
+  expect([o.nowhere.status, o.nowhere.error]).toEqual([400, 'which memory?']);
+  expect(o.made.status).toBe(200);
+  expect(o.asRule.always).toBe(true);
+  expect(o.back.status).toBe(200);
+  expect(o.missing.status).toBe(404);
+  const log = o.end.log.filter((l) => [o.rule.added, o.fact.added].includes(l.id)).map((l) => `${l.where} ${l.what}${l.why ? ` ${l.why}` : ''}`);
+  expect(log).toEqual(expect.arrayContaining(['you add by hand', 'project add by hand', 'project always', 'project sometimes']));
+  // the page has the way in, and the words for the new lines of the log
+  expect(o.page).toContain('+ New memory');
+  expect(o.page).toContain("always: 'made a rule'");
+});

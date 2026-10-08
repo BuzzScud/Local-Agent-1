@@ -8,8 +8,10 @@
 //   POST /memory/retire     { where, id }
 //   POST /memory/restore    { where, id }
 //   POST /memory/undo       takes back the last save
+//   POST /memory/add        { where, text, kind?, always? }   a fact you write yourself; always: a rule, read at every start
+//   POST /memory/always     { where, id, always }             a fact made a rule, or a rule made a fact again (8 Oct 2026)
 import { homedir } from 'node:os';
-import { memoryDirs, readFacts, readLog, editFact, pinFact, applyChanges, restoreFact, undoSave, RETIRE_AT, UNUSED_DAYS } from '../agent/facts.mjs';
+import { memoryDirs, readFacts, readLog, editFact, pinFact, setAlways, applyChanges, restoreFact, undoSave, KINDS, RETIRE_AT, UNUSED_DAYS } from '../agent/facts.mjs';
 
 const tilde = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
 const plain = ({ dir: _d, ...f }) => f;
@@ -38,9 +40,18 @@ export async function memoryRoute(req, url, cwd) {
   const dir = body.where === 'you' ? dirs.you : body.where === 'project' ? dirs.project : null;
   const ok = (extra = {}) => Response.json({ ok: true, ...extra, data: memoryData(cwd) }, { headers: { 'cache-control': 'no-store' } });
   if (url.pathname === '/memory/undo') { const u = undoSave(dirs); return u ? ok({ undone: u.did.length }) : bad('nothing to take back', 404); }
+  // A fact written from scratch: about you is always kind "you"; in a project, any other kind (a note by default).
+  // The store's own rules hold: 8 characters at least, nothing that looks like a key, not one saved already.
+  if (url.pathname === '/memory/add') {
+    if (!dir) return bad('which memory?');
+    const kind = body.where === 'you' ? 'you' : KINDS.includes(body.kind) && body.kind !== 'you' ? body.kind : 'project';
+    const r = applyChanges(dir, { add: [{ text: body.text, kind, always: body.always === true, from: 'written by you in the hub' }] }, { why: 'by hand' });
+    return r.added.length ? ok({ added: r.added[0].id }) : bad(r.refused[0]?.why ?? 'it was not saved');
+  }
   if (!dir || typeof body.id !== 'string' || !/^[\w.-]+$/.test(body.id)) return bad('which fact?');
   if (url.pathname === '/memory/edit') { const r = editFact(dir, body.id, body.text); return r.error ? bad(r.error) : ok(); }
   if (url.pathname === '/memory/pin') return pinFact(dir, body.id, body.pinned !== false) ? ok() : bad('no such fact', 404);
+  if (url.pathname === '/memory/always') return setAlways(dir, body.id, body.always !== false) ? ok() : bad('no such fact', 404);
   if (url.pathname === '/memory/retire') { const r = applyChanges(dir, { retire: [{ id: body.id, reason: 'taken out of use by you' }] }, { why: 'by hand' }); return r.retired.length ? ok() : bad('no such fact', 404); }
   if (url.pathname === '/memory/restore') return restoreFact(dir, body.id) ? ok() : bad('no such fact', 404);
   return bad('not found', 404);
