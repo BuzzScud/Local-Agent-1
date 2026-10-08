@@ -95,6 +95,28 @@ export function clipboardImage(out) {
   return JSON.parse(r.out);
 }
 
+// A picture as a few coloured dots, for the prompt box's tray (app/attach.mjs): at most `cols`
+// wide and `rows` × 2 tall, since a cell draws two (▀ in two colours). A PDF: its first page.
+// { w, h, srcW, srcH, px: ['rrggbb' | null (see-through), …] row by row, pages? }
+export function thumbnail(path, { cols = 24, rows = 5 } = {}) {
+  if (isPdf(path)) {
+    const png = scratch('png');
+    try {
+      const r = run(['pdf-page', path, '1', png, '512']);
+      if (r.code === 4) throw new Error('the PDF is locked with a password');
+      if (r.code !== 0) throw new Error(r.err || 'macOS could not open the PDF');
+      const { srcW, srcH, ...t } = thumbnail(png, { cols, rows });
+      return { ...t, pages: JSON.parse(r.out).pages };
+    } finally { rmSync(png, { force: true }); }
+  }
+  const r = run(['thumb', path, String(cols), String(rows)]);
+  if (r.code !== 0) throw new Error(r.err || 'macOS could not open the picture');
+  const t = JSON.parse(r.out);
+  const px = [];
+  for (let i = 0; i < t.w * t.h; i++) { const c = t.px.slice(i * 6, i * 6 + 6); px.push(c === '------' ? null : c); }
+  return { w: t.w, h: t.h, srcW: t.srcW, srcH: t.srcH, px };
+}
+
 // Black text on white at `out` (the tests' pictures, the vision check's).
 export function textImage(out, text, { w = 640, h = 240 } = {}) {
   const r = run(['text-image', out, String(w), String(h), text]);

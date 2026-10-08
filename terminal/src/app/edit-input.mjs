@@ -175,7 +175,13 @@ export function editInput(s, input, key, opts) {
   if (key.ctrl && input === 'u') { const st = lineStart(v, c); return { value: v.slice(0, st) + v.slice(c), cursor: st }; }
   if (key.ctrl && input === 'k') return { value: v.slice(0, c) + v.slice(lineEnd(v, c)), cursor: c };
   if ((key.ctrl && input === 'w') || (key.meta && (key.backspace || key.delete))) { const st = wordLeft(v, c); return { value: v.slice(0, st) + v.slice(c), cursor: st }; }
-  if (key.backspace || key.delete) return c > 0 ? { value: v.slice(0, c - 1) + v.slice(c), cursor: c - 1 } : s;
+  if (key.backspace || key.delete) {
+    if (c <= 0) return s;
+    // a picture's or PDF's chip ([Image #1], [PDF #2]: app/attach.mjs) goes in one piece
+    const chip = /\[(?:Image|PDF) #\d+\]$/.exec(v.slice(0, c));
+    if (chip) return { value: v.slice(0, chip.index) + v.slice(c), cursor: chip.index };
+    return { value: v.slice(0, c - 1) + v.slice(c), cursor: c - 1 };
+  }
   if (key.ctrl || key.meta || key.escape || key.tab || key.return || key.upArrow || key.downArrow || key.pageUp || key.pageDown) return s;
   if (!input) return s;
   return insertText(s, input.replace(/\r\n?/g, '\n'));

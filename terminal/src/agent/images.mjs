@@ -96,5 +96,6 @@ export function droppedFiles(text, cwd) {
   return found;
 }
 
-// Where a pasted picture sits in the prompt: "[Image #2]".
-export const IMAGE_TOKEN = /\[Image #(\d+)\]/g;
+// Where a pasted or dropped picture sits in the prompt, "[Image #2]", and a dropped PDF, "[PDF #3]"
+// (app/attach.mjs): the kind, then the number.
+export const ATTACH_TOKEN = /\[(Image|PDF) #(\d+)\]/g;

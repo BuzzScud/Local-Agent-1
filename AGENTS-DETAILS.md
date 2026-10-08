@@ -718,6 +718,34 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Tests**: `terminal/test/start.test.mjs` (the room at eight sizes, never past it, loading as tall as ready, every
   part, the small page, the numbers, `/resume 2` and the / menu in the real window).
 
+## Pictures and PDFs dropped into the prompt (7 Oct 2026)
+
+- **What and why.** The owner asked to drag a screenshot in and see it as a preview or attachment.
+  Before, a dragged file stayed as its long path in the box until enter. Their picks (all
+  recommended): the tray over the box with a thumbnail, a click opening Quick Look, the file copied
+  as it arrives, a chip deleted in one piece, PDFs too (not thumbnails in sent messages).
+- **How** (`terminal/src/app/attach.mjs`, drawn by `tray.jsx`): a paste, or keys arriving all at
+  once (a drop with Terminal's paste brackets off), is read with `droppedFiles`; each picture or
+  PDF is copied to `~/.agentic-coder/attachments/<session>-<n>.<ext>` and its path in the text
+  becomes `[Image #n]` or `[PDF #n]` (`ATTACH_TOKEN`, shared with ctrl+v's numbering:
+  `pastedRef` = { n, files, info }). One that cannot be copied or opened keeps its path, with a
+  line saying why. In shell mode (!) a path stays a path. The tray lists the chips the box holds
+  (`trayItems`), so a deleted chip takes its card away and ctrl+z brings it back; `trayLayout`
+  places the cards once, for the drawing and for a click (`trayRef`, onMouse: the rows over the
+  box's top edge). A window under 24 rows or 60 columns gets one line instead.
+- **The thumbnail** is media-tool.swift's `thumb`: the picture drawn into at most 20 × 10 dots
+  (a cell is two, ▀ with its top dot as the letter and its bottom as the background); a dot half
+  see-through or more is left blank (a window's shadow). In Terminal's 256 colours it shows a
+  page's layout and colours, not its words; Quick Look (`qlmanage -p`, ctrl+f or a click) shows it sharp.
+- **What the model gets** is as before (the copy, made smaller), plus a line saying where a dropped
+  file came from (`expandMentions`' `from`), so it can still name or read the original.
+- **Tests**: `attach.test.mjs` (the drop, the copy, PDFs, what is left alone, the thumbnail the
+  right way up, the cards, Quick Look), `edit-input.test.mjs` (a chip in one piece),
+  `app-vision.test.mjs` (the real window: drop, card, ctrl+f, delete and ctrl+z, the request),
+  `app-mouse.test.mjs` (a click on a card), `app-keeper.test.mjs` (a drop through the keeper).
+  `AGENTIC_TEST_QUICKLOOK` names a file the tests read in Quick Look's place; with
+  `AGENTIC_NO_OPEN` (every test window) nothing opens.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

@@ -161,7 +161,11 @@ changes put back, as a message in the window does.
 ### Pictures and PDFs
 
 Drag a screenshot or a PDF into the window, name it with `@shot.png`, or copy a screenshot
-(ctrl+shift+cmd+4) and press **ctrl+v**: it goes with your message. The model looks at a picture
+(ctrl+shift+cmd+4) and press **ctrl+v**: it goes with your message. A dragged or pasted one becomes
+`[Image #1]` (a PDF `[PDF #1]`) in the prompt at once, copied, so moving the file afterwards changes
+nothing, and a card over the prompt box shows it: a small picture of it, its name and its size.
+**ctrl+f** (or a click on the card) opens it full size in Quick Look; delete takes a chip away in
+one piece and ctrl+z brings it back. The model looks at a picture
 once its vision add-on is loaded: the first picture you attach loads it (the model reloads once,
 about 20 s; it is downloaded then if `coding setup` has not got it yet: Qwen's is 0.92 GB, Gemma's
 0.18 GB). The model can also look at a picture it finds by itself with Read: its vision is

@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { existsSync, statSync } from 'node:fs';
 import { resolvePath } from '../agent/tools.mjs';
 import { liveUsers, stopServer, scanServers } from '../../../models/index.mjs';
-import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
+import { droppedFiles, ATTACH_TOKEN } from '../agent/images.mjs';
 import { isImage, isPdf, preparedImage, pdfText } from '../tools/media.mjs';
 import { readFile } from '../tools/read.mjs';
 
@@ -52,9 +52,10 @@ export const remoteConfOf = (r) => (r ? { ...r, key: Boolean(r.key) } : null);
 
 // "@path" in a prompt attaches that file for the model.
 // @picture.png and @doc.pdf too: a picture is attached as a picture (images), a
-// PDF as its text. A file dragged into the window (its path) and a pasted
-// picture ([Image #n], `pasted`) count the same way.
-export function expandMentions(value, cwd, maxChars, pasted = new Map()) {
+// PDF as its text. A file dragged into the window (its path) and a pasted or
+// dropped one ([Image #n], [PDF #n]: `pasted`, n → its copy) count the same way;
+// `from` (n → where a dropped one was) tells the model where it came from.
+export function expandMentions(value, cwd, maxChars, pasted = new Map(), from = new Map()) {
   const attached = [];
   const images = [];
   let extra = '';
@@ -69,9 +70,16 @@ export function expandMentions(value, cwd, maxChars, pasted = new Map()) {
   const addImage = (abs, shown) => {
     try { const img = preparedImage(abs); images.push({ ...img, path: shown }); attached.push({ path: shown, label: `picture, ${img.srcW}×${img.srcH}` }); } catch (e) { attached.push({ path: shown, label: `not a picture it can open: ${e.message}` }); }
   };
-  for (const m of value.matchAll(IMAGE_TOKEN)) {
-    const file = pasted.get(Number(m[1]));
-    if (file && existsSync(file)) addImage(file, m[0]);
+  const chips = new Set();
+  for (const m of value.matchAll(ATTACH_TOKEN)) {
+    const n = Number(m[2]);
+    const file = pasted.get(n);
+    if (chips.has(n) || !file || !existsSync(file)) continue;
+    chips.add(n);
+    const was = from.get(n);
+    const shown = was?.startsWith(homedir()) ? `~${was.slice(homedir().length)}` : was;
+    if (isPdf(file)) addPdf(file, shown ?? m[0]); else addImage(file, m[0]);
+    if (shown) extra += `\n\n(${m[0]} is ${shown}, dropped into the window.)`;
   }
   for (const d of droppedFiles(value, cwd)) {
     const shown = d.path.startsWith(homedir()) ? `~${d.path.slice(homedir().length)}` : d.path;
