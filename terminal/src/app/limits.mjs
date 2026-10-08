@@ -154,11 +154,14 @@ export const LIMITS = [
     note: () => 'each try ~20 s on Low, up to a few min on High',
   },
   {
+    // 0 = no limit: only on the Claude API, and its default (8 Oct 2026, the owner's ask: "remove the
+    // step limit for claude api"); a request runs until it is done, or esc stops it. Saved 0 fits only
+    // there (readLimits: in range of the row's steps), so a local model keeps its count.
     id: 'steps', label: 'Steps per request',
-    steps: () => [20, 40, 60, 80, 120],
-    def: (m) => m?.harness?.steps ?? 40,
-    show: (v) => String(v),
-    note: (v) => `stops a request after ${v} tool steps`,
+    steps: (m) => (m?.remote?.kind === 'claude' ? [0, 20, 40, 60, 80, 120] : [20, 40, 60, 80, 120]),
+    def: (m) => (m?.remote?.kind === 'claude' ? 0 : m?.harness?.steps ?? 40),
+    show: (v) => (v ? String(v) : 'no limit'),
+    note: (v) => (v ? `stops a request after ${v} tool steps` : 'runs until the request is done; esc stops it'),
   },
   {
     // 0 = auto: a share of the Context, never under 12,000 (room.mjs). Saved with the rest of the rules' reading:
@@ -424,7 +427,7 @@ export function searchModels(agent, values) {
 // The limits the agent reads while it works (they take effect at once).
 export function applyLimits(agent, values) {
   agent.maxTries = values.tries;
-  agent.maxSteps = values.steps;
+  agent.maxSteps = values.steps || Infinity; // 0: no limit (the Claude API)
   agent.trimAt = values.trimAt;
   agent.fullAt = values.summarizeAt;
   agent.bash = { maxLines: values.outputLines, timeoutMs: values.timeoutSecs * 1000 };

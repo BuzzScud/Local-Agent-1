@@ -44,6 +44,26 @@ test('saved limits: valid ones are used, junk and out-of-range ones are left out
   expect([bad.trimAt, bad.summarizeAt]).toEqual([0.78, 0.85]);
 });
 
+test('the Claude API has no step limit: Steps per request starts at "no limit" (0) there, the agent runs without a cap, and a saved 0 means nothing on a local model', () => {
+  const claude = { ...model, id: 'remote', remote: { kind: 'claude', model: 'claude-opus-5-5' } };
+  const row = LIMITS.find((l) => l.id === 'steps');
+  expect(row.steps(claude)).toEqual([0, 20, 40, 60, 80, 120]);
+  expect(row.steps(model)).toEqual([20, 40, 60, 80, 120]);
+  expect(defaultLimits(claude).steps).toBe(0);
+  expect(row.show(0)).toBe('no limit');
+  expect(row.note(0)).toContain('until the request is done');
+  // a count picked in /effort still wins there
+  expect(readLimits({ limits: { steps: 60 } }, claude).steps).toBe(60);
+  expect(limitsToSave({ ...defaultLimits(claude), steps: 60 }, claude)).toEqual({ steps: 60 });
+  // 0 saved on Claude: a local model (whose row starts at 20) keeps its own 40
+  expect(readLimits({ limits: { steps: 0 } }, model).steps).toBe(40);
+  const agent = { bash: {} };
+  applyLimits(agent, defaultLimits(claude));
+  expect(agent.maxSteps).toBe(Infinity);
+  applyLimits(agent, defaultLimits(model));
+  expect(agent.maxSteps).toBe(40);
+});
+
 test('big-model mode: a big model on a service starts with more steps, tries and output, the app still deciding; what /effort saved still wins, and a save on it keeps the rows it left alone', () => {
   const big = { ...model, id: 'remote', remote: { kind: 'openai', ollama: '0.32.12', model: 'qwen3-coder:30b' }, harness: { steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 } } };
   const small = defaultLimits(model);
