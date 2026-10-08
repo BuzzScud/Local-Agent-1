@@ -8,292 +8,320 @@
 :root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e;--warn:#8a5a00;--accent:#2a78d6;--tint:rgba(42,120,214,.08)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c674;--accent:#5a9ceb;--tint:rgba(90,156,235,.12)}}
 :root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c674;--accent:#5a9ceb;--tint:rgba(90,156,235,.12)}
-*{box-sizing:border-box}html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-/* One container that fits the window, like the Tests tab: the title and the tabs stay put, and each tab fills the space under them. A list shows as many facts as fit and pages through the rest; the fact picked in it is shown in full beside it, with what you can do to it. A small window (a phone) scrolls instead. */
-main{max-width:1120px;margin:0 auto;padding:22px 16px 16px;display:flex;flex-direction:column;min-height:100vh}
-@media (min-width:900px) and (min-height:560px){html,body{height:100%;overflow:hidden}main{height:100vh;min-height:0}}
-h1{font-size:26px;line-height:1.15;letter-spacing:-.02em;margin:0 0 4px}h2{font-size:18px;letter-spacing:-.01em;margin:0}h3{font-size:15px;margin:0 0 2px}p{margin:0 0 10px}
-.lede{color:var(--mute);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sub{color:var(--mute);font-size:14px;margin:0}
-.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0;flex:none}
-.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
-.tabs button:hover{color:var(--ink);border-color:var(--faint)}.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}
-.tabs button span{color:var(--faint);font-weight:400;margin-left:5px}
-.stage{flex:1;min-height:0;display:flex;flex-direction:column;margin-top:14px}
-.pane{flex:1;min-height:0;display:flex;flex-direction:column}.pane[hidden]{display:none}
-/* Overview: one card per memory and two more, then the last changes, which take the rest of the height. */
-#overview{gap:18px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;flex:none}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0;cursor:pointer;font:inherit;color:inherit;text-align:left;display:flex;flex-direction:column;justify-content:flex-start}
-.card:hover{border-color:var(--faint)}.card:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.card .k{color:var(--mute);font-size:13px}.card .v{font-size:21px;font-weight:700;letter-spacing:-.01em;margin:2px 0;font-variant-numeric:tabular-nums}
-.card .m{color:var(--mute);font-size:12.5px;margin-top:4px;overflow-wrap:anywhere}
-.recent{flex:1;min-height:0}
-.rhead{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);flex:none;min-width:0}.rhead h2{font-size:16px}
-.rhead .said{margin-left:auto}
-.log{list-style:none;padding:0;margin:0;flex:1;min-height:0;overflow:hidden}.log li{padding:8px 14px;border-bottom:1px solid var(--line);font-size:14px;display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;white-space:nowrap}
-.log li span:last-child{overflow:hidden;text-overflow:ellipsis}.log .w{color:var(--mute);font-variant-numeric:tabular-nums}
-/* A list tab: one line per fact on the left, the picked fact in full on the right, the pages under the rows. */
-.khead{display:flex;align-items:baseline;gap:12px;margin:0 0 10px;flex:none;min-width:0}.khead .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.khead .kbar{margin-left:auto;display:flex;align-items:center;gap:10px;flex:none}.khead .kbar[hidden]{display:none}
-.split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
-.box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column}
-.rows{flex:1;min-height:0;overflow:hidden}
-table{border-collapse:collapse;width:100%;table-layout:fixed;font-variant-numeric:tabular-nums}
-th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:39px}
-thead th{font-size:13px;color:var(--mute);font-weight:600;background:var(--soft);height:36px}
-tbody tr{cursor:pointer}tbody tr:hover{background:var(--soft)}tbody tr[aria-selected="true"]{background:var(--soft)}tbody tr[aria-selected="true"] td.t{font-weight:600}
-td .q{color:var(--mute);font-size:12.5px;margin-left:6px}td .rule{color:var(--mute)}
-.pager{flex:none;display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--line);background:var(--card)}
-.pager button{border-radius:999px;color:var(--ink);white-space:nowrap}
-.pager .at{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}.pager .keys{margin-left:auto;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nothing{padding:22px 16px;color:var(--mute)}
-.detail{padding:16px 18px;overflow:auto}
-.detail .k{color:var(--mute);font-size:13px}.detail .fact{font-size:15px;line-height:1.45;margin:8px 0 10px;overflow-wrap:anywhere;white-space:pre-wrap}
-.detail ol{margin:0 0 12px;padding-left:20px;color:var(--mute);font-size:13.5px}
-.detail dl{margin:0 0 14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;font-size:13.5px}.detail dt{color:var(--mute)}.detail dd{margin:0;min-width:0;overflow-wrap:anywhere}
-.chip{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
-.chip.always,.chip.pinned{background:var(--tint);border-color:transparent;color:var(--accent)}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,textarea{font:inherit;color:inherit}
+/* The Memory tab (8 Oct 2026, the owner's pick of two designs after "i cant scroll here"): the page fits the window;
+   the memories on the left, the list in the middle (it scrolls: every item is there, none is paged away or hidden),
+   the one picked in full on the right with what you can do to it. + New memory writes a rule or a fact yourself.
+   A small window (a phone) scrolls as a page instead. */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr);max-width:1500px;margin:0 auto;padding:18px 18px 14px;gap:14px}
+.top{display:flex;align-items:flex-end;gap:16px;min-width:0}
+.top .t{min-width:0;flex:1}
+h1{font-size:24px;line-height:1.15;letter-spacing:-.02em;margin:0 0 3px}
+.lede{color:var(--mute);margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.search{position:relative;flex:none}
+.search input{width:300px;padding:8px 12px 8px 32px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--faint);fill:none;stroke-width:2}
+.newmem{flex:none;border:0;background:var(--accent);color:#fff;border-radius:10px;padding:8px 16px;font-weight:600;cursor:pointer;white-space:nowrap}
+.newmem:hover{filter:brightness(1.07)}
+.compose h2{font-size:19px;margin:0 0 4px}.compose p.k{margin:0 0 12px}
+.compose textarea{min-height:110px;margin:0 0 12px}
+.compose .row{display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap;font-size:13.5px}
+.compose .row>span:first-child{width:118px;color:var(--mute);flex:none}
+.tog{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.tog button{border:0;background:none;padding:4px 12px;cursor:pointer;color:var(--mute);font-size:13px}
+.tog button[aria-pressed="true"]{background:var(--tint);color:var(--accent);font-weight:600}
+.compose select{border:1px solid var(--line);border-radius:999px;background:var(--card);padding:3px 10px;font-size:13px;color:var(--ink)}
+.compose .what{font-size:12.5px;color:var(--mute);margin:-4px 0 14px 128px}
+.chip.fresh{color:var(--up);border-color:color-mix(in srgb,var(--up) 45%,var(--line))}
+.search kbd{position:absolute;right:9px;top:50%;transform:translateY(-50%);font:11px ui-monospace,Menlo,monospace;color:var(--faint);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.body{display:grid;grid-template-columns:220px minmax(0,1fr) 420px;gap:14px;min-height:0}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+/* the memories */
+.rail{padding:8px;gap:2px;overflow:auto}
+.rail h4{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:10px 8px 4px;font-weight:600}
+.rail h4:first-child{margin-top:4px}
+.rail button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;text-align:left;padding:7px 10px;border-radius:9px;color:var(--mute);cursor:pointer}
+.rail button:hover{background:var(--soft);color:var(--ink)}
+.rail button[aria-current="true"]{background:var(--tint);color:var(--accent);font-weight:600}
+.rail button .n{margin-left:auto;font-size:12.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.rail button[aria-current="true"] .n{color:var(--accent)}
+.rail .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.rail .foot{margin-top:auto;padding:10px 10px 4px;border-top:1px solid var(--line);font-size:12.5px;color:var(--mute)}
+.rail .foot b{color:var(--ink);font-weight:600}
+/* the list */
+.lhead{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);flex:none;min-width:0}
+.lhead h2{font-size:16px;margin:0;white-space:nowrap}
+.lhead .sub{color:var(--mute);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lhead .sp{flex:1}
+.lhead select{border:1px solid var(--line);border-radius:8px;background:var(--card);padding:4px 8px;font-size:13px;color:var(--mute)}
+.lhead button{border:1px solid var(--line);border-radius:8px;background:var(--card);padding:4px 10px;font-size:13px;cursor:pointer;white-space:nowrap}
+.lhead button:disabled{color:var(--faint);cursor:default}
+.list{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scroll-padding:40px 0 8px}
+.list .day{position:sticky;top:0;z-index:1;background:var(--soft);color:var(--mute);font-size:12px;font-weight:600;letter-spacing:.03em;padding:5px 14px;border-bottom:1px solid var(--line)}
+.item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;border-left:3px solid transparent}
+.item:hover{background:var(--soft)}
+.item[aria-selected="true"]{background:var(--tint);border-left-color:var(--accent)}
+.item .x{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14.5px;line-height:1.45}
+.item .meta{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--mute)}
+.item .side{text-align:right;font-size:12.5px;color:var(--mute);white-space:nowrap;font-variant-numeric:tabular-nums}
+.item .what{font-weight:600}
+.chip{display:inline-block;font-size:11.5px;padding:0 7px;border-radius:999px;border:1px solid var(--line);color:var(--mute);line-height:18px}
+.chip.always{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.chip.pinned{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
 .pos{color:var(--up);font-weight:600}.neg{color:var(--down);font-weight:600}
-button{font:inherit;font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--mute);cursor:pointer}
-button:hover:not(:disabled){color:var(--ink);border-color:var(--faint)}button.go{color:var(--ink);border-color:var(--ink)}
-button:disabled{background:var(--soft);color:var(--mute);cursor:default}
-textarea{font:inherit;width:100%;min-height:120px;margin:8px 0 0;padding:8px 10px;border:1px solid var(--faint);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical}
-.row-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.said{font-size:13.5px;color:var(--mute);margin:10px 0 0;min-height:1em}.said.bad{color:var(--down)}.rhead .said,.kbar .said{margin:0}
-.about{max-width:860px;color:var(--mute);font-size:14px;overflow:auto}.about li{margin:4px 0}.about h3{color:var(--ink);font-size:16px;margin:0 0 6px}
-.empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);max-width:780px}
+mark{background:color-mix(in srgb,var(--warn) 30%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+.nothing{color:var(--mute);padding:40px 16px;text-align:center}
+.lfoot{flex:none;border-top:1px solid var(--line);padding:6px 14px;font-size:12px;color:var(--faint);display:flex;gap:12px}
+/* the one picked */
+.reader{overflow:auto;padding:18px 20px}
+.reader .k{color:var(--mute);font-size:13px}
+.reader .fact{font-size:16px;line-height:1.5;margin:10px 0 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.reader dl{margin:0 0 16px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;font-size:13.5px}
+.reader dt{color:var(--mute)}.reader dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.reader ol{margin:0 0 14px;padding-left:20px;font-size:14px}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+.acts button{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:6px 14px;cursor:pointer}
+.acts button:hover{border-color:var(--faint)}
+.acts button.go{background:var(--accent);border-color:var(--accent);color:#fff}
+.acts button.bad{color:var(--down)}
+.reader h3{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin:0 0 6px;font-weight:600}
+.hist{list-style:none;margin:0;padding:0;font-size:13px}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:5px 0;border-bottom:1px solid var(--line);color:var(--mute)}
+.hist li b{color:var(--ink);font-weight:500}
+textarea{width:100%;min-height:140px;margin:8px 0 10px;padding:9px 11px;border:1px solid var(--faint);border-radius:9px;background:var(--bg);resize:vertical}
+.said{font-size:13px;color:var(--mute);min-height:1em;margin:0 0 10px}.said.bad{color:var(--down)}.said.good{color:var(--up)}
+.about{padding:18px 20px;overflow:auto;color:var(--mute);font-size:14px}.about li{margin:6px 0}.about h3{color:var(--ink);font-size:16px;margin:0 0 6px;text-transform:none;letter-spacing:0}
 code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
-@media (max-width:899px),(max-height:559px){.split{grid-template-columns:1fr}.rows{flex:none}.recent{flex:none}.log{overflow:visible}}
-@media (max-width:600px){h1{font-size:23px}th,td{padding:8px 10px}.lede{white-space:normal}.col-used,td.u,th.u{display:none}.log li{grid-template-columns:1fr;gap:2px;white-space:normal}.khead{flex-wrap:wrap}.khead .kbar{margin-left:0}}
+.back{display:none}
+/* narrower: the reader drops under; a phone: one column, the page scrolls */
+@media (max-width:1250px){.body{grid-template-columns:200px minmax(0,1fr) 340px}.search input{width:220px}}
+@media (max-width:980px){body{overflow:auto}.app{height:auto;min-height:100vh}.body{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;overflow:visible}.rail h4,.rail .foot{display:none}.rail button{width:auto}.list{max-height:60vh}.reader{max-height:none}.top{flex-wrap:wrap}.search input{width:100%}.search{flex:1 1 100%}}
 </style>
 </head>
 <body>
-<main>
-<h1>Agentic Coder memory</h1>
-<p class="lede" id="lede">Reading the memory…</p>
-<div class="tabs" id="tabs" role="tablist" aria-label="Which part of the memory to show"></div>
-<div class="stage">
-<section class="pane" id="overview" role="tabpanel"><div class="cards" id="cards"></div>
-<div class="box recent"><div class="rhead"><h2>Last changes</h2><button type="button" id="undo1">Take back the last save</button><span class="said" id="said1" role="status"></span></div><ul class="log" id="recent"></ul></div>
-</section>
-<section class="pane" id="listpane" role="tabpanel" hidden>
-<div class="khead"><h2 id="kname"></h2><p class="sub" id="ksub"></p><div class="kbar" id="kbar" hidden><span class="said" id="said2" role="status"></span><button type="button" id="undo2">Take back the last save</button></div></div>
-<div class="split">
-<div class="box"><div class="rows" id="rowsbox"><table><colgroup id="cols"></colgroup><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
-<div class="pager"><button type="button" id="prev">‹ Previous</button><span class="at" id="at"></span><button type="button" id="next">Next ›</button><span class="keys">↑ ↓ pick · page up / down · ← → tabs</span></div></div>
-<div class="box detail" id="detail" aria-live="polite"></div>
+<div class="app">
+  <div class="top"><div class="t"><h1>Agentic Coder memory</h1><p class="lede" id="lede">Reading the memory…</p></div>
+    <label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" placeholder="Find a fact or a change" spellcheck="false" aria-label="Find"><kbd>/</kbd></label>
+    <button type="button" class="newmem" id="new" title="Write a rule or a fact yourself (n)">+ New memory</button></div>
+  <div class="body">
+    <nav class="box rail" id="rail" aria-label="The memories"></nav>
+    <section class="box"><div class="lhead"><h2 id="lname"></h2><span class="sub" id="lsub"></span><span class="sp"></span><span id="ltools"></span></div><div class="list" id="list" tabindex="0"></div><div class="lfoot" id="lfoot"></div></section>
+    <aside class="box reader" id="reader" aria-live="polite"></aside>
+  </div>
 </div>
-</section>
-<section class="pane about" id="foot" role="tabpanel" hidden></section>
-</div>
-</main>
 <script>
 (async function () {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const KIND = { you: 'about you', project: 'project', worked: 'worked', failed: 'failed', mistake: 'mistake', recipe: 'recipe' };
   const TITLE = { you: 'About you', project: 'This project' };
-  const WHAT = { add: 'saved', replace: 'replaced', retire: 'taken out of use', restore: 'brought back', edit: 'edited by you', undo: 'a save taken back', trust: 'trust changed', pin: 'pinned', unpin: 'unpinned' };
+  const WHAT = { add: 'saved', replace: 'replaced', retire: 'taken out', restore: 'brought back', edit: 'edited by you', undo: 'a save taken back', trust: 'trust changed', pin: 'pinned', unpin: 'unpinned', always: 'made a rule', sometimes: 'no longer a rule' };
+  // What a fact you write can be: about you is one kind; in a project, a note or one of these.
+  const KIND_NAME = { project: 'A note', worked: 'What worked', failed: 'What failed', mistake: 'A mistake to avoid', recipe: 'A recipe (steps)' };
   const UNDOABLE = ['add', 'replace', 'retire', 'restore', 'edit'];
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const day = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
   const clock = (iso) => { const d = new Date(iso); if (isNaN(d)) return ''; const h = d.getHours(); return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
-  const when = (iso) => `${day(iso)} · ${clock(iso)}`;
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-  const worth = (a, b) => Number(b.always) - Number(a.always) || Number(b.pinned) - Number(a.pinned) || b.trust - a.trust || b.used - a.used;
   const sign = (n) => `${n > 0 ? '+' : ''}${n}`;
   const trustCls = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
+  const worth = (a, b) => Number(b.always) - Number(a.always) || Number(b.pinned) - Number(a.pinned) || b.trust - a.trust || b.used - a.used;
 
-  let data; let tab = 'all'; let editing = null; let said = '';
-  const sel = {}; const picked = {}; // per list tab: the place picked in its list, and that item's key (a save keeps the same fact picked)
-  let page = 0, per = 12;
+  let data, view = 'you', q = '', sort = 'worth', editing = null, said = '', saidGood = false, composing = null;
+  const sel = {};
+  const fresh = new Set(); // what you wrote here this visit ("just added")
+  // A link to the page before (#all, #retired…) still opens the same part.
+  try { const h = decodeURIComponent(location.hash.slice(1)); if (h) view = h === 'all' ? 'you' : h; } catch { /* the first view */ }
 
   async function load() {
     try { data = await (await fetch('/memory.json', { cache: 'no-store' })).json(); } catch { $('lede').textContent = 'The memory could not be read. Open this page from Agentic Coder with /memory open.'; return; }
-    try { const h = decodeURIComponent(location.hash.slice(1)); if (h) tab = h; } catch { /* keep the overview */ }
     draw();
   }
-  async function send(path, body) {
+  async function send(path, body, good = '') {
     said = '';
     try {
       const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
       const j = await r.json();
-      if (!r.ok) { said = j.error || 'that did not work'; draw(); return false; }
-      data = j.data; editing = null; draw();
-      return true;
-    } catch { said = 'Agentic Coder is not answering. Is its window still open?'; draw(); return false; }
+      if (!r.ok) { said = j.error || 'that did not work'; saidGood = false; draw(); return null; }
+      data = j.data; editing = null; said = good; saidGood = Boolean(good); draw(); return j;
+    } catch { said = 'Agentic Coder is not answering. Is its window still open?'; saidGood = false; draw(); return null; }
   }
 
-  // What each list tab holds, newest or most worth first, one key per item.
-  const facts = () => data.parts.flatMap((p) => p.facts);
+  const part = (w) => data.parts.find((p) => p.where === w);
+  const facts = () => data.parts.flatMap((p) => p.facts.map((f) => ({ ...f, where: p.where })));
   const gone = () => data.parts.flatMap((p) => p.retired.map((f) => ({ ...f, where: p.where })));
   const changes = () => data.log.filter((l) => l.what !== 'trust');
   const textOf = () => new Map(data.parts.flatMap((p) => [...p.facts, ...p.retired].map((f) => [`${p.where}/${f.id}`, f.text])));
-  function list(t) {
-    if (t === 'you' || t === 'project') { const p = data.parts.find((x) => x.where === t); return p ? [...p.facts].sort(worth).map((f) => ({ ...f, where: t, key: `${t}/${f.id}` })) : []; }
-    if (t === 'retired') return gone().map((f) => ({ ...f, key: `${f.where}/${f.id}` }));
-    if (t === 'changes') return changes().map((l, i) => ({ ...l, key: `${l.at}/${i}` }));
-    return [];
+  const VIEWS = () => [
+    { id: 'you', name: 'About you', group: 'Facts', n: part('you')?.facts.length ?? 0, dot: 'var(--accent)' },
+    ...(part('project') ? [{ id: 'project', name: 'This project', group: 'Facts', n: part('project').facts.length, dot: 'var(--up)' }] : []),
+    { id: 'rules', name: 'Rules (always)', group: 'Kinds', n: facts().filter((f) => f.always).length },
+    { id: 'pinned', name: 'Pinned', group: 'Kinds', n: facts().filter((f) => f.pinned).length },
+    { id: 'retired', name: 'Taken out', group: 'Kinds', n: gone().length },
+    { id: 'changes', name: 'Changes', group: 'History', n: changes().length },
+    { id: 'about', name: 'How it works', group: 'History' },
+  ];
+  const hit = (t) => !q || String(t ?? '').toLowerCase().includes(q.toLowerCase());
+  const mark = (t) => { const s = esc(t); if (!q) return s; const i = s.toLowerCase().indexOf(esc(q).toLowerCase()); return i < 0 ? s : `${s.slice(0, i)}<mark>${s.slice(i, i + esc(q).length)}</mark>${s.slice(i + esc(q).length)}`; };
+  function items() {
+    let xs;
+    if (view === 'you' || view === 'project') xs = (part(view)?.facts ?? []).map((f) => ({ ...f, where: view }));
+    else if (view === 'rules') xs = facts().filter((f) => f.always);
+    else if (view === 'pinned') xs = facts().filter((f) => f.pinned);
+    else if (view === 'retired') xs = gone();
+    else if (view === 'changes') { const tx = textOf(); return changes().map((l, i) => ({ ...l, key: `${l.at}/${i}`, text: tx.get(`${l.where}/${l.id}`) ?? '' })).filter((l) => hit(l.text) || hit(WHAT[l.what])); }
+    else return [];
+    xs = xs.map((f) => ({ ...f, key: `${f.where}/${f.id}` })).filter((f) => hit(f.text));
+    if (view === 'retired') return xs;
+    return xs.sort(sort === 'new' ? (a, b) => String(b.saved).localeCompare(String(a.saved)) : sort === 'used' ? (a, b) => b.used - a.used || worth(a, b) : worth);
   }
-  const tabList = () => ['all', ...data.parts.map((p) => p.where), 'retired', 'changes', 'about'];
-  const canUndo = () => changes().some((l) => UNDOABLE.includes(l.what));
+  const chips = (f) => `<span class="chip${f.always ? ' always' : ''}">${f.always ? 'always' : KIND[f.kind] || esc(f.kind)}</span>${f.pinned ? '<span class="chip pinned">pinned</span>' : ''}`;
 
-  function tabs() {
-    const n = { you: data.parts.find((p) => p.where === 'you')?.facts.length, project: data.parts.find((p) => p.where === 'project')?.facts.length, retired: gone().length, changes: changes().length };
-    const name = { all: 'Overview', you: 'About you', project: 'This project', retired: 'Taken out', changes: 'Changes', about: 'How it works' };
-    $('tabs').innerHTML = tabList().map((t) => `<button type="button" role="tab" data-tab="${t}" aria-selected="${t === tab}">${name[t]}${n[t] != null ? `<span>${n[t]}</span>` : ''}</button>`).join('');
+  function rail() {
+    let last = '';
+    $('rail').innerHTML = VIEWS().map((v) => `${v.group !== last ? `<h4>${(last = v.group)}</h4>` : ''}<button type="button" data-v="${v.id}" aria-current="${v.id === view}">${v.dot ? `<span class="dot" style="background:${v.dot}"></span>` : ''}${v.name}${v.n != null ? `<span class="n">${v.n}</span>` : ''}</button>`).join('')
+      + `<div class="foot">Taken out at trust <b>${data.retireAt}</b>, or unused for <b>${data.unusedDays} days</b>. Pinned facts stay.</div>`;
   }
-  $('tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) go(b.dataset.tab); };
-  function go(t) {
-    if (!tabList().includes(t)) t = 'all';
-    if (t !== tab) { editing = null; said = ''; }
-    tab = t;
-    try { history.replaceState(null, '', t === 'all' ? location.pathname + location.search : `#${t}`); } catch { /* a file page */ }
+  $('rail').onclick = (e) => { const b = e.target.closest('button[data-v]'); if (b) go(b.dataset.v); };
+  function go(v) { view = v; editing = null; said = ''; if (composing && !composing.text.trim()) composing = null; try { history.replaceState(null, '', `#${v}`); } catch {} draw(); $('list').scrollTop = 0; }
+
+  function list() {
+    const xs = items();
+    const v = VIEWS().find((x) => x.id === view);
+    $('lname').textContent = v?.name ?? '';
+    const SUB = { you: 'how you like to work; follows you into every project', project: 'where things are here, what worked, what failed', rules: 'read at every start', pinned: 'never taken out by trust', retired: 'kept; each can be brought back', changes: 'newest first' };
+    $('lsub').textContent = `${plural(xs.length, view === 'changes' ? 'change' : 'fact')}${q ? ` matching “${q}”` : ''} · ${SUB[view] ?? ''}`;
+    $('ltools').innerHTML = view === 'changes' ? `<button type="button" id="undo" ${changes().some((l) => UNDOABLE.includes(l.what)) ? '' : 'disabled'}>Take back the last save</button>`
+      : ['you', 'project', 'rules', 'pinned'].includes(view) ? `<select id="sort" aria-label="Order"><option value="worth" ${sort === 'worth' ? 'selected' : ''}>Rules first, then trusted</option><option value="new" ${sort === 'new' ? 'selected' : ''}>Newest first</option><option value="used" ${sort === 'used' ? 'selected' : ''}>Most used</option></select>` : '';
+    if ($('sort')) $('sort').onchange = (e) => { sort = e.target.value; draw(); };
+    if ($('undo')) $('undo').onclick = () => send('/memory/undo');
+    if (!xs.length) { $('list').innerHTML = `<div class="nothing">${q ? 'Nothing matches.' : view === 'changes' ? 'No change yet.' : view === 'retired' ? 'No fact has been taken out of use.' : 'Nothing here yet: + New memory writes one.'}</div>`; $('lfoot').textContent = ''; return xs; }
+    sel[view] = Math.min(sel[view] ?? 0, xs.length - 1);
+    let h = '', lastDay = '';
+    xs.forEach((x, i) => {
+      if (view === 'changes') {
+        const d = day(x.at);
+        if (d !== lastDay) { h += `<div class="day">${d}</div>`; lastDay = d; }
+        h += `<div class="item" data-i="${i}" aria-selected="${i === sel[view]}"><div class="x"><span class="what">${WHAT[x.what] || esc(x.what)}</span> · ${TITLE[x.where]}${x.text ? ` · ${mark(x.text)}` : ''}</div><div class="side">${clock(x.at)}</div></div>`;
+      } else {
+        h += `<div class="item" data-i="${i}" aria-selected="${i === sel[view]}"><div class="x">${mark(x.text)}</div><div class="side">${x.always ? 'rule' : `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span>`}</div><div class="meta">${chips(x)}${fresh.has(x.key) ? '<span class="chip fresh">just added</span>' : ''}${view === 'rules' || view === 'pinned' || view === 'retired' ? `<span>${TITLE[x.where]}</span>` : ''}<span>${view === 'retired' ? esc(String(x.retired || 'taken out').split(':')[0]) : x.always ? 'read at every start' : `used ${plural(x.used, 'time')}`}</span><span>saved ${esc(x.saved || '—')}</span></div></div>`;
+      }
+    });
+    $('list').innerHTML = h;
+    $('lfoot').innerHTML = `<span>↑ ↓ pick</span><span>/ find</span><span>scroll for all ${xs.length}</span>`;
+    return xs;
+  }
+  $('list').onclick = (e) => { const it = e.target.closest('.item'); if (it) pick(+it.dataset.i); };
+  function pick(i, scroll = false) { sel[view] = i; editing = null; said = ''; if (composing && !composing.text.trim()) composing = null; draw(); if (scroll) $('list').querySelector(`.item[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' }); }
+
+  // + New memory: what to remember, where, and when it is read (a rule at every start, or a fact when a request fits).
+  function compose() {
+    const r = $('reader');
+    r.className = 'box reader compose';
+    const c = composing;
+    const parts = data.parts.map((p) => p.where);
+    r.innerHTML = `<h2>New memory</h2><p class="k">Agentic Coder reads it from its next task on.</p>
+      <textarea id="ctext" aria-label="What to remember" placeholder="${c.always ? 'e.g. Always run the tests before you say a change is done.' : 'e.g. The desk server runs on port 8811.'}">${esc(c.text)}</textarea>
+      <div class="row"><span>When it is read</span><span class="tog" id="cas"><button type="button" data-v="1" aria-pressed="${c.always}">A rule · every start</button><button type="button" data-v="0" aria-pressed="${!c.always}">A fact · when a request fits</button></span></div>
+      <p class="what">${c.always ? 'Read in full before every task. Keep rules few and short.' : 'Brought back when a request is about it; trust moves with how tasks go.'}</p>
+      <div class="row"><span>About</span><span class="tog" id="cwhere">${parts.map((w) => `<button type="button" data-v="${w}" aria-pressed="${w === c.where}">${TITLE[w]}</button>`).join('')}</span></div>
+      ${c.where === 'project' ? `<div class="row"><span>Kind</span><select id="ckind" aria-label="What kind">${Object.entries(KIND_NAME).map(([k, n]) => `<option value="${k}" ${k === c.kind ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : ''}
+      <div class="acts"><button type="button" class="go" data-do="csave">Save</button><button type="button" data-do="ccancel">Cancel</button><span style="color:var(--faint);font-size:12.5px;align-self:center">⌘ Enter saves · Esc cancels</span></div>
+      <p class="said${said ? (saidGood ? ' good' : ' bad') : ''}" role="status">${esc(said)}</p>`;
+    const ta = $('ctext'); if (document.activeElement !== ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    ta.oninput = () => { c.text = ta.value; };
+    $('cas').onclick = (e) => { const b = e.target.closest('button'); if (b) { c.always = b.dataset.v === '1'; compose(); } };
+    $('cwhere').onclick = (e) => { const b = e.target.closest('button'); if (b) { c.where = b.dataset.v; compose(); } };
+    if ($('ckind')) $('ckind').onchange = (e) => { c.kind = e.target.value; };
+  }
+  function startNew() {
+    // Where it goes: the memory you are looking at, else about you; from Rules it starts as a rule.
+    composing = { text: '', where: data.parts.some((p) => p.where === view) ? view : 'you', always: view === 'rules', kind: 'project' };
+    said = ''; editing = null; draw();
+  }
+  async function saveNew() {
+    const c = composing;
+    const j = await send('/memory/add', { where: c.where, text: c.text, always: c.always, kind: c.kind }, `Saved: ${c.always ? 'a rule' : 'a fact'} ${c.where === 'you' ? 'about you' : 'about this project'}${c.always ? ', read at every start' : ''}.`);
+    if (!j) return;
+    composing = null;
+    fresh.add(`${c.where}/${j.added}`);
+    view = c.always ? 'rules' : c.where; q = ''; $('q').value = '';
+    const at = items().findIndex((x) => x.id === j.added && x.where === c.where);
+    if (at >= 0) sel[view] = at;
     draw();
+    $('list').querySelector(`.item[data-i="${sel[view]}"]`)?.scrollIntoView({ block: 'nearest' });
   }
+  $('new').onclick = startNew;
 
-  // Overview: one card per memory, the most trusted fact, the ones taken out; a card opens its tab. The last changes fill the rest.
-  function overview() {
-    const all = facts();
-    const top = all.filter((f) => !f.always && f.trust > 0).sort((a, b) => b.trust - a.trust || b.used - a.used)[0];
-    $('cards').innerHTML = data.parts.map((p) => `<button type="button" class="card" data-tab="${p.where}"><div class="k">${TITLE[p.where]}</div><div class="v">${plural(p.facts.length, 'fact')}</div><div class="m">${esc(p.dir || '')}</div></button>`).join('')
-      + `<button type="button" class="card" data-tab="${top ? top.where ?? data.parts.find((p) => p.facts.includes(top))?.where : 'you'}"><div class="k">Most trusted</div><div class="v">${top ? sign(top.trust) : '–'}</div><div class="m">${top ? esc(top.text.length > 90 ? `${top.text.slice(0, 89)}…` : top.text) : 'no fact has passed a check yet'}</div></button>`
-      + `<button type="button" class="card" data-tab="retired"><div class="k">Taken out of use</div><div class="v">${gone().length}</div><div class="m">kept, and can be brought back</div></button>`;
-    const texts = textOf();
-    const c = changes();
-    $('recent').innerHTML = c.length ? c.slice(0, fits() ? 40 : 12).map((l) => `<li><span class="w">${esc(when(l.at))}</span><span title="${esc(texts.get(`${l.where}/${l.id}`) ?? '')}">${WHAT[l.what] || esc(l.what)} · ${TITLE[l.where]}${texts.get(`${l.where}/${l.id}`) ? `: ${esc(texts.get(`${l.where}/${l.id}`))}` : l.id ? `: <code>${esc(l.id)}</code>` : ''}</span></li>`).join('') : '<li class="nothing">No change yet.</li>';
-    trim();
-    $('undo1').disabled = !canUndo();
-    $('said1').textContent = said; $('said1').className = `said${said ? ' bad' : ''}`;
-  }
-  // A line the box cuts through is left out, so the list ends on a whole line.
-  function trim() {
-    if (!fits()) return;
-    const box = $('recent'); const bottom = box.getBoundingClientRect().bottom;
-    for (const li of box.querySelectorAll('li')) li.hidden = li.getBoundingClientRect().bottom > bottom + 0.5;
-  }
-  new ResizeObserver(() => { if (!$('overview').hidden) { for (const li of $('recent').querySelectorAll('li')) li.hidden = false; trim(); } }).observe($('recent'));
-  $('cards').onclick = (e) => { const c = e.target.closest('.card'); if (c) go(c.dataset.tab); };
-
-  // A list tab. As many lines as fit the box make a page (one line each, so every page holds the same number); the picked one is shown in full beside them.
-  const fits = () => matchMedia('(min-width:900px) and (min-height:560px)').matches;
-  function fit() {
-    if (!fits()) { per = 15; return; }
-    const box = $('rowsbox'), th = box.querySelector('thead').offsetHeight || 36;
-    per = Math.max(3, Math.floor((box.clientHeight - th) / 39));
-  }
-  const HEAD = {
-    fact: ['<col><col style="width:156px"><col style="width:84px"><col class="col-used" style="width:112px">', '<tr><th>Fact</th><th>Kind</th><th>Trust</th><th class="u">Used</th></tr>'],
-    retired: ['<col><col style="width:120px"><col class="col-used" style="width:200px">', '<tr><th>Fact</th><th>Memory</th><th class="u">Why</th></tr>'],
-    changes: ['<col style="width:150px"><col style="width:150px"><col>', '<tr><th>When</th><th>What</th><th>Fact</th></tr>'],
-  };
-  const chips = (f) => `<span class="chip${f.always ? ' always' : ''}">${f.always ? 'always' : KIND[f.kind] || esc(f.kind)}</span>${f.pinned ? ' <span class="chip pinned">pinned</span>' : ''}`;
-  const chip = (f) => `<span class="chip${f.always ? ' always' : f.pinned ? ' pinned' : ''}">${f.always ? 'always' : KIND[f.kind] || esc(f.kind)}${f.pinned ? ' · pinned' : ''}</span>`;
-  function row(t, x, i) {
-    const on = `data-i="${i}" aria-selected="${i === sel[t]}"`;
-    if (t === 'changes') { const txt = textOf().get(`${x.where}/${x.id}`); return `<tr ${on}><td>${day(x.at)}<span class="q">${clock(x.at)}</span></td><td>${WHAT[x.what] || esc(x.what)}</td><td class="t" title="${esc(txt ?? '')}">${txt ? esc(txt) : x.id ? `<code>${esc(x.id)}</code>` : ''}<span class="q">${TITLE[x.where]}</span></td></tr>`; }
-    if (t === 'retired') return `<tr ${on}><td class="t" title="${esc(x.text)}">${esc(x.text)}</td><td>${TITLE[x.where]}</td><td class="u">${esc(x.retired || 'taken out of use')}</td></tr>`;
-    return `<tr ${on}><td class="t" title="${esc(x.text)}">${esc(x.text)}</td><td>${chip(x)}</td><td>${x.always ? '<span class="rule">rule</span>' : `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span>`}</td><td class="u">${x.always ? '<span class="rule">every start</span>' : x.used}</td></tr>`;
-  }
-  function detail(t, x, n) {
-    if (!x) { $('detail').innerHTML = ''; return; }
-    const status = `<p class="said${said ? ' bad' : ''}" role="status">${esc(said)}</p>`;
-    if (t === 'changes') {
-      const txt = textOf().get(`${x.where}/${x.id}`);
-      $('detail').innerHTML = `<div class="k">Change ${sel[t] + 1} of ${n}</div><h3 style="margin:6px 0 2px">${WHAT[x.what] || esc(x.what)}</h3><div class="k">${esc(when(x.at))} · ${TITLE[x.where]}</div>${txt ? `<p class="fact">${esc(txt)}</p>` : ''}<dl>${x.id ? `<dt>Fact</dt><dd><code>${esc(x.id)}</code></dd>` : ''}${x.reason ? `<dt>Why</dt><dd>${esc(x.reason)}</dd>` : ''}</dl>`;
+  function reader(xs) {
+    if (composing) { compose(); return; }
+    const r = $('reader');
+    if (view === 'about') {
+      r.className = 'box about';
+      r.innerHTML = `<h3>How the memory is kept</h3><ul><li>Trust goes up by 1 when a task passes its check after a fact was used, down by 1 when it fails or Agentic Coder got stuck, down by 2 when you correct or stop it. At ${data.retireAt} a fact is taken out of use, unless it is pinned.</li><li>A fact not used in ${data.unusedDays} days, or about a file that is gone, is taken out when the memory is tidied.</li><li>Every change here goes through the same store as Agentic Coder's own saves: it shows under Changes, and "Take back the last save" undoes it.</li><li>+ New memory writes one yourself: a rule (read in full at every start) or a fact (brought back when a request fits). Make it a rule / Not a rule moves one between the two.</li><li>The facts are plain files in ${data.parts.map((p) => `<code>${esc(p.dir || '')}</code>`).join(' and ')}.</li></ul>`;
+      return;
+    }
+    r.className = 'box reader';
+    const x = xs[sel[view]];
+    if (!x) { r.innerHTML = '<p class="nothing">Pick something on the left.</p>'; return; }
+    const st = `<p class="said${said ? (saidGood ? ' good' : ' bad') : ''}" role="status">${esc(said)}</p>`;
+    if (view === 'changes') {
+      r.innerHTML = `<div class="k">${day(x.at)} · ${clock(x.at)} · ${TITLE[x.where]}</div><h2 style="margin:6px 0 0;font-size:19px">${WHAT[x.what] || esc(x.what)}</h2>${x.text ? `<p class="fact">${esc(x.text)}</p>` : ''}<dl>${x.reason ? `<dt>Why</dt><dd>${esc(x.reason)}</dd>` : ''}${x.why ? `<dt>From</dt><dd>${esc(x.why)}</dd>` : ''}${x.id ? `<dt>Fact</dt><dd><code>${esc(x.id)}</code></dd>` : ''}</dl>${x.id ? `<div class="acts"><button type="button" data-open="${esc(x.where)}/${esc(x.id)}">Open the fact</button></div>` : ''}${st}`;
       return;
     }
     const k = x.key;
-    const body = editing === k
-      ? `<textarea id="edit" aria-label="The fact">${esc(x.text)}</textarea><div class="row-actions"><button class="go" data-do="save" data-k="${esc(k)}">Save</button><button data-do="cancel">Cancel</button></div>`
-      : `<p class="fact">${esc(x.text)}</p>${x.steps?.length ? `<ol>${x.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}`;
-    const dl = t === 'retired'
+    const hist = data.log.filter((l) => l.id === x.id && l.where === x.where);
+    const dl = view === 'retired'
       ? [['Memory', TITLE[x.where]], ['Why', esc(x.retired || 'taken out of use')], ['Trust', `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span> · ${x.passed} passed · ${x.failed} failed`], ['Saved', esc(x.saved || '—')]]
-      : [
-        ['Trust', x.always ? 'a rule, read at every start' : `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span> · ${x.passed} passed · ${x.failed} failed`],
-        ['Used', x.always ? 'every start' : `${plural(x.used, 'time')}${x.last ? ` · last ${esc(x.last)}` : ''}`],
-        x.from ? ['From', esc(x.from)] : null,
-        ['Saved', esc(x.saved || '—')],
-      ].filter(Boolean);
-    const acts = t === 'retired'
-      ? `<button data-do="restore" data-k="${esc(k)}">Bring back</button>`
-      : `<button data-do="pin" data-k="${esc(k)}" data-on="${x.pinned ? 0 : 1}">${x.pinned ? 'Unpin' : 'Pin'}</button><button data-do="edit" data-k="${esc(k)}">Edit</button><button data-do="retire" data-k="${esc(k)}">Take out</button>`;
-    $('detail').innerHTML = `<div class="k">${t === 'retired' ? 'Taken out' : TITLE[t]} · ${sel[t] + 1} of ${n}</div><div style="margin-top:6px">${chips(x)}</div>${body}<dl>${dl.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>${editing === k ? '' : `<div class="row-actions">${acts}</div>`}${status}`;
+      : [['Memory', TITLE[x.where]], ['Trust', x.always ? 'a rule, read at every start' : `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span> · ${x.passed} passed · ${x.failed} failed`], ['Used', x.always ? 'every start' : `${plural(x.used, 'time')}${x.last ? ` · last ${esc(x.last)}` : ''}`], ...(x.from ? [['From', esc(x.from)]] : []), ['Saved', esc(x.saved || '—')]];
+    const acts = view === 'retired' ? `<button type="button" class="go" data-do="restore" data-k="${esc(k)}">Bring back</button>`
+      : editing === k ? `<button type="button" class="go" data-do="save" data-k="${esc(k)}">Save</button><button type="button" data-do="cancel">Cancel</button>`
+      : `<button type="button" data-do="edit" data-k="${esc(k)}">Edit</button><button type="button" data-do="always" data-k="${esc(k)}" data-on="${x.always ? 0 : 1}">${x.always ? 'Not a rule' : 'Make it a rule'}</button><button type="button" data-do="pin" data-k="${esc(k)}" data-on="${x.pinned ? 0 : 1}">${x.pinned ? 'Unpin' : 'Pin'}</button><button type="button" class="bad" data-do="retire" data-k="${esc(k)}">Take out</button>`;
+    r.innerHTML = `<div class="k">${view === 'retired' ? 'Taken out' : TITLE[x.where]} · ${sel[view] + 1} of ${xs.length}</div><div style="margin-top:8px;display:flex;gap:6px">${chips(x)}${fresh.has(k) ? '<span class="chip fresh">just added</span>' : ''}</div>
+      ${editing === k ? `<textarea id="edit" aria-label="The fact">${esc(x.text)}</textarea>` : `<p class="fact">${esc(x.text)}</p>${x.steps?.length ? `<ol>${x.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}`}
+      <div class="acts">${acts}</div>${st}<dl>${dl.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>
+      <h3>Its history</h3><ul class="hist">${hist.length ? hist.map((l) => `<li><span>${day(l.at)} · ${clock(l.at)}</span><span><b>${WHAT[l.what] || esc(l.what)}</b>${l.delta ? ` ${sign(l.delta)}` : ''}${l.reason ? ` · ${esc(l.reason)}` : ''}</span></li>`).join('') : '<li><span>—</span><span>nothing in the last 40 changes</span></li>'}</ul>`;
+    const ta = $('edit'); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
   }
-  const SUB = {
-    you: (n) => `How you like to work. It follows you into every project. ${plural(n, 'fact')}, rules first, then the most trusted.`,
-    project: (n) => `Where things are here, what worked, what failed, and mistakes to avoid. ${plural(n, 'fact')}, rules first, then the most trusted.`,
-    retired: (n) => `${plural(n, 'fact')} out of use: kept, and each can be brought back.`,
-    changes: (n) => `${plural(n, 'change')}, newest first.`,
-  };
-  const NAME = { you: 'About you', project: 'This project', retired: 'Taken out of use', changes: 'Changes' };
-  function table() {
-    const items = list(tab); fit();
-    // Keep the same item picked across a save (it may have moved in the list).
-    if (picked[tab]) { const at = items.findIndex((x) => x.key === picked[tab]); if (at >= 0) sel[tab] = at; }
-    sel[tab] = Math.min(Math.max(0, sel[tab] ?? 0), Math.max(0, items.length - 1));
-    const pages = Math.max(1, Math.ceil(items.length / per));
-    page = Math.floor(sel[tab] / per);
-    const from = page * per, part = items.slice(from, from + per);
-    const head = HEAD[tab === 'you' || tab === 'project' ? 'fact' : tab];
-    $('kname').textContent = NAME[tab]; $('ksub').textContent = SUB[tab](items.length);
-    $('kbar').hidden = tab !== 'changes'; $('undo2').disabled = !canUndo();
-    $('said2').textContent = tab === 'changes' ? said : ''; $('said2').className = `said${said ? ' bad' : ''}`;
-    $('cols').innerHTML = head[0]; $('thead').innerHTML = head[1];
-    $('tbody').innerHTML = items.length ? part.map((x, i) => row(tab, x, from + i)).join('') : `<tr><td class="nothing" colspan="4">${tab === 'changes' ? 'No change yet.' : tab === 'retired' ? 'No fact has been taken out of use.' : 'Nothing here yet.'}</td></tr>`;
-    $('at').textContent = items.length ? `Page ${page + 1} of ${pages} · ${from + 1}–${from + part.length} of ${items.length}` : '';
-    $('prev').textContent = tab === 'changes' ? '‹ Newer' : '‹ Previous'; $('next').textContent = tab === 'changes' ? 'Older ›' : 'Next ›';
-    $('prev').disabled = page === 0; $('next').disabled = page >= pages - 1;
-    picked[tab] = items[sel[tab]]?.key;
-    detail(tab, items[sel[tab]], items.length);
-    const ta = $('edit'); if (ta && document.activeElement !== ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
-  }
-  const pick = (i) => { sel[tab] = i; picked[tab] = list(tab)[i]?.key; if (editing && editing !== picked[tab]) editing = null; said = ''; table(); };
-  $('tbody').onclick = (e) => { const tr = e.target.closest('tr[data-i]'); if (tr) pick(+tr.dataset.i); };
-  const turn = (d) => pick(Math.min(Math.max(0, (page + d) * per), list(tab).length - 1));
-  $('prev').onclick = () => turn(-1); $('next').onclick = () => turn(1);
-  new ResizeObserver(() => { if (!$('listpane').hidden) table(); }).observe($('rowsbox'));
-
   document.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.id === 'undo1' || b.id === 'undo2') return void send('/memory/undo');
+    if (b.dataset.open) { const [w, id] = b.dataset.open.split('/'); const inUse = part(w)?.facts.some((f) => f.id === id); view = inUse ? w : 'retired'; draw(); const i = items().findIndex((x) => x.id === id); if (i >= 0) pick(i, true); return; }
     const act = b.dataset.do; if (!act) return;
     const [where, id] = (b.dataset.k || '/').split('/');
     if (act === 'edit') { editing = b.dataset.k; said = ''; draw(); }
     else if (act === 'cancel') { editing = null; draw(); }
     else if (act === 'save') send('/memory/edit', { where, id, text: $('edit').value });
     else if (act === 'pin') send('/memory/pin', { where, id, pinned: b.dataset.on === '1' });
+    else if (act === 'always') send('/memory/always', { where, id, always: b.dataset.on === '1' }, b.dataset.on === '1' ? 'Now a rule: read at every start.' : 'No longer a rule: read when a request fits.');
+    else if (act === 'csave') saveNew();
+    else if (act === 'ccancel') { composing = null; said = ''; draw(); }
     else if (act === 'retire') send('/memory/retire', { where, id });
     else if (act === 'restore') send('/memory/restore', { where, id });
   });
+  $('q').oninput = (e) => { q = e.target.value.trim(); sel[view] = 0; draw(); };
   document.addEventListener('keydown', (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || !data || /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
-    const t = tabList(), at = t.indexOf(tab);
-    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); go(t[(at + (e.key === 'ArrowRight' ? 1 : t.length - 1)) % t.length]); return; }
-    if (/^[1-9]$/.test(e.key) && +e.key <= t.length) { go(t[+e.key - 1]); return; }
-    if ($('listpane').hidden) return;
-    const n = list(tab).length; if (!n) return;
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); pick(Math.min(Math.max(0, sel[tab] + (e.key === 'ArrowDown' ? 1 : -1)), n - 1)); }
-    else if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); turn(e.key === 'PageDown' ? 1 : -1); }
-    else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); pick(e.key === 'Home' ? 0 : n - 1); }
+    if (composing && e.target.id === 'ctext') {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveNew(); return; }
+      if (e.key === 'Escape') { composing = null; said = ''; draw(); return; }
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey || !data) return;
+    if (e.key === 'n' && !/^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName)) { e.preventDefault(); startNew(); return; }
+    if (e.key === '/' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); $('q').focus(); return; }
+    if (e.key === 'Escape' && e.target === $('q')) { $('q').value = ''; q = ''; $('q').blur(); draw(); return; }
+    if (/^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName)) return;
+    const n = items().length; if (!n) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); pick(Math.min(Math.max(0, (sel[view] ?? 0) + (e.key === 'ArrowDown' ? 1 : -1)), n - 1), true); }
   });
 
   function draw() {
-    if (!tabList().includes(tab)) tab = 'all';
+    if (!VIEWS().some((v) => v.id === view)) view = 'you';
     const all = facts();
-    $('lede').textContent = all.length
-      ? `${plural(all.length, 'fact')} in use for ${data.cwd}. A fact comes back when a request fits it; the rules marked "always" are read at every start.`
-      : `Nothing saved yet for ${data.cwd}. Agentic Coder saves what it learns after a task and when you quit.`;
-    tabs();
-    $('overview').hidden = tab !== 'all'; $('listpane').hidden = tab === 'all' || tab === 'about'; $('foot').hidden = tab !== 'about';
-    if (tab === 'all') overview(); else if (tab !== 'about') table();
-    $('foot').innerHTML = `<h3>How the memory is kept</h3><ul>
-<li>Trust goes up by 1 when the task passed its check after a fact was used, down by 1 when it failed or Agentic Coder got stuck, and down by 2 when you corrected or stopped Agentic Coder. At ${data.retireAt} a fact is taken out of use, unless it is pinned.</li>
-<li>A fact not used in ${data.unusedDays} days, or about a file that is gone, is taken out of use when the memory is tidied.</li>
-<li>Every change here goes through the same store as Agentic Coder's own saves, so it is in the Changes tab and "Take back the last save" undoes it.</li>
-<li>The facts are plain files in ${data.parts.map((p) => `<code>${esc(p.dir || '')}</code>`).join(' and ')}: they can be edited or deleted by hand as well.</li></ul>
-<p>Nothing on this page loads from the internet.</p>`;
+    $('lede').textContent = `${plural(all.length, 'fact')} in use for ${data.cwd} · ${gone().length} taken out · ${changes().length} changes. A fact comes back when a request fits it; rules are read at every start.`;
+    rail();
+    reader(list());
   }
   await load();
 })();

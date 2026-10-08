@@ -136,6 +136,17 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   skipped once is kept in `state.json` (`declined`) and not offered again; `/memory` ends with a 7-day health line.
   With `"memory": false` nothing is saved: the old `notes.md` writer is gone, and a leftover notes file is no longer read as rules (since 30 Sep 2026 only AGENTS.md and CLAUDE.md are, from the working folder up to your home folder).
 
+- **The hub's Memory tab** (`terminal/src/app/memory.html`, `memory-hub.mjs`; redone 8 Oct 2026 after the owner's
+  "i cant scroll here": the Overview showed 13 of 39 changes and hid the rest, by design, with no way to scroll). Their
+  pick of four designs, "1 · Reading pane": the memories on the left (About you, This project, Rules, Pinned, Taken out,
+  Changes, How it works), one list in the middle that scrolls (nothing paged or hidden; changes by day; search with `/`),
+  the one picked in full on the right with Edit · Make it a rule / Not a rule · Pin · Take out (or Bring back) and its
+  own history. **+ New memory** (or `n`; their ask "allow me to add new memory"): what to remember, about you or this
+  project, a rule (read at every start) or a fact (when a request fits), a kind for a project fact; ⌘ Enter saves.
+  Two routes: `POST /memory/add` (`applyChanges` with `why: 'by hand'`, so the store's rules hold: 8 characters, no
+  secret, not saved already) and `POST /memory/always` (`setAlways`). The page fits the window; a phone scrolls as a
+  page. `terminal/test/memory-hub.test.mjs` covers the routes; the design round is private
+  (`docs/private/design rounds/memory-tab-2026-10-08/`).
 - **What the memory sends to another machine** (`memoryToRemote`, 3 Oct 2026, the owner's pick: "in full only to
   your own Macs"): the opening read (`terminal/src/agent/opening.mjs`) gives a remote model the facts in full. Facts
   about the user go only to the owner's own other computer: kind `llama` (`coding serve`) at a private address or
