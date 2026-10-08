@@ -14,7 +14,8 @@ import { pageReadOn } from './page-read.mjs';
 import { pickSkill, readSkills, skillNote } from './prompt-files.mjs';
 import { mathIndex, mathNotes, sortMath } from './expertise.mjs';
 import { briefNote, designNotes, designSettings, isDesignRequest, mixTurn, pickCards } from './design.mjs';
-import { pickPieces, studioNotes } from './studio.mjs';
+import { pickPieces, studioNotes, usesReact, pickLookFor, lookNote } from './studio.mjs';
+import { lookCard } from './library.mjs';
 import { pagesToCheck } from '../flows/layoutcheck.mjs';
 import { basename, join, relative } from 'node:path';
 import { isSmallTalk, routeByRules, runFlows } from '../flows/index.mjs';
@@ -313,21 +314,26 @@ export class WorkPart {
         // The design studio's pieces (studio.mjs) that fit take the example
         // card's place; the rules card still comes. No piece fits: the cards as before.
         // A page of your picks that says the thing asked for as well wins over the pieces (8 Oct 2026).
-        const pieces = design.studio ? pickPieces(text, { ctx: this.ctx }) : null;
+        // The library's pieces come with the user's own (library.mjs); a React project gets React ones; a
+        // look the request names ("like Linear", or /design look) changes the colours the page is built in.
+        const pieces = design.studio ? pickPieces(text, { ctx: this.ctx, react: usesReact(this.cwd), library: design.library }) : null;
+        const look = design.studio ? pickLookFor(text, design.look) : null;
         const peek = design.style === 'mix' ? mixTurn({ peek: true }) : design.style;
         const pick = pickCards(text, { sets: design.sets, style: peek });
         const yours = pick.examples[0]?.set === 'your picks' && pick.hits > 0 && pick.hits >= (pieces?.hits ?? 0);
-        const studio = pieces?.pieces.length && !yours ? studioNotes(pieces) : null;
+        const studio = pieces?.pieces.length && !yours ? studioNotes(pieces, undefined, { look }) : null;
         // mix: opus and fable take turns, one page request each (the turn is taken only when the cards go).
         const style = !studio && design.style === 'mix' ? mixTurn() : design.style;
         const cards = designNotes(studio ? { ...pick, examples: [], more: [], look: null } : pick);
-        const notes = cards || studio ? { text: [cards?.text, studio?.text].filter(Boolean).join('\n\n'), names: [...(cards?.cards ?? []).map((c) => c.file.replace(/\.md$/i, '')), ...(studio?.pieces ?? []).map((p) => `studio/${p.file.replace(/^components\//, '').replace(/\.html?$/i, '')}`)] } : null;
+        // A look with the cards (no pieces): its card, used in the page's own CSS.
+        const lookText = look && !studio ? `This page takes the ${look.name} look (asked for): use the colours, type and corners below in place of the rules card's look. Never the brand's name, logo or words on the page.\n${lookCard(look)}` : null;
+        const notes = cards || studio ? { text: [cards?.text, studio?.text, lookText].filter(Boolean).join('\n\n'), names: [...(cards?.cards ?? []).map((c) => c.file.replace(/\.md$/i, '')), ...(studio?.pieces ?? []).map((p) => `studio/${p.file.replace(/^components\//, '').replace(/^library\/(?:pieces|react)\//, '').replace(/\.(html?|tsx?)$/i, '')}`), ...(look ? [`look/${look.id}`] : [])] } : null;
         if (notes) {
           // The page plan: six lines from the model before it writes (agent-pages.mjs pageBrief).
           const brief = await this.pageBrief(text, notes.text, signal);
           if (brief) { notes.text += `\n\n${briefNote(brief)}`; this.turn.brief = brief; }
           this.turn.design = { request, notes: notes.text, cards: notes.names };
-          if (studio) this.turn.studio = { pieces: studio.pieces.map((p) => p.file) };
+          if (studio) this.turn.studio = { pieces: studio.pieces.map((p) => p.file), look: studio.pieces.every((p) => p.react) ? null : look?.id ?? null };
           this.ctxUsed += tokensOf(notes.text);
           // `design` names the cards for the screen (it folds them into the line under your message).
           this.emit('note', { text: `Design ${studio ? 'studio' : 'examples'}${!studio && design.style === 'mix' ? ` (mix: ${style}'s turn)` : !studio && design.style !== 'auto' ? ` (${style})` : ''}: ${notes.names.join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim', design: notes.names });
@@ -530,6 +536,16 @@ export class WorkPart {
           if (nudges < 2 && toolsUsed > 0 && this.hook('next-step') && announcesNextStep(text)) {
             nudges++;
             this.messages.push({ role: 'user', content: auto('You said what you will do next but did not do it. If you meant to, do it now with the tools; if you are waiting for the user, stop.') });
+            continue;
+          }
+          // A page asked for and none written: back once to write it (8 Oct 2026: Qwen3.6 on the service
+          // answered page requests with the six-line plan, and Look before answering below sent it to
+          // search an empty folder; no page came in 9 of 10 runs). The search nudge is for code that is there.
+          if (this.turn.type === 'page' && !this.isHelper && !this.turn.pageBack && !this.turn.changed && !this.turn.startTexts?.size && !this.madePages().length && !(!text.trim() && turn.finish === 'length')) {
+            this.turn.pageBack = true;
+            const planOnly = /^\s*Main thing:/i.test(text) && /^\s*Phone:/im.test(text);
+            this.emit('note', { text: `It answered without writing the page${planOnly ? ' (only its plan)' : ''}; asked it to write it.`, tone: 'warn' });
+            this.messages.push({ role: 'user', content: auto(`You have not written the page yet${planOnly ? ': that was only the plan' : ''}. Write it now with the Write tool, as one self-contained file in this folder, then say in a line what you made.`) });
             continue;
           }
           // Look before answering (a model on another machine, in a project, aboutTheCode): an answer

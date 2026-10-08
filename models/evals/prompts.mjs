@@ -29,7 +29,7 @@ export function testPrompts({ home = HOME, now = Date.now() } = {}) {
     ...tasksIn(join(HERE, 'battle', 'new28')),
     ...tasksIn(join(HERE, 'battle', 'work28')),
     ...tasksIn(join(HERE, 'bench', 'tasks')),
-    ...[join(HERE, 'bench', 'design', 'pages.json'), join(HERE, 'bench', 'design', 'components.json')].flatMap((f) => (json(f) ?? []).map((p) => String(p?.prompt ?? ''))),
+    ...[join(HERE, 'bench', 'design', 'pages.json'), join(HERE, 'bench', 'design', 'components.json'), join(HERE, 'bench', 'design', 'library.json')].flatMap((f) => (json(f) ?? []).map((p) => String(p?.prompt ?? ''))),
   ].filter((p) => p.length >= 40);
   kept = { home, at: now, list: [...new Set(list)] };
   return kept.list;

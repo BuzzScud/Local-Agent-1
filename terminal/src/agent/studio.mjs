@@ -25,12 +25,15 @@
 //             nothing and is sent back to be swapped. Read shows that line folded
 //             (hideBuilt), so the model never reads or edits the built CSS
 //   switch    settings.json "design": { studio }, AGENTIC_STUDIO (on|off), /design studio [on|off]
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve, sep, relative, isAbsolute, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { findPrivateDir, mainFolder } from '../app/docs-dir.mjs';
 import { askedThing, fitScore, kindHits, plainScore, scoreCard } from './design.mjs';
+import { libraryFiles, libraryStamp, libraryDir, readLooks, askedLook, lookTheme, lookCard } from './library.mjs';
+import { layoutCheck, findChrome } from '../flows/layoutcheck.mjs';
 
 export const FOLDER = 'design studio';
 export const MORE = 3; // other fitting pieces named by path
@@ -39,6 +42,19 @@ export const STUDIO_CHARS = 6400; // the head and the pieces together
 // Fewer Tailwind classes than this on a page that was never built: a plain-CSS
 // page, which the build's reset (Tailwind's preflight) would only spoil.
 const MIN_CLASSES = 5;
+
+// The studio folder, made (with the default theme) when there is a private folder and none yet: the
+// library needs a home before its first /design update.
+export function ensureStudioDir() {
+  const have = studioDir();
+  if (have) return have;
+  if (process.env.AGENTIC_STUDIO_DIR) return null;
+  const own = findPrivateDir();
+  if (!own) return null;
+  const d = join(own, FOLDER);
+  try { mkdirSync(join(d, 'styles'), { recursive: true }); if (!existsSync(join(d, 'styles', 'theme.css'))) writeFileSync(join(d, 'styles', 'theme.css'), DEFAULT_THEME); } catch { return null; }
+  return d;
+}
 
 export function studioDir() {
   const named = process.env.AGENTIC_STUDIO_DIR;
@@ -105,7 +121,7 @@ export function parsePiece(text, file = '') {
 }
 
 // Every piece in components/, kind by kind (the subfolder is the kind).
-export function readPieces(dir = studioDir()) {
+export function readPieces(dir = studioDir(), { library = true } = {}) {
   const root = dir ? join(dir, 'components') : null;
   if (!root || !existsSync(root)) return { dir: dir ?? null, kinds: [], pieces: [] };
   const pieces = [];
@@ -125,9 +141,49 @@ export function readPieces(dir = studioDir()) {
     }
   };
   walk('');
+  for (const p of pieces) p.source = 'yours';
+  if (library) pieces.push(...libraryPieces(dir));
   const kinds = [...new Set(pieces.map((p) => p.kind))].map((name) => ({ name, pieces: pieces.filter((p) => p.kind === name) }));
   return { dir, kinds, pieces };
 }
+
+// The library's pieces (library.mjs: downloaded, in the user's colours, each checked in a browser),
+// read once for each version of the library. kind: the folder after the source's (pieces/hyperui/stats/…).
+// A React piece's head is "// - Key:" lines; a page is named, never pasted.
+let kept = { key: null, pieces: [] };
+export function libraryPieces(dir = studioDir()) {
+  if (!dir) return [];
+  const key = `${dir}:${libraryStamp(dir)}`;
+  if (kept.key === key) return kept.pieces;
+  const out = [];
+  for (const f of libraryFiles(dir)) {
+    let text;
+    try { text = readFileSync(join(dir, f.file), 'utf8'); } catch { continue; }
+    const head = f.react ? `<!--\n${(/^(?:\/\/.*\n)+/.exec(text)?.[0] ?? '').replace(/^\/\/ ?/gm, '')}-->\n${text.replace(/^(?:\/\/.*\n)+/, '')}` : text;
+    const parts = f.file.split('/');
+    // "Stats · Title, value and icon": the kind picks it, the version's own words only show (they say
+    // "title", "image", "price" of many things, and brought a product card to a notification).
+    const piece = parsePiece(head, f.file);
+    const [name, ...version] = piece.name.split(' · ');
+    out.push({ ...piece, name, version: version.join(' · '), kind: parts[3] ?? 'other', file: f.file, chars: text.length, source: f.source, react: Boolean(f.react), page: Boolean(f.page), needs: Boolean(f.needs), check: f.check ?? 'unchecked' });
+  }
+  kept = { key, pieces: out };
+  return out;
+}
+
+// A React project (its package.json has react or next): shadcn/ui's React pieces in place of the HTML ones.
+export function usesReact(cwd) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    return Boolean(deps.react || deps.next);
+  } catch { return false; }
+}
+
+// A piece the picker may hand over: the user's own, or a library piece that passed the browser check
+// and needs no script of its library's; a React piece only in a React project. A whole page is only named.
+const pickable = (p) => p.source === 'yours' || p.react || (p.check === 'ok' && !p.needs && !p.page);
+const pasteable = (p) => p.chars <= PIECE_CHARS + 400;
 
 // The pieces that go along with a request: the best one by its Words (and the
 // words of its name), and the next best only when it fits nearly as well (at
@@ -138,35 +194,58 @@ export function readPieces(dir = studioDir()) {
 // asks for (askedThing), the first piece must say that thing (kindHits); with none that does, no piece
 // goes and the design cards come instead. The second still comes for a part the request names ("a stat
 // card … in a page with tabs"), as before. ctx: a model with 32k or less gets the first only.
-export function pickPieces(text, { dir = studioDir(), pieces, ctx } = {}) {
-  const all = pieces ?? readPieces(dir).pieces;
+// With the library (8 Oct 2026): among pieces that fit as well, the user's own come first, then one that
+// can be handed over whole, then the shorter; the second is another kind of piece than the first (not a
+// second stat card); a React project gets React pieces (react), and the rest the HTML ones.
+export function pickPieces(text, { dir = studioDir(), pieces, ctx, react = false, library = true } = {}) {
+  const every = pieces ?? readPieces(dir, { library }).pieces;
+  const reactOnes = every.filter((p) => p.react);
+  const all = react && reactOnes.length ? reactOnes : every.filter((p) => !p.react);
   const thing = askedThing(text);
   const scored = all.map((p) => ({ p, score: plainScore(p, text, thing), hits: kindHits(p, thing) })).filter((x) => x.score > 0 || x.hits > 0);
-  const lead = scored.filter((x) => !thing || x.hits > 0)
-    .sort((a, b) => fitScore(b.p, text, thing) - fitScore(a.p, text, thing) || a.p.file.localeCompare(b.p.file))[0];
+  const own = (p) => p.source === 'yours';
+  const order = (a, b) => (own(a.p) ? 0 : 1) - (own(b.p) ? 0 : 1) || (own(a.p) && own(b.p) ? 0 : (pasteable(a.p) ? 0 : 1) - (pasteable(b.p) ? 0 : 1) || a.p.chars - b.p.chars) || a.p.file.localeCompare(b.p.file);
+  // A library's versions of one thing share its kind (stats/1, stats/2); each of the user's pieces is its own.
+  const sort = (p) => (own(p) ? p.file : `${p.source}:${p.kind}`);
+  const lead = scored.filter((x) => pickable(x.p) && (!thing || x.hits > 0))
+    .sort((a, b) => fitScore(b.p, text, thing) - fitScore(a.p, text, thing) || order(a, b))[0];
   if (!lead) return { pieces: [], more: [], hits: 0 };
-  const rest = scored.filter((x) => x !== lead && x.score > 0).sort((a, b) => b.score - a.score || a.p.file.localeCompare(b.p.file));
+  const rest = scored.filter((x) => x !== lead && x.score > 0 && (pickable(x.p) || x.p.page)).sort((a, b) => b.score - a.score || order(a, b));
   // Nearly as well as the first by its words, measured as before (scoreCard), so no second comes that did not.
   const near = scoreCard(lead.p, text);
-  const second = ctx && ctx <= 32_768 ? null : rest.find((x) => x.score >= 2 && x.score * 2 >= near);
-  return { pieces: [lead, second].filter(Boolean).map((x) => x.p), more: rest.filter((x) => x !== second).slice(0, MORE).map((x) => x.p), hits: lead.hits };
+  // The second is for a part the request names, never another version of the thing asked for.
+  const second = ctx && ctx <= 32_768 ? null : rest.find((x) => !x.p.page && pickable(x.p) && sort(x.p) !== sort(lead.p) && !(lead.hits > 0 && x.hits > 0) && x.score >= 2 && x.score * 2 >= near);
+  // Others that fit, one of each kind, the pages too.
+  const seen = new Set([sort(lead.p), second && sort(second.p)]);
+  const more = rest.filter((x) => x !== second && !seen.has(sort(x.p)) && seen.add(sort(x.p))).slice(0, MORE).map((x) => x.p);
+  return { pieces: [lead, second].filter(Boolean).map((x) => x.p), more, hits: lead.hits };
 }
 
 const SHELL = '<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>…</title></head>\n<body class="min-h-screen bg-paper text-ink font-sans antialiased">…</body>\n</html>';
 
 function head(colours) {
-  return `The design studio (the user's own UI pieces, read-only under STUDIO/): build this page from the pieces below. Copy their HTML and their Tailwind classes, put this request's own words and numbers in them, and join them into one page, starting from this shell:\n${SHELL}\nStyle with Tailwind classes only. The colours are the user's theme and there are no others: ${colours.map((c) => c).join(', ')} (as bg-…, text-…, border-…; paper is the page, surface a card, subtle a hover or table head; good, wait and bad only for a state, with their -soft for a tag's background). Stock Tailwind colours (blue-500, gray-600, white, black) do not exist here and draw nothing. Light and dark mode switch by themselves: no dark: classes. Do not add Tailwind's <script> or a <link> to it: Agentic Coder builds the CSS for your classes into the page after every change. A <style> of your own is fine for what classes cannot do.`;
+  return `The design studio (UI pieces read-only under STUDIO/: the user's own, and pieces from free libraries already in the user's colours): build this page from the pieces below. Copy their HTML and their Tailwind classes, put this request's own words and numbers in them, and join them into one page, starting from this shell:\n${SHELL}\nStyle with Tailwind classes only. The colours are the user's theme and there are no others: ${colours.map((c) => c).join(', ')} (as bg-…, text-…, border-…; paper is the page, surface a card, subtle a hover or table head; good, wait and bad only for a state, with their -soft for a tag's background). Stock Tailwind colours (blue-500, gray-600, white, black) do not exist here and draw nothing. Light and dark mode switch by themselves: no dark: classes. Do not add Tailwind's <script> or a <link> to it: Agentic Coder builds the CSS for your classes into the page after every change. A <style> of your own is fine for what classes cannot do.`;
+}
+
+const REACT_HEAD = 'The design studio has React pieces for this React project (shadcn/ui, MIT, read-only under STUDIO/): build from the pieces below. Use the project\'s own components where it has them (components/ui) and its own colour names (bg-background, text-foreground, bg-primary, text-muted-foreground, border); import from where this project keeps them, not from "@/registry/…". Put this request\'s own words and numbers in them.';
+
+// What goes with a request when the page takes a look (asked for, or /design look): its card, and how
+// the build uses it. The colour names stay the same; the page's <meta name="studio-look"> says which.
+export function lookNote(look) {
+  return `This page takes the ${look.name} look (asked for). Put <meta name="studio-look" content="${look.id}"> in <head>: Agentic Coder then builds the same colour names (paper, surface, ink, accent…) in ${look.name}'s colours, type and corners. Never the brand's name, logo or words on the page.\n${lookCard(look)}`;
 }
 
 // The text that goes with the request, and the pieces in it.
-export function studioNotes(pick, dir = studioDir()) {
+export function studioNotes(pick, dir = studioDir(), { look = null } = {}) {
   if (!pick.pieces.length) return null;
-  const parts = [head(themeColours(readTheme(dir)))];
+  const react = pick.pieces.every((p) => p.react);
+  const parts = [react ? REACT_HEAD : head(themeColours(readTheme(dir)))];
+  if (look && !react) parts.push(lookNote(look));
   const used = [];
   let room = STUDIO_CHARS - parts[0].length;
   const skipped = [];
   for (const p of pick.pieces) {
-    const t = `[Piece · STUDIO/${p.file}: ${p.name}${p.for ? `, for ${p.for}` : ''}]\n${p.body}`;
+    const t = `[Piece · STUDIO/${p.file}: ${p.name}${p.version ? ` (${p.version})` : ''}${p.for ? `, for ${p.for}` : ''}${p.source && p.source !== 'yours' ? ` · from ${p.source}` : ''}]\n${p.body}`;
     if (t.length > PIECE_CHARS + 200 || t.length > room) { skipped.push(p); continue; }
     parts.push(t);
     used.push(p);
@@ -197,8 +276,54 @@ export function inStudioDir(abs, dir = studioDir()) {
 
 // /design studio alone: the pieces, kind by kind.
 export function studioSummary(dir = studioDir()) {
-  const { kinds } = readPieces(dir);
+  const { kinds } = readPieces(dir, { library: false });
   return { dir, rows: kinds.map((k) => [k.name, `${k.pieces.length} piece${k.pieces.length === 1 ? '' : 's'}: ${k.pieces.map((p) => p.file.split('/').pop().replace(/\.html?$/i, '')).join(', ')}`]) };
+}
+
+// ── Looks (library.mjs): a brand's or a theme's colours, type and corners ─────
+
+export const studioLooks = (dir = studioDir()) => readLooks(libraryDir(dir));
+
+// The look a page takes: the one the request names ("like Linear"), else the one /design look set;
+// null: the user's own.
+export function pickLookFor(text, setting, dir = studioDir()) {
+  const looks = studioLooks(dir);
+  if (!looks.length) return null;
+  const want = String(setting ?? '').toLowerCase();
+  return askedLook(text, looks) ?? (want ? looks.find((l) => l.id === want || l.name.toLowerCase() === want || l.id.replace(/\.(app|ai|com)$/, '') === want) ?? null : null);
+}
+
+const LOOK_META = /<meta\s+name=["']studio-look["']\s+content=["']([^"']+)["'][^>]*>/i;
+// The theme a page's styles are built with: its look's (<meta name="studio-look">), else the user's.
+export function themeFor(html, dir = studioDir()) {
+  const id = LOOK_META.exec(html ?? '')?.[1];
+  const base = readTheme(dir);
+  if (!id) return base;
+  const look = studioLooks(dir).find((l) => l.id === id);
+  return look ? lookTheme(look, base) : base;
+}
+
+// The page with its look's meta line, when the turn took a look and the model left it out.
+export function withLook(html, id) {
+  if (!id || LOOK_META.test(html) || !/<head[^>]*>/i.test(html)) return html;
+  return html.replace(/<head[^>]*>/i, (m) => `${m}\n<meta name="studio-look" content="${id}">`);
+}
+
+// One piece in a browser, as the studio check opens the user's own: in the page shell, its styles
+// built. Its problems ([] when clean), or null with no browser here. No clicks: a library's buttons do
+// nothing until a page gives them work.
+export async function checkPiece(text, { dir = studioDir(), theme = readTheme(dir), chrome = findChrome() } = {}) {
+  if (!chrome) return null;
+  const { body, name } = parsePiece(text);
+  const page = `<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name.replace(/[<&]/g, '')}</title></head>\n<body class="min-h-screen bg-paper text-ink font-sans antialiased">\n<main class="mx-auto max-w-6xl p-4 sm:p-8">\n${body}\n</main>\n</body>\n</html>\n`;
+  const built = await buildStyles(page, { theme, force: true });
+  const box = mkdtempSync(join(tmpdir(), 'agentic-piece-'));
+  try {
+    const f = join(box, 'piece.html');
+    writeFileSync(f, built.html ?? page);
+    const r = await layoutCheck(f, { chrome, clicks: false });
+    return r.skipped ? [`could not be opened: ${r.skipped}`] : r.problems;
+  } finally { rmSync(box, { recursive: true, force: true }); }
 }
 
 // ── The build ──────────────────────────────────────────────────────────────

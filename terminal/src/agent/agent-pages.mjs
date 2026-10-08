@@ -9,7 +9,7 @@ import { emptyOf, pageReadLine, pageReadNote, readPage } from './page-read.mjs';
 import { askedThing, briefAsk, designSettings, parseBrief, savePick } from './design.mjs';
 import { complete } from '../flows/llm.mjs';
 import { endpointOf } from '../../../models/index.mjs';
-import { buildNote, buildStyles, isBuilt } from './studio.mjs';
+import { buildNote, buildStyles, isBuilt, themeFor, withLook } from './studio.mjs';
 import { findChrome, layoutCheck, layoutNote, needsServer, pagesToCheck } from '../flows/layoutcheck.mjs';
 import { findProjects, foldersNamed, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
@@ -68,8 +68,10 @@ export class PagesPart {
     let html = '';
     try { html = readFileSync(prepared.abs, 'utf8'); } catch { return null; }
     if (!isBuilt(html) && !(design.studio && this.turn?.studio)) return null;
+    // A look the request asked for (library.mjs): its meta line on the page, and its colours in the build.
+    html = withLook(html, this.turn?.studio?.look);
     let r;
-    try { r = await buildStyles(html); } catch (e) {
+    try { r = await buildStyles(html, { theme: themeFor(html) }); } catch (e) {
       this.emit('note', { text: `Could not build the styles into ${prepared.rel}: ${e.message}.`, tone: 'warn' });
       return null;
     }

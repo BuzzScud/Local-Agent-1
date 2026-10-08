@@ -66,7 +66,9 @@ export function designSettings(saved = {}) {
   // ask: a page saved for a request stops the turn and asks you first (agent.mjs askPage).
   // polish, brief, learn (8 Oct 2026, the owner's picks): check and look before asking, a plan before
   // writing, and "Looks good" offering to keep the page (agent-pages.mjs polishPage, pageBrief, offerPick).
-  const s = { auto: true, check: true, ask: true, sets: 'all', style: 'auto', studio: true, polish: true, brief: true, learn: true, ...(saved && typeof saved === 'object' ? saved : {}) };
+  // library, look (8 Oct 2026): the downloaded pieces (library.mjs) picked with the studio's own, and
+  // a brand look every page takes (null: the user's own; a request that names one still gets it).
+  const s = { auto: true, check: true, ask: true, sets: 'all', style: 'auto', studio: true, polish: true, brief: true, learn: true, library: true, look: null, ...(saved && typeof saved === 'object' ? saved : {}) };
   const auto = onOff(process.env.AGENTIC_DESIGN);
   const check = onOff(process.env.AGENTIC_LAYOUT);
   const ask = onOff(process.env.AGENTIC_LAYOUT_ASK);
@@ -77,7 +79,7 @@ export function designSettings(saved = {}) {
   s.ask = s.ask !== false;
   if (studio !== undefined) s.studio = studio;
   s.studio = s.studio !== false;
-  for (const [k, env] of [['polish', 'AGENTIC_DESIGN_POLISH'], ['brief', 'AGENTIC_DESIGN_BRIEF'], ['learn', 'AGENTIC_DESIGN_LEARN']]) {
+  for (const [k, env] of [['polish', 'AGENTIC_DESIGN_POLISH'], ['brief', 'AGENTIC_DESIGN_BRIEF'], ['learn', 'AGENTIC_DESIGN_LEARN'], ['library', 'AGENTIC_DESIGN_LIBRARY']]) {
     const v = onOff(process.env[env]);
     if (v !== undefined) s[k] = v;
     s[k] = s[k] !== false;
@@ -85,6 +87,9 @@ export function designSettings(saved = {}) {
   const sets = process.env.AGENTIC_DESIGN_SETS?.trim();
   if (sets) s.sets = /^all$/i.test(sets) ? 'all' : sets.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (s.sets !== 'all' && !Array.isArray(s.sets)) s.sets = 'all';
+  const look = process.env.AGENTIC_DESIGN_LOOK?.trim().toLowerCase();
+  if (look) s.look = /^(off|none|mine|yours)$/.test(look) ? null : look;
+  if (typeof s.look !== 'string' || !s.look) s.look = null;
   const style = process.env.AGENTIC_DESIGN_STYLE?.trim().toLowerCase();
   if (style) s.style = style;
   if (!STYLES.includes(s.style)) s.style = 'auto';
@@ -164,6 +169,11 @@ const MADE_THING = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:app|application|timer|cou
 const MADE_MORE = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:timeline|carousel|slideshow|lightbox|scoreboard|playlist)\b|\b(?:interactive|world|store|location|street|city|travel|leaflet) maps?\b|\bmaps? (?:of|showing) (?:my|our|the|all) (?:[\w-]+ ){0,2}(?:stores|shops|locations|offices|places|cities|countries|trips|travels|customers|branches|visits|sales)\b|\b(?:music|audio|video|media|mp3|podcast|radio) players?\b|\bchat ?(?:window|box|view|bubbles?)\b|\b(?:support|live|group|team) chat\b|\b(?:store|shop|branch) (?:locator|finder)\b|\b(?:profile|stat|stats|data|info|user|product|contact|business|weather|summary|pricing|team|recipe|flash|kpi|metric) cards?\b|\b(?:online|web) (?:shop|store)s?\b|\bempty[- ]states?\b|\bpricing (?:tables?|plans?|tiers?)\b|\bproduct (?:grid|listing|details?)\b/i;
 // "show my sales as a bar chart", "plot the runs over time in a graph": a chart asked for with no
 // make-word.
+// Diagrams, slide decks and posters (8 Oct 2026, the owner: "better at ui design and design in general",
+// picking charts, slides and posters, and diagrams): a page when one is made, with draw and sketch as
+// make-words. Not "the presentation layer", not a diagram of a database's tables written in SQL.
+const DRAW = /\b(?:draw|sketch|diagram)\b/i;
+const MADE_DESIGN = /\b(?:flow ?charts?|(?:[\w-]+ )?diagrams?|org(?:anization(?:al)?)? charts?|mind ?maps?|slide ?decks?|pitch decks?|(?:a|an|the|my|our)\s+(?:[\w-]+\s+){0,2}?(?:presentation|deck)(?!\s+layer)s?\b|posters?|one-pagers?|infographics?)\b/i;
 const CHART_ASK = /\b(?:show|draw|plot|display|put|turn|visuali[sz]e)\b[^.?!]{0,60}?\b(?:as|into|in|on) (?:a |an )?(?:[\w-]+ ){0,2}(?:charts?|graphs?|plots?|dashboards?|maps?|timelines?)\b|^\s*(?:please )?(?:chart|graph|plot|visuali[sz]e) (?:my|our|the|all)\b/i;
 const LOOKS = /\b(?:look(?:s|ing)? (?:better|nicer|good|great|cleaner|modern|professional|prettier|ugly|bad|off|dated|plain|boring)|prettier|nicer looking|better looking|more modern|redesign|restyle|the design|visual(?:ly)?)\b/i;
 const NOT_UI_FILE = /\b[\w-]+\.(py|rb|go|rs|java|kt|swift|c|cc|cpp|h|sh|sql|ya?ml|toml|json|csv|txt|md)\b/i;
@@ -177,7 +187,7 @@ export function isDesignRequest(text) {
   if (QUESTION.test(t) && !/\b(?:can|could|would) you\b/i.test(t.split(/[.?!]/)[0]) && !looks) return false;
   if (NOT_UI_FILE.test(t) && !/\.(html?|css|jsx|tsx|vue|svelte)\b/i.test(t)) return false;
   if (CODE_ONLY.test(t) && !looks) return false;
-  return looks || (MAKE.test(t) && (THING.test(t) || MADE_THING.test(t) || MADE_MORE.test(t))) || CHART_ASK.test(t);
+  return looks || ((MAKE.test(t) || DRAW.test(t)) && (THING.test(t) || MADE_THING.test(t) || MADE_MORE.test(t) || MADE_DESIGN.test(t))) || CHART_ASK.test(t);
 }
 
 const clean = (s) => ` ${String(s).toLowerCase().replace(/[‘’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim()} `;
@@ -209,8 +219,9 @@ export function scoreCard(card, text) {
 // names ("a small progress indicator", "toggle play", "city codes") brought a goal card, a toggle switch
 // or a weather card to a file card, a media player and a boarding pass (3 of the owner's 5 card prompts).
 // → { phrase, words: the words that say what kind it is, head } or null.
-const HEADS = 'cards?|posts?|pass(?:es)?|players?|widgets?|forms?|tables?|lists?|dashboards?|modals?|pop-?ups?|toasts?|banners?|panels?|screens?|pages?|apps?|items?|tiles?|charts?|graphs?|timelines?|calendars?|boards?|menus?|navbars?|sidebars?|headers?|footers?|wizards?|reports?|invoices?|receipts?|galler(?:y|ies)|feeds?|maps?|games?|quiz(?:zes)?|trackers?|planners?|timers?|clocks?|calculators?|converters?|shops?|stores?|portfolios?|blogs?|resumes?|chats?|logins?|profiles?|layouts?|sites?|websites?|bars?|badges?|buttons?|views?|sections?|strips?|summar(?:y|ies)|snapshots?|feeds?|inbox(?:es)?';
-const ASK_FOR = new RegExp(`\\b(?:for|of|displays?|renders?|shows?|showing|build|create|make|write|design|redesign|restyle|is)\\s+(?:a|an|one|the|my|our)\\s+((?:[\\w-]+\\s+){0,4})(${HEADS})\\b`, 'i');
+const HEADS = 'cards?|posts?|pass(?:es)?|players?|widgets?|forms?|tables?|lists?|dashboards?|modals?|pop-?ups?|toasts?|banners?|panels?|screens?|pages?|apps?|items?|tiles?|charts?|graphs?|timelines?|calendars?|boards?|menus?|navbars?|sidebars?|headers?|footers?|wizards?|reports?|invoices?|receipts?|galler(?:y|ies)|feeds?|maps?|games?|quiz(?:zes)?|trackers?|planners?|timers?|clocks?|calculators?|converters?|shops?|stores?|portfolios?|blogs?|resumes?|chats?|logins?|profiles?|layouts?|sites?|websites?|bars?|badges?|buttons?|views?|sections?|strips?|summar(?:y|ies)|snapshots?|feeds?|inbox(?:es)?|flow ?charts?|diagrams?|org charts?|mind ?maps?|decks?|presentations?|slides?|posters?|flyers?|one-pagers?|infographics?';
+const ASK_FOR = new RegExp(`\\b(?:for|of|displays?|renders?|shows?|showing|build|create|make|write|design|redesign|restyle|draw|sketch|is)\\s+(?:a|an|one|the|my|our)\\s+((?:(?!(?:of|for|with|about|from|in|on|to|that|which|showing)\\s)[\\w-]+\\s+){0,4})(${HEADS})\\b`, 'i');
+const GENERIC = /^(?:pages?|sections?|screens?|sites?|websites?|views?|layouts?|panels?|blocks?)$/;
 // Words that say nothing about which kind it is.
 const PLAIN = new Set(['a', 'an', 'the', 'or', 'and', 'of', 'with', 'for', 'my', 'our', 'one', 'single', 'self', 'contained', 'html', 'file', 'css', 'compact', 'modern', 'small', 'simple', 'clean', 'mini', 'little', 'tiny', 'nice', 'new', 'minimal', 'sleek', 'basic', 'quick', 'full', 'responsive', 'beautiful', 'pretty', 'cool', 'in', 'app', 'web', 'big', 'large', 'main', 'whole', 'standalone', 'interactive', 'live', 'static', 'card', 'cards']);
 export function askedThing(text) {
@@ -222,6 +233,13 @@ export function askedThing(text) {
   // "a file or document card": file is the kind there, not the "HTML file" every request is.
   const words = before.filter((w, i) => !PLAIN.has(w) || (w === 'file' && before[i - 1] !== 'html'));
   const headWord = clean(head).trim();
+  // A page, a section, a screen: the word before says what kind ("a pricing page" is pricing, "an FAQ
+  // section" an FAQ), so that word is the noun and "page" says nothing (8 Oct 2026: with the library's
+  // pieces, "pricing page" brought pagination and "team page" a page-numbers bar).
+  if (GENERIC.test(headWord) && words.length) {
+    const kind = words.filter((w) => w !== headWord && !GENERIC.test(w));
+    if (kind.length) return { phrase: clean(`${m[1]}${m[2]}`).trim(), words: [...new Set(kind)], head: kind[kind.length - 1] };
+  }
   if (!['card', 'cards'].includes(headWord) && !words.includes(headWord)) words.push(headWord.replace(/s$/, ''));
   return { phrase: clean(`${m[1]}${m[2]}`).trim(), words: [...new Set(words)], head: headWord };
 }
