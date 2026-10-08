@@ -19,6 +19,8 @@
 //     (Easy, Medium, Hard): paste a list of prompts, checks suggested from each prompt's words, try them with
 //     no model (builder-hub.mjs). The tests are the Arena's "My tests", on this Mac only
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
+//   /profiles, /profiles.json, /profiles/…   the Profiles tab: the profiles of /profiles, read from and saved to
+//                     the same file (profiles-hub.mjs)
 //   /remote, /remote.json, /remote/…   the Remote tab: the models on the services saved with /remote, a card each,
 //                     one model in full, and Try it · Load · Unload (remote-hub.mjs)
 //   /favicon.ico      the tab icon every page asks for: the Visor bot (favicon.mjs)
@@ -34,10 +36,12 @@ import memoryHtml from './memory.html' with { type: 'text' };
 import instructionsHtml from './instructions.html' with { type: 'text' };
 import builderHtml from './builder.html' with { type: 'text' };
 import remoteHtml from './remote.html' with { type: 'text' };
+import profilesHtml from './profiles.html' with { type: 'text' };
 import { builderRoute } from './builder-hub.mjs';
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { remoteHub } from './remote-hub.mjs';
+import { profilesHub } from './profiles-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
 import { flowRoute } from './flow-hub.mjs';
 import { helpData, VERSION, setupModels } from './help.mjs';
@@ -108,6 +112,7 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
   const model = MODELS[DEFAULT_MODEL];
   const noStore = { 'cache-control': 'no-store' };
   const remote = remoteHub({ cwd });
+  const profiles = profilesHub({ cwd });
   // The models as the Weights tab shows them, read each time: the tags are the Harness
   // tab's (the model /model saved last is the one in use), and a file can arrive or go.
   const modelsData = () => {
@@ -182,6 +187,8 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
         catch (e) { return page(`<!doctype html><meta charset="utf-8"><body style="font:14px -apple-system,sans-serif;padding:24px"><h3>The Arena did not start</h3><p>${String(e.message).replace(/[<>&]/g, '')}</p><p>Open the Arena tab again to try once more.</p>`); }
       }
       if (url.pathname === '/memory') return page(memoryHtml);
+      if (url.pathname === '/profiles') return page(profilesHtml);
+      if (url.pathname === '/profiles.json' || url.pathname.startsWith('/profiles/')) { const r = await profiles.route(req, url); if (r) return r; }
       if (url.pathname === '/remote') return page(remoteHtml);
       if (url.pathname.startsWith('/remote')) { const r = await remote.route(req, url); if (r) return r; }
       if (url.pathname === '/instructions') return page(instructionsHtml);

@@ -746,6 +746,51 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   `AGENTIC_TEST_QUICKLOOK` names a file the tests read in Quick Look's place; with
   `AGENTIC_NO_OPEN` (every test window) nothing opens.
 
+## Profiles: which server and model each request goes to (8 Oct 2026)
+
+- **What and why.** The owner's shared Ollama service is busy (6 Oct: 77 s of a 201 s task was waiting in line), and
+  they asked to hot-swap the server and model live: each AI and each task group points at a profile, and changing a
+  profile changes the very next request, mid-task too. Their picks: the full build, the next request even mid-task,
+  a busy server spills to a backup, a /profiles panel every window on this Mac follows, a second step in /model, the
+  Rows design, /profiles in /subagents' place in the / menu.
+- **A profile** (`terminal/src/app/profiles.mjs`) is a server (the /remote set-up without its key), a model, a backup
+  and a wait (`spillAfter`), by name, in `~/.agentic-coder/profiles.json` with `uses`: a row's key (`ai:btw`,
+  `type:fix`, `cat:coding`, `skill:write-a-test`) → a profile. The most specific wins (`profileFor`): skill › task
+  type › its category › the AI › its category › Main. Nothing changes until a file exists: the first one is made from
+  what runs today (`seedProfiles`: Main = the remote in use, one profile per /subagents helper model, a saved Claude
+  API as one nothing uses), and only a window makes it (it knows the helpers); the hub's tab waits for one.
+- **The router** (`terminal/src/app/profile-router.mjs`) reads the file again whenever its time changed, at each
+  request. The conversation moves between steps (`agent-model.mjs followProfile`, called before `fitContext` in the
+  step loop and in `chat`): the step under way never moves; the new model reads the conversation once, made to fit
+  first. Its own calls name no model, so a move connects the server for that model (its endpoint then names it);
+  every helper's call names its model and server (`use.url`, client.mjs), so two profiles on one address never mix.
+  Each server is connected once; the window's own connection is lent (`lendConn` at /remote and /model).
+  `helperUse` goes by profile once a file exists (`profileUse`), /btw has its own row (`btwUse`), /agents' steps go
+  by the `agents` row (agents-driver `routeAi`), a helper agent by `helpers` unless its file names its own model.
+- **A spill** (client.mjs `spilling`): a profile with a backup sends its request there when its server answers busy
+  (a 429/503, or those words) or sends no first word within `spillAfter` seconds plus the time to read what is new
+  (the reading speed measured, else 1,000 tokens a second: a long conversation read again is not a busy server);
+  then the profile cools down for `COOL_MS` (2 min, `agent/profile-spill.mjs`): its requests go straight to the
+  backup. A note says so. Once the first word has come the request stays.
+  The calls the agent makes on the conversation's model without naming a profile (a summary, the cases, the second
+  look, a check) follow it the same way: the agent registers its profile by address (client.mjs `routeCalls`). The
+  agent's event for a move is `profile-route` (`route` is the request's sort, flows/index.mjs).
+- **Meters** (`terminal/src/agent/profile-meters.mjs`): each window writes `profile-meters/<day>/<pid>.json` (requests,
+  wait to the first word, speed, spills, cost); /profiles and the hub add up every window of the day.
+- **The window** (`app-profiles.mjs`): /profiles (profiles-view.jsx) lists the profiles (←→ steps the highlighted
+  one's model: the Claude API's list, else its service's; enter opens its settings), then one group at a time with
+  ◀ profile ▶ per row, saved at once; a model that cannot do a row's job (pictures, embeddings) is marked ⚠. /model on
+  a service has three steps: the model, which profile uses it (+ New profile, Just this window = the old switch), its
+  settings with Backup and Spill after. Both open while a reply runs. The window looks at the file every 2 s and,
+  while idle, moves the conversation to its Main and rebuilds the code search's embedder (`followProfiles`); the
+  footer follows (`onRoute`). /subagents is typed only and opens /profiles on its AIs group; its panel is gone.
+- **The hub's Profiles tab** (`profiles-hub.mjs`, `profiles.html`, `coding hub profiles`): the same file, a model
+  picked from the Remote tab's list for that server, backups, who uses which, today's meters.
+- **Tests**: `terminal/test/profiles.test.mjs` (which profile, the first profiles, the file, the meters, the router,
+  a busy and a silent server spilling, the conversation moving to another server between two steps, a spill with its
+  cool-down) and `app-profiles.test.mjs` (the real window: the / menu, /subagents, /model's steps while a task works,
+  its next step on the new model).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

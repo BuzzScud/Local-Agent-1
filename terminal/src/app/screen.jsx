@@ -22,7 +22,6 @@ import { DETACH_LABEL } from './sessions.mjs';
 import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc, formReady } from './remote-form.mjs';
 import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord, isBig, isHelper as isHelperModel } from './remote-models.mjs';
 import { triedWord } from './tryouts.mjs';
-import { statusOf as statusOfJob, roomLine as subRoomLine, MAIN } from './subagents.mjs';
 import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
 import { listRows, serverLine, projectLine, formRows, showMcpValue, mcpRowNote, mcpRowChanged, mcpWarning, testLines, toolState, toolWindow, toolNote } from './mcp-form.mjs';
 import { hookListRows, hookLine, projectLine as hooksProjectLine, checkOn, rowWindow, hookFormRows, showHookValue, hookRowNote, hookRowChanged, hookWarning } from './hooks-form.mjs';
@@ -32,6 +31,8 @@ import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords } from './rail.jsx';
 import { StartPage } from './start.jsx';
 import { AttachTray } from './tray.jsx';
+import { ProfileStep, ProfilesPanel } from './profiles-view.jsx';
+import { spillWord } from './profiles.mjs';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const diffW = (width) => Math.max(40, Math.min(110, width - 12));
@@ -1257,19 +1258,22 @@ function LimitsPicker({ app }) {
   const vw = Math.max(...shown.flatMap((l) => (l.choice ? l.steps(pk.model).map((s) => showLimit(l.id, s).length) : [showLimit(l.id, pk.values[l.id]).length])), ...levels.map((l) => l.label.length)) + 1;
   const heading = (name) => <Text key={`h-${name}`} color={C.faint}>{`── ${name} `}{'─'.repeat(Math.max(0, app.width - 8 - name.length))}</Text>;
   const env = { ...pk.env, values: pk.values, effortOn, effortLevel: lv?.effort ?? null, effortWord };
-  const reset = pk.index === off + shown.length;
+  const pr = own?.profile ?? null; // /model's step 3: a profile's settings (app-profiles.mjs)
+  const reset = pk.index === off + shown.length + (pr ? 2 : 0);
+  // Its two rows fit 80 × 24 by leaving out three lines there: the Suggested line, the Thinking cap line and the Profile heading.
+  const roomy = !pr || (app.rows ?? 24) >= 30;
   const onEffort = off && pk.index === 0;
   const effortUnsaved = pk.level !== pk.savedLevel;
   // What the ranks page suggests for a row: ✓ when it already has it.
   const suggests = (v, want, show) => (want === undefined || want === null ? '' : v === want ? '✓ suggested · ' : `suggested ${show(want)} · `);
-  const where = own ? (own.inUse ? 'in use · enter saves, from its next step' : 'nothing loads until you press enter') : '←→ moves a row; its cost is on the right. Kept for next time.';
-  const keys = own ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter ${own.inUse ? 'saves' : 'switches to it'} · esc ${own.back ? 'back to the list' : 'cancels'}`
+  const where = pr ? `${own.id} · enter saves ${pr.name}; the next request that uses it goes there` : own ? (own.inUse ? 'in use · enter saves, from its next step' : 'nothing loads until you press enter') : '←→ moves a row; its cost is on the right. Kept for next time.';
+  const keys = pr ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter saves ${pr.name} · esc back` : own ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter ${own.inUse ? 'saves' : 'switches to it'} · esc ${own.back ? 'back to the list' : 'cancels'}`
     : `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter saves · esc cancels${svc ? '' : ' · ↻ restarts model'}`;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       {/* The hint sits on the title's line: the panel stays within 22 lines with Who decides in it. */}
-      <Text wrap="truncate-end"><Text bold>{own ? `${own.id} · its own settings` : svc ? `Effort and limits · ${pk.model.remote.model}` : 'Effort and limits'}</Text><Text color={C.dim}>{'   '}{where}</Text></Text>
-      {own ? (
+      <Text wrap="truncate-end"><Text bold>{pr ? `/model · 3 of 3: ${pr.name}’s settings` : own ? `${own.id} · its own settings` : svc ? `Effort and limits · ${pk.model.remote.model}` : 'Effort and limits'}</Text><Text color={C.dim}>{'   '}{where}</Text></Text>
+      {own && roomy ? (
         <Text color={C.dim} wrap="truncate-end">{sg ? `Suggested: ${sg.why} · ${sg.source}` : 'Nothing suggested for it on the ranks page: each row starts from the shared settings.'}</Text>
       ) : null}
       {lv ? (
@@ -1310,12 +1314,36 @@ function LimitsPicker({ app }) {
             <Text color={note.startsWith('⚠') ? C.warn : C.dim}>{suggests(v, sg?.limits?.[l.id], (x) => showLimit(l.id, x))}{isDefault(l.id, pk.values, pk.model) ? 'default · ' : ''}{note}</Text>
           </Text>
           {/* Their place on a service: why there is no Thinking cap there (and, in /effort, where the search went). One line, so the panel keeps its 22. */}
-          {svc && l.id === 'context' ? (own
+          {svc && l.id === 'context' && roomy ? (own
             ? <Text color={C.dim} wrap="truncate-end">{'  '}{'Thinking cap'.padEnd(lw)}{'  '}not on a service: Ollama has no thinking limit, so Reply length holds the thinking and the answer</Text>
-            : <Text color={C.dim} wrap="truncate-end">{'  '}{'Not here'.padEnd(lw)}{'  '}Thinking cap: Ollama has none, Reply length holds it all · Search: the service’s own, /subagents gives it a model</Text>) : null}
+            : <Text color={C.dim} wrap="truncate-end">{'  '}{'Not here'.padEnd(lw)}{'  '}Thinking cap: Ollama has none, Reply length holds it all · Search: the service’s own, /profiles gives it a model</Text>) : null}
           </React.Fragment>
         );
       })}
+      {pr ? (() => {
+        const base = off + shown.length;
+        const bk = pr.backups[pr.backup];
+        const sp = pr.spills[pr.spill];
+        const line = (k, label, value, first, last, note, idle) => {
+          const on = pk.index === base + k;
+          return (
+            <Text key={label} wrap="truncate-end">
+              <Text color={on ? C.accent : idle ? C.dim : undefined} bold={on}>{on ? '❯' : ' '} {label.padEnd(lw)}</Text>
+              <Text color={on && !first ? C.accent : C.faint}>◀ </Text>
+              <Text color={idle ? C.dim : undefined}>{value.padEnd(vw)}</Text>
+              <Text color={on && !last ? C.accent : C.faint}>▶ </Text>
+              <Text color={C.dim}>{'   '}{note}</Text>
+            </Text>
+          );
+        };
+        return (
+          <>
+            {roomy ? heading(`Profile · ${pr.name}${pr.isNew ? ' (new)' : ''}`) : null}
+            {line(0, 'Backup', bk ?? 'none', pr.backup === 0, pr.backup === pr.backups.length - 1, bk ? `when this server is busy or slow, the request goes to ${bk}` : 'no backup: a busy server is waited for, as today')}
+            {line(1, 'Spill after', bk ? spillWord(sp) : '—', pr.spill === 0, pr.spill === pr.spills.length - 1, bk ? (sp ? `no first word in ${sp} s → ${bk}; a "busy" answer goes at once` : `only when the server answers "busy"`) : 'needs a backup', !bk)}
+          </>
+        );
+      })() : null}
       <Text wrap="truncate-end">
         <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {(svc ? 'Use shared' : 'Reset all').padEnd(lw)}</Text>
         <Text color={C.dim}>{'  '}{reset && svc ? `enter: ${own?.id ?? pk.model.remote?.model ?? 'it'} back to the shared settings${own && !own.inUse ? ', then it switches' : ''}` : keys}</Text>
@@ -1692,7 +1720,7 @@ function RemoteCatalogPick({ app }) {
   const detail = !cur?.m ? null
     : cur.m.copies?.length ? `${cur.m.copies.length + 1} copies of one model: ←→ picks one (${[cur.id, ...cur.m.copies].map((x) => x.split(':')[1] ?? x).join(' · ')}).`
     : !cur.m.known ? 'The service does not say what this one can do: a try-out the first time you pick it will.'
-    : cur.m.embedding ? 'It compares meanings (code search). /subagents can give it that job; it cannot be the main model.'
+    : cur.m.embedding ? 'It compares meanings (code search). /profiles can give it that job; it cannot be the main model.'
     : !cur.m.tools ? 'No tools: it can only answer in words. As the main model it reads, edits and runs nothing.'
     : isBig(cur.m) ? 'Big model: it reads 400 lines at a time, up to 80 steps.' : null;
   const row = (r, k) => {
@@ -1839,47 +1867,6 @@ function EffortRows({ levels, at }) {
 // a window of rows around the cursor, the line about the highlighted model, Effort.
 // A narrow window drops the quantization, then the size, then the GB.
 const SVC_COLS = [['size', 11], ['quant', 8], ['ctx', 8], ['can', 25], ['gb', 8], ['tried', 15]];
-// /subagents (subagents.mjs): one row per job, its model between ◀ ▶ and where it stands.
-function SubagentsPanel({ app }) {
-  const pk = app.picker;
-  const sa = app.subagents ?? { models: [], main: null, where: '' };
-  const labelW = Math.max(...pk.jobs.map((j) => j.label.length)) + 2;
-  const modelW = Math.min(28, Math.max(16, ...pk.jobs.map((j) => (j.model === MAIN ? 14 : (j.model ?? '').length) + 4)));
-  const cur = pk.jobs[pk.at];
-  const shown = (j) => (j.model === MAIN ? 'same as main' : j.model ?? '—');
-  const tone = { ok: C.ok, warn: C.warn, dim: C.dim };
-  return (
-    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      <Box justifyContent="space-between">
-        <Text bold>Subagents · helpers on the service</Text>
-        <Text color={C.dim} wrap="truncate-start">{`  ${sa.where}`}</Text>
-      </Box>
-      <Text color={C.dim} wrap="truncate-end">Each job has a model on the service. A helper loads the first time its job needs it.</Text>
-      <Text> </Text>
-      {pk.jobs.map((j, k) => {
-        const on = k === pk.at;
-        const st = statusOfJob(j, sa.models, sa.main);
-        const can = j.choices.length > 1;
-        return (
-          <Text key={j.id} wrap="truncate-end">
-            <Text color={C.accent}>{on ? '❯ ' : '  '}</Text>
-            <Text color={j.on && j.model ? C.ok : C.dim}>{j.on && j.model ? '● ' : '○ '}</Text>
-            <Text bold={on} color={on ? C.accent : j.on ? undefined : C.dim}>{j.label.padEnd(labelW)}</Text>
-            <Text color={C.dim}>{can ? '◀ ' : '  '}</Text>
-            <Text color={j.on ? undefined : C.dim}>{shown(j).padEnd(modelW - 4)}</Text>
-            <Text color={C.dim}>{can ? ' ▶  ' : '    '}</Text>
-            <Text color={tone[st.tone]}>{st.text}</Text>
-          </Text>
-        );
-      })}
-      <Text> </Text>
-      <Text color={C.dim} wrap="truncate-end">{`  ${cur ? `${cur.label}: ${cur.note}.` : ''}${cur?.missing ? ' Its saved model is no longer on the service.' : ''}`}</Text>
-      <Text color={C.dim} wrap="truncate-end">{`  ${subRoomLine(pk.jobs, sa.models, sa.main)}`}</Text>
-      <Text> </Text>
-      <Text color={C.dim} wrap="truncate-end">↑↓ job · space on/off · ←→ model · enter loads it now · esc closes (changes are kept)</Text>
-    </Box>
-  );
-}
 
 function ServicePicker({ app }) {
   const pk = app.picker;
@@ -1933,12 +1920,12 @@ function ServicePicker({ app }) {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       <Box justifyContent="space-between">
-        <Text bold wrap="truncate-end">Model · {sv.title}</Text>
+        <Text bold wrap="truncate-end">/model · 1 of 3: model<Text color={C.dim}>{`  · ${sv.title}`}</Text></Text>
         <Text color={C.dim} wrap="truncate-start">{`  ${sv.where}${sv.version ? ` · Ollama ${sv.version}` : ''}${sv.ms != null ? ` · ${sv.ms} ms` : ''}`}</Text>
       </Box>
       {pk.filter
         ? <Box justifyContent="space-between"><Text><Text bold>Filter  </Text>{pk.filter}<Text color={C.accent}>█</Text></Text><Text color={C.dim}>{`${models.length} of ${total} · esc clears the filter`}</Text></Box>
-        : <Text color={C.dim} wrap="truncate-end">Pick a model: its own settings come next, and it loads only when you press enter there. The chat stays.</Text>}
+        : <Text color={C.dim} wrap="truncate-end">Pick a model. Next: which profile uses it, then its settings. Nothing changes until enter on the last step; the chat stays.</Text>}
       <Text> </Text>
       {above ? <Text color={C.dim}>  ↑ {above} more</Text> : null}
       {shown.map((r, k) => row(r, top + k))}
@@ -1946,7 +1933,7 @@ function ServicePicker({ app }) {
       <Text> </Text>
       <Text color={detail?.tone === 'warn' ? C.warn : C.dim} wrap="truncate-end">{detail ? `  ${detail.text}` : ' '}</Text>
       <Text> </Text>
-      <Text color={C.dim} wrap="truncate-end">↑↓ model · type to filter · enter its settings, then it switches · esc cancels</Text>
+      <Text color={C.dim} wrap="truncate-end">↑↓ model · type to filter · enter: which profile uses it · esc cancels</Text>
     </Box>
   );
 }
@@ -2183,8 +2170,10 @@ export function Screen({ app }) {
         <ModelPicker app={app} />
       ) : app.picker?.kind === 'service' ? (
         <ServicePicker app={app} />
-      ) : app.picker?.kind === 'subagents' ? (
-        <SubagentsPanel app={app} />
+      ) : app.picker?.kind === 'profile-step' ? (
+        <ProfileStep app={app} />
+      ) : app.picker?.kind === 'profiles' ? (
+        <ProfilesPanel app={app} />
       ) : app.picker?.kind === 'jump' ? (
         <JumpPicker app={app} />
       ) : app.picker?.kind === 'choice' ? (

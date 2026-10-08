@@ -370,8 +370,9 @@ test('on an Ollama service: the footer names the model and where it runs; /model
     { type: 'one' }, { key: 'enter' }, { wait: 'From tiny:3b, reply 1.' }, { sleep: 200 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'list' },
     { type: 'coder' }, { sleep: 200 }, { snapshot: 'filtered' },
-    // enter: its own settings first; nothing loads until enter there
-    { key: 'enter' }, { wait: 'coder:30b · its own settings' }, { sleep: 300 }, { snapshot: 'menu' }, { fn: () => { loadsAtMenu = srv.loads.filter((l) => l.model === 'coder:30b').length; } },
+    // enter: which profile uses it (8 Oct 2026; ↑ from Main is Just this window, the switch as it was: app-profiles.test.mjs
+    // has the profile's way), then its own settings; nothing loads until enter there
+    { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'coder:30b · its own settings' }, { sleep: 300 }, { snapshot: 'menu' }, { fn: () => { loadsAtMenu = srv.loads.filter((l) => l.model === 'coder:30b').length; } },
     { key: 'enter' }, { wait: 'Now on coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
     { type: 'two' }, { key: 'enter' }, { wait: 'From coder:30b, reply 2.' }, { sleep: 200 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
@@ -385,7 +386,7 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   // the footer: the model, where it runs
   expect(s.start).toMatch(new RegExp(`● tiny:3b on ${where.replace('.', '\\.')}`));
   // /model: the service's list, the one in use marked, what each can do; the chat-only model and this Mac folded
-  expect(s.list).toContain('Model · Another service');
+  expect(s.list).toContain('/model · 1 of 3: model  · Another service');
   expect(s.list).toMatch(/Ollama 0\.32\.12/);
   expect(s.list).toMatch(/❯ tiny:3b\s+3\.2B\s+Q4_K_M\s+128k\s+tools\s+2\.0 GB\s+not tried\s+✔ in use/);
   expect(s.list).toMatch(/Can run the agent/);
@@ -430,11 +431,11 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (mo
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 50_000, steps: [
     { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'list' },
-    { type: 'coder' }, { sleep: 200 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'Big-model mode for coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
+    { type: 'coder' }, { sleep: 200 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'Big-model mode for coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From coder:30b, reply 1.' }, { sleep: 200 },
     { type: '/effort' }, { key: 'enter' }, { wait: 'Use shared' }, { sleep: 200 }, { snapshot: 'panel' }, { key: 'esc' }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'tiny' }, { sleep: 200 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'Big-model mode off' }, { sleep: 300 }, { snapshot: 'back' },
+    { type: 'tiny' }, { sleep: 200 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'Big-model mode off' }, { sleep: 300 }, { snapshot: 'back' },
     { type: 'two' }, { key: 'enter' }, { wait: 'From tiny:3b, reply 2.' }, { sleep: 200 },
     ...quit,
   ] });
@@ -469,7 +470,7 @@ test('a service whose own size is less than the agent works in (Ollama’s 4k): 
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 40_000, steps: [
     { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'coder' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'loaded' },
+    { type: 'coder' }, { sleep: 150 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'loaded' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From coder:30b, reply 1.' }, { sleep: 200 },
     ...quit,
   ] });
@@ -493,11 +494,11 @@ test('a model that does not fit on the service: tried again at half the context 
     { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
     // huge: 256k and 128k do not fit, 64k does
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'huge' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'huge:120b is loaded on the service' }, { sleep: 300 }, { snapshot: 'fitted' },
+    { type: 'huge' }, { sleep: 150 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'huge:120b is loaded on the service' }, { sleep: 300 }, { snapshot: 'fitted' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From huge:120b, reply 1.' }, { sleep: 200 },
     // giant: never fits; "two" is sent while it is loading, waits, and goes to huge once it is back
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'giant' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { sleep: 250 },
+    { type: 'giant' }, { sleep: 150 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { sleep: 250 },
     { type: 'two' }, { key: 'enter' }, { sleep: 150 }, { snapshot: 'waiting' },
     { wait: 'Back on huge:120b' }, { wait: 'From huge:120b, reply 2.' }, { sleep: 300 }, { snapshot: 'back' },
     // /effort: the Context row is huge's own 64k, no memory sum of this Mac; ← 32k, enter: it loads again at 32k
@@ -553,24 +554,24 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
     { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 },
-    { type: 'laguna' }, { sleep: 200 }, { key: 'enter' }, { wait: 'laguna-s-2.1:latest · its own settings' }, { sleep: 300 }, { snapshot: 'menu' },
+    { type: 'laguna' }, { sleep: 200 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'laguna-s-2.1:latest · its own settings' }, { sleep: 300 }, { snapshot: 'menu' },
     { fn: () => { lagunaLoadsAtMenu = srv.loads.filter((l) => l.model === 'laguna-s-2.1:latest').length; } },
     { key: 's' }, { sleep: 200 }, { snapshot: 'filled' },
     ...down(5), { key: 'left' }, { sleep: 100 }, // Keep loaded: while open → 30 min
     { key: 'enter' }, { wait: 'Now on laguna-s-2.1:latest' }, { wait: 'laguna-s-2.1:latest is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From laguna-s-2.1:latest, reply 1.' }, { sleep: 200 },
     // the model in use: its menu saves at once (Steps 80 → 120)
-    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 }, { key: 'enter' }, { wait: 'in use · enter saves' }, { sleep: 200 }, { snapshot: 'inUse' },
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'in use · enter saves' }, { sleep: 200 }, { snapshot: 'inUse' },
     ...down(7), { key: 'right' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Kept for laguna-s-2.1:latest alone' }, { sleep: 200 }, { snapshot: 'saved' },
     // another model: the shared settings (and big-model mode off)
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'tiny' }, { sleep: 150 }, { key: 'enter' }, { wait: 'tiny:3b · its own settings' }, { sleep: 200 }, { snapshot: 'tinyMenu' }, { key: 'enter' }, { wait: 'Big-model mode off' }, { sleep: 300 }, { snapshot: 'back' },
+    { type: 'tiny' }, { sleep: 150 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'tiny:3b · its own settings' }, { sleep: 200 }, { snapshot: 'tinyMenu' }, { key: 'enter' }, { wait: 'Big-model mode off' }, { sleep: 300 }, { snapshot: 'back' },
     // (laguna thinks at Max, so Look first sent its replies back for more: count none of them)
     { type: 'two' }, { key: 'enter' }, { wait: 'From tiny:3b, reply' }, { sleep: 200 },
-    // laguna's come back in its menu; esc goes back to the list, esc again closes it, nothing switched
+    // laguna's come back in its menu; esc goes back a step (to which profile, then the list), esc again closes it, nothing switched
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'laguna' }, { sleep: 150 }, { key: 'enter' }, { wait: 'laguna-s-2.1:latest · its own settings' }, { sleep: 200 }, { snapshot: 'again' },
-    { key: 'esc' }, { wait: 'Model · Another service' }, { sleep: 200 }, { snapshot: 'list' }, { key: 'esc' }, { sleep: 100 }, { key: 'esc' }, { sleep: 200 },
+    { type: 'laguna' }, { sleep: 150 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'laguna-s-2.1:latest · its own settings' }, { sleep: 200 }, { snapshot: 'again' },
+    { key: 'esc' }, { wait: '2 of 3' }, { sleep: 200 }, { key: 'esc' }, { wait: '1 of 3: model  · Another service' }, { sleep: 200 }, { snapshot: 'list' }, { key: 'esc' }, { sleep: 100 }, { key: 'esc' }, { sleep: 200 },
     ...quit,
   ] });
   await srv.close();

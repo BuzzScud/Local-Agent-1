@@ -1,5 +1,5 @@
 // /subagents in the app (2 Oct 2026) on a pretend Ollama service (fake-ollama.mjs): the
-// first-pick try-out and its ✔ in /model, the panel (a job switched off and saved), a
+// first-pick try-out and its ✔ in /model, /subagents opening /profiles (a job moved to none of its own, saved), a
 // picture described by the pictures helper for a main model that cannot see, the second
 // opinion after a change, the summary on the side model, the main model kept loaded
 // (keep_alive 15m, asked again while the window is open), and what it used let go as it closes.
@@ -17,7 +17,6 @@ const onService = (base, url, model = 'coder:30b') => {
   const r0 = { source: 'openai', address: url, port: null, connect: 'http', kind: 'openai', model, context: 0, key: false, keyEnd: '', keyId: 'openai' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
 };
-const settingsOf = (base) => JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
 
 test.skipIf(needs('pictures', mediaTool))('on an Ollama service: the try-out on first use, /subagents (one switched off, saved), a picture described by llava, the second opinion after a change, the summary on the small model, and the models let go at quit', async () => {
   const { cwd, env, base } = setup();
@@ -28,9 +27,11 @@ test.skipIf(needs('pictures', mediaTool))('on an Ollama service: the try-out on 
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_UNLOAD: 'on', AGENTIC_TRYOUT: 'on' }, args: ['--no-flows'], timeoutMs: 90_000, steps: [
     { wait: 'On the remote:', ms: 25_000 }, { wait: 'It works with the agent', ms: 15_000 }, { sleep: 300 }, { snapshot: 'tried' },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'model' }, { key: 'esc' }, { sleep: 150 },
-    { type: '/subagents' }, { key: 'enter' }, { wait: 'Subagents · helpers on the service' }, { sleep: 300 }, { snapshot: 'panel' },
-    { key: 'down' }, { sleep: 60 }, { key: 'down' }, { sleep: 60 }, { key: 'down' }, { sleep: 60 }, { key: 'down' }, { sleep: 60 }, { key: 'down' }, { sleep: 60 },
-    { type: ' ' }, { sleep: 200 }, { snapshot: 'off' }, { key: 'esc' }, { sleep: 200 },
+    // /subagents opens /profiles on its AIs group (8 Oct 2026): the jobs are its first profiles; UI design · checks
+    // moved to none of its own is the conversation's model, which skips the check, as "off" did.
+    { type: '/subagents' }, { key: 'enter' }, { wait: 'Profiles' }, { sleep: 300 }, { snapshot: 'panel' },
+    ...Array.from({ length: 13 }, () => [{ key: 'down' }, { sleep: 70 }]).flat(),
+    { key: 'right' }, { sleep: 300 }, { snapshot: 'off' }, { key: 'esc' }, { sleep: 200 },
     { type: 'what is in @shot.png please' }, { key: 'enter' }, { wait: 'From coder:30b.', ms: 20_000 }, { sleep: 300 }, { snapshot: 'picture' },
     { type: 'fix the typo in notes.txt' }, { key: 'enter' }, { wait: 'Do you want to make this edit', ms: 20_000 }, { sleep: 150 }, { key: 'enter' },
     { wait: 'Do you want to proceed', ms: 20_000 }, { sleep: 150 }, { key: 'enter' }, // the project's tests after the change
@@ -45,14 +46,19 @@ test.skipIf(needs('pictures', mediaTool))('on an Ollama service: the try-out on 
   expect(s.tried).toMatch(/✔ coder:30b: ✔ read a file · ✔ fixed one line · ✔ ran a command · 40 tok\/s/);
   expect(s.model).toMatch(/coder:30b .*✔ 40 tok\/s/);
   expect(Object.values(JSON.parse(readFileSync(join(base, 'home', 'tryouts.json'), 'utf8')))[0]['coder:30b']).toMatchObject({ ok: true });
-  // the panel: a model for each job; UI design · checks switched off and saved by service
-  expect(s.panel).toMatch(/● Pictures\s+◀ llava:latest/);
-  expect(s.panel).toMatch(/● Side jobs\s+◀ tiny:3b/);
-  expect(s.panel).toMatch(/● Second opinion\s+thinker:35b/); // the only one here that thinks and is 30B+: no ◀ ▶
-  expect(s.off).toMatch(/○ UI design · checks/);
-  const saved = Object.values(settingsOf(base).helperModels)[0];
-  expect(saved.designCheck).toEqual({ on: false, model: 'thinker:35b' });
-  expect(saved.review).toEqual({ on: true, model: 'thinker:35b' });
+  // /profiles: a profile for each helper model, each job on its row; UI design · checks moved to none of its own, saved
+  expect(s.panel).toMatch(/\[ AIs \]/);
+  expect(s.panel).toMatch(/Vision\s+llava:latest\s+service/);
+  expect(s.panel).toMatch(/Pictures\s+◀ Vision\s+▶/);
+  expect(s.panel).toMatch(/Side jobs\s+◀ Fast\s+▶/);
+  expect(s.panel).toMatch(/Second opinion\s+◀ Review\s+▶/);
+  // none of its own: the conversation's model, which cannot see, so the check is skipped (and the row says why)
+  expect(s.off).toMatch(/UI design · checks\s+◀ Main\s+▶\s+⚠ coder:30b cannot see pictures/);
+  const saved = JSON.parse(readFileSync(join(base, 'home', 'profiles.json'), 'utf8'));
+  expect(saved.uses['ai:designCheck']).toBeUndefined();
+  expect(saved.uses['ai:review']).toBe('Review');
+  expect(saved.profiles.Review.model).toBe('thinker:35b');
+  expect(saved.profiles.Fast.model).toBe('tiny:3b');
   // the picture: llava looked first; the main model got its words, not the picture
   expect(s.picture).toMatch(/Pictures: llava:latest described it/);
   const look = chats.find((b) => b.model === 'llava:latest');

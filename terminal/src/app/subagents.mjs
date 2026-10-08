@@ -1,5 +1,7 @@
-// /subagents (2 Oct 2026, the user's ask and picks): the helper models on an Ollama
-// service, one row per job. Each job is on or off and has its model; ←→ steps
+// The helper jobs of /subagents (2 Oct 2026, the user's ask and picks), one per helper model on an
+// Ollama service. Since 8 Oct 2026 /profiles shows and sets them (each job is an AI row there, and today's
+// jobs are its first profiles: profiles.mjs seedProfiles); /subagents typed opens it. Before that, the panel's
+// rows: one per job. Each job is on or off and has its model; ←→ steps
 // through the service's models that can do it, space switches it, enter loads it
 // now. A helper loads the first time its job needs it (their pick), not as the
 // window connects, so the main model keeps the most room. Saved in settings.json
@@ -59,36 +61,4 @@ export function jobsOf(saved = {}, models = [], main = null) {
   });
 }
 
-// What a row says on its right: loaded, loads when needed, off, or nothing on the service for it.
-export function statusOf(job, models = [], main = null) {
-  if (!job.model) return { text: 'nothing on the service can', tone: 'warn' };
-  if (!job.on) return { text: 'off', tone: 'dim' };
-  if (job.model === MAIN) return { text: `your model (${main ?? 'main'})`, tone: 'dim' };
-  const m = models.find((x) => x.id === job.model);
-  const gb = m?.bytes ? ` · ${(m.bytes / 1e9).toFixed(1)} GB` : '';
-  return m?.loaded ? { text: `loaded${gb}`, tone: 'ok' } : { text: `loads when needed${gb}`, tone: 'dim' };
-}
 
-// The line under the rows: the main model and what is loaded on the service now.
-// (Ollama does not say how much memory the service has in all, so the room left is
-// not known; a helper that does not fit is loaded after the least-needed model is
-// let go: "only me", their pick.)
-export function roomLine(jobs, models = [], main = null) {
-  const loaded = models.filter((m) => m.loaded);
-  const now = loaded.reduce((n, m) => n + (m.bytes || 0), 0);
-  return `Main: ${main ?? 'none'} · loaded on the service now: ${(now / 1e9).toFixed(1)} GB (${loaded.length} model${loaded.length === 1 ? '' : 's'})`;
-}
-
-// The panel as it opens, and its moves. pk: { kind: 'subagents', at, jobs }.
-export const openSubagents = (jobs) => ({ kind: 'subagents', at: 0, jobs });
-export const moveJob = (pk, dir) => ({ ...pk, at: Math.max(0, Math.min(pk.jobs.length - 1, pk.at + dir)) });
-export function stepModel(pk, dir) {
-  const j = pk.jobs[pk.at];
-  if (!j?.choices.length) return pk;
-  const i = Math.max(0, j.choices.indexOf(j.model));
-  const next = j.choices[Math.max(0, Math.min(j.choices.length - 1, i + dir))];
-  return { ...pk, jobs: pk.jobs.map((x, k) => (k === pk.at ? { ...x, model: next, on: true, missing: false } : x)) };
-}
-export const toggleJob = (pk) => ({ ...pk, jobs: pk.jobs.map((x, k) => (k === pk.at && x.model ? { ...x, on: !x.on } : x)) });
-// What settings.json keeps for the service.
-export const savedOf = (jobs) => Object.fromEntries(jobs.map((j) => [j.id, { on: j.on, model: j.model }]));

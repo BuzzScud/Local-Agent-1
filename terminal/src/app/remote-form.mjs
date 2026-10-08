@@ -164,7 +164,7 @@ export function openModelPick(form, models = null, { tried = readTryouts(cur(for
       { text: 'Loaded on the service', note: 'answers at once', list: g.loaded },
       { text: 'Can run the agent', note: 'loads when you connect', list: g.agent },
       { text: 'Chat only', note: 'no tools, so no file reads, edits or commands', list: g.chatOnly },
-      { text: 'Helpers', note: 'pictures, search, small jobs: /subagents gives them a job', list: g.helpers },
+      { text: 'Helpers', note: 'pictures, search, small jobs: /profiles gives them a job', list: g.helpers },
     ].filter((x) => x.list.length).map((x) => ({ ...x, ids: x.list.map((m) => m.id) }));
     const ids = groups.flatMap((x) => x.ids);
     const v = cur(form)?.model;

@@ -46,6 +46,7 @@ import { IDLE, PLACEHOLDERS, liveView, pick, short } from './app-common.mjs';
 import { modelPart } from './app-model.mjs';
 import { remotePart } from './app-remote.mjs';
 import { panelsPart } from './app-panels.mjs';
+import { profilesPart } from './app-profiles.mjs';
 import { runPart } from './app-run.mjs';
 import { slashPart } from './app-slash.mjs';
 import { keysPart } from './app-keys.mjs';
@@ -70,7 +71,7 @@ export function App({ opts, win, onRestart }) {
     historyRef: () => historyRef, holdRef: () => holdRef, hooksKeys: () => hooksKeys, hooksList: () => hooksList,
     input: () => input, interrupt: () => interrupt, items: () => items, itemsRef: () => itemsRef,
     jobWakeRef: () => jobWakeRef, jumpBoxKey: () => jumpBoxKey, jumpTo: () => jumpTo, lastCheck: () => lastCheck,
-    limitsRef: () => limitsRef, loadFnRef: () => loadFnRef, loadRef: () => loadRef, loadSubagent: () => loadSubagent,
+    limitsRef: () => limitsRef, loadFnRef: () => loadFnRef, loadRef: () => loadRef,
     loadedOnce: () => loadedOnce, loadsAtOpen: () => loadsAtOpen, localModelRef: () => localModelRef,
     loopsBadgeOf: () => loopsBadgeOf, loopsKey: () => loopsKey, loopsOf: () => loopsOf, loopsRef: () => loopsRef,
     loopsSeen: () => loopsSeen, loopsSegsKey: () => loopsSegsKey, loopsSize: () => loopsSize, loopsUi: () => loopsUi,
@@ -83,7 +84,7 @@ export function App({ opts, win, onRestart }) {
     openHub: () => openHub, openJumpBox: () => openJumpBox, openLoops: () => openLoops,
     openMcpPicker: () => openMcpPicker, openModelPicker: () => openModelPicker, openOwnSettings: () => openOwnSettings,
     openPermissions: () => openPermissions, openRemoteForm: () => openRemoteForm, openRewind: () => openRewind,
-    openSettings: () => openSettings, openSubagentsPanel: () => openSubagentsPanel, openWebPicker: () => openWebPicker,
+    openSettings: () => openSettings, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, followProfiles: () => followProfiles, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
     pendingContext: () => pendingContext, pendingSaveRef: () => pendingSaveRef, pickHere: () => pickHere,
     pickLevel: () => pickLevel, pickLevels: () => pickLevels, pre: () => pre, preloadRemote: () => preloadRemote,
@@ -95,7 +96,7 @@ export function App({ opts, win, onRestart }) {
     resumeSession: () => resumeSession, rewindArmed: () => rewindArmed, rewindRef: () => rewindRef, rows: () => rows,
     runShell: () => runShell, runSlash: () => runSlash, runWebTest: () => runWebTest,
     saveEffortLimits: () => saveEffortLimits, saveNow: () => saveNow, saveOnlyForm: () => saveOnlyForm,
-    saveOwnLevel: () => saveOwnLevel, saveOwnSettings: () => saveOwnSettings, saveSubagents: () => saveSubagents,
+    saveOwnLevel: () => saveOwnLevel, saveOwnSettings: () => saveOwnSettings, keepOwnSettings: () => keepOwnSettings,
     saveWeb: () => saveWeb, savedAskRef: () => savedAskRef, sayEffort: () => sayEffort,
     seeingModels: () => seeingModels, sendPrompt: () => sendPrompt, seq: () => seq, serverRef: () => serverRef,
     serviceCtx: () => serviceCtx, serviceOf: () => serviceOf, sessionRef: () => sessionRef,
@@ -187,6 +188,9 @@ export function App({ opts, win, onRestart }) {
   const userHooksRef = useRef(undefined); // your own hooks (user-hooks.mjs), made with the agent
   const hookNoteRef = useRef(null); // a hook that failed or stopped something, said on the screen
   useEffect(() => { const w = watchUpdates(setUpdate); updateRef.current = w; return w.stop; }, []);
+  // Profiles changed in another window or the hub: picked up here every 2 s (app-profiles.mjs followProfiles).
+  const followProfilesRef = useRef(null);
+  useEffect(() => { const t = setInterval(() => followProfilesRef.current?.(), 2000); t.unref?.(); return () => clearInterval(t); }, []);
   const memoryNote = useRef(null);
   const measure = useRef({ width: 100, modelName: '', cwdShort: '' });
   const itemsRef = useRef([]);
@@ -210,7 +214,7 @@ export function App({ opts, win, onRestart }) {
   const [, setLoopsTick] = useState(0);
   const loopsUi = useRef(null);
   const loopsSize = useRef(null); // the window's size before /loops grew it
-  const { pickLevels, pickLevel, waitForBattle, waitForOthers, modelKey, timeLoad, timeLoaded, timeWarmed, timeDone, listOtherWindows, pushFn, fold, flashFn, setModeFn, openHub, switchModel, openChoice, startCopy, askCopyBack, doPutBack, relimit, applyKeep, saveOwnLevel, setOwn } = modelPart(self);
+  const { pickLevels, pickLevel, waitForBattle, waitForOthers, modelKey, timeLoad, timeLoaded, timeWarmed, timeDone, listOtherWindows, pushFn, fold, flashFn, setModeFn, openHub, switchModel, openChoice, startCopy, askCopyBack, doPutBack, relimit, applyKeep, saveOwnLevel, setOwn, ownLevel } = modelPart(self);
   const [input, setInput] = useState({ value: '', cursor: 0 });
   const [menuIndex, setMenuIndex] = useState(0);
   const startedIn = useRef(firstMode(opts.mode, settings)).current;
@@ -492,7 +496,9 @@ export function App({ opts, win, onRestart }) {
     const one = (name) => [`url = ${q(`${conn.url.replace(/\/+$/, '')}/api/generate`)}`, `header = ${q('Content-Type: application/json')}`, ...Object.entries(head).map(([k, v]) => `header = ${q(`${k}: ${v}`)}`), `data = ${q(JSON.stringify({ model: name, keep_alive: 0 }))}`, 'output = "/dev/null"'].join('\n');
     try { spawnSync('curl', ['-s', '-Z', '--connect-timeout', '1', '-m', '2', '-K', '-'], { input: names.map(one).join('\nnext\n'), timeout: 2500, stdio: ['pipe', 'ignore', 'ignore'] }); } catch { /* the service lets them go by itself later */ }
   };
-  const { openSubagentsPanel, saveSubagents, applyHelpers, loadSubagent, serviceOf, serviceProps, pickHere, openWebPicker, runWebTest, saveWeb, offerList, openMcpPicker, mcpKeys, hooksList, hooksKeys, mcpNews, seeingModels, needVision, openSettings, openRewind, chooseRewind, applyRewind, openPermissions, memoryForRestart, openEffortLimits, openOwnSettings, fillSuggested, sharedValues, saveOwnSettings, applyChoice, sayEffort, saveEffortLimits, setThinkingFn, readMacMemory, readServicePs, saveNowFn } = panelsPart(self);
+  const { applyHelpers, serviceOf, serviceProps, pickHere, openWebPicker, runWebTest, saveWeb, offerList, openMcpPicker, mcpKeys, hooksList, hooksKeys, mcpNews, seeingModels, needVision, openSettings, openRewind, chooseRewind, applyRewind, openPermissions, memoryForRestart, openEffortLimits, openOwnSettings, fillSuggested, sharedValues, saveOwnSettings, keepOwnSettings, applyChoice, sayEffort, saveEffortLimits, setThinkingFn, readMacMemory, readServicePs, saveNowFn } = panelsPart(self);
+  const { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles } = profilesPart(self);
+  followProfilesRef.current = followProfiles;
   useEffect(() => { applyHelpers(catalog); }, [catalog, model]);
   remoteFnRef.current = { ...remoteFnRef.current, useRemote, useLocal, reconnect, openForm: openRemoteForm, to: remoteTo };
 
@@ -717,7 +723,7 @@ export function App({ opts, win, onRestart }) {
     // up and still show its bot (2 + START_BIG and its blank line; start.room, below, shrinks it to fit).
     const fits = holdRef.current ? (rows ?? 40) - 7 - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 6;
     const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
-    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined) }) : [];
+    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined), remote: Boolean(model.remote) }) : [];
     if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
     // /shop: lists that MCP server's prompts (typed in full they run: /shop:review-pr 57).
     const slashServer = inputMode === 'prompt' && mcpHub ? /^\/([A-Za-z0-9][A-Za-z0-9-]{0,31}):(\S*)$/.exec(input.value) : null;
@@ -907,7 +913,7 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, walk: holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff ? walkStep : null, tip: tipOnPage ? null : tip,
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'profiles' || picker?.kind === 'profile-step' || picker?.own?.profile ? { profilesCtx: { models: catalog?.models ?? [], busy: agent.busy, where: model.remote?.label ?? '' } } : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),
