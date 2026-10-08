@@ -24,8 +24,9 @@ test('classic: the whole task, answering each question by key', async () => {
   ] });
   await fake.close();
   // The turn on its rail: your message on its strip, then each step with its mark, closed by ╰─.
-  for (const s of ['› add a --json flag to export.mjs', '◇ thought', '○ Read  export.mjs · 19 lines', '☐ Update Todos', '✎ Changed  export.mjs · +1 line',
-    "14  +   if (argv.includes('--json'))", '❯ Ran  node --test', '✔ --json prints the rows as JSON', '╰─ ⠿', 'accept edits on', 'Saved. Continue this conversation with: coding -c']) expect(r.text).toContain(s);
+  expect(r.text).toMatch(/◇ \S.* {2}\d+s\n/); // a thought: its first sentence, its seconds at the end
+  for (const s of ['› add a --json flag to export.mjs', '○ Read  export.mjs · 19 lines', '☐ Update Todos', '✎ Changed  export.mjs · +1 line',
+    "14  +   if (argv.includes('--json'))", '❯ Ran  node --test · 3 pass · 0 fail', '✔ toCsv writes a header row', '╰─ ⠿', 'accept edits on', 'Saved. Continue this conversation with: coding -c']) expect(r.text).toContain(s);
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain("argv.includes('--json')");
   expect(existsSync(join(base, 'home', 'sessions'))).toBe(true);
 }, T);
@@ -95,7 +96,7 @@ test('working: the live thinking line above the spinner, which shows time, token
   expect(r.snapshots.thinking).toMatch(/◇ thinking · \d+s · ([▰▱]{8} [\d.]+k? of [\d.]+k?|\d+ tokens?)/);
   expect(r.snapshots.thinking).toMatch(/╰─ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · ↓ [\d.]+k? tokens this session · this step \d+s · (↓ [\d.]+ tok\/s|reading) · esc to interrupt\)/);
   expect(r.snapshots.thinking).not.toMatch(/┃/); // no streaming window: one layout, like Claude Code
-  expect(r.text).toContain('◇ thought'); // what it had thought so far is kept, folded
+  expect(r.text).toMatch(/◇ I should read export\.mjs first/); // what it had thought so far is kept, one row
   expect(r.text).toMatch(/╰─ ■ Interrupted · What should Agentic Coder do instead\?/); // the end line closes the rail
 }, T);
 
@@ -106,7 +107,8 @@ test('a finished turn leaves its time behind, like Claude Code: "⠿ Worked for 
     { wait: '? for shortcuts' }, { type: 'hello' }, { key: 'enter' }, { wait: 'with this project?' }, { wait: '· done ' }, { sleep: 300 }, ...quit,
   ] });
   await fake.close();
-  expect(r.text).toMatch(/⠿ [A-Z][a-z]+ for \d+s · ↓ [\d.]+k? tokens this session · done \d{1,2}:\d\d [AP]M/);
+  // How it went in one row, its counts in the row under it (Tight rail, 8 Oct 2026).
+  expect(r.text).toMatch(/⠿ [A-Z][a-z]+ for \d+s · done \d{1,2}:\d\d [AP]M\n {5}(\d+ steps? · )?↓ [\d.]+k? tokens this session/);
 }, T);
 
 test('long lines in finished steps wrap at the window edge, between words', async () => {

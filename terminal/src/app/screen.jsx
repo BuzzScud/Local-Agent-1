@@ -29,7 +29,7 @@ import { hookListRows, hookLine, projectLine as hooksProjectLine, checkOn, rowWi
 import { HOOKS as APP_CHECKS } from '../agent/way.mjs';
 import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
-import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords } from './rail.jsx';
+import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, LooksNode, RunningNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords, foldSteps } from './rail.jsx';
 import { StartPage } from './start.jsx';
 import { AttachTray } from './tray.jsx';
 import { ProfileStep, ProfilesPanel } from './profiles-view.jsx';
@@ -286,6 +286,8 @@ export function Item({ it, width, model, cwd, loaded, start }) {
     case 'done': return it.rail ? <EndLine it={it} counts={doneCounts(it)} /> : <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}{it.usd > 0 ? ` · ${money(it.usd)} for this request` : ''}</Text></Text>;
     case 'text': return it.rail ? <ReplyNode text={it.text} /> : <Row><Markdown text={it.text} /></Row>;
     case 'tool': return it.rail ? <ToolNode it={it} cwd={cwd} /> : <ToolView it={it} width={width} />;
+    // Reads, lists and searches in a row, as one row (rail.jsx foldSteps).
+    case 'looks': return <LooksNode list={it.list} cwd={cwd} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
     case 'made': return <MadeNode files={it.files} />;
     case 'note': {
@@ -471,12 +473,12 @@ export function tailToFit(text, maxLines, width) {
   return out.join('\n');
 }
 
-export function LiveArea({ app }) {
+export function LiveArea({ app, held }) {
   const { live, width, rows } = app;
   if (live.phase !== 'working') return null;
   // An open /btw panel is taller than the prompt box it replaces: the reply shows less.
   const maxLines = app.btw ? Math.max(2, rows - 16 - (btwLayout(app).panelRows - 4)) : Math.max(6, rows - 16);
-  if (live.rail) return <LiveRail app={app} maxLines={maxLines} />;
+  if (live.rail) return <LiveRail app={app} maxLines={maxLines} held={held} />;
   const blocks = [];
   // While it thinks: one folded line above the spinner, as in Claude Code
   // (ctrl+o shows the thinking once the turn is over).
@@ -513,36 +515,36 @@ export function LiveArea({ app }) {
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
-// A turn under way, on the rail: what came along (until the first step prints it), the thinking
-// (its latest two lines, live), the reply as it is written, the file being written, a tool
-// running, and the working line at the rail's end.
-function LiveRail({ app, maxLines }) {
+// A turn under way, on the rail: what came along (until the first step prints it), a run of reads
+// not closed yet (held: Screen's foldSteps), the thinking (its latest lines, live), the reply as it
+// is written (an empty row above it, as once printed), the file being written, a tool running with
+// its seconds, and the working line at the rail's end. No empty rail rows between them.
+function LiveRail({ app, maxLines, held }) {
   const { live, width } = app;
   const blocks = [];
   if (live.pre) blocks.push(<MachineLine key="pre" it={live.pre} />);
-  if (live.thinking && !live.text && !live.writing) blocks.push(<Box key="think" flexDirection="column"><Pipe /><ThinkingLive thinking={live.thinking} now={app.now} width={width} cap={live.thinkCap} /></Box>);
+  if (held) blocks.push(held.type === 'looks' ? <LooksNode key="held" list={held.list} cwd={app.cwdShort} /> : <ToolNode key="held" it={held} cwd={app.cwdShort} />);
+  if (live.thinking && !live.text && !live.writing) blocks.push(<ThinkingLive key="think" thinking={live.thinking} now={app.now} width={width} cap={live.thinkCap} />);
   if (live.text) {
     const shown = tailToFit(live.text, maxLines, width - 6);
     blocks.push(
-      <Box key="text" flexDirection="column"><Pipe />
-        <Box maxHeight={maxLines} overflow="hidden" flexDirection="column" justifyContent="flex-end">
-          <Box flexDirection="column" flexShrink={0}><ReplyNode text={shown} /></Box>
-        </Box>
+      <Box key="text" flexDirection="column" marginY={1} maxHeight={maxLines + 2} overflow="hidden" justifyContent="flex-end">
+        <Box flexDirection="column" flexShrink={0}><ReplyNode text={shown} /></Box>
       </Box>,
     );
   }
-  if (live.writing) blocks.push(<Box key="writing" flexDirection="column"><Pipe /><WritingNode writing={live.writing} room={live.room} used={live.streamTokens} tps={live.liveTps} /></Box>);
+  if (live.writing) blocks.push(<WritingNode key="writing" writing={live.writing} room={live.room} used={live.streamTokens} tps={live.liveTps} />);
   if (live.tries) {
     const t = live.tries;
     blocks.push(
-      <Box key="tries" flexDirection="column"><Pipe />
+      <Box key="tries" flexDirection="column">
         <Node g="◆" c={C.dim}><Text><Text bold>{t.label}</Text><Text color={C.dim}> ({Math.min(t.n, t.max)} of up to {t.max})</Text></Text></Node>
         <Pipe><Text><Marks marks={t.marks} pending />{t.tokens ? <Text color={C.dim}>  writing… {plural(t.tokens, 'token')}</Text> : <Text color={C.dim}>  checking…</Text>}</Text></Pipe>
       </Box>,
     );
   }
-  if (live.running) blocks.push(<Box key="running" flexDirection="column"><Pipe /><Node g="▸" c={C.dim}><Text color={C.dim}><Text bold>{live.running.label}</Text>  {live.running.arg}</Text><Text color={C.dim}>Running…</Text></Node></Box>);
-  if (!app.perm) blocks.push(<Box key="spin" flexDirection="column"><Pipe /><Spinner app={app} /></Box>);
+  if (live.running) blocks.push(<RunningNode key="running" running={live.running} secs={live.stepStart ? Math.max(0, (app.now - live.stepStart) / 1000) : 0} cwd={app.cwdShort} />);
+  if (!app.perm) blocks.push(<Spinner key="spin" app={app} />);
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
@@ -2070,21 +2072,24 @@ const itemHeights = new Map();
 // conversations (more after /clear), the tip (gone at your first message), the sessions in the background.
 const pageKey = (s) => [s?.room, s?.recent?.length, s?.tip ? 1 : 0, s?.running?.length].join(':');
 const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `\0${pageKey(ctx.start)}` : ''}`;
-// An item as printed: a turn's step brings the rail line linking it to the step before and has no
-// blank line under it; the turn's end line, and everything outside a turn, has one. Your message's
-// strip has its own padding.
-export const gapUnder = (it) => (it.rail ? (it.type === 'done' ? 1 : 0) : it.type === 'user' ? 0 : 1);
+// An item as printed (Tight rail, 8 Oct 2026): a turn's steps sit on consecutive rows; a reply has
+// an empty row above and under it; your message has one above and under it (a turn cut off has no
+// end line to leave one); the end line and everything outside a turn have one under them.
+export const gapOver = (it) => ((it.rail && it.type === 'text') || (!it.rail && it.type === 'user') ? 1 : 0);
+export const gapUnder = (it) => (it.rail ? (it.type === 'done' || it.type === 'text' ? 1 : 0) : it.type === 'looks' ? 0 : 1);
 export function ItemFrame({ it, width, model, cwd, loaded, start }) {
   return (
-    <Box flexDirection="column" marginBottom={gapUnder(it)} width={width}>
-      {it.rail && it.type !== 'machine' ? <Pipe /> : null}
+    <Box flexDirection="column" marginTop={gapOver(it)} marginBottom={gapUnder(it)} width={width}>
       <Item it={it} width={width} model={model} cwd={cwd} loaded={loaded} start={start} />
     </Box>
   );
 }
+// What the conversation prints: its items with each run of reads folded into one (rail.jsx
+// foldSteps); while a turn works, a run still open at the end is held for the live area.
+const printedOf = (items, working = false) => foldSteps(items, working);
 export function primeRows(items, ctx) {
   let added = false;
-  for (const it of items) {
+  for (const it of printedOf(items).printed) {
     const k = rowsKey(it, ctx);
     if (itemHeights.has(k)) continue;
     if (itemHeights.size > 5000) itemHeights.clear();
@@ -2106,9 +2111,9 @@ export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(it
 // Rows the conversation fills from the top of the window (at most the
 // window). An item not measured yet counts as a full window: no space, never
 // a prompt box pushed below the window.
-function usedRows(app) {
+function usedRows(app, list) {
   let n = 0;
-  for (const it of app.hold ? [] : app.items) {
+  for (const it of app.hold ? [] : list) {
     const h = heightOf(it, app);
     if (h === undefined) return app.rows;
     n += h;
@@ -2122,9 +2127,11 @@ export function Screen({ app }) {
   // The live part's height as last drawn, and how many items were printed then.
   const liveRef = useRef(null);
   const drawn = useRef({ redraw: null, height: 0, count: 0 });
+  const working = app.live?.phase === 'working';
+  const folded = printedOf(app.items, working);
   useLayoutEffect(() => {
     if (!liveRef.current) return;
-    drawn.current = { redraw: app.redraw, height: measureElement(liveRef.current).height, count: app.hold ? 0 : app.items.length };
+    drawn.current = { redraw: app.redraw, height: measureElement(liveRef.current).height, count: app.hold ? 0 : folded.printed.length };
   });
   // An empty <Static> of its own resets what Ink keeps to print again on a
   // full clear, so the old (wider) conversation is not printed into the small window.
@@ -2137,9 +2144,9 @@ export function Screen({ app }) {
   // again after a resize); the prompt box, footer and status line sit on the
   // last lines, with blank space in between until the conversation fills it.
   // The last line stays free for the cursor, so nothing scrolls.
-  const items = app.items;
+  const items = folded.printed;
   const printed = app.hold ? [] : items;
-  let fill = Math.max(0, app.rows - 1 - usedRows(app));
+  let fill = Math.max(0, app.rows - 1 - usedRows(app, items));
   // Once the window has scrolled (a long reply), keep the live part as tall as
   // it was, less the lines printed above it now: shrinking it would leave
   // blank lines under the prompt box instead of above it.
@@ -2173,7 +2180,7 @@ export function Screen({ app }) {
         <Box marginBottom={1} flexDirection="column"><Text><StartIcon app={app} /><Text color={C.accent}> Starting {modelName}…</Text><Text color={C.dim}> {START_PHASE[app.startPhase] ?? ''}({fmtSecs(Math.max(0, (app.now - app.startedAt) / 1000))})</Text></Text>
           {app.waiting ? <Text color={C.warn}>  {app.waiting} has {modelName} loaded, and two copies do not fit. It starts by itself when that is done · <Text bold>esc</Text> starts anyway</Text> : null}</Box>
       ) : null}
-      <LiveArea app={app} />
+      <LiveArea app={app} held={folded.held} />
       {app.btwWaiting ? <Box marginBottom={1}><Text color={C.dim}>⏵ Your /btw answer is kept: it shows again once you have answered</Text></Box> : null}
       {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : app.modelState?.remote && app.modelState.state === 'loading' ? '  · sends once the model has loaded on the service' : app.modelOff ? '  · sends once /start has loaded the model' : ''}</Text></Box> : null}
       </Box>

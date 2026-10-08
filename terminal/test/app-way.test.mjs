@@ -25,8 +25,7 @@ test('--way model: no sorting line, the model reads two files in one reply, /eff
   const a = r.snapshots.answer;
   expect(a).not.toContain('┊'); // the line under the request that says how it was sorted
   expect(a).not.toContain('Sorted as');
-  expect(a).toMatch(/Read\s+export\.mjs/);
-  expect(a).toMatch(/Read\s+export\.test\.mjs/);
+  expect(a).toMatch(/Read\s+export\.mjs, export\.test\.mjs/); // two reads in a row are one row (Tight rail, 8 Oct 2026)
   expect(a).not.toContain('Read first'); // nothing read ahead
   // One request for the reads, one for the answer: nothing sorted it first.
   const chats = fake.requests.filter((q) => q.stream && q.messages);
