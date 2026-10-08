@@ -61,6 +61,11 @@ test('the first profiles copy today: Main is the remote in use, one profile per 
   expect(seedProfiles(settings, { ...jobs, review: { on: false, model: 'gpt-oss:120b' } }).uses['ai:review']).toBeUndefined();
   // no remote in use: none
   expect(seedProfiles({ remote: { use: false } }, jobs)).toEqual({ profiles: {}, uses: {} });
+  // on the Claude API (this Mac's set-up) with a service saved: the service is a profile nothing uses yet
+  const onClaude = seedProfiles({ remote: { ...CLAUDE, model: 'claude-fable-5-1', use: true }, remotes: { claude: { ...CLAUDE, model: 'claude-fable-5-1' }, openai: { ...SVC, model: 'qwen3.6:35b-a3b' } } }, null);
+  expect(Object.keys(onClaude.profiles)).toEqual(['Main', 'Service']);
+  expect(onClaude.profiles.Service).toMatchObject({ model: 'qwen3.6:35b-a3b', server: { address: SVC.address } });
+  expect(onClaude.uses).toEqual({ 'ai:main': 'Main' });
 });
 
 test('the file: none saved means none decide; a save is whole and read back as written', () => {
@@ -127,6 +132,7 @@ test('the router: nothing until a file is saved; the conversation moves only whe
   expect(r.active()).toBe(false);
   writeProfiles({ profiles: { Main: P(A, 'a1'), Fast: P(A, 'a-small'), Far: P(B, 'b1', { backup: 'Main', spillAfter: 30 }) }, uses: { 'ai:main': 'Main', 'ai:btw': 'Fast', 'ai:review': 'Far' } });
   expect(r.active()).toBe(true);
+  setEndpoint(A.address, { remote: true, kind: 'openai', model: 'a1', label: A.address }); // the window's own connection
   r.lend(A, { url: A.address });
   const now = { url: A.address, model: 'a1' };
   expect(await r.route({ ai: 'main' }, now)).toEqual({ name: 'Main', same: true });
@@ -142,11 +148,17 @@ test('the router: nothing until a file is saved; the conversation moves only whe
   expect(u.spill).toMatchObject({ name: 'Far', after: 30 });
   // Main changed in the file: the next route moves the conversation, connected for that model
   await Bun.sleep(5);
-  writeProfiles({ profiles: { Main: P(B, 'b2'), Fast: P(A, 'a-small') }, uses: { 'ai:main': 'Main' } });
+  writeProfiles({ profiles: { Main: P(B, 'b2'), Fast: P(A, 'a-small') }, uses: { 'ai:main': 'Main', 'ai:btw': 'Fast' } });
   const to = await r.route({ ai: 'main' }, now);
   expect(to).toMatchObject({ name: 'Main', same: false, url: B.address, ctx: 32768 });
   expect(to.model.remote.model).toBe('b2');
   expect(calls.at(-1)).toBe(`${B.address}|b2`);
+  // a connection closed elsewhere (its endpoint gone): forgotten and reached again, not used dead
+  dropEndpoint(A.address);
+  expect(r.helper('btw', { url: B.address, model: 'b2' })).toBeUndefined();
+  await Bun.sleep(10);
+  expect(r.helper('btw', { url: B.address, model: 'b2' })).toMatchObject({ url: A.address, model: 'a-small' });
+  expect(calls.at(-1)).toBe(`${A.address}|`);
   r.stop();
   fresh();
 });
@@ -209,6 +221,31 @@ test('a server that sends nothing: after the wait the request goes to the backup
     expect(kept.some((e) => e.type === 'spill')).toBe(false);
     expect(kept.filter((e) => e.type === 'text').map((e) => e.text).join('')).toBe('B again');
   } finally { silent.closeAllConnections?.(); silent.close(); B.close(); dropEndpoint(silentUrl); dropEndpoint(B.url); }
+});
+
+test('no backup to go to: the request that is waiting goes on waiting, not sent again from the back of the line', async () => {
+  // A server whose first word comes after 1.5 s (a short line ahead of it), one reply per request it gets.
+  let asked = 0;
+  const slow = createServer(async (req, res) => {
+    for await (const _ of req) { /* the body */ }
+    asked++;
+    await Bun.sleep(1500);
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: `answer ${asked}` }, finish_reason: null }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`);
+    res.end();
+  });
+  await new Promise((ok) => slow.listen(0, '127.0.0.1', ok));
+  const url = `http://127.0.0.1:${slow.address().port}`;
+  setEndpoint(url, { remote: true, kind: 'openai', model: 'a1', label: `slow-${slow.address().port}` });
+  try {
+    let tried = 0;
+    const evs = await collect(streamChat({ url, messages: ask, maxTokens: 50, spill: { name: 'Main', after: 1, to: async () => { tried++; return null; } } }));
+    expect(tried).toBe(1); // it was past the wait, and the backup could not be had
+    expect(evs.some((e) => e.type === 'spill')).toBe(false);
+    expect(evs.filter((e) => e.type === 'text').map((e) => e.text).join('')).toBe('answer 1');
+    expect(asked).toBe(1);
+  } finally { slow.closeAllConnections?.(); slow.close(); dropEndpoint(url); }
 });
 
 test('a call on the conversation\'s model that names no profile (a summary, the cases, a check) follows its profile too: to the backup while it cools down', async () => {

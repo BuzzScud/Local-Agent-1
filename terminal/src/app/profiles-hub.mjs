@@ -5,11 +5,13 @@
 //   GET  /profiles.json                          the profiles, who uses which, the groups, today's meters
 //   POST /profiles/use     { key, profile|null } a row's profile (null: none of its own)
 //   POST /profiles/set     { name, model?, backup?, spillAfter? }   a profile's model or its backup
-// A model is picked from the list the Remote tab reads for that server (/remote.json?service=<its source>).
+// A model is picked from the list the Remote tab reads for that server (/remote.json?service=<its source>);
+// the Claude API's from the app's own list.
 import { readFileSync } from 'node:fs';
 import { loadSettings } from './store.mjs';
 import { PROFILES_FILE, profilesSaved, groupsNow, rowsOf, inheritedOf, writeProfiles, SPILL_STEPS, serverWord } from './profiles.mjs';
 import { readMeters } from '../agent/profile-meters.mjs';
+import { CLAUDE_MODELS } from '../../../models/index.mjs';
 
 const noStore = { 'cache-control': 'no-store' };
 const json = (body, status = 200) => Response.json(body, { status, headers: noStore });
@@ -25,7 +27,9 @@ export function profilesHub({ cwd = process.cwd() } = {}) {
     if (!d || !profilesSaved()) return { saved: false, remote: Boolean(s.remote?.use) };
     const groups = groupsNow();
     const rows = rowsOf(groups).map((r) => ({ key: r.key, group: r.group, label: r.label, note: r.note, own: d.uses[r.key] ?? null, uses: d.uses[r.key] ?? inheritedOf(r, d).name }));
-    const profiles = Object.entries(d.profiles).map(([name, p]) => ({ name, model: p.model, server: serverWord(p.server), source: p.server?.source ?? (p.server?.kind === 'claude' ? 'claude' : 'openai'), backup: p.backup ?? null, spillAfter: p.spillAfter ?? 0 }));
+    const profiles = Object.entries(d.profiles).map(([name, p]) => ({ name, model: p.model, server: serverWord(p.server), source: p.server?.source ?? (p.server?.kind === 'claude' ? 'claude' : 'openai'), backup: p.backup ?? null, spillAfter: p.spillAfter ?? 0,
+      // the Claude API's models are known here (no key, no network), as /profiles has them
+      ...(p.server?.kind === 'claude' ? { models: CLAUDE_MODELS.map((m) => m.id) } : {}) }));
     return { saved: true, profiles, groups: groups.map((g) => ({ id: g.id, label: g.label, note: g.note })), rows, meters: readMeters(), spills: SPILL_STEPS };
   };
   async function route(req, url) {
