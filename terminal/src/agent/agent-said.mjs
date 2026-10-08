@@ -327,6 +327,17 @@ export function keptWriteNote(path, kept) {
 }
 
 const inParts = (file) => `Build ${file} in parts instead. First Write ${file} with only a short skeleton: its opening, empty sections marked with comments, and its closing. Then add one section at a time with Edit, each part well under 100 lines. Start with the skeleton now.`;
+
+// A reply with no call that the server says was far longer than what arrived (its words and thinking):
+// a call written and dropped on the way. A reply cut at the limit is the cut handling's.
+export function lostCall(turn, text) {
+  const said = [turn?.text, text].reduce((a, b) => (String(b ?? '').length > a.length ? String(b) : a), '');
+  const got = tokensOf(`${turn?.reasoning ?? ''}${said}`);
+  const wrote = turn?.tokens ?? 0;
+  return turn?.finish !== 'length' && wrote - got >= 1000 && wrote > got * 3;
+}
+export const LOST_CALL = 'Your last reply wrote a tool call that never arrived: it was lost on the way (a long file in one call can be dropped by the model server), so nothing ran. Take that step again, smaller. For a file: Write a short first version now (under 80 lines: its outline and first part), then add the rest with Edit, one part at a time.';
+
 export function cutCallNote(name, path) {
   const file = path || 'the file';
   if (name === 'Write' || name === 'Edit') {
