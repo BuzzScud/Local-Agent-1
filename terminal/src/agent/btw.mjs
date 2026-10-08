@@ -211,7 +211,7 @@ export async function askAside({ agent, question, live, signal, onText, onNote, 
     const room = roomFor({ ctx: agent.ctx, ctxUsed: agent.ctxUsed, busy: agent.busy, thinking: agent.thinking, budget: agent.model?.thinkingBudget });
     const messages = sideMessages({ messages: agent.messages, question, now: right, room });
     if (!messages) return { noRoom: true, room };
-    const r = await stream({ agent, messages, use: agent.sideUse?.(), signal, onText });
+    const r = await stream({ agent, messages, use: agent.btwUse ? agent.btwUse() : agent.sideUse?.(), signal, onText });
     return { ...r, sent: messages };
   }
   // A request of its own on the service: the copy is cut to what reads quickly, not to a shared memory.

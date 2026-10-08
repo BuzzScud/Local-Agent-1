@@ -201,8 +201,19 @@ export class Agent extends EventEmitter {
   // /subagents (helper-models.mjs): the helper model for a job on an Ollama service, as
   // the endpoint override a call takes, or undefined (the job is off, its model is the
   // main one, or this is not an Ollama service). helperJobs is set by the app.
-  helperUse(id) { return !this.isHelper && endpointOf(this.url)?.ollama ? useOf(this.helperJobs?.[id], id) : undefined; }
+  // A helper's call: by its profile once profiles are saved (profile-router.mjs: on any server), else the
+  // /subagents job on the same Ollama service. undefined: the conversation's own model does it.
+  helperUse(id) {
+    if (this.isHelper) return undefined;
+    if (this.router?.active()) return this.profileUse(id);
+    return endpointOf(this.url)?.ollama ? useOf(this.helperJobs?.[id], id) : undefined;
+  }
+  profileUse(ai) { return this.router?.active() ? this.router.helper(ai, { url: this.url, model: this.modelName() }) : undefined; }
   sideUse() { return this.helperUse('side'); }
+  // /btw has a row of its own in /profiles; without profiles it is a side job, as before.
+  btwUse() { return this.router?.active() ? this.profileUse('btw') : this.sideUse(); }
+  // The model's name as its server knows it (a model on this Mac: its id).
+  modelName() { return this.model?.remote?.model ?? this.model?.id ?? null; }
   // /effort's Who decides row: the next message goes the new way. The prompt and the tools
   // change with it, so the next reply reads the instructions again (the app warms them up).
   setWay(way, hooks) {
@@ -546,7 +557,7 @@ export class Agent extends EventEmitter {
     });
     // Its tools: the app's, and of the MCP tools those its file names (mcp__github__get_* names several).
     const toolFilter = own ? helperToolFilter(own.tools, [...this.tools().map((t) => t.function.name), ...this.mcpEntries().map((e) => e.name)]) : kind === 'explore' ? EXPLORE_TOOLS : null;
-    Object.assign(helper, { jobs: this.jobs, userHooks: this.userHooks, isHelper: true, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
+    Object.assign(helper, { jobs: this.jobs, userHooks: this.userHooks, isHelper: true, router: ownUse ? null : this.router, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
     // The same MCP servers and this conversation's list of their tools (worked out for its own room), and what you allowed.
     if (this.mcpFrozen) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).

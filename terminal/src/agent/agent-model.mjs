@@ -2,12 +2,13 @@
 // much it thinks (the step-down and the cap).
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
 import { endpointOf } from '../../../models/index.mjs';
-import { streamChat } from './client.mjs';
+import { streamChat, routeCalls } from './client.mjs';
 import { isBusy } from './busy.mjs';
 import { display } from './tools.mjs';
 import { SERVICE_REPLY } from './room.mjs';
 import { oldThinking } from '../flows/llm.mjs';
 import { replyTiming } from './timing.mjs';
+import { COOL_MS } from './profile-spill.mjs';
 import { CALL_STOPS, CALL_UNREADABLE, STEP_DOWN_CAP, STUCK_WORD, auto, beforeCall, isLooping, kTok, leakedThinking, replyRoom, tokensOf, toolCallInText } from './agent-said.mjs';
 
 export class ModelPart {
@@ -68,6 +69,48 @@ export class ModelPart {
     return Boolean(ep?.ollama && /gpt-?oss/i.test(`${ep.family ?? ''} ${this.turn?.use?.model ?? ep.model ?? ''}`));
   }
 
+  // The conversation's profile for this step (profile-router.mjs, 8 Oct 2026): moved to here, between
+  // steps, when it changed (in /profiles, /model, the hub or another window) or when this request's type
+  // or skill has a profile of its own. The step under way never moves; the new model reads the
+  // conversation once (fitContext first makes it fit). A helper agent of yours with a model of its own keeps it.
+  // idle: the window following the file between messages: the conversation's own profile (Main), not the last request's type.
+  async followProfile({ type, idle = false } = {}) {
+    const r = this.router;
+    if (!r?.active() || this.ownUse) { if (this.routeName && !this.isHelper) routeCalls(this.url, null); this.routeName = null; return; }
+    const ai = this.isHelper ? 'helpers' : this.routeAi ?? 'main';
+    let route;
+    try { route = await r.route({ ai, type: idle ? null : type ?? this.turn?.type ?? null, skill: idle ? null : this.turn?.skillSlug ?? null }, { url: this.url, model: this.modelName() }); } catch (e) {
+      if (this.routeFailed !== e.message) this.emit('note', { text: `Its profile's server did not answer (${String(e.message).slice(0, 160)}): this step stays on ${this.modelName()}.`, tone: 'warn' });
+      this.routeFailed = e.message;
+      return;
+    }
+    this.routeFailed = null;
+    this.routeName = route?.name ?? null;
+    const own = () => { if (!this.isHelper) routeCalls(this.url, this.routeName ? () => this.profileCall(0) : null); };
+    if (!route || route.same) { own(); return; }
+    const from = this.modelName();
+    if (!this.isHelper) routeCalls(this.url, null);
+    Object.assign(this, { url: route.url, model: route.model, ctx: route.ctx, canSee: route.vision, slots: route.conn?.slots > 1 ? { main: 0, side: 1 } : null });
+    own();
+    const reads = this.estNow?.() ?? 0;
+    this.emit('profile-route', { name: route.name, conn: route.conn, model: route.model, ctx: route.ctx, server: route.server, helper: Boolean(this.isHelper) });
+    if (!this.isHelper) this.emit('note', { text: `${route.name}: ${from} → ${this.modelName()}${idle ? '' : ', from this step'}.${reads > 2000 ? ` It reads the conversation once (about ${Math.round(reads / 1000)}k tokens).` : ''}`, tone: 'dim', profile: route.name });
+  }
+
+  // This step's extras by profile: its meter's name, and its backup (a spill after the wait in line plus
+  // the time to read what is new: a long conversation read again is not a busy server), or, while its
+  // profile cools down after a spill, the backup itself.
+  profileCall(fresh) {
+    if (!this.routeName || !this.router?.active()) return {};
+    const x = this.router.callFor(this.routeName);
+    if (x.cooled) return { use: x.cooled, profile: x.cooled.profile };
+    if (x.spill?.after > 0) {
+      const reads = Math.ceil(fresh / Math.max(300, this.stats?.pps ?? 1000));
+      return { profile: x.profile, spill: { ...x.spill, after: x.spill.after + reads } };
+    }
+    return x;
+  }
+
   // A turn stopped as stuck still answers the user: one short reply without tools, saying
   // what it found, what blocked it and what to try. Without a usable reply (it wrote a call,
   // nothing, or the service failed), the app says what the turn did. Before (3 Oct 2026) the
@@ -95,6 +138,7 @@ export class ModelPart {
   async chat(said, started, signal) {
     let reason = 'done';
     try {
+      await this.followProfile({ type: 'chat' });
       await this.fitContext(signal);
       // Room to think first (at your effort level), then a short answer, then stop.
       const turn = await this.generate(signal, { textOnly: true, maxTokens: 900 });
@@ -178,9 +222,11 @@ export class ModelPart {
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: sentTools, toolChoice: textOnly ? 'none' : 'auto', extra: (() => { const conn = textOnly ? [] : this.mcpConnectors(); return textOnly || conn.length ? { ...(textOnly ? { stop: CALL_STOPS } : {}), ...(conn.length ? { mcpServers: conn } : {}) } : undefined; })(), thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
+      // A turn on a model of its own (the UI design writer, a helper agent's own model) carries its own profile's call.
+      const via = this.turn?.use ? {} : this.profileCall(fresh);
+      const stream = streamChat({ ...via, url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: sentTools, toolChoice: textOnly ? 'none' : 'auto', extra: (() => { const conn = textOnly ? [] : this.mcpConnectors(); return textOnly || conn.length ? { ...(textOnly ? { stop: CALL_STOPS } : {}), ...(conn.length ? { mcpServers: conn } : {}) } : undefined; })(), thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use ?? via.use });
       for await (const ev of stream) {
-        if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
+        if (ev.type !== 'done' && ev.type !== 'spill' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
           turn.reasoning += ev.text;
           this.emit('reasoning', { text: ev.text, all: turn.reasoning });
@@ -206,6 +252,8 @@ export class ModelPart {
             ? `Another window was told the service is busy: waiting ${secs} s with it, then asking (try ${ev.next} of ${ev.of}).`
             : `The service is busy: too many requests right now. Trying again in ${secs} s (try ${ev.next} of ${ev.of}). Your conversation stays as it is.`, tone: 'warn' });
           this.emit('busy', { waitMs: ev.waitMs, until: Date.now() + ev.waitMs, next: ev.next, of: ev.of });
+        } else if (ev.type === 'spill') {
+          this.emit('note', { text: `${ev.from}'s server: ${ev.why}. This step went to ${ev.to}; ${ev.from} is asked again in ${Math.round(COOL_MS / 60000)} min.`, tone: 'warn', profile: ev.from });
         } else if (ev.type === 'server') {
           // A web search or page, or a search for tools, done on the server's side (the Claude API): shown as a finished step.
           this.emit('tool', { id: ev.id, name: ev.name, ...(ev.shown ?? display(ev.name, ev.args)), view: ev.view, error: ev.error });

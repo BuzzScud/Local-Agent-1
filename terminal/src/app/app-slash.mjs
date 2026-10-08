@@ -543,8 +543,13 @@ export function slashPart(self) {
         self.openModelPicker();
         break;
       }
+      case 'profiles': {
+        self.openProfilesPanel();
+        break;
+      }
+      // /subagents is a row group of /profiles now (8 Oct 2026, the owner's pick): typed, it opens there.
       case 'subagents': {
-        self.openSubagentsPanel();
+        self.openProfilesPanel({ group: 'ai' });
         break;
       }
       case 'stats':

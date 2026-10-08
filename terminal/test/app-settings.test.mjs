@@ -40,12 +40,13 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
     expect(COMMANDS.some((c) => c.name === n)).toBe(true); // typed in full it still runs
     expect(menu).not.toContain(n);
   }
-  // On an Ollama service /subagents takes the place of /start and /stop: 17, so /jumptomac fits as the 18th.
-  const onService = matchCommands('/', { service: true, side: true }).map((c) => c.name);
-  expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'subagents', 'remote', 'jumptomac', 'test', 'settings', 'exit']); // 18: /jumptomac fits there
+  // On an Ollama service /profiles takes the place of /start and /stop (it took /subagents' row, 8 Oct 2026): 17, so /jumptomac fits as the 18th.
+  const onService = matchCommands('/', { service: true, side: true, remote: true }).map((c) => c.name);
+  expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'profiles', 'remote', 'jumptomac', 'test', 'settings', 'exit']); // 18: /jumptomac fits there
   expect(COMMANDS.some((c) => c.name === 'subagents')).toBe(true);
   // /agents took /morning's row (2 Oct 2026): /morning is typed only, and still a command on /help
-  expect([...TYPED_ONLY]).toEqual(['morning']);
+  // /subagents too (8 Oct 2026): typed, it opens /profiles on its AIs group
+  expect([...TYPED_ONLY]).toEqual(['morning', 'subagents']);
   // /jumptomac (3 Oct 2026): in the whole menu where a 19th row fits (a window taller than 80 × 24),
   // and in any window once its name is typed; typed only, nobody saw it.
   // /loop and /loops (3 Oct 2026) follow it, in that order, then /mcp and /jobs: one free row shows /jumptomac, five all of them.
@@ -61,7 +62,10 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac', 'jobs']);
   expect(matchCommands('/jo').map((c) => c.name)).toEqual(['jobs']);
   expect(matchCommands('/jump').map((c) => c.name)).toEqual(['jumptomac']);
-  expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size + WHEN_ROOM.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /subagents, on a service only)
+  expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size + WHEN_ROOM.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /profiles, on a remote only)
+  // /profiles on any remote (the Claude API too), under /model; not on this Mac's own model
+  expect(matchCommands('/', { side: true, remote: true }).map((c) => c.name)).toContain('profiles');
+  expect(menu).not.toContain('profiles');
   expect(matchCommands('/doc')).toEqual([]); // half a hidden name finds nothing
   expect(matchCommands('/se').map((c) => c.name)).toEqual(['settings']);
   expect(matchCommands('/te').map((c) => c.name)).toEqual(['test', 'remote']); // /tests (the record) is in /settings; remote holds "te"
@@ -167,7 +171,7 @@ test('coding hub [tab]: --help lists it once instead of six words; each tab open
   expect(await hubLine(['memory'], env)).toBe('memory');
   const bad = spawnSync('bun', [CLI, 'hub', 'notes'], { encoding: 'utf8', env: { ...process.env, ...env } });
   expect(bad.status).toBe(1);
-  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, memory, instructions, help.');
+  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, profiles, memory, instructions, help.');
   const noModel = spawnSync('bun', [CLI, 'hub'], { encoding: 'utf8', env: { ...process.env, ...env } }); // weights is the default, and this home has no model file
   expect(noModel.status).toBe(1);
   expect(noModel.stderr).toContain('open another tab (coding hub docs)');

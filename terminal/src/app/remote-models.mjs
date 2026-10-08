@@ -105,9 +105,9 @@ export function serviceRows(pk, sv) {
     const helpers = g.helpers.filter(fits);
     if (helpers.length) {
       if (rows.at(-1)?.kind !== 'fold' || q) gap();
-      if (q) rows.push({ kind: 'head', text: 'Helpers', note: '/subagents gives them a job' }, ...helpers.map(model));
+      if (q) rows.push({ kind: 'head', text: 'Helpers', note: '/profiles gives them a job' }, ...helpers.map(model));
       else {
-        rows.push({ kind: 'fold', id: 'fold:helpers', open: pk.open.helpers, text: 'Helpers', note: `${helpers.length} on the service · pictures, search, small jobs · /subagents gives them a job` });
+        rows.push({ kind: 'fold', id: 'fold:helpers', open: pk.open.helpers, text: 'Helpers', note: `${helpers.length} on the service · pictures, search, small jobs · /profiles gives them a job` });
         if (pk.open.helpers) rows.push(...helpers.map(model));
       }
     }

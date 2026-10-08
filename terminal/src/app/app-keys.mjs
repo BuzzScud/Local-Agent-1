@@ -12,7 +12,6 @@ import { modelPath, serverBinOf, engineOf, HOME } from '../../../models/index.mj
 import { attachDropped, attachClipboard, quickLook, trayItems } from './attach.mjs';
 import { pasteField, rowsOf as remoteRows, startEdit, formReady, modelChoices, moveRow, openModelPick, commitEdit, editField, movePick, moveCopy, closePick, commitPick } from './remote-form.mjs';
 import { serviceRows, atRow, moveService, filterService, toggleFold } from './remote-models.mjs';
-import { moveJob, stepModel, toggleJob } from './subagents.mjs';
 import { WEB_ROWS, moveWebRow } from './web-form.mjs';
 import { withUndo, insertText, promptTextWidth, cursorCell, posAt, wordAt, moveBy, cursorLine, selectedText, undoEdit, redoEdit, editInput } from './edit-input.mjs';
 import { DOUBLE_CLICK_MS, parseCursorReply, parseMouse, WHEEL_PAUSE_MS, ASK_CURSOR } from './mouse.mjs';
@@ -234,7 +233,7 @@ export function keysPart(self) {
   // What it finds goes into an empty prompt, for enter to send to the model.
   const secondOpinionNow = async () => {
     if (self.agent.busy || self.S.current.live.phase === 'working') { self.flash('Wait for Agentic Coder to finish, or press esc first'); return; }
-    if (!self.agent.helperUse?.('review')) { self.flash(self.model.remote ? 'No second opinion here: /subagents gives the job a model on an Ollama service' : 'A second opinion needs a review model on an Ollama service (/remote service, then /subagents)', 3000); return; }
+    if (!self.agent.helperUse?.('review')) { self.flash(self.model.remote ? 'No second opinion here: /profiles gives Second opinion a profile of its own' : 'A second opinion needs a review model on an Ollama service (/remote service, then /subagents)', 3000); return; }
     if (!self.agent.turn?.changed || !self.agent.turn.diffs?.trim()) { self.flash('Nothing changed in the last message, so there is nothing to review', 2500); return; }
     const ac = new AbortController();
     self.abortRef.current = ac;
@@ -342,18 +341,9 @@ export function keysPart(self) {
     // /model on an Ollama service (remote-models.mjs): ↑↓ a row, ←→ the highlighted model's effort,
     // letters filter by name (backspace takes one back, esc clears it, then closes), enter switches
     // to the model (one without tools asks first), opens or shuts a fold, or goes to a model here.
-    // /subagents: ↑↓ the job, ←→ its model, space on or off (saved at once), enter loads it now, esc closes.
-    if (cur.picker?.kind === 'subagents') {
-      const pk = cur.picker;
-      const set = (next) => { self.setPicker(next); if (next.jobs !== pk.jobs) self.saveSubagents(next.jobs); };
-      if (key.upArrow) self.setPicker(moveJob(pk, -1));
-      else if (key.downArrow || key.tab) self.setPicker(moveJob(pk, 1));
-      else if (key.leftArrow || key.rightArrow) set(stepModel(pk, key.leftArrow ? -1 : 1));
-      else if (ch === ' ') set(toggleJob(pk));
-      else if (key.return) self.loadSubagent(pk.jobs[pk.at]);
-      else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
-      return;
-    }
+    // /profiles and /model's step 2 (app-profiles.mjs).
+    if (cur.picker?.kind === 'profiles') { self.profilesKey(cur.picker, ch, key); return; }
+    if (cur.picker?.kind === 'profile-step') { self.profileStepKey(cur.picker, ch, key); return; }
     if (cur.picker?.kind === 'service') {
       const pk = cur.picker;
       const sv = self.serviceOf(pk);
@@ -372,7 +362,7 @@ export function keysPart(self) {
         // A model on the service: its own settings first, and nothing loads until enter there (the
         // user's pick, 2 Oct 2026). One without tools is asked about before that.
         if (!row.m.tools && row.m.id !== sv.inUse) { self.setPicker(null); self.chatOnlyRef.current = { m: row.m, back: pk }; self.openChoice('service-chat-only'); return; }
-        self.openOwnSettings(row.m, { back: pk });
+        self.openProfileStep(row.m, pk);
       } else if (typed) self.setPicker(filterService(pk, sv, pk.filter + typed));
       return;
     }
@@ -479,16 +469,22 @@ export function keysPart(self) {
       const levels = m.thinkingLevels ?? [];
       const off = levels.length ? 1 : 0; // the Effort row, when the model has levels
       const shown = shownLimits(m, { own: Boolean(pk.own) });
-      const rows = off + shown.length + 1;
+      const pr = pk.own?.profile ?? null;
+      const extra = pr ? 2 : 0; // the profile's Backup and Spill after
+      const rows = off + shown.length + extra + 1;
       const step = key.rightArrow ? 1 : -1;
+      const at = pk.index - off - shown.length; // 0 Backup, 1 Spill after
       const svc = Boolean(pk.own) || self.onService();
       if (key.upArrow) self.setPicker({ ...pk, index: (pk.index + rows - 1) % rows });
       else if (key.downArrow || key.tab) self.setPicker({ ...pk, index: (pk.index + 1) % rows });
+      else if ((key.leftArrow || key.rightArrow) && pr && at === 0) self.setPicker({ ...pk, own: { ...pk.own, profile: { ...pr, backup: Math.max(0, Math.min(pr.backups.length - 1, pr.backup + step)) } } });
+      else if ((key.leftArrow || key.rightArrow) && pr && at === 1) self.setPicker({ ...pk, own: { ...pk.own, profile: { ...pr, spill: Math.max(0, Math.min(pr.spills.length - 1, pr.spill + step)) } } });
       else if ((key.leftArrow || key.rightArrow) && off && pk.index === 0) self.setPicker({ ...pk, level: Math.max(0, Math.min(levels.length - 1, pk.level + step)) });
-      else if ((key.leftArrow || key.rightArrow) && pk.index >= off && pk.index < rows - 1) self.setPicker({ ...pk, values: moveLimit(pk.values, shown[pk.index - off].id, step, m) });
+      else if ((key.leftArrow || key.rightArrow) && pk.index >= off && pk.index < off + shown.length) self.setPicker({ ...pk, values: moveLimit(pk.values, shown[pk.index - off].id, step, m) });
       else if (ch === 's' && !key.ctrl && !key.meta && pk.suggested) self.setPicker(self.fillSuggested(pk));
       else if (key.return) {
         const reset = pk.index === rows - 1;
+        if (pr) { self.saveProfileStep(pk, { reset }); return; }
         if (pk.own) { self.saveOwnSettings(pk, { reset }); return; }
         self.setPicker(null);
         if (reset && svc) self.saveEffortLimits(off ? levels[pk.level]?.id : null, self.sharedValues(pk), { reset: true });

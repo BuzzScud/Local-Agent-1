@@ -73,7 +73,7 @@ export const KEYS = [
     ['shift+tab', 'switch mode: manual → accept edits → plan → auto (bypass only from /mode)'],
     ['ctrl+c twice · ctrl+d', 'quit (ctrl+d on an empty prompt)'],
     ['ctrl+p', 'compact now: summarize the conversation to free context, as /compact'],
-    ['ctrl+r', 'a second opinion on the last change now: the review model on an Ollama service (/subagents) reads it, and what it finds goes into the prompt'],
+    ['ctrl+r', 'a second opinion on the last change now: the Second opinion’s model (/profiles) reads it, and what it finds goes into the prompt'],
   ] },
 ];
 

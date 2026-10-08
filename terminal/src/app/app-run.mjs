@@ -90,6 +90,8 @@ export function runPart(self) {
     const offs = [
       // A busy service (busy.mjs): the spinner counts down to the next try.
       on('busy', ({ until }) => self.setLive((l) => (l.phase ? { ...l, busyUntil: until } : l))),
+      // The conversation moved to another profile's model between steps (app-profiles.mjs onRoute).
+      on('profile-route', (ev) => self.onRoute(ev)),
       on('turn-start', () => { try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend().usd; self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
       on('waiting', ({ room, thinkCap, whole } = {}) => self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null }))),
@@ -430,6 +432,7 @@ export function runPart(self) {
     self.setLeaving(true);
     self.loopsRef.current?.close();
     self.agent.jobs?.stopAll(); // the background commands end with the window
+    self.closeProfiles(); // the router's own connections; this window's meters written
     await self.agent.endSession('quit').catch(() => {}); // your SessionEnd hooks, 5 s at most
     self.abortRef.current?.abort();
     self.btwRef.current?.ac.abort();

@@ -435,5 +435,5 @@ export function modelPart(self) {
     self.settings.remote = saved.remote;
     self.settings.remotes = saved.remotes;
   };
-  return { pickLevels, pickLevel, waitForBattle, waitForOthers, modelKey, timeLoad, timeLoaded, timeWarmed, timeDone, listOtherWindows, pushFn, fold, flashFn, setModeFn, openHub, switchModel, openChoice, startCopy, askCopyBack, doPutBack, relimit, applyKeep, saveOwnLevel, setOwn };
+  return { pickLevels, pickLevel, waitForBattle, waitForOthers, modelKey, timeLoad, timeLoaded, timeWarmed, timeDone, listOtherWindows, pushFn, fold, flashFn, setModeFn, openHub, switchModel, openChoice, startCopy, askCopyBack, doPutBack, relimit, applyKeep, saveOwnLevel, setOwn, ownLevel };
 }

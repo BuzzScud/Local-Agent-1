@@ -33,7 +33,7 @@ export function agentDriver(agent, { home = null } = {}) {
   const cwd = () => agent.cwd;
   let saving = null;
   const call = async ({ system, user, maxTokens, signal }) => {
-    const r = await complete({ url: agent.url, model: agent.model, slot: agent.slots?.side, system, user, maxTokens, signal, temperature: 0.2 });
+    const r = await complete({ url: agent.url, model: agent.model, slot: agent.slots?.side, system, user, maxTokens, signal, temperature: 0.2, use: agent.profileUse?.('agents') });
     return r.text;
   };
   return {
@@ -49,8 +49,9 @@ export function agentDriver(agent, { home = null } = {}) {
     // "tests after a change" waits too.
     // kind: a change (the test, the code, a fix) or a question (Verify: it runs, it changes nothing).
     async send(text, { shown, signal, kind = 'change' } = {}) {
-      const keep = { flows: agent.flows, confirmPlan: agent.confirmPlan, testCmd: agent.testCmd, kindFor: agent.kindFor };
-      agent.flows = false; agent.confirmPlan = false; agent.testCmd = null; agent.kindFor = kind;
+      const keep = { flows: agent.flows, confirmPlan: agent.confirmPlan, testCmd: agent.testCmd, kindFor: agent.kindFor, routeAi: agent.routeAi };
+      // Its steps go by the /agents row of /profiles (profile-router.mjs).
+      agent.flows = false; agent.confirmPlan = false; agent.testCmd = null; agent.kindFor = kind; agent.routeAi = 'agents';
       // The files the step made or changed, from its steps as they are shown.
       const files = new Set();
       const onTool = (ev) => { if (!ev.error && /^(Update|Write|Create)$/.test(ev.label ?? '') && ev.arg) files.add(String(ev.arg)); };

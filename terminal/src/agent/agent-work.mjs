@@ -215,6 +215,8 @@ export class WorkPart {
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
       opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
       fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map(), stuckSteps: new Set(),
+      // Its task type and skill as /profiles names them (profiles.mjs): with the model deciding, the word rules' sort.
+      type: kind ?? (follow ? this.lastRoute?.kind : routeByRules(text)?.kind) ?? null, skillSlug: skill?.slug ?? null,
       // A helper agent of yours with a model of its own (runHelper): every step on that model.
       ...(this.ownUse ? { use: this.ownUse } : {}) };
     if (asksForWork(this.turn.request) && wantsDesktop(this.turn.request)) this.desktopAsked = true;
@@ -301,6 +303,7 @@ export class WorkPart {
     this.designForce = false;
     // UI design · writes (/subagents): a page request runs on that helper, when it is not the main model.
     if (this.turn && (forced || (!['question', 'fix', 'rename'].includes(kind) && isDesignRequest(text)))) {
+      this.turn.type = 'page';
       const writer = this.helperUse('designWrite');
       if (writer) { this.turn.use = { ...writer, keepAlive: undefined }; this.emit('note', { text: `UI design: ${writer.model} writes this page.`, tone: 'dim' }); }
     }
@@ -359,6 +362,8 @@ export class WorkPart {
     try {
       for (let step = 0; step < this.maxSteps; step++) {
         if (signal?.aborted) { reason = 'interrupted'; break; }
+        // Its profile first (profile-router.mjs): a change made since the last step moves it here.
+        await this.followProfile();
         await this.fitContext(signal);
         const turn = await this.generate(signal);
         // Counted for the done line: each reply is a step; its thinking share

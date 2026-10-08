@@ -14,7 +14,8 @@ import { thinkingKwargs, thinkingLevel, endpointOf, authHeaders, isOutOfMemory }
 import { streamClaude } from './claude.mjs';
 import { openAIMessages, ollamaMessages } from './images.mjs';
 import { splitThink } from './think-tags.mjs';
-import { withBusyRetry, retryAfterHeader } from './busy.mjs';
+import { withBusyRetry, retryAfterHeader, isBusy } from './busy.mjs';
+import { noteServed, noteSpill } from './profile-meters.mjs';
 import { recordSpend } from './spend.mjs';
 import { qwenRawFits, renderQwen35, callOpening } from './qwen-raw.mjs';
 
@@ -69,9 +70,90 @@ export function refusedField(status, text, body) {
 // use: another model on the same Ollama service for this one call (a /subagents helper):
 // { model, numCtx, thinks, tools, family, keepAlive }, laid over the service's endpoint.
 // use: another model for this one call (/subagents' helpers on an Ollama service; on the Claude API, the model alone: /btw's lowest one).
-const endpointFor = (url, use) => { const ep = endpointOf(url); return ep && use && ep.ollama ? { ...ep, ...use } : ep && use?.model && ep.kind === 'claude' ? { ...ep, model: use.model } : ep; };
+// A profile (profiles.mjs) adds its server (use.url, the call goes there), its name (meters) and its
+// backup (spill): none of them is the endpoint's. An OpenAI-style service takes another of its models by name too.
+const endpointFor = (url, use) => {
+  const ep = endpointOf(url);
+  if (!ep || !use) return ep;
+  const { url: _u, profile: _p, spill: _s, ...u } = use;
+  return ep.ollama ? { ...ep, ...u } : u.model && (ep.kind === 'claude' || ep.kind === 'openai') ? { ...ep, model: u.model } : ep;
+};
+
+// The conversation's profile, for the calls the agent makes on its model without naming one (a summary,
+// the cases, the second look, a check): its backup, its cool-down and its meter, as its steps have them.
+// The agent registers it by its address when it follows a profile (agent-model.mjs followProfile).
+const routed = new Map(); // address → () => { profile, spill } | { use, profile }
+const bare = (url) => String(url ?? '').replace(/\/+$/, '');
+export function routeCalls(url, extras) { if (extras) routed.set(bare(url), extras); else routed.delete(bare(url)); }
 
 export async function* streamChat(args) {
+  if (!args.profile && !args.use && !args.spill && !args.spilled && routed.size) {
+    const x = routed.get(bare(args.url))?.();
+    if (x?.use || x?.spill || x?.profile) args = { ...args, ...x };
+  }
+  // A profile on another server than the conversation's: the call goes to its address.
+  if (args.use?.url && args.use.url !== args.url) args = { ...args, url: args.use.url };
+  const sp = args.spill ?? args.use?.spill;
+  if (sp?.to && !args.spilled) { yield* spilling(args, sp); return; }
+  const profile = args.profile ?? args.use?.profile;
+  if (profile) { yield* metered(args, profile); return; }
+  yield* streamOne(args);
+}
+
+// A profile's request, on its meter (profile-meters.mjs): the wait to its first word, its speed, its cost.
+async function* metered(args, profile) {
+  const t0 = Date.now();
+  let first = null;
+  for await (const ev of streamOne(args)) {
+    if (first === null && ev.type !== 'busy') first = Date.now();
+    if (ev.type === 'done') {
+      const writing = first ? (Date.now() - first) / 1000 : 0;
+      const n = ev.timings?.predicted_n ?? ev.usage?.completion_tokens ?? 0;
+      noteServed(profile, { waitS: first ? (first - t0) / 1000 : null, tps: ev.timings?.predicted_per_second ?? (n > 20 && writing > 0.2 ? n / writing : null), usd: ev.usd ?? null });
+    }
+    yield ev;
+  }
+}
+
+// A profile with a backup (profiles.mjs spillAfter): when its server says it is busy, or sends nothing
+// for sp.after seconds, this request goes to the backup instead (sp.to(why) gives its { url, use,
+// model, name }), with a 'spill' event first. Once the first word has come, the request stays.
+async function* spilling(args, sp) {
+  const ctl = new AbortController();
+  const onAbort = () => ctl.abort();
+  args.signal?.addEventListener('abort', onAbort, { once: true });
+  if (args.signal?.aborted) ctl.abort();
+  const it = streamChat({ ...args, spill: null, use: args.use?.spill ? { ...args.use, spill: undefined } : args.use, profile: args.profile ?? args.use?.profile, signal: ctl.signal })[Symbol.asyncIterator]();
+  let timer = null;
+  const late = sp.after > 0 ? new Promise((ok) => { timer = setTimeout(() => ok({ late: true }), sp.after * 1000); timer.unref?.(); }) : null;
+  const next = it.next();
+  next.catch(() => {});
+  let first;
+  try { first = await (late ? Promise.race([next, late]) : next); } catch (e) {
+    if (args.signal?.aborted || !isBusy(e)) { clearTimeout(timer); args.signal?.removeEventListener('abort', onAbort); throw e; }
+    first = { busy: e };
+  }
+  clearTimeout(timer);
+  const why = first.late ? `no first word in ${sp.after} s` : first.busy || first.value?.type === 'busy' ? 'its server said it is busy' : null;
+  if (!why) {
+    try {
+      if (!first.done) yield first.value;
+      for (let r = await it.next(); !r.done; r = await it.next()) yield r.value;
+    } finally { args.signal?.removeEventListener('abort', onAbort); }
+    return;
+  }
+  ctl.abort();
+  it.return?.().catch?.(() => {});
+  args.signal?.removeEventListener('abort', onAbort);
+  const to = await sp.to(why);
+  // No backup to go to (it is the same, or it cannot be reached): this request waits as before.
+  if (!to) { yield* streamChat({ ...args, spill: null, use: args.use ? { ...args.use, spill: undefined } : args.use }); return; }
+  noteSpill(sp.name);
+  yield { type: 'spill', from: sp.name, to: to.name, why };
+  yield* streamChat({ ...args, url: to.url, use: to.use, model: to.model ?? args.model, profile: to.name, spill: null, spilled: true });
+}
+
+async function* streamOne(args) {
   const ep = endpointFor(args.url, args.use);
   const once = () => {
     const tags = args.model?.thinkTags;

@@ -10,13 +10,14 @@ import { hooksEnv, changeHooks, HOOKS } from '../agent/way.mjs';
 import { writeUserHooks, eventOf, answerProjectHooks } from '../agent/user-hooks.mjs';
 import { openHooksList, testHookForm, hookWarning, toHook, hookListRows, hookFormRows, startHookEdit, commitHookEdit, moveHookRow, openHookForm, checkOn } from './hooks-form.mjs';
 import { screenAccess } from '../tools/screen.mjs';
-import { ollamaCatalog, authHeaders, preloadOllama, isOutOfMemory, DEFAULT_REMOTE, saveKey, removeKey, MODELS, modelPath, visionPath, remoteLabel, withVision, readRecord, battleCounts, battleHold, availableBytes, freeWithHandBack, scanServers, searchBytes, thinkingLevel, remoteModel, getVision, setEndpoint, endpointOf, macMemory, ollamaPs, OPEN_KEEP, OPEN_KEEP_MS } from '../../../models/index.mjs';
+import { preloadOllama, DEFAULT_REMOTE, saveKey, removeKey, MODELS, modelPath, visionPath, remoteLabel, withVision, readRecord, battleCounts, battleHold, availableBytes, freeWithHandBack, scanServers, searchBytes, thinkingLevel, remoteModel, getVision, setEndpoint, endpointOf, macMemory, ollamaPs, OPEN_KEEP, OPEN_KEEP_MS } from '../../../models/index.mjs';
 import { copyDiff } from './copies.mjs';
 import { pasteField, editField } from './remote-form.mjs';
 import { ctxWord } from './remote-models.mjs';
 import { suggestedFor } from './remote-suggested.mjs';
-import { openSubagents, jobsOf, savedOf, MAIN } from './subagents.mjs';
-import { RemoteEmbedder, HELPER_CTX, HELPER_KEEP } from '../agent/helper-models.mjs';
+import { jobsOf, MAIN } from './subagents.mjs';
+import { serverOf } from './profiles.mjs';
+import { RemoteEmbedder } from '../agent/helper-models.mjs';
 import { serviceKey, readTryouts } from './tryouts.mjs';
 import { openWebForm, testWebForm, webWarning, toWebSettings, webSettings, searchKeyId } from './web-form.mjs';
 import { PROVIDER_NAMES } from '../tools/web.mjs';
@@ -39,21 +40,9 @@ import { searchModels, ownOf, readLimits, OWN_ROWS, effortNote, limitChanges, ap
 import { short, IDLE } from './app-common.mjs';
 
 export function panelsPart(self) {
-  // /subagents: the helper models on an Ollama service, one row per job (subagents.mjs). The jobs are
-  // kept by service address; changes are saved as they are made.
+  // The /subagents jobs as saved (settings.json `helperModels`, by service address): today's helpers, and
+  // the first profiles when there is no profiles.json yet (/profiles shows and sets them since 8 Oct 2026).
   const subagentsKey = () => serviceKey(self.settings.remote?.address ?? '');
-  const openSubagentsPanel = () => {
-    const conn = self.remoteRef.current.conn;
-    if (!(self.model.remote && conn?.info?.ollama)) { self.push({ type: 'note', text: 'Subagents are helper models on an Ollama service: connect to one first (/remote service), then /subagents gives each job a model.', tone: 'dim' }); return; }
-    const open = (c) => self.setPicker(openSubagents(jobsOf(self.settings.helperModels?.[subagentsKey()] ?? {}, c?.models ?? [], self.model.remote.model)));
-    if (self.catalog) { open(self.catalog); self.refreshCatalog(conn); return; }
-    ollamaCatalog({ url: conn.url }).then((c) => { if (c) self.setCatalog(c); open(c); }).catch(() => open(null));
-  };
-  // Kept as settings.json `helperModels` by service ("subagents" there already switches the Agent tool).
-  const saveSubagents = (jobs) => {
-    self.settings.helperModels = saveSettings({ helperModels: { ...(self.settings.helperModels ?? {}), [subagentsKey()]: savedOf(jobs) } }).helperModels;
-    applyHelpers();
-  };
   // The jobs the agent works with (helper-models.mjs): each with the service's entry for its
   // model, and the code search's embedder from the service when that job is on.
   const applyHelpers = (c = self.catalog) => {
@@ -61,24 +50,13 @@ export function panelsPart(self) {
     if (!(self.model.remote?.ollama && conn?.info?.ollama && c?.models?.length)) { self.agent.helperJobs = null; self.agent.searchEmbedder = null; return; }
     const jobs = jobsOf(self.settings.helperModels?.[subagentsKey()] ?? {}, c.models, self.model.remote.model);
     self.agent.helperJobs = Object.fromEntries(jobs.map((j) => [j.id, { on: j.on, model: j.model, entry: c.models.find((m) => m.id === j.model) ?? null }]));
+    // Profiles saved (/profiles): they decide the helpers and the code search's model (app-profiles.mjs).
+    self.agent.router?.setCatalog(serverOf(self.settings.remote), c.models);
+    if (self.agent.router?.active()) { self.applyProfiles(); return; }
     const search = self.agent.helperJobs.search;
     const want = search?.on && search.model && search.model !== MAIN ? `${conn.url}|${search.model}` : null;
     if (!want) self.agent.searchEmbedder = null;
     else if (self.agent.searchEmbedder?.key !== want) { self.agent.searchEmbedder = new RemoteEmbedder({ url: conn.url, model: search.model }); self.agent.searchEmbedder.key = want; }
-  };
-  // enter on a job: its model is loaded on the service now (a search model is asked for one meaning).
-  const loadSubagent = (job) => {
-    const conn = self.remoteRef.current.conn;
-    if (!conn || !job.on || !job.model || job.model === MAIN) return;
-    const m = self.catalog?.models.find((x) => x.id === job.model);
-    if (m?.loaded) { self.push({ type: 'note', text: `${job.model} is already loaded on the service.`, tone: 'dim' }); return; }
-    self.push({ type: 'note', text: `Loading ${job.model} on the service for ${job.label}…`, tone: 'dim' });
-    const t0 = Date.now();
-    const go = m?.embedding
-      ? fetch(`${conn.url.replace(/\/+$/, '')}/api/embed`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders(conn.url) }, body: JSON.stringify({ model: job.model, input: 'ready' }) }).then((r) => { if (!r.ok) throw new Error(`${r.status}`); })
-      : preloadOllama({ url: conn.url, model: job.model, numCtx: HELPER_CTX[job.id] ?? undefined, keepAlive: HELPER_KEEP });
-    go.then(() => { self.push({ type: 'note', text: `${job.model} is loaded (${Math.max(1, Math.round((Date.now() - t0) / 1000))} s).`, tone: 'dim' }); self.refreshCatalog(conn); self.noteModels(conn); })
-      .catch((e) => self.push({ type: 'note', text: `${job.model} did not load: ${isOutOfMemory(e.message) ? 'the service has no room for it next to the main model' : e.message}.`, tone: 'warn' }));
   };
   // What the service's /model draws from: what was set as it opened, and what moves (the list, the chat).
   const serviceOf = (pk) => ({ ...pk.sv, catalog: self.catalog, version: self.catalog?.version ?? self.model.remote?.ollama ?? null, inUse: self.model.remote?.model ?? null, used: self.agent.ctxUsed ?? 0, tried: readTryouts(self.settings.remote?.address) });
@@ -555,7 +533,7 @@ export function panelsPart(self) {
   // rows, with the ranks page's values suggested beside them, before anything loads; enter switches
   // to it with them, esc goes back to the list (back). On the model in use it is saved at once.
   // A model not in use is read from the service's entry for it (what it can do, its longest context).
-  const openOwnSettings = (entry, { back = null } = {}) => {
+  const openOwnSettings = (entry, { back = null, profile = null } = {}) => {
     const inUse = entry.id === self.model.remote?.model;
     const m = inUse ? self.model : remoteModel(self.settings.remote, { model: entry.id, ollama: { version: self.catalog?.version ?? self.model.remote?.ollama ?? '?', ...entry }, ctx: entry.loadedCtx || entry.ctx || null });
     const levels = m.thinkingLevels ?? [];
@@ -565,7 +543,7 @@ export function panelsPart(self) {
     const mine = readLimits({ ...loadSettings(self.opts.cwd), remote: self.settings.remote }, m);
     const values = { ...self.limitsRef.current, ...Object.fromEntries(OWN_ROWS.map((id) => [id, mine[id]])), context: self.serviceCtx(entry.id) };
     self.setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values, saved: { ...values }, model: m, suggested: suggestedFor(entry.id, m),
-      own: { id: entry.id, entry, inUse, back },
+      own: { id: entry.id, entry, inUse, back, profile },
       env: { model: m, switching: !inUse, freeBytes: null, searchBytes: null, tps: self.stats.tps, pps: self.stats.pps, ctxNow: inUse ? self.agent.ctx : entry.loadedCtx || null, lastRerank: null } });
   };
   // The menu's values with every suggested one filled in (s).
@@ -589,6 +567,16 @@ export function panelsPart(self) {
     if (inUse) { self.setPicker(null); saveEffortLimits(lv?.id ?? null, reset ? sharedValues(pk) : pk.values, { reset }); return; }
     if (self.busyNow()) { self.push({ type: 'note', text: `Agentic Coder is busy (a reply, or a model loading). Press enter again when it is done; nothing was saved and ${self.model.remote?.model ?? self.model.name} is still in use.`, tone: 'warn' }); return; }
     self.setPicker(null);
+    keepOwnSettings(pk, { reset });
+    // Its Effort goes in use once the switch has worked (relimit's ownLevel): one that fails leaves the model in use as it was.
+    self.switchService(entry);
+  };
+  // A model's own settings kept for it (its moved rows, its Effort, its Context), with no switch: the
+  // menu's save above, and /model's step 3 for a profile (app-profiles.mjs).
+  const keepOwnSettings = (pk, { reset = false } = {}) => {
+    const { id } = pk.own;
+    const levels = pk.model.thinkingLevels ?? [];
+    const lv = levels[pk.level] ?? null;
     const prev = ownOf(self.settings, id);
     const moved = OWN_ROWS.filter((r) => pk.values[r] !== pk.saved[r]);
     const limits = reset ? {} : { ...(prev?.limits ?? {}), ...Object.fromEntries(moved.map((r) => [r, pk.values[r]])) };
@@ -597,8 +585,6 @@ export function panelsPart(self) {
     if (Object.keys(own).length || prev) self.setOwn(id, Object.keys(own).length ? own : null);
     const ctx = reset ? 0 : pk.values.context ?? 0;
     if (ctx !== self.serviceCtx(id)) self.setServiceCtx(id, ctx);
-    // Its Effort goes in use once the switch has worked (relimit's ownLevel): one that fails leaves the model in use as it was.
-    self.switchService(entry);
   };
   const applyChoice = (id, value) => {
     if (id === 'memory-save') { const p = self.pendingSaveRef.current; self.pendingSaveRef.current = null; p?.resolve(value === 'save'); return; }
@@ -838,5 +824,5 @@ export function panelsPart(self) {
     const slimImages = (m) => (m.images ? { ...m, images: m.images.map(({ data, ...rest }) => rest) } : m);
     try { saveSession(self.cwd, s.id, { title: s.title, messages: self.agent.messages.map(slimImages), items: s.items.slice(-300), mode: self.agent.mode, lessons: self.agent.lessons }); } catch {}
   };
-  return { openSubagentsPanel, saveSubagents, applyHelpers, loadSubagent, serviceOf, serviceProps, pickHere, openWebPicker, runWebTest, saveWeb, offerList, openMcpPicker, mcpKeys, hooksList, hooksKeys, mcpNews, seeingModels, needVision, openSettings, openRewind, chooseRewind, applyRewind, openPermissions, memoryForRestart, openEffortLimits, openOwnSettings, fillSuggested, sharedValues, saveOwnSettings, applyChoice, sayEffort, saveEffortLimits, setThinkingFn, readMacMemory, readServicePs, saveNowFn };
+  return { applyHelpers, serviceOf, serviceProps, pickHere, openWebPicker, runWebTest, saveWeb, offerList, openMcpPicker, mcpKeys, hooksList, hooksKeys, mcpNews, seeingModels, needVision, openSettings, openRewind, chooseRewind, applyRewind, openPermissions, memoryForRestart, openEffortLimits, openOwnSettings, fillSuggested, sharedValues, saveOwnSettings, keepOwnSettings, applyChoice, sayEffort, saveEffortLimits, setThinkingFn, readMacMemory, readServicePs, saveNowFn };
 }

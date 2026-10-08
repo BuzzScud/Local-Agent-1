@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Coder Profiles</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --tint: rgba(42,120,214,.08);
+  --up: #1d7a46; --down: #b3261e; --warn: #8a5a00;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color-scheme: light dark; display: flex; flex-direction: column; overflow: hidden; }
+/* One container that fits the window: the profiles on the left, who uses which on the right; each list scrolls inside its own box. */
+header { padding: 14px 18px 10px; border-bottom: 1px solid var(--line); }
+h1 { font-size: 17px; margin: 0 0 2px; }
+.sub { color: var(--ink2); margin: 0; }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 14px 18px; }
+section { min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+section h2 { font-size: 14px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; }
+section h2 small { color: var(--ink3); font-weight: 400; }
+.scroll { overflow: auto; min-height: 0; padding: 6px 14px 12px; }
+.prof { padding: 10px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; align-items: center; }
+.prof:last-child { border-bottom: 0; }
+.prof b { font-size: 15px; }
+.prof .meta { color: var(--ink3); font-size: 12.5px; }
+.prof .meter { grid-column: 2; color: var(--ink2); font-size: 12.5px; font-family: var(--mono); }
+.prof .meter.spilled { color: var(--warn); }
+.row { display: grid; grid-template-columns: 170px 150px minmax(0, 1fr); gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row .note { color: var(--ink3); font-size: 12.5px; }
+.row.inherit select { color: var(--ink3); }
+select { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; max-width: 100%; }
+.tabs { display: flex; gap: 4px; padding: 8px 14px 0; flex-wrap: wrap; }
+.tabs button { font: inherit; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ink2); padding: 4px 8px; cursor: pointer; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.rule { color: var(--ink3); font-size: 12.5px; padding: 6px 14px 0; }
+.empty { padding: 30px; color: var(--ink2); max-width: 640px; }
+.flash { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 6px 12px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.flash.show { opacity: .92; }
+@media (max-width: 760px) { body { overflow: auto; height: auto; } main { grid-template-columns: 1fr; } .row { grid-template-columns: 1fr 1fr; } .row .note { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Profiles</h1>
+  <p class="sub">A profile is a server, a model and its settings by name. Change one here and the next request that uses it goes the new way, in every window, mid-task too.</p>
+</header>
+<main id="main"></main>
+<div class="flash" id="flash"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let state = null, tab = 'ai';
+const models = {}; // source → model ids (the Remote tab's list)
+try { tab = localStorage.getItem('profiles-tab') || 'ai'; } catch {}
+function flash(t) { const f = $('#flash'); f.textContent = t; f.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => f.classList.remove('show'), 1800); }
+async function load() {
+  const r = await fetch('/profiles.json', { cache: 'no-store' });
+  state = await r.json();
+  draw();
+  for (const p of state.profiles ?? []) if (!models[p.source]) {
+    models[p.source] = [];
+    fetch(`/remote.json?service=${encodeURIComponent(p.source)}`, { cache: 'no-store' }).then((x) => x.json()).then((l) => { models[p.source] = (l.models ?? []).map((m) => m.id); draw(); }).catch(() => {});
+  }
+}
+async function post(path, body, said) {
+  const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { flash(j.error ?? 'not saved'); return; }
+  state = j; draw(); flash(said);
+}
+function meterWords(m) {
+  if (!m?.n && !m?.spills) return 'no requests yet today';
+  const secs = (s) => (s < 10 ? s.toFixed(1) : String(Math.round(s)));
+  return [m.n ? `${m.n} today` : null, m.wait != null ? `wait ${secs(m.wait)} s` : null, m.tps ? `${Math.round(m.tps)} tok/s` : null, m.spills ? `${m.spills} to backup` : null, m.usd ? `$${m.usd.toFixed(2)}` : null].filter(Boolean).join(' · ');
+}
+function draw() {
+  const main = $('#main');
+  if (!state) return;
+  if (!state.saved) { main.innerHTML = `<div class="empty"><b>No profiles saved yet.</b><p>Open <code>/profiles</code> in an Agentic Coder window ${state.remote ? '' : 'on a model on /remote '}and change anything: it starts them from your /subagents helpers (Main, Fast, Vision, Search, Review…), and from then on this tab and every window share them.</p></div>`; return; }
+  const names = state.profiles.map((p) => p.name);
+  const opt = (v, label, sel) => `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(label)}</option>`;
+  const profs = state.profiles.map((p) => {
+    const list = [...new Set([p.model, ...(models[p.source] ?? [])])];
+    const m = state.meters?.[p.name];
+    return `<div class="prof"><b>${esc(p.name)}</b>
+      <div><select data-model="${esc(p.name)}">${list.map((id) => opt(id, id, id === p.model)).join('')}</select> <span class="meta">${esc(p.server)}</span></div>
+      <span class="meta">backup</span>
+      <div><select data-backup="${esc(p.name)}">${opt('', 'none', !p.backup)}${names.filter((n) => n !== p.name).map((n) => opt(n, n, n === p.backup)).join('')}</select>
+        <select data-spill="${esc(p.name)}" ${p.backup ? '' : 'disabled'}>${state.spills.map((s) => opt(s, s ? `after ${s} s` : 'only when busy', s === p.spillAfter)).join('')}</select></div>
+      <span class="meter${m?.spills ? ' spilled' : ''}">${esc(meterWords(m))}</span></div>`;
+  }).join('');
+  const rows = state.rows.filter((r) => r.group === tab).map((r) => `<div class="row${r.own ? '' : ' inherit'}"><span>${esc(r.label)}</span>
+    <select data-use="${esc(r.key)}">${opt('', r.own ? '— none of its own' : `${r.uses} (not its own)`, !r.own)}${names.map((n) => opt(n, n, n === r.own)).join('')}</select>
+    <span class="note">${esc(r.note)}</span></div>`).join('');
+  main.innerHTML = `<section><h2>Profiles <small>today, every window</small></h2><div class="scroll">${profs}</div></section>
+    <section><h2>Who uses which <small>saved as you pick</small></h2>
+      <div class="tabs">${state.groups.map((g) => `<button data-tab="${g.id}" class="${g.id === tab ? 'on' : ''}">${esc(g.label)}</button>`).join('')}</div>
+      <div class="rule">Most specific wins: skill › task type › category › AI › Main.</div>
+      <div class="scroll">${rows}</div></section>`;
+}
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset.model) post('/profiles/set', { name: t.dataset.model, model: t.value }, `${t.dataset.model} → ${t.value}: from the next request`);
+  else if (t.dataset.backup !== undefined) post('/profiles/set', { name: t.dataset.backup, backup: t.value || null }, 'backup saved');
+  else if (t.dataset.spill) post('/profiles/set', { name: t.dataset.spill, spillAfter: Number(t.value) }, 'saved');
+  else if (t.dataset.use) post('/profiles/use', { key: t.dataset.use, profile: t.value || null }, 'saved: from the next request');
+});
+document.addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) { tab = b.dataset.tab; try { localStorage.setItem('profiles-tab', tab); } catch {} draw(); } });
+load();
+setInterval(() => { if (document.visibilityState === 'visible' && !document.activeElement?.matches?.('select')) load(); }, 5000);
+</script>
+</body>
+</html>

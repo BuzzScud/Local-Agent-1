@@ -57,6 +57,7 @@ export function remotePart(self) {
     }
     self.remoteRef.current.conn = conn;
     self.remoteRef.current.why = null;
+    self.lendConn(r, conn);
     // The service this window connected with (never its key): its memory save after you close it goes
     // there too, not to whichever service another window saved since (autosave.mjs).
     self.agent.remoteConf = remoteConfOf(r);
@@ -515,6 +516,7 @@ export function remotePart(self) {
     if (before && before.url !== conn.url) before.stop();
     self.remoteRef.current.conn = conn;
     self.remoteRef.current.why = null;
+    self.lendConn(r, conn);
     self.agent.remoteConf = remoteConfOf(r);
     const src = sourceOf(r);
     const saved = saveSettings({ remote: r, ...(self.settings.remotes?.[src] ? { remotes: { ...self.settings.remotes, [src]: { ...self.settings.remotes[src], model: id } } } : {}) });

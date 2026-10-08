@@ -10,7 +10,7 @@ import { join } from 'node:path';
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-subagents-home-'));
 const { HOME, pickRemoteModel, setEndpoint, dropEndpoint, ollamaCatalog } = await import('../../models/index.mjs');
 const { groupsOf, copiesOf, suggestModel, isHelper } = await import('../src/app/remote-models.mjs');
-const { JOBS, MAIN, choicesFor, jobsOf, statusOf, openSubagents, moveJob, stepModel, toggleJob, savedOf } = await import('../src/app/subagents.mjs');
+const { JOBS, MAIN, choicesFor, jobsOf } = await import('../src/app/subagents.mjs');
 const { openForm, openModelPick, moveCopy, commitPick, movePick } = await import('../src/app/remote-form.mjs');
 const { readTryouts, saveTryout, triedWord, serviceKey } = await import('../src/app/tryouts.mjs');
 const { tryOut } = await import('../src/agent/tryout.mjs');
@@ -105,24 +105,8 @@ test('each job\'s model at first: llava looks, llama3.2 3b does the side jobs, e
   expect(saved.find((j) => j.id === 'side')).toMatchObject({ model: 'llama3.2:3b', missing: true });
 });
 
-test('the panel: ↑↓ the job, ←→ its model (and on), space on or off, the status words, what is saved', () => {
-  let pk = openSubagents(jobsOf({}, SERVICE, 'qwen3-coder-next:latest'));
-  pk = moveJob(moveJob(moveJob(pk, 1), 1), 1);
-  expect(pk.jobs[pk.at].id).toBe('review');
-  pk = stepModel(pk, 1);
-  expect(pk.jobs[pk.at].model).toBe('gpt-oss:120b');
-  pk = toggleJob(pk);
-  expect(pk.jobs[pk.at].on).toBe(false);
-  expect(statusOf(pk.jobs[pk.at], SERVICE).text).toBe('off');
-  expect(statusOf(pk.jobs[0], SERVICE).text).toBe('loads when needed · 4.7 GB');
-  expect(statusOf(pk.jobs.find((j) => j.id === 'designWrite'), SERVICE, 'qwen3-coder-next:latest').text).toBe('your model (qwen3-coder-next:latest)');
-  expect(moveJob(pk, 99).at).toBe(JOBS.length - 1);
-  expect(savedOf(pk.jobs).review).toEqual({ on: false, model: 'gpt-oss:120b' });
-  expect(useOf({ on: true, model: 'llama3.2:3b', entry: { family: 'llama', tools: true } }, 'side')).toMatchObject({ model: 'llama3.2:3b', numCtx: 32768, keepAlive: '30m' });
-  expect(useOf({ on: true, model: MAIN }, 'designWrite')).toBe(undefined);
-  expect(useOf({ on: false, model: 'llava:latest' }, 'pictures')).toBe(undefined);
-});
-
+// The panel's own test went with the panel (8 Oct 2026): /profiles shows and sets the jobs now (profiles.test.mjs,
+// app-subagents.test.mjs).
 test('a call written as bare JSON runs when it names one of the tools; a JSON answer does not', () => {
   const N = ['Read', 'Edit', 'Bash'];
   expect(bareCallInText('{"name": "Read", "arguments": {"path": "src/a.js"}}', N)).toMatchObject({ name: 'Read', args: '{"path":"src/a.js"}', before: '' });

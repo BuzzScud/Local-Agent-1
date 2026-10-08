@@ -49,7 +49,7 @@ test('the rows: two sections, then a fold for the chat-only models, one for the 
     'Can run the agent', 'm:qwen2.5-coder:14b', 'm:qwen3-coder:30b', 'm:laguna-s-2.1:latest', 'm:gpt-oss:120b', '',
     'Chat only', 'Helpers', 'This Mac', 'svc:claude',
   ]);
-  expect(rows.find((r) => r.id === 'fold:helpers').note).toBe('2 on the service · pictures, search, small jobs · /subagents gives them a job');
+  expect(rows.find((r) => r.id === 'fold:helpers').note).toBe('2 on the service · pictures, search, small jobs · /profiles gives them a job');
   expect(rows.find((r) => r.id === 'fold:chat').note).toBe('2 on the service · no tools, so no file reads, edits or commands');
   expect(rows.find((r) => r.id === 'fold:mac').note).toBe('2 models · Qwen3.5 9B was in use last');
   expect(atRow(pk, rows).id).toBe('m:Qwen3.6:35B-A3B'); // it opens on the model in use
