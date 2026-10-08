@@ -182,7 +182,7 @@ test.skipIf(!S.canHost())('ctrl+b leaves the app running; coding sessions lists 
       { key: 'ctrlC' }, { sleep: 300 }, { key: 'ctrlC' }, { sleep: 200 }, { key: 'ctrlC' },
       { wait: 'Continue this conversation with' },
     ] });
-    expect(b.snapshots.open).toContain('Agentic Coder v');
+    expect(b.snapshots.open).toContain('Welcome');
     expect(b.code).toBe(0);
     // demo-project-1 ended; demo-project-2 still runs.
     expect(await until(() => records(env).join() === 'demo-project-2.json')).toBe(true);

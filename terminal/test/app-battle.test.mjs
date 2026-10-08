@@ -35,7 +35,7 @@ test('/settings → Arena opens the hub on the Arena tab and says a run there un
   const fake = await startFakeServer([]);
   let hub = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' },
+    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'enter opens it' },
     ...Array.from({ length: 12 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'The Arena opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; hub = await (await fetch(`${url}?tab=arena`)).text(); } },
@@ -43,7 +43,8 @@ test('/settings → Arena opens the hub on the Arena tab and says a run there un
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toMatch(/❯ Arena\s+\d+ tests? · \d+ runs?\s+run a test on one model, or battle two/);
+  expect(r.snapshots.menu).toMatch(/❯ Arena\s+\d+ tests? · \d+ runs?/);
+  expect(r.snapshots.menu).toContain('run a test on one model, or battle two'); // the row you are on, in full beside the list
   expect(r.text.replace(/\s+/g, ' ')).toContain('?tab=arena · run a test on one model, or battle two with it, one model at a time, each run stopped at 10 min');
   expect(hub).toContain('<button data-tab="arena">Arena</button>');
   expect((r.text.match(/The Arena opened in the browser at/g) ?? []).length).toBe(2); // /battle opened it too

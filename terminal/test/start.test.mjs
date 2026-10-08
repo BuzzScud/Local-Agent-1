@@ -1,14 +1,15 @@
-// The start page (start.jsx): two columns under a titled line, the model loading in place, the
-// tip under the prompt box until the first message, and the safety check in the same columns.
+// The start page (start.jsx): since 7 Oct 2026 the Launcher, a centred column (the bot walking
+// like Pac-Man when there is room, the name in block letters, the model loading in place, the
+// conversations to pick up, the keys to start something new); and the safety check in two columns.
 // Also where to start (start-folder.mjs): typed in the home folder, which folder to work in.
 import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 const h = React.createElement;
-import { StartPage, TrustPage, FolderPage, folderCard, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP, subjectOf, headline, daysOf, recentRows } from '../src/app/start.jsx';
+import { StartPage, TrustPage, FolderPage, folderCard, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP, subjectOf, headline, recentRows, tidySubject, walkCells, blockWord, launcherPad } from '../src/app/start.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
-import { setup, T, quit } from './app-setup.mjs';
+import { setup, T, quit, quitTyped as quitTypedSteps } from './app-setup.mjs';
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -29,46 +30,79 @@ const START = {
   ],
 };
 
-test('the page: a titled line, the greeting, the bot, the model; recent activity, this folder and keys to try beside them', () => {
+test('the Launcher: the greeting, the name in block letters, the model, this folder in a line; the conversations to pick up, the keys to start something new', () => {
   const lines = draw(h(StartPage, { start: START, width: 107 }), 107);
-  expect(lines[0]).toMatch(/^── Agentic Coder v\d+\.\d+\.\d+ ─+$/);
   const text = lines.join('\n');
-  for (const s of ['Welcome back!', 'Qwen3.5 9B', '● ready · effort high · 64k context', 'Recent activity', ' 1  1h ago', ' 2  6h ago', ' 3  1d ago', '1 prompt', 'click one, or /resume 2', '/resume lists all 4', 'This folder', 'Try', '@ a file   ! a command   / every command']) expect(text).toContain(s);
-  expect(draw(h(StartPage, { start: START, width: 127 }), 127).join('\n')).toContain('/ every command   shift+tab switch mode'); // as many keys as fit
-  expect(text).toMatch(/where\s+~ · your home folder/); // this folder as labelled rows
-  expect(text).toMatch(/git\s+none here/);
-  expect(text).toMatch(/reads\s+AGENTS\.md \+ memory/);
+  for (const s of ['Welcome back!', blockWord('AGENTIC')[0], blockWord('CODER')[1], 'Qwen3.5 9B', '● ready · effort high · 64k context', 'no git here  ·  reads AGENTS.md + memory',
+    'Pick up where you left off', ' 1  1h ago', ' 2  6h ago', ' 3  1d ago', '1 prompt', 'click one, or /resume 2', 'Or start something new', '↵  type in the box below and press enter',
+    '@ a file   ! a command   / every command   shift+tab switch mode   esc esc rewind']) expect(text).toContain(s);
   const turns = draw(h(StartPage, { start: { ...START, recent: [{ ...START.recent[0], turns: 4 }] }, width: 107 }), 107).join('\n');
   expect(turns).toContain('4 prompts'); // how many prompts each one had
   expect(text.match(/In-app notification card/g)).toHaveLength(1); // the same prompt run again shows once, by its subject
   expect(text).toContain('Small weather widget for a city');
   expect(text).toContain('w01 · Fix a futures roll that stays'); // one line, the separator run gone
-  expect(text).not.toContain('┌');
   expect(text).not.toContain('╭'); // no box
+  // a centred column: the conversations start at its left edge
+  expect(lines.find((l) => l.includes('1h ago')).indexOf(' 1  1h ago')).toBe(launcherPad(107));
   const also = draw(h(StartPage, { start: { ...START, also: ['folder settings (model)', 'starts in auto-edit (/permissions)'] }, width: 107 }), 107).join('\n');
   expect(also).toContain('starts in auto-edit (/permissions)'); // what this folder changes at the start
   expect(also).toContain('folder settings (model)');
   for (const l of lines) expect(l.length).toBeLessThanOrEqual(107);
+  // the bot in the middle above it all when the window has the rows; in a short one the name says it in words
+  const tall = draw(h(StartPage, { start: { ...START, room: 40 }, width: 107 }), 107);
+  expect(tall.findIndex((l) => l.includes('▄▄            ▄▄'))).toBeLessThan(tall.findIndex((l) => l.includes('Welcome back!')));
+  expect(text).not.toContain('▄▄            ▄▄');
+  const narrow = draw(h(StartPage, { start: { ...START, room: 12 }, width: 80 }), 80).join('\n');
+  expect(narrow).toContain('Agentic Coder v');
+  expect(narrow).not.toContain(blockWord('AGENTIC')[0]);
 });
 
 test('loading and ready take the same rows, so nothing moves when the page is printed', () => {
-  for (const w of [80, 107, 155]) {
-    const ready = draw(h(StartPage, { start: START, width: w }), w);
-    const loading = draw(h(StartPage, { start: START, width: w, loading: { phase: 'reading', secs: 12.4 } }), w);
+  for (const w of [80, 107, 155]) for (const room of [22, 40]) {
+    const ready = draw(h(StartPage, { start: { ...START, room }, width: w }), w);
+    const loading = draw(h(StartPage, { start: { ...START, room }, width: w, loading: { phase: 'reading', secs: 12.4 } }), w);
     expect(loading.length).toBe(ready.length);
-    // the start's steps under the model's name: done, now (with its seconds), still to come
-    expect(loading.join('\n')).toContain(w >= 100 ? '✓ model ─ ◐ instructions 12s ─ ○ ready' : '✓ model ◐ reading 12s ○ ready');
-    const model = draw(h(StartPage, { start: START, width: w, loading: { phase: 'loading', secs: 3 } }), w).join('\n');
+    expect(loading.findIndex((l) => l.includes('Pick up where'))).toBe(ready.findIndex((l) => l.includes('Pick up where')));
+    // the start's steps beside the model's name: done, now (with its seconds), still to come
+    expect(loading.join('\n')).toMatch(/✓ model ─ ◐ (instructions|reading) 12s ─ ○ ready/);
+    const model = draw(h(StartPage, { start: { ...START, room }, width: w, loading: { phase: 'loading', secs: 3 } }), w).join('\n');
     expect(model).toMatch(/[◐◓◑◒] model 3s/);
     expect(model).toContain('○ ready');
-    // a long name has its own line, never a cut one
-    const gemma = draw(h(StartPage, { start: { ...START, model: 'Gemma 4 12B QAT' }, width: w, loading: { phase: 'reading', secs: 12.4 } }), w).join('\n');
+    const gemma = draw(h(StartPage, { start: { ...START, room, model: 'Gemma 4 12B QAT' }, width: w, loading: { phase: 'reading', secs: 12.4 } }), w).join('\n');
     expect(gemma).toContain('Gemma 4 12B QAT');
-    expect(gemma).not.toContain('…│');
     for (const l of [...ready, ...loading]) expect(l.length).toBeLessThanOrEqual(w);
-    // the left column never wraps: the rail between the columns is on every row but the title's two
-    expect(ready.slice(2).every((l) => l.includes('│'))).toBe(true);
   }
+});
+
+test('the bot walks like Pac-Man: across the window and back in at the left edge, eating the dots in front of it, which come back on a new lap', () => {
+  const W = 60;
+  const cells = botCells('ready');
+  const dots = (lines) => lines[4].map((c, x) => (c.ch === '·' ? x : null)).filter((x) => x != null);
+  const at0 = walkCells(cells, 0, W); // it sets off from the middle, where it stood
+  expect(at0[0].slice(19, 41).map((c) => c.ch)).toEqual(cells[0].map((c) => c.ch));
+  expect(dots(at0).every((x) => x > 40 && x % 3 === 1)).toBe(true); // only ahead of it
+  expect(dots(at0).length).toBe(6);
+  const at10 = walkCells(cells, 10, W); // 20 cells on, at the right edge: every dot it went over is eaten
+  expect(dots(at10)).toEqual([]);
+  const wrapped = walkCells(cells, 20, W); // at the right edge: what is past it shows at the left
+  expect(wrapped[0][59].ch).toBe(cells[0][0].ch);
+  expect(wrapped[0].slice(0, 21).map((c) => c.ch)).toEqual(cells[0].slice(1).map((c) => c.ch));
+  const lap = walkCells(cells, 25, W); // a new lap: every dot ahead of it again
+  expect(dots(lap).length).toBeGreaterThan(dots(at10).length);
+  for (const line of [...at0, ...wrapped, ...lap]) expect(line).toHaveLength(W);
+  // on the page: it moves with the step, and stands in the middle while the model loads or is off
+  const page = (walk, extra = {}) => renderToString(h(StartPage, { start: { ...START, room: 40, ...extra }, width: 107, walk }), { columns: 107 });
+  expect(page(1)).not.toBe(page(2));
+  expect(strip(page(1))).toContain('·  ·');
+  expect(strip(page(1, { off: true }))).toBe(strip(page(null, { off: true })));
+});
+
+test('a first prompt in capitals reads in sentence case; one that is a shell command shows as one', () => {
+  expect(tidySubject('CAN YOU HELP ME INPROVE THIS PROGRAM ? THE AGENTIC CODER TERMINAL?')).toBe('Can you help me inprove this program ? the agentic coder terminal?');
+  expect(tidySubject('HELLO')).toBe('Hello');
+  expect(tidySubject('I NEED HELP WITH THIS')).toBe('I need help with this');
+  expect(tidySubject("Rsync -a --delete --exclude '.git' src/ dst/")).toBe("$ rsync -a --delete --exclude '.git' src/ dst/");
+  for (const t of ['notes.html that works', 'Fix the API', 'Small weather widget for a city']) expect(tidySubject(t)).toBe(t);
 });
 
 test('the bot sleeps while the model is off, looks about while it loads, and is happy when ready', () => {
@@ -123,7 +157,7 @@ test('while you type, the awake bot looks down at the prompt box, left or right 
   expect(eyes('ready', 0.9)).toEqual(['8,8', '9,8', '14,8', '15,8', '8,9', '9,9', '14,9', '15,9']); // down and to the right
   expect(eyes('loading', 0.5)).toEqual(eyes('ready', 0.5).map((e) => e)); // loading too
   expect(botPixels('off', 0, 0.5)).toEqual(botPixels('off', 0)); // asleep, it does not look
-  const page = (typing) => renderToString(h(StartPage, { start: START, width: 107, typing }), { columns: 107 });
+  const page = (typing) => renderToString(h(StartPage, { start: { ...START, room: 40 }, width: 107, typing }), { columns: 107 }); // a page with room for the bot
   expect(page(0.1)).not.toBe(page(null));
 });
 
@@ -246,12 +280,12 @@ test('the real app: the tip on the page under Try until the first message, the f
   await fake.close();
   const before = r.snapshots.before.split('\n');
   const tip = before.findIndex((l) => l.includes('Tip  /init writes an AGENTS.md with notes about this project')); // the demo project has no AGENTS.md
-  expect(tip).toBeGreaterThan(before.findIndex((l) => l.includes('@ a file   ! a command'))); // on the page, under Try
+  expect(tip).toBeGreaterThan(before.findIndex((l) => l.includes('@ a file   ! a command'))); // on the page, under the keys
   expect(tip).toBeLessThan(before.findIndex((l) => l.startsWith('╭'))); // above the prompt box
   expect(before.find((l) => l.includes('for shortcuts'))).toBeTruthy(); // the footer is free for the model and the mode
   expect(r.snapshots.before).not.toContain('※ Tip:');
   expect(r.snapshots.before).toContain('Welcome!');
-  expect(r.snapshots.before).toContain('Recent activity');
+  expect(r.snapshots.before).toContain('Pick up where you left off');
   expect(r.snapshots.after.split('\n').find((l) => l.includes('for shortcuts'))).toBeTruthy(); // the page went up with your message; the footer never had the tip
   expect(r.snapshots.after).not.toContain('※ Tip:');
 }, T);
@@ -286,12 +320,31 @@ test('a panel opened while the model loads prints the page out of its way: whole
   ] });
   expect(r.snapshots.panel).toContain('Effort and limits');
   expect(r.snapshots.closed).toContain(`Starting ${D.name}…`); // the old line carries the loading now
-  expect(r.text.match(/Recent activity/g)).toHaveLength(1); // the page was printed once, whole
+  expect(r.text.match(/Pick up where you left off/g)).toHaveLength(1); // the page was printed once, whole
 }, 120_000);
 
 
-// 4 Oct 2026, the owner's pick "1 · Studio, grown" (its preview is private, docs/private/design rounds/):
-// the page fills the rows App gives it (start.room), the conversations numbered for /resume <n>.
+test('the real app: the bot walks while the page waits, four steps a second; it stops the moment you type', async () => {
+  const { ENGINE, MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs'); // inside the test: an early import would fix HOME for later files
+  const D = MODELS[DEFAULT_MODEL];
+  const { cwd, env, base } = setup();
+  const home = join(base, 'home');
+  mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
+  mkdirSync(join(home, 'models'), { recursive: true });
+  symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
+  writeFileSync(join(home, 'models', D.file), 'stand-in');
+  const band = (t) => t.split('\n').slice(0, t.split('\n').findIndex((l) => l.includes('Welcome!'))).join('\n'); // the rows above the greeting
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_BOT_WALK: 'on' }, rows: 48, args: ['--no-flows'], timeoutMs: 90_000, steps: [
+    { wait: '● ready ·', ms: 60_000 }, { sleep: 700 }, { snapshot: 'a' }, { sleep: 700 }, { snapshot: 'b' },
+    { type: 'x' }, { sleep: 400 }, { snapshot: 'c' }, { sleep: 800 }, { snapshot: 'd' },
+    ...quitTypedSteps,
+  ] });
+  expect(band(r.snapshots.a)).toContain('·  ·'); // the dots in front of it
+  expect(band(r.snapshots.a)).not.toBe(band(r.snapshots.b)); // it moved
+  expect(band(r.snapshots.c)).toBe(band(r.snapshots.d)); // typing: it stands where it was
+}, 120_000);
+
+// The page keeps to the rows App gives it (start.room), the conversations numbered for /resume <n>.
 const MANY = {
   ...START,
   recent: Array.from({ length: 30 }, (_, i) => ({ id: `c${i}`, title: `fix bug number ${i} in the cart`, updated: at(i * 5 + 1), turns: 2 })),
@@ -304,29 +357,33 @@ const MANY = {
   folders: 4, memory: { you: 9, project: 0 }, running: [{ name: 'home-1', folder: '~' }], tip: INIT_TIP,
 };
 
-test('the page fills the rows it is given: never more, nothing past the edge, more conversations as it grows', () => {
+test('the page keeps to the rows it is given: never more, nothing past the edge, more conversations as it grows', () => {
   for (const [w, room] of [[152, 49], [152, 41], [120, 33], [120, 25], [100, 15], [80, 17], [80, 9], [80, 4]]) {
     const lines = draw(h(StartPage, { start: { ...MANY, room }, width: w }), w);
     expect(lines.length).toBeLessThanOrEqual(room);
-    if (room <= 41) expect(lines.length).toBeGreaterThanOrEqual(room - 1); // with 30 conversations there is more to show (up to 20 of them)
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(w);
     // loading takes the same rows as ready, so nothing moves when it is ready
     expect(draw(h(StartPage, { start: { ...MANY, room }, width: w, loading: { phase: 'loading', secs: 3 } }), w)).toHaveLength(lines.length);
   }
-  const shown = (room) => draw(h(StartPage, { start: { ...MANY, room }, width: 152 }), 152).filter((l) => / ago {3}Fix bug number/.test(l)).length;
-  expect(shown(41)).toBeGreaterThan(shown(30));
-  expect(shown(30)).toBeGreaterThan(shown(20));
+  // short of rows, the bot, the name, the newest change and the background go before the fourth
+  // conversation does; given rows, it shows up to 8 (/resume lists the rest), with the bot over them
+  const page = (room) => draw(h(StartPage, { start: { ...MANY, room }, width: 120 }), 120);
+  const shown = (room) => page(room).filter((l) => / ago {2,3}Fix bug number/.test(l)).length;
+  for (const room of [19, 25, 33]) expect(shown(room)).toBeGreaterThanOrEqual(4);
+  expect(shown(49)).toBe(8);
+  expect(page(49).join('\n')).toContain('▄▄            ▄▄');
+  expect(page(19).join('\n')).not.toContain('Running in the background');
+  expect(page(25).join('\n')).toContain('Running in the background');
 });
 
-test('the full page: numbered conversations, the last 14 days, the memory, other folders, background sessions, What\'s new, the tip', () => {
+test('the full page: numbered conversations, background sessions, the app\'s newest change, the tip', () => {
   const text = draw(h(StartPage, { start: { ...MANY, room: 49 }, width: 152 }), 152).join('\n');
-  for (const s of [' 1  1h ago   Fix bug number 0 in the cart', 'click one, or /resume 2', '/resume lists all 30', 'Last 14 days', '30 conversations here · 4 folders',
-    '9 facts about you', 'none about this folder yet', 'Other folders', '~/Desktop/shop', 'Running in the background', 'coding attach home-1', "What's new", '· Steer a loop while it runs',
-    'a form for its rules, a note at its next step', 'Tip  /init writes an AGENTS.md']) expect(text).toContain(s);
+  for (const s of [' 1  1h ago   Fix bug number 0 in the cart', 'click one, or /resume 2', '/resume lists all 30', 'Running in the background', 'coding attach <name>', 'home-1',
+    'New in the app', 'Steer a loop while it runs', 'Tip  /init writes an AGENTS.md']) expect(text).toContain(s);
   expect(text).not.toContain('feat(loops)'); // a change by its headline
   expect(text).not.toContain('[skip ci]');
   const none = draw(h(StartPage, { start: { ...START, room: 49 }, width: 152 }), 152).join('\n');
-  for (const s of ['Other folders', 'Running in the background', "What's new", 'Memory', 'Tip ']) expect(none).not.toContain(s); // each only when it is there
+  for (const s of ['Running in the background', 'New in the app', 'Tip ', '/resume lists all']) expect(none).not.toContain(s); // each only when it is there
 });
 
 test('a small window: the title, the model, the conversations, the keys', () => {
@@ -339,14 +396,10 @@ test('a small window: the title, the model, the conversations, the keys', () => 
   expect(lines.at(-1)).toContain('@ a file');
 });
 
-test('a subject without http:// and with a capital; a change by its headline; the last 14 days a day each', () => {
+test('a subject without http:// and with a capital; a change by its headline', () => {
   expect(subjectOf({ title: 'analyze the link: http://example.com:60011/index.html / learn' })).toBe('Analyze the link: example.com:60011/index.html / learn');
   expect(subjectOf({ title: 'notes.html that works' })).toBe('notes.html that works');
   expect(headline('feat(loops): You can steer a loop while it runs — a form for its rules [skip ci]')).toBe('You can steer a loop while it runs');
-  const days = daysOf([{ updated: at(1) }, { updated: at(2) }, { updated: at(49) }, { updated: at(24 * 20) }], NOW);
-  expect(days).toHaveLength(14);
-  expect(days.at(-1)).toBe(2);
-  expect(days.reduce((a, b) => a + b, 0)).toBe(3); // 20 days ago is not drawn
 });
 
 test('recentRows finds each numbered row where it is drawn, on the full page and the small one', () => {
@@ -367,9 +420,13 @@ test('the real app: /resume 2 opens the conversation the page numbers 2; the / m
   const slug = realpathSync(cwd).replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100);
   const dir = join(base, 'home', 'sessions', slug);
   mkdirSync(dir, { recursive: true });
-  const save = (id, title, answer, hours) => writeFileSync(join(dir, `${id}.json`), JSON.stringify({ title, messages: [{ role: 'system', content: 's' }, { role: 'user', content: title }, { role: 'assistant', content: answer }], items: [{ type: 'user', text: title }, { type: 'text', text: answer }], cwd, id, updated: new Date(Date.now() - hours * 3_600_000).toISOString() }));
+  const save = (id, title, answer, hours, before = [], after = []) => writeFileSync(join(dir, `${id}.json`), JSON.stringify({ title, messages: [{ role: 'system', content: 's' }, { role: 'user', content: title }, { role: 'assistant', content: answer }], items: [...before, { type: 'user', text: title }, ...after, { type: 'text', text: answer }], cwd, id, updated: new Date(Date.now() - hours * 3_600_000).toISOString() }));
   save('2026-10-04T10-00-00-000Z', 'the newest one', 'Newest answer.', 1);
-  save('2026-10-04T09-00-00-000Z', 'the one before', 'The answer before.', 2);
+  // saved by a window that was itself resumed: its own resume line and start note, and a note said twice
+  const lean = "Lean harness: the app's checks, reminders and put-back are off (/hooks full brings them back).";
+  save('2026-10-04T09-00-00-000Z', 'the one before', 'The answer before.', 2,
+    [{ type: 'divider', text: 'resumed: the one before' }, { type: 'note', text: 'Started in bypass permissions, as the last window left it · shift+tab changes it', tone: 'warn' }],
+    [{ type: 'note', text: lean, tone: 'dim' }, { type: 'note', text: lean, tone: 'dim' }]);
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, rows: 40, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'The one before' }, { sleep: 300 }, { snapshot: 'page' },
@@ -379,8 +436,12 @@ test('the real app: /resume 2 opens the conversation the page numbers 2; the / m
   ] });
   await fake.close();
   expect(r.snapshots.page).toMatch(/ 2 {2}2h ago {3}The one before/);
-  expect(r.snapshots.menu).toContain('Agentic Coder v'); // the page is still there, above the menu
+  expect(r.snapshots.menu).toContain('Welcome back!'); // the page is still there, above the menu
   expect(r.snapshots.menu).toContain('/resume');
   expect(r.snapshots.end).toContain('resumed: the one before');
   expect(r.snapshots.end).not.toContain('Newest answer.');
+  // the earlier window's own lines are not shown again, and a note only once (7 Oct 2026)
+  expect(r.snapshots.end.match(/resumed: the one before/g)).toHaveLength(1);
+  expect(r.snapshots.end).not.toContain('Started in bypass permissions');
+  expect(r.snapshots.end.match(/Lean harness: the app's checks/g)).toHaveLength(1);
 }, T);

@@ -68,14 +68,21 @@ export function ToolHead({ tool, arg, color = C.ok, dim = false }) {
   );
 }
 
+// A line longer than the box wraps under its number (7 Oct 2026), so a change you are asked
+// about shows whole; rows(hunk, width) counts the rows that takes.
+export const diffParts = (text, width) => {
+  const room = Math.max(10, width - 7);
+  const parts = [];
+  for (let t = String(text); ; t = t.slice(room)) { parts.push(t.slice(0, room)); if (t.length <= room) break; }
+  return parts;
+};
 export function Diff({ hunk, width = 96 }) {
   return (
     <Box flexDirection="column">
-      {hunk.map((l, i) => {
+      {hunk.flatMap((l, i) => {
         const no = String((l.type === '-' ? l.oldNo : l.newNo) ?? '').padStart(4);
-        const body = `${no} ${l.type} ${l.text}`.padEnd(width);
         const bg = l.type === '+' ? C.addBg : l.type === '-' ? C.delBg : undefined;
-        return <Text key={i} wrap="truncate-end" backgroundColor={bg} color={l.type === ' ' ? C.dim : undefined}>{body}</Text>;
+        return diffParts(l.text, width).map((p, j) => <Text key={`${i}.${j}`} backgroundColor={bg} color={l.type === ' ' ? C.dim : undefined}>{`${j ? '      ' : `${no} ${l.type}`} ${p}`.padEnd(width)}</Text>);
       })}
     </Box>
   );

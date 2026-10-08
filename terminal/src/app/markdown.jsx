@@ -22,6 +22,12 @@ export function Inline({ text, color }) {
   return <Text>{parts}</Text>;
 }
 
+// A line of code, two in from the edge; a line too long for the window wraps under its own start
+// (its own indent kept), not back at the edge (7 Oct 2026).
+function CodeLine({ text }) {
+  const indent = /^\s*/.exec(text ?? '')[0].length;
+  return <Box paddingLeft={2 + indent}><Text color={CODE}>{(text ?? '').slice(indent) || ' '}</Text></Box>;
+}
 export function Markdown({ text, color }) {
   const lines = text.replace(/\s+$/, '').split('\n');
   const out = [];
@@ -29,7 +35,7 @@ export function Markdown({ text, color }) {
   lines.forEach((line, i) => {
     const fence = /^\s*```/.test(line);
     if (fence) {
-      if (code) { out.push(<Box key={`c${i}`} flexDirection="column" marginY={0}>{code.map((l, j) => <Text key={j} color={CODE}>  {l || ' '}</Text>)}</Box>); code = null; }
+      if (code) { out.push(<Box key={`c${i}`} flexDirection="column" marginY={0}>{code.map((l, j) => <CodeLine key={j} text={l} />)}</Box>); code = null; }
       else code = [];
       return;
     }
@@ -44,6 +50,6 @@ export function Markdown({ text, color }) {
     }
     out.push(line.trim() ? <Inline key={i} text={line} color={color} /> : <Text key={i}> </Text>);
   });
-  if (code) out.push(<Box key="cend" flexDirection="column">{code.map((l, j) => <Text key={j} color={CODE}>  {l || ' '}</Text>)}</Box>);
+  if (code) out.push(<Box key="cend" flexDirection="column">{code.map((l, j) => <CodeLine key={j} text={l} />)}</Box>);
   return <Box flexDirection="column">{out}</Box>;
 }

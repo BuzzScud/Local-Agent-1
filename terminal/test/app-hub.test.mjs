@@ -20,14 +20,15 @@ test('/settings → Weights starts the viewer inside the window: the note names 
   const fake = await startFakeServer([]);
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' },
+    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'enter opens it' },
     ...Array.from({ length: 10 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { facts: await (await fetch(url + 'model.json')).json(), page: await (await fetch(url + 'weights')).text(), hub: await (await fetch(url)).text(), bytes: await (await fetch(url + 'model', { headers: { Range: 'bytes=0-4' } })).text() }; } },
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toMatch(new RegExp(`❯ Weights\\s+${DN} · 0\\.00 GB\\s+each model's weights`)); // the row names the model whose file is here
+  expect(r.snapshots.menu).toMatch(new RegExp(`❯ Weights\\s+${DN} · 0\\.00 GB`)); // the row names the model whose file is here
+  expect(r.snapshots.menu).toContain("each model's weights"); // and beside the list, what the row is
   expect(r.text).toContain(`Weights of ${D.name} opened in the browser at http://127.0.0.1:`); // the models whose files are on this Mac
   expect(served.facts).toEqual({ name: D.file, size: 8 });
   expect(served.page).toContain('<title>Agentic Coder Weights</title>');
@@ -103,7 +104,7 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   expect(r.snapshots.box).not.toContain(':8757/'); // a test's hub never takes the real hub's address
   // in the middle: centred across, and between the conversation and the prompt box
   const top = box.findIndex((l) => l.indexOf('╭') > 4); // the prompt box starts at the left edge
-  expect(top).toBeGreaterThan(box.findIndex((l) => l.includes('This folder')));
+  expect(top).toBeGreaterThan(box.findIndex((l) => l.includes('Welcome')));
   expect(top).toBeLessThan(title);
   expect(top).toBeLessThan(box.findLastIndex((l) => l.startsWith('╭'))); // above the prompt box
   const left = box[top].indexOf('╭'), right = 155 - 1 - box[top].lastIndexOf('╮'); // the pty is 155 wide; the snapshot drops trailing spaces
@@ -132,7 +133,7 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   writeFileSync(join(models, 'edited.json'), JSON.stringify({ base: 'gemma', file: 'gemma-4-12B-it-qat-UD-Q4_K_XL-edited.gguf', saved: '2026-09-26T14:32:00.000Z', edits: [{ op: 'scale', tensor: 'blk.12.ffn_up.weight', row: 3072, k: 0.5 }] }));
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Recent activity' }, { sleep: 400 }, { snapshot: 'badge' },
+    { wait: 'Pick up where you left off' }, { sleep: 400 }, { snapshot: 'badge' },
     { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { sleep: 500 }, { snapshot: 'picker' },
     // the edited copy is listed last, after every model, and ↓ stops at the
     // end of the list, so 4 presses reach it however many models there are.
@@ -162,7 +163,7 @@ test('edited weights, one copy per model: the picker lists each after the models
   }
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Recent activity' }, { sleep: 400 }, { snapshot: 'badge' },
+    { wait: 'Pick up where you left off' }, { sleep: 400 }, { snapshot: 'badge' },
     { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { sleep: 500 }, { snapshot: 'picker' },
     // the copies come after every model, in the models' order: the last row is the second model's
     ...[1, 2, 3, 4, 5, 6].flatMap(() => [{ key: 'down' }, { sleep: 150 }]), { key: 'enter' },

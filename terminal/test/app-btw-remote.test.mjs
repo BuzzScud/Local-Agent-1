@@ -10,7 +10,7 @@ import { fakeOllama } from './fake-ollama.mjs';
 import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 
 const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' };
-const menuRows = (s) => s.split('\n').filter((l) => /^\s{2}\/[a-z]+\s{2,}\S/.test(l)).map((l) => l.trim().split(/\s+/)[0]);
+const menuRows = (s) => s.split('\n').map((l) => /^\s{2}(?:❯ | {2})(\/[a-z:-]+)\s/.exec(l)?.[1]).filter(Boolean); // the names in the / menu's list
 const onService = (base, svc) => {
   const r0 = { source: 'openai', address: svc.url, port: null, connect: 'http', kind: 'openai', model: 'coder:30b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));

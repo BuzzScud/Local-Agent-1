@@ -6,6 +6,7 @@
 // A step prints the rail line above itself (its link to the step before); the turn's steps
 // have no blank line between them, and the end line leaves one under it.
 import React from 'react';
+import { homedir } from 'node:os';
 import { Box, Text } from 'ink';
 import { C, MARK, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { wrap } from '../ui/parts.jsx';
@@ -116,15 +117,30 @@ const kb = (b) => (b < 1024 ? `${b} B` : `${(b / 1024).toFixed(1)} KB`);
 // A command as its step's head shows it: a script typed in (a heredoc) by its first line, how many
 // more, and the file it was saved as (4 Oct 2026: a 196-line heredoc filled the window at every step;
 // ctrl+o still shows it whole).
+// A path as short as it reads the same (7 Oct 2026): inside the project, from the project; anywhere
+// else in your home folder, from ~.
+const HOME_DIR = homedir();
+export function shortPath(p, cwd) {
+  const s = String(p ?? '');
+  if (cwd && cwd !== HOME_DIR && s.startsWith(`${cwd}/`)) return s.slice(cwd.length + 1);
+  return HOME_DIR && (s === HOME_DIR || s.startsWith(`${HOME_DIR}/`)) ? `~${s.slice(HOME_DIR.length)}` : s;
+}
+// A command as short as it reads the same: a cd into the project in front of it dropped, the home
+// folder written ~ (cd ~/Desktop/agentic-coder && git log …).
+export function shortCommand(cmd, cwd) {
+  let s = String(cmd ?? '');
+  if (cwd && cwd !== HOME_DIR) for (const c of [cwd, shortPath(cwd)]) if (s.startsWith(`cd ${c} && `) || s.startsWith(`cd ${c}/ && `)) s = s.slice(s.indexOf('&& ') + 3);
+  return HOME_DIR ? s.split(`${HOME_DIR}/`).join('~/') : s;
+}
 export function cmdShown(arg, saved) {
   const s = String(arg ?? '');
   if (!s.includes('\n')) return s;
   const lines = s.split('\n');
   return `${lines[0]} … +${lines.length - 1} lines${saved ? ` · ${saved}` : ''}`;
 }
-export function ToolNode({ it }) {
+export function ToolNode({ it, cwd }) {
   const v = it.view ?? {};
-  const what = v.path ?? it.arg;
+  const what = shortPath(v.path ?? it.arg, cwd);
   const more = (n, hint = '') => <Pipe><Text color={C.dim}>{'      '}… {n} more {n === 1 ? 'line' : 'lines'}{hint ? <Text color={C.faint}>{hint}</Text> : null}</Text></Pipe>;
   switch (v.kind) {
     case 'diff': {
@@ -154,7 +170,7 @@ export function ToolNode({ it }) {
     case 'read': return <Node g="○" c={C.dim}><Head verb={v.outline ? 'Outline' : 'Read'} c="ansi256(250)" what={what} detail={v.outline ? `${v.parts > 0 ? plural(v.parts, 'part') : 'no parts'} of ${plural(v.total, 'line')}` : `${plural(v.lines, 'line')}${v.total > v.lines ? ` of ${v.total}` : ''}`} hint="ctrl+o to expand" /></Node>;
     case 'screen': return <Node g="○" c={C.dim}><Head verb="Looked at" c="ansi256(250)" what={v.what} detail={`${v.size} · a picture, nothing clicked`} /></Node>;
     case 'same': return <Node g="○" c={C.dim}><Head verb="Read" c="ansi256(250)" what={what} detail="already read above, unchanged" /></Node>;
-    case 'list': return <Node g="○" c={C.dim}><Head verb="Listed" c="ansi256(250)" what={it.arg} detail={plural(v.count, 'path')} /></Node>;
+    case 'list': return <Node g="○" c={C.dim}><Head verb="Listed" c="ansi256(250)" what={shortPath(it.arg, cwd)} detail={plural(v.count, 'path')} /></Node>;
     case 'search': return <Node g="○" c={C.dim}><Head verb="Searched" c="ansi256(250)" what={it.arg} detail={plural(v.count, 'match')} /></Node>;
     case 'agent': return <Node g="◆" c={it.error ? C.bad : C.accent}><Head verb={it.label} c={it.error ? C.bad : C.accent} what={it.arg} detail={`${plural(v.steps ?? 0, 'step')} · ${fmtSecs(v.secs ?? 0)}${v.reason && !['done', 'answered'].includes(v.reason) ? ` · ${v.reason}` : ''}`} hint="ctrl+o for its steps and report" /></Node>;
     case 'websearch': return <Node g="○" c={C.dim}><Head verb="Searched the web" c="ansi256(250)" what={it.arg} detail={`${plural(v.count, 'result')}${v.service ? ` · ${v.service}` : ''}`} hint={v.content ? 'ctrl+o to expand' : undefined} /></Node>;
@@ -165,7 +181,7 @@ export function ToolNode({ it }) {
       const shown = v.lines.slice(0, 4);
       return (
         <Box flexDirection="column">
-          <Node g="❯" c={C.edits}><Head verb="Ran" c={C.edits} what={cmdShown(it.arg, v.saved)} /></Node>
+          <Node g="❯" c={C.edits}><Head verb="Ran" c={C.edits} what={shortCommand(cmdShown(it.arg, v.saved), cwd)} /></Node>
           {shown.map((l, i) => <Pipe key={i}><Text wrap="truncate-end">{l || ' '}</Text></Pipe>)}
           {v.lines.length > 4 ? <Pipe><Text color={C.dim}>… +{v.lines.length - 4} lines <Text color={C.faint}>(ctrl+o to expand)</Text></Text></Pipe> : null}
           {v.timedOut ? <Pipe><Text color={C.warn}>Stopped after {v.after ?? '2 minutes'}</Text></Pipe> : v.code ? <Pipe><Text color={C.bad}>Exit code {v.code}</Text></Pipe> : null}
@@ -262,14 +278,16 @@ export const NoteNode = ({ it }) => {
 // The turn's last line: how it ended.
 const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 export function EndLine({ it, counts = '' }) {
-  const lead = <Text color={RAIL}>{'  ╰─ '}</Text>;
+  return <Box flexDirection="row"><Box width={5} flexShrink={0}><Text color={RAIL}>{'  ╰─ '}</Text></Box><Box flexGrow={1} flexShrink={1}><EndWords it={it} counts={counts} /></Box></Box>;
+}
+function EndWords({ it, counts }) {
   // What the request cost on a paid service (/remote, spend.mjs).
   const cost = it.usd > 0 ? <Text color={C.dim}> · {money(it.usd)} for this request</Text> : null;
-  if (it.reason === 'interrupted') return <Text>{lead}<Text color={C.warn}>■ {it.text ?? 'Interrupted · What should Agentic Coder do instead?'}</Text>{cost}</Text>;
-  if (it.reason && it.reason !== 'done') return <Text>{lead}<Text color={it.left ? C.warn : C.dim}>{it.text ?? `Stopped (${it.reason})`}{it.left ? ` · ${plural(it.left, 'layout problem')} left` : ''}</Text><Text color={C.dim}>{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''}{it.session ? ` · ↓ ${fmtTok(it.session)} tokens this session` : ''} · {clock(it.at)}</Text>{cost}</Text>;
+  if (it.reason === 'interrupted') return <Text><Text color={C.warn}>■ {it.text ?? 'Interrupted · What should Agentic Coder do instead?'}</Text>{cost}</Text>;
+  if (it.reason && it.reason !== 'done') return <Text><Text color={it.left ? C.warn : C.dim}>{it.text ?? `Stopped (${it.reason})`}{it.left ? ` · ${plural(it.left, 'layout problem')} left` : ''}</Text><Text color={C.dim}>{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''}{it.session ? ` · ↓ ${fmtTok(it.session)} tokens this session` : ''} · {clock(it.at)}</Text>{cost}</Text>;
   const left = it.left ? <Text color={C.warn}>✗ Ended with {plural(it.left, 'layout problem')} left · </Text> : null;
   const time = it.secs >= 1 ? `${it.past} for ${fmtSecs(it.secs)}${counts} · done ${clock(it.at)}` : `done ${clock(it.at)}`;
-  return <Text>{lead}{left}<Text color={it.left ? C.warn : C.accent}>{it.left ? '' : `${MARK} `}</Text><Text color={C.dim}>{time}</Text>{cost}</Text>;
+  return <Text>{left}<Text color={it.left ? C.warn : C.accent}>{it.left ? '' : `${MARK} `}</Text><Text color={C.dim}>{time}</Text>{cost}</Text>;
 }
 
 // While a tool call is being written: the file and how many lines so far, read from what has

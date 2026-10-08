@@ -14,21 +14,22 @@ import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 const D = MODELS[DEFAULT_MODEL];
 const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
 
-test('the welcome on the top line, the prompt box on the last lines, space in between', async () => {
+test('the page in the middle of the window, the prompt box on the last lines, space under it', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, rows: 43, args: ['--url', fake.url], steps: [{ wait: '? for shortcuts' }, { sleep: 400 }, { snapshot: 'start' }, ...quit] });
   await fake.close();
   const lines = r.snapshots.start.split('\n');
   while (lines.length < 43) lines.push('');
-  const welcome = lines.findIndex((l) => l.includes('Agentic Coder v'));
-  const tipsEnd = lines.findLastIndex((l) => l.indexOf('│') > 20 && l.indexOf('│') < 60); // the start page's last row: its columns' divider
+  const welcome = lines.findIndex((l) => l.includes('Welcome!'));
+  const keys = lines.findLastIndex((l) => l.includes('@ a file')); // the page's last row
   const footer = lines.findIndex((l) => l.includes('? for shortcuts'));
-  expect(welcome).toBeLessThanOrEqual(2);          // at the top (this harness may show one line above)
+  expect(welcome).toBeGreaterThan(2);              // not at the top: the column sits in the middle
+  expect(welcome).toBeLessThan(43 / 2);
   expect(footer).toBeGreaterThanOrEqual(43 - 3);   // the prompt box and footer at the bottom
   // the box is three rows and sits one empty row above the footer (1 Oct 2026)
-  expect(lines.slice(tipsEnd + 1, footer - 4).every((l) => !l.trim())).toBe(true); // space in between
-  expect(footer - 4 - tipsEnd).toBeGreaterThan(10);
+  expect(lines.slice(keys + 1, footer - 4).every((l) => !l.trim())).toBe(true); // space in between
+  expect(footer - 4 - keys).toBeGreaterThan(3);
 }, T);
 
 test('start-up says what it waits for; a message typed meanwhile is sent when ready; the next start restores', async () => {
@@ -49,7 +50,7 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   expect(first.snapshots.queued).toMatch(new RegExp(`${DN}[\\s│]+✓ model ─ [◐◓◑◒] (instructions|reading) \\d+s`)); // the start page's steps under the model's name, live while it loads
   expect(first.snapshots.queued).toContain('⏵ Queued: hello');
   // Live while it loaded, then printed once, ready: one start page in the whole scrollback.
-  expect(first.text.match(/Recent activity/g)).toHaveLength(1);
+  expect(first.text.match(/Pick up where you left off/g)).toHaveLength(1);
   expect(first.text).toMatch(/● ready · effort \w+ · \d+k/);
   expect(readdirSync(join(home, 'slots')).filter((f) => f.startsWith('warm-'))).toHaveLength(1);
   const second = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
@@ -69,7 +70,7 @@ test('a folder not yet trusted gets the safety check first; arrows + enter say y
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Quick safety check' }, { sleep: 200 }, { snapshot: 'menu' }, { key: 'down' }, { sleep: 100 }, { snapshot: 'onNo' }, { key: 'up' }, { sleep: 100 }, { key: 'enter' },
-    { wait: 'Recent activity' }, ...quit,
+    { wait: 'Pick up where you left off' }, ...quit,
   ] });
   await fake.close();
   expect(r.text).toContain('Is this a folder you created or one you trust?');
@@ -77,7 +78,7 @@ test('a folder not yet trusted gets the safety check first; arrows + enter say y
   expect(r.snapshots.menu).toContain('  2. No, exit');
   expect(r.snapshots.onNo).toContain('❯ 2. No, exit');
   expect(r.snapshots.onNo).toContain('  1. Yes, I trust this folder');
-  expect(r.text).toContain('This folder'); // the start page says what was read
+  expect(r.text).toContain('no AGENTS.md yet · reads'); // the start page says what was read
   expect(r.snapshots.menu).toContain('not trusted yet'); // in the start page's columns, nothing read before a yes
   // The key is the real path (tmpdir is a link on macOS).
   const keys = Object.keys(JSON.parse(readFileSync(join(base, 'home', 'trust.json'), 'utf8')));
@@ -100,10 +101,10 @@ test('safety check: typing 2 picks No at once and nothing is read; 1 still says 
   const b = mk();
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const yes = await runInPty({ cwd: b.cwd, env: b.env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Quick safety check' }, { sleep: 200 }, { type: '1' }, { wait: 'Recent activity' }, ...quit,
+    { wait: 'Quick safety check' }, { sleep: 200 }, { type: '1' }, { wait: 'Pick up where you left off' }, ...quit,
   ] });
   await fake.close();
-  expect(yes.text).toContain('Recent activity');
+  expect(yes.text).toContain('Pick up where you left off');
   expect(existsSync(join(b.base, 'home', 'trust.json'))).toBe(true);
 }, T * 2);
 
@@ -132,11 +133,11 @@ test('typed in the home folder: where to start comes first; 2 starts in Agentic 
   expect(r.snapshots.menu).toMatch(/ {3}2  ~\/agentic-coder +Agentic Coder/);
   expect(r.snapshots.menu.match(/✓ trusted/g)).toHaveLength(2); // the home folder's yes covers both
   expect(r.text).not.toContain('Quick safety check'); // the home folder's yes covers the folder inside it
-  expect(r.snapshots.start).toMatch(/where\s+~\/agentic-coder/); // the start page: working in the folder picked
+  expect(r.snapshots.start).toMatch(/● ready[^\n]*~\/agentic-coder/); // the start page: working in the folder picked
   const b = mk();
   const esc = await runInPty({ cwd: b.home, env: b.env, args: ['--no-flows'], steps: [{ wait: 'Where should it work?' }, { sleep: 200 }, { key: 'esc' }, { sleep: 800 }] });
   expect(esc.code).toBe(0);
-  expect(esc.text).not.toContain('Recent activity');
+  expect(esc.text).not.toContain('Pick up where you left off');
 }, T * 2);
 
 // The last menu comes after a typed line (readline, which pauses the terminal's input as it closes):
@@ -157,7 +158,7 @@ test('typed in the home folder, enter through where to start and the safety chec
     { wait: 'Quick safety check' }, { sleep: 200 }, { key: 'enter' },
     { wait: '? for shortcuts' }, { sleep: 1000 }, { type: 'hello there' }, { wait: '> hello there' }, { snapshot: 'typed' }, ...quitTyped,
   ] });
-  expect(r.snapshots.typed).toMatch(/where\s+~ · your home folder/);
+  expect(r.snapshots.typed).toContain('~ · your home folder');
   expect(Object.keys(JSON.parse(readFileSync(join(base, 'home', 'trust.json'), 'utf8')))).toHaveLength(1);
 }, T);
 

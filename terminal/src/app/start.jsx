@@ -311,36 +311,8 @@ export function subjectOf(s) {
   const t = nameOf(s).replace(/\bhttps?:\/\/(www\.)?/gi, '').replace(/\s+/g, ' ').trim();
   return /^[a-z][a-z-]*(\s|:|$)/.test(t) ? `${t[0].toUpperCase()}${t.slice(1)}` : t;
 }
-// Conversations a day over the last n days, the oldest first (today last).
-export function daysOf(list, now = Date.now(), n = 14) {
-  const day = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
-  const today = day(now);
-  const out = Array(n).fill(0);
-  for (const s of list) {
-    const i = n - 1 - Math.round((today - day(s.updated)) / 86400000);
-    if (i >= 0 && i < n) out[i]++;
-  }
-  return out;
-}
-const BARS = '▁▂▃▄▅▆▇█';
-// A bar a day, two columns each, today in the brighter green; a day with none is a faint dot.
-function dayBars(days) {
-  const max = Math.max(1, ...days);
-  return (
-    <Text>{days.map((c, i) => (
-      <Text key={i} color={!c ? C.faint : i === days.length - 1 ? C.accent : C.accentDim}>{(c ? BARS[Math.min(7, Math.max(0, Math.ceil((c / max) * 8) - 1))] : '·').padEnd(i === days.length - 1 ? 1 : 2)}</Text>
-    ))}</Text>
-  );
-}
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-function dayLabels(n, now) {
-  const d = new Date(now - (n - 1) * 86400000);
-  const first = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  return <Text color={C.faint}>{first}{' '.repeat(Math.max(1, (n - 1) * 2 + 1 - first.length - 5))}today</Text>;
-}
 // "feat(loops): You can steer a loop while it runs — a form …": the headline, then the rest.
 export const headline = (subject) => String(subject).replace(/^\w+(\([^)]*\))?!?:\s*/, '').split(' — ')[0].replace(/\s*\[skip ci\]/i, '').trim();
-const deckOf = (subject) => String(subject).split(' — ').slice(1).join(' — ').replace(/\s*\[skip ci\]/i, '').trim();
 const rule = (w) => <Text color={C.faint}>{'─'.repeat(Math.max(4, w))}</Text>;
 // A heading with words on its right.
 const HeadRow = ({ w, title, hint }) => <Box width={w}><Box flexGrow={1}><Heading>{title}</Heading></Box>{hint}</Box>;
@@ -348,9 +320,10 @@ const openHint = (n) => <Text color={C.dim}>click one, or <Text color={WHITE}>/r
 // A conversation, numbered as /resume <n> takes it (recentRows finds the rows by these numbers).
 function recentRow(r, i, w, now) {
   const countW = 10;
+  const subject = tidySubject(subjectOf(r));
   return (
     <Box width={w}>
-      <Box flexGrow={1}><Text wrap="truncate-end"><Text color={WHITE}>{String(i + 1).padStart(2)}  </Text><Text color={C.dim}>{ago(r.updated, now).padEnd(9)}</Text><Text color={PATH}>{cut(subjectOf(r), Math.max(8, w - 4 - 9 - countW - 1))}</Text></Text></Box>
+      <Box flexGrow={1}><Text wrap="truncate-end"><Text color={WHITE}>{String(i + 1).padStart(2)}  </Text><Text color={C.dim}>{ago(r.updated, now).padEnd(9)}</Text><Text color={subject.startsWith('$ ') ? C.dim : PATH}>{cut(subject, Math.max(8, w - 4 - 9 - countW - 1))}</Text></Text></Box>
       <Text color={C.faint}>{plural(r.turns ?? 1, 'prompt').padStart(countW)}</Text>
     </Box>
   );
@@ -364,28 +337,8 @@ function newsRow(n, w, now) {
     </Box>
   );
 }
-// The first `n` changes, the rest of the sentence under the first `decks` that have one.
-function newsRows(news, n, decks, w, now) {
-  let left = decks;
-  return news.slice(0, n).flatMap((x) => [newsRow(x, w, now), ...(deckOf(x.text) && left-- > 0 ? [<Text color={C.dim} wrap="truncate-end">{'  '}{cut(deckOf(x.text), w - 3)}</Text>] : [])]);
-}
-// Another folder you worked in: its path, then its conversations and when.
-function placeRow(p, w, now) {
-  const tail = `${p.convs ?? 0} · ${ago(p.updated, now)}`;
-  return <Box width={w}><Box flexGrow={1}><Text color={PATH} wrap="truncate-end">{fitPath(p.folder, w - tail.length - 2)}</Text></Box><Text color={C.faint}>{tail}</Text></Box>;
-}
 const tipLine = (tip) => <Text color={C.dim} wrap="truncate-end"><Text color={C.faint}>Tip  </Text>{tip}</Text>;
 
-// The parts that grow are given rows in this order until the room is used: up to 5 conversations,
-// 3 changes, then up to 10 conversations, 5 changes, 20 conversations, then the rest of each change's
-// sentence.
-const GROW = [['recent', 5], ['news', 3], ['recent', 10], ['news', 5], ['recent', 20], ['decks', 5]];
-function grow(have, max, room) {
-  const n = { ...have };
-  let used = 0;
-  for (const [part, upTo] of GROW) while (n[part] < Math.min(upTo, max[part]) && used < room) { n[part]++; used++; }
-  return { n, used };
-}
 // The page with too few rows for the bot: the title, the model and its state, the conversations,
 // What's new in rows still free, the keys.
 function SmallPage({ s, width, room, loading, k }) {
@@ -421,77 +374,133 @@ const START_ROOM = 22;
 // title the whole page needs (the bot's column); with fewer it is SmallPage.
 export const START_MIN = 4;
 export const START_BIG = 16;
-export function StartPage({ start, width, loading = null, typing = null }) {
+export function StartPage({ start, width, loading = null, typing = null, walk = null }) {
   const s = start ?? {};
   const room = s.room ?? START_ROOM;
   // two steps a second: the page is redrawn only when the bot or the seconds move
   const k = loading ? Math.floor(loading.secs * 2) : 0;
-  const body = room - 2; // under the title and its blank line
-  if (body < START_BIG) return <SmallPage s={s} width={width} room={room} loading={loading} k={k} />;
-  const L = leftWidth(width);
-  const RW = Math.max(10, width - L - 3);
-  const w = RW - 1;
-  const wide = width >= 100;
+  if (room < LAUNCH_MIN) return <SmallPage s={s} width={width} room={room} loading={loading} k={k} />;
+  return <LauncherPage s={s} width={width} room={room} loading={loading} k={k} typing={typing} walk={walk} />;
+}
+
+// The start page (7 Oct 2026, the owner's pick "3 · Launcher", the bot in the middle, walking like
+// Pac-Man): what will you do next? The bot, the name in block letters, the model and the folder,
+// then the two ways on: pick up a conversation (numbered as /resume takes them, a click opens one)
+// or start something new; the app's newest change under them. A short column in the middle of the
+// window, as high up or down as centres it; what does not fit goes from the top: the bot, then
+// the name, then conversations.
+const LAUNCH_MIN = 10;
+const launcherWidth = (width) => Math.max(10, Math.min(width - 4, 100));
+export const launcherPad = (width) => Math.max(0, Math.floor((width - launcherWidth(width)) / 2));
+const FONT = { A: ['▄▀█', '█▀█'], G: ['█▀▀', '█▄█'], E: ['█▀▀', '██▄'], N: ['█▄ █', '█ ▀█'], T: ['▀█▀', ' █ '], I: ['█', '█'], C: ['█▀▀', '█▄▄'], O: ['█▀█', '█▄█'], D: ['█▀▄', '█▄▀'], R: ['█▀█', '█▀▄'] };
+export const blockWord = (word) => [0, 1].map((r) => [...word].map((ch) => FONT[ch][r]).join(' '));
+// A first prompt typed in capitals reads in sentence case; one that is a shell command shows as one.
+const SHELLISH = /^(?:rsync|cd|git|ls|npm|npx|bun|node|python3?|cat|grep|curl|ssh|scp|mkdir|cp|mv|rm|open|brew|make|docker)\s/i;
+export function tidySubject(t) {
+  const s = String(t).trim();
+  const letters = s.replace(/[^A-Za-z]/g, '');
+  if (letters.length >= 4 && letters.replace(/[^A-Z]/g, '').length / letters.length > 0.8) {
+    const low = s.toLowerCase().replace(/\bi\b/g, 'I');
+    return low[0].toUpperCase() + low.slice(1);
+  }
+  return SHELLISH.test(s) ? `$ ${s[0].toLowerCase()}${s.slice(1)}` : s;
+}
+
+// The bot's walk: across the whole window two cells a step, out at the right edge and straight back
+// in at the left, eating the row of dots level with its visor; they come back as a new lap starts.
+// step: the walk's step (App's walk, four a second), or null: it stands in the middle. It sets off
+// from the middle, where it stood.
+const WALK_ROW = 4, DOT_EVERY = 3, DOT = 179;
+export function walkCells(cells, step, width) {
+  const x0 = (Math.floor((width - BOT_W) / 2) + step * 2) % width;
+  return cells.map((row, y) => {
+    const line = Array.from({ length: width }, (_, c) => (y === WALK_ROW && c % DOT_EVERY === 1 && c >= x0 ? { ch: '·', fg: DOT } : { ch: ' ' }));
+    row.forEach((cell, i) => { line[(x0 + i) % width] = cell; });
+    return line;
+  });
+}
+// A line of cells as few Text pieces as the colours allow.
+function cellRuns(line, key) {
+  const out = [];
+  for (const c of line) {
+    const last = out.at(-1);
+    if (last && last.fg === c.fg && last.bg === c.bg && last.inverse === c.inverse) last.ch += c.ch;
+    else out.push({ ...c });
+  }
+  return <Text key={key}>{out.map((c, i) => <Text key={i} color={ink(c.fg)} backgroundColor={ink(c.bg)} inverse={c.inverse}>{c.ch}</Text>)}</Text>;
+}
+function LauncherPage({ s, width, room, loading, k, typing, walk }) {
   const all = s.recent ?? [];
   const recent = recentOf(all, 99);
-  const left = [
-    <Text bold color={WHITE}>{all.length ? 'Welcome back!' : 'Welcome!'}</Text>, null,
-    ...botRows(loading ? 'loading' : s.off ? 'off' : 'ready', k, typing), null,
-    <Text bold color={WHITE} wrap="truncate-end">{s.model ?? 'the model'}</Text>,
-    stateLine(s, loading, L - 2, k, wide),
-    timeLine(s, loading, L - 2),
-  ];
-  // Under the bot, as room allows: the last 14 days drawn with the counts, then the memory.
-  if (all.length && body >= left.length + 5) {
-    const counts = [plural(all.length, 'conversation') + ' here', s.folders > 1 ? plural(s.folders, 'folder') : null].filter(Boolean).join(' · ');
-    left.push(null, <Text color={C.dim}>Last 14 days</Text>, dayBars(daysOf(all, s.now)), dayLabels(14, s.now), <Text color={C.dim} wrap="truncate-end">{counts}</Text>);
-  }
-  if (s.memory && body >= left.length + 4) left.push(null, <Text color={C.dim}>Memory</Text>, <Text color={PATH}>{plural(s.memory.you ?? 0, 'fact')} about you</Text>, <Text color={C.dim}>{s.memory.project ? `${s.memory.project} about this folder` : 'none about this folder yet'}</Text>);
-
-  const git = gitWords(s.git);
-  const folder = [
-    <Heading>This folder</Heading>,
-    <Labelled label="where">{fitPath(where(s.cwd ?? ''), RW - 10)}</Labelled>,
-    <Labelled label="git" color={C.dim}>{git === 'no git' ? 'none here' : git.replace(/^git /, '')}</Labelled>,
-    <Labelled label="reads" color={C.dim}>{notesWords(s.notes).replace(/^reads /, '')}</Labelled>,
-    ...(s.also ?? []).map((l) => <Labelled label="" color={C.dim}>{l}</Labelled>),
-  ];
-  const tries = [<Heading>Try</Heading>, keysLine(TRY, RW - 2), ...(s.tip ? [tipLine(s.tip)] : [])];
-  const running = s.running ?? [];
   const news = s.news ?? [];
-  const places = s.places ?? [];
-  // What must show: a conversation (or that there are none) with its hint lines, This folder, Try.
-  // Then, while they fit: the sessions in the background, What's new; then the parts that grow.
-  let used = 3 + 1 + folder.length + 1 + tries.length;
-  const showFolder = used <= body;
-  if (!showFolder) used -= folder.length + 1;
-  const runN = running.length && used + 2 + running.length <= body ? running.length : 0;
-  if (runN) used += 2 + runN;
-  const newsOn = news.length > 0 && used + 3 <= body;
-  if (newsOn) used += 3;
-  const { n, used: grown } = grow({ recent: recent.length ? 1 : 0, news: newsOn ? 1 : 0, decks: 0 }, { recent: recent.length, news: newsOn ? news.length : 0, decks: newsOn ? news.filter((x) => deckOf(x.text)).length : 0 }, body - used);
-  // what is still free: the other folders you worked in (a heading, a row each, a rule)
-  const free = body - used - grown;
-  const placesN = showFolder && free >= 3 ? Math.min(places.length, free - 2) : 0;
-
-  const right = [
-    <HeadRow w={w} title="Recent activity" hint={recent.length ? openHint(recent.length) : null} />,
+  const running = s.running ?? [];
+  const colW = launcherWidth(width);
+  const pad = launcherPad(width);
+  const [a1, a2] = blockWord('AGENTIC');
+  const [c1, c2] = blockWord('CODER');
+  const markW = a1.length + 3 + c1.length;
+  const centred = (el) => <Box width={colW} justifyContent="center">{el}</Box>;
+  const head = (t, hint) => <Box width={colW}><Box flexGrow={1}><Text bold color={WHITE}>{t}</Text></Box>{hint ? <Text color={C.dim}>{hint}</Text> : null}</Box>;
+  const status = (named) => centred(
+    <Text wrap="truncate-end">
+      {named ? <Text><Text bold color={WHITE}>Agentic Coder</Text><Text color={C.dim}> v{VERSION}   </Text></Text> : null}
+      <Text bold color={WHITE}>{s.model ?? 'the model'}</Text>{'  '}{stateLine(s, loading, 36, k, width >= 100)}
+      <Text color={C.faint}>{'   '}</Text><Text color={PATH}>{fitPath(where(s.cwd ?? ''), Math.max(16, colW - (s.model ?? '').length - 5 - (width >= 100 ? 44 : 26) - (named ? 24 : 0)))}</Text>
+    </Text>,
+  );
+  // what this folder is: its git and what is read into the model (the old page's This folder, one line)
+  const git = gitWords(s.git);
+  const facts = centred(<Text color={C.dim} wrap="truncate-end">{git === 'no git' ? 'no git here' : git}<Text color={C.faint}>  ·  </Text>{notesWords(s.notes)}</Text>);
+  const greeting = centred(<Text bold color={WHITE}>{all.length ? 'Welcome back!' : 'Welcome!'}</Text>);
+  const mark = [centred(<Text><Text color={C.accent}>{a1}</Text>   <Text color={WHITE}>{c1}</Text></Text>), centred(<Text><Text color={C.accent}>{a2}</Text>   <Text color={WHITE}>{c2}</Text></Text>)];
+  // The page, with what it has room for (on: the parts shown; n: the conversations). The bot's
+  // ten rows and a blank are counted on top of it.
+  const page = (on, n) => [
+    ...(on.greeting ? [greeting, null] : []),
+    ...(on.mark ? [...mark, null] : []),
+    status(!on.mark),
+    // how long the start takes (start-times.mjs): a bar while it loads, "/start takes about" while
+    // off, "started in" once ready; its row is kept when it has nothing to say, so nothing moves
+    ...(on.timing ? [centred(timeLine(s, loading, 44))] : []),
+    ...(on.facts ? [facts, ...(s.also ?? []).map((l) => centred(<Text color={C.dim} wrap="truncate-end">{l}</Text>))] : []),
+    null,
+    head('Pick up where you left off', recent.length ? `click one, or /resume ${recent.length > 1 ? 2 : 1}` : ''),
     ...(recent.length
-      ? [...recent.slice(0, n.recent).map((r, i) => recentRow(r, i, w, s.now)),
-        <Text color={C.dim} wrap="truncate-end"><Text color={WHITE}>/resume</Text> lists {all.length > n.recent ? `all ${all.length}` : 'them'} · <Text color={WHITE}>coding -c</Text> goes on with the last one</Text>]
-      : [<Text color={C.dim}>No conversations here yet</Text>, <Text color={C.dim} wrap="truncate-end"><Text color={WHITE}>/init</Text> writes an AGENTS.md for this project</Text>]),
-    rule(RW - 2),
-    ...(showFolder ? [...folder, rule(RW - 2)] : []),
-    ...(placesN ? [<HeadRow w={w} title="Other folders" hint={<Text color={C.faint}>cd there, then coding</Text>} />, ...places.slice(0, placesN).map((p) => placeRow(p, w, s.now)), rule(RW - 2)] : []),
-    ...(runN ? [<Heading>Running in the background</Heading>, ...running.slice(0, runN).map((r) => <Text wrap="truncate-end"><Text color={WHITE}>{r.name.padEnd(16)}</Text><Text color={C.dim}>{cut(r.folder ?? '', 30).padEnd(32)}</Text><Text color={C.dim}>coding attach {r.name}</Text></Text>), rule(RW - 2)] : []),
-    ...(newsOn ? [<HeadRow w={w} title="What's new" hint={<Text color={C.faint}>the app's newest changes</Text>} />, ...newsRows(news, n.news, n.decks, w, s.now), rule(RW - 2)] : []),
-    ...tries,
+      ? recent.slice(0, n).map((r, i) => recentRow(r, i, colW, s.now))
+      : [<Text color={C.dim}>  No conversations here yet · <Text color={WHITE}>/init</Text> writes an AGENTS.md for this project</Text>]),
+    ...(recent.length > n ? [<Text color={C.dim}>  <Text color={WHITE}>/resume</Text> lists all {all.length} · <Text color={WHITE}>coding -c</Text> goes on with the last one</Text>] : []),
+    null,
+    head('Or start something new', ''),
+    ...(on.enter ? [<Text color={C.dim}>{'  '}<Text color={WHITE}>↵</Text>{'  '}type in the box below and press enter</Text>] : []),
+    <Box paddingLeft={2}>{keysLine(TRY, colW - 3)}</Box>,
+    ...(on.tip && s.tip && room - 2 >= START_BIG ? [<Box paddingLeft={2}>{tipLine(s.tip)}</Box>] : []),
+    ...(on.running && running.length ? [null, head('Running in the background', 'coding attach <name>'), ...running.map((r) => <Text wrap="truncate-end">{'  '}<Text color={WHITE}>{r.name.padEnd(16)}</Text><Text color={C.dim}>{cut(r.folder ?? '', 40)}</Text></Text>)] : []),
+    ...(on.news && news.length ? [null, <Text wrap="truncate-end"><Text color={C.faint}>New in the app  </Text><Text color={PATH}>{headline(news[0].text)}</Text><Text color={C.faint}>  · {ago(news[0].at, s.now)}</Text></Text>] : []),
   ];
+  // What goes first when the rows run short: the bot, the name, the newest change, the background
+  // sessions, the tip, the ↵ line, this folder's line, the timing row, the greeting; then
+  // conversations, down to one. The most it shows is 8; /resume lists the rest.
+  const on = { bot: width >= markW + 4, mark: width >= markW + 4, news: true, running: true, tip: true, enter: true, facts: true, timing: true, greeting: true };
+  const most = Math.max(1, Math.min(recent.length, 8));
+  const rows = (n) => page(on, n).length + (on.bot ? 11 : 0);
+  for (const part of ['bot', 'mark', 'news', 'running', 'tip', 'enter', 'facts', 'timing', 'greeting']) {
+    if (rows(Math.min(most, 4)) <= room) break;
+    on[part] = false;
+  }
+  let n = most;
+  while (n > 1 && rows(n) > room) n--;
+  const body = page(on, n);
+  const botOn = on.bot;
+  const lift = Math.max(0, Math.floor((room - body.length - (botOn ? 11 : 0)) / 2));
+  const state = loading ? 'loading' : s.off ? 'off' : 'ready';
+  const cells = botCells(state, k, typing ?? (walk != null ? 0.9 : null));
+  const band = !botOn ? [] : walk != null && state === 'ready'
+    ? walkCells(cells, walk, width).map((line, y) => cellRuns(line, `w${y}`))
+    : botRows(state, k, typing).map((row) => <Box width={width} justifyContent="center">{row}</Box>);
   return (
     <Box flexDirection="column" width={width}>
-      <TitleLine width={width} />
-      <Text> </Text>
-      <Split width={width} left={keyed(left)} right={keyed(right)} />
+      {keyed([...Array(lift).fill(null), ...band, ...(botOn ? [null] : [])].map((el) => el ?? <Text> </Text>))}
+      <Box flexDirection="column" paddingLeft={pad}>{keyed(body.map((el) => el ?? <Text> </Text>))}</Box>
     </Box>
   );
 }
@@ -509,7 +518,7 @@ export function recentRows(start, width) {
   const lines = renderToString(<StartPage start={s} width={width} />, { columns: width }).split('\n').map((l) => l.replace(ANSI, ''));
   const out = [];
   lines.forEach((l, row) => {
-    for (const at of [leftWidth(width) + 3, 0]) {
+    for (const at of [launcherPad(width), 0]) {
       const m = ROW_NUMBER.exec(l.slice(at));
       const r = m ? recent[Number(m[1]) - 1] : null;
       if (r && !out.some((o) => o.id === r.id)) { out.push({ id: r.id, row, from: at + 1, to: width }); break; }

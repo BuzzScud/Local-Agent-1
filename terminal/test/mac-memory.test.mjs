@@ -26,7 +26,7 @@ test('the footer says it the way Activity Monitor does, and the pressure has a w
 
 test('the start page says nothing about the memory: that is the footer', () => {
   const out = strip(renderToString(React.createElement(StartPage, { start: { model: 'Gemma 4 12B QAT', effort: 'low', ctx: 32768, cwd: '~', git: 'not a git repository', notes: ['AGENTS.md', 'memory'], recent: [] }, width: 155 }), { columns: 155 }));
-  expect(out).toContain('Agentic Coder v');
+  expect(out).toContain('Pick up where you left off');
   expect(out).not.toContain('Mac memory');
   expect(out).not.toContain('does not fit');
   for (const line of out.split('\n')) expect(line.trimEnd().length).toBeLessThanOrEqual(155);
@@ -47,7 +47,7 @@ test.skipIf(needs('python3'))('the real app: no memory panel beside the start pa
   try {
     await t.waitFor('? for shortcuts'); await t.idle();
     const lines = (await t.lines()).map((l) => l.text);
-    expect(lines.find((l) => l.includes('Agentic Coder v'))).not.toContain('Mac memory');
+    expect(lines.filter((l) => !l.includes('? for shortcuts')).join('\n')).not.toContain('Mac memory'); // nowhere on the page
     expect(lines.some((l) => l.includes('squeezed') || l.includes('swap'))).toBe(false);
     const footer = lines.find((l) => l.includes('? for shortcuts'));
     expect(footer).toMatch(/● Mac \d+\.\d\/\d+ GB/);
