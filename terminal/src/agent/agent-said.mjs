@@ -399,6 +399,16 @@ export function toolCallInText(text) {
     for (const p of x[2].matchAll(/<parameter=([^>\s]+)>\n?([\s\S]*?)\n?<\/parameter>/g)) args[p[1]] = paramValue(p[2]);
     return { name: x[1], args: JSON.stringify(args), before: text.slice(0, x.index).trim() };
   }
+  // The same with its tag cut short: <Name> for <function=Name>, and no <tool_call> round it (Qwen3.6 on a
+  // service, 8 Oct 2026: "<Search>\n<parameter=pattern>\nfile-card\n</parameter>\n</function>", every step
+  // of a page request, so no tool ever ran and no page was made). It needs a <parameter=…> and the
+  // </function>, which no page or prose has.
+  const y = /(?:<tool_call>\s*)?<(?:function=)?([A-Za-z][\w-]*)>\s*((?:<parameter=[^>\s]+>[\s\S]*?<\/parameter>\s*)+)<\/function>(?:\s*<\/tool_call>)?/.exec(text);
+  if (y) {
+    const args = {};
+    for (const p of y[2].matchAll(/<parameter=([^>\s]+)>\n?([\s\S]*?)\n?<\/parameter>/g)) args[p[1]] = paramValue(p[2]);
+    return { name: y[1], args: JSON.stringify(args), before: text.slice(0, y.index).trim() };
+  }
   // K2 Horizon's (its chat template): inside <ifm|tool_calls>, each call is
   //   <ifm|tool_call>Name\n<ifm|arg_key>k</ifm|arg_key>\n[<ifm|arg_type>t</ifm|arg_type>\n]<ifm|arg_value>v</ifm|arg_value>\n…</ifm|tool_call>
   // (xml, its default, and xml_typed), or <ifm|tool_call>{"name": …, "arguments": {…}}</ifm|tool_call> (json).

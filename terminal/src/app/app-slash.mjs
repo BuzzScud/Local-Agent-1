@@ -21,7 +21,8 @@ import { notesCount, notesDir } from '../agent/claude-notes.mjs';
 import { packState } from '../agent/claude-pack.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { designSettings, styleWords, designSummary, STYLES as DESIGN_STYLES, readCards, designDir } from '../agent/design.mjs';
-import { studioSummary } from '../agent/studio.mjs';
+import { studioSummary, studioDir, ensureStudioDir, studioLooks, checkPiece, readTheme } from '../agent/studio.mjs';
+import { updateLibrary, librarySummary, SOURCES as LIBRARY_SOURCES } from '../agent/library.mjs';
 import { newSessionId, listSessions, saveSettings } from './store.mjs';
 import { MAC_NAME } from './jump-box.mjs';
 import { isLoopCommand, unclearOf, parseLoop, describe as describeLoop, LOOP_HELP } from './loops.mjs';
@@ -386,7 +387,7 @@ export function slashPart(self) {
           if (self.agent) self.agent.designSaved = next;
           saveSettings({ design: next });
           const now = designSettings(next);
-          self.push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${now.ask ? 'asks you first' : 'checks by itself'} · studio ${now.studio ? 'on' : 'off'} · polish ${now.polish ? 'on' : 'off'} · plan ${now.brief ? 'on' : 'off'} · learn ${now.learn ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_LAYOUT_ASK || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE || process.env.AGENTIC_DESIGN_POLISH || process.env.AGENTIC_DESIGN_BRIEF || process.env.AGENTIC_DESIGN_LEARN ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
+          self.push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${now.ask ? 'asks you first' : 'checks by itself'} · studio ${now.studio ? 'on' : 'off'} · library ${now.library ? 'on' : 'off'} · look: ${now.look ?? 'your own'} · polish ${now.polish ? 'on' : 'off'} · plan ${now.brief ? 'on' : 'off'} · learn ${now.learn ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_DESIGN_LIBRARY || process.env.AGENTIC_DESIGN_LOOK || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_LAYOUT_ASK || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE || process.env.AGENTIC_DESIGN_POLISH || process.env.AGENTIC_DESIGN_BRIEF || process.env.AGENTIC_DESIGN_LEARN ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
         };
         const a = arg.trim();
         if (!a) {
@@ -430,6 +431,56 @@ export function slashPart(self) {
           if (!sum.dir) { self.push({ type: 'note', text: 'No design studio folder (make "design studio" in docs/private/: styles/theme.css and components/<kind>/<piece>.html).', tone: 'warn' }); break; }
           const now = designSettings(saved);
           self.push({ type: 'panel', title: `Design studio · ${now.studio && now.auto ? 'on' : 'off'} with page requests · ${sum.dir.replace(homedir(), '~')}`, pad: 12, rows: sum.rows.length ? sum.rows : [['(none)', 'no pieces in components/ yet']] });
+          break;
+        }
+        // library: the downloaded pieces, looks and skills (agent/library.mjs), alone its list; on|off: picked or not.
+        const lib = /^library(?:\s+(on|off))?$/i.exec(a);
+        if (lib) {
+          if (lib[1]) { keep({ library: /^on$/i.test(lib[1]) }); break; }
+          const sum = librarySummary(studioDir());
+          self.push({ type: 'panel', title: `Design library · ${designSettings(saved).library ? 'picked with page requests' : 'off (/design library on)'} · ${sum.updated ? `updated ${sum.updated.slice(0, 10)}` : 'not downloaded yet: /design update'}${sum.dir ? ` · ${sum.dir.replace(homedir(), '~')}` : ''}`, pad: 18, rows: sum.rows });
+          break;
+        }
+        // look <name>: every page in that look (a brand's or a theme's colours, type and corners); off: your own.
+        const lk = /^looks?(?:\s+(.+))?$/i.exec(a);
+        if (lk) {
+          const looks = studioLooks();
+          const want = lk[1]?.trim().toLowerCase();
+          if (!want) {
+            const now = designSettings(saved).look;
+            self.push({ type: 'panel', title: `Looks · now ${now ?? 'your own'} · a request that says "like Linear" takes that look for its page · /design look <name> | off`, pad: 18, rows: looks.length ? looks.sort((x, y) => x.name.localeCompare(y.name)).map((l) => [l.name, `${l.mode} · page ${l.vars.paper}, text ${l.vars.ink}, accent ${l.vars.accent}${l.font ? ` · ${l.font.split(',')[0]}` : ''}`]) : [['(none)', 'no looks yet: /design update downloads them']] });
+            break;
+          }
+          if (/^(off|none|mine|yours|own)$/.test(want)) { keep({ look: null }); break; }
+          const hit = looks.find((l) => l.id === want || l.name.toLowerCase() === want || l.id.replace(/\.(app|ai|com)$/, '') === want);
+          if (!hit) { self.push({ type: 'note', text: `No look named ${want}. ${looks.length ? `The looks: ${looks.map((l) => l.name).sort().join(', ')}.` : 'None yet: /design update downloads them.'}`, tone: 'warn' }); break; }
+          keep({ look: hit.id });
+          break;
+        }
+        // update [source,…] [force]: the newest of each library from GitHub, made into pieces and checked in a browser.
+        const up = /^update(?:\s+(.+))?$/i.exec(a);
+        if (up) {
+          if (busy || self.S.current.live.phase === 'working') { self.flash('Wait for Agentic Coder to finish, or press esc first'); break; }
+          const words = (up[1] ?? '').toLowerCase().split(/[\s,]+/).filter(Boolean);
+          const force = words.includes('force');
+          const recheck = words.includes('recheck');
+          const only = words.filter((w) => w !== 'force' && w !== 'recheck');
+          const bad = only.filter((w) => !LIBRARY_SOURCES.some((x) => x.id === w));
+          if (bad.length) { self.push({ type: 'note', text: `No source named ${bad.join(', ')}. The sources: ${LIBRARY_SOURCES.map((x) => x.id).join(', ')}.`, tone: 'warn' }); break; }
+          const dir = ensureStudioDir();
+          if (!dir) { self.push({ type: 'note', text: 'No design studio folder, and none could be made (docs/private/ is missing).', tone: 'warn' }); break; }
+          const ac = new AbortController();
+          self.abortRef.current = ac;
+          self.setLive({ phase: 'working', turnStart: Date.now(), verb: 'Updating the design library', tokens: 0 });
+          try {
+            const theme = readTheme(dir);
+            const r = await updateLibrary({ studio: dir, only: only.length ? only : null, force, recheck, signal: ac.signal, baseTheme: theme, check: (text) => checkPiece(text, { dir, theme }), say: (line) => self.push({ type: 'note', text: line, tone: 'dim' }) });
+            self.push({ type: 'panel', title: `Design library updated in ${Math.round(r.took)} s · /design library lists it`, pad: 18, rows: r.sources.map((x) => [x.name, x.error ? `not updated: ${x.error}` : x.same ? `already the newest (${String(x.ref).slice(0, 7)})` : [x.pieces ? `${x.pieces} pieces: ${x.added} new, ${x.changed} changed, ${x.removed} gone; ${x.ok} pass the check` : null, x.looks ? `${x.looks} looks` : null, x.skills ? `${x.skills} skills` : null].filter(Boolean).join(' · ')]) });
+          } catch (e) {
+            self.push({ type: 'note', text: ac.signal.aborted ? 'Design library update stopped; what was done is kept.' : `Design library: ${e.message}`, tone: ac.signal.aborted ? 'dim' : 'error' });
+          } finally {
+            self.setLive(IDLE);
+          }
           break;
         }
         const sets = /^sets?\s+(.+)$/i.exec(a);

@@ -257,6 +257,51 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   results page of names and results to `docs/tests/`; the **UI component battle** has a fourth part, Studio on,
   with its own blind vote against the folder-on page.
 
+## The design library (8 Oct 2026)
+
+- **What and why.** The owner asked to make the agents better at design and to download the newest UI designs and
+  templates. Their picks: everything (every source and every design in it), the user's look on every piece with a
+  brand's look only when asked, charts, slide decks, posters and diagrams too, and a measured before/after first.
+- **`/design update`** (`terminal/src/agent/library.mjs` `updateLibrary`; a /design word, so the / menu keeps its
+  rows): for each of `SOURCES` (HyperUI, Flowbite, shadcn/ui, VoltAgent/awesome-design-md, anthropics/skills) the
+  newest commit (api.github.com) and one archive (codeload.github.com), unpacked with `tar` into a throwaway folder
+  and never run. What it makes goes in the studio's `library/` (private): `pieces/<source>/<kind>/…` (HTML in the
+  user's colours), `pages/` (whole pages, only named), `react/shadcn/…` (React projects only), `looks/<id>/`
+  (theme.css, look.md, look.json, the DESIGN.md), `skills/<name>/` as their makers wrote them, `LICENSES/`, and
+  `library.json` (each source's version and each piece's check). `updateLibrary({ from })` takes unpacked folders
+  instead (the tests; no internet). Only a changed piece is checked again (`recheck` checks all); `force` makes a
+  source again at the same version. `/design library` lists it; `/design library off` keeps it out of the picks.
+- **Colours** (`toTokens`, `tokenClass`): a stock Tailwind colour or a Flowbite 4 name becomes the theme's by what it
+  is for and what it sits on (white text on the accent is `accent-ink`, on a dark band `paper`; gray-500 text is
+  `muted`; a hover a shade darker is the colour at /90); `dark:` classes go, since the theme switches by itself;
+  pictures from the internet become a plain block. A piece that still holds a stock colour is kept but not picked.
+- **The check** (`studio.mjs checkPiece`): each piece in the shell, its styles built, through the layout check with
+  no clicks (a library's buttons have no work until a page gives them some). A piece with a problem, one that needs
+  its library's script (Flowbite's data- switches) and a whole page are kept and named, never handed over.
+  The layout check now treats a closed `<details>` as hidden but for its summary: every FAQ and accordion had read as
+  text over text.
+- **The picker** (`pickPieces`): the library beside the user's own pieces; among equal fits the user's own first,
+  then one that can be handed over whole, then the shorter. The second piece is for a part the request names, never
+  another version of the thing asked for, and a library's versions of one kind count as one. A React project
+  (`usesReact`: react or next in package.json) gets shadcn/ui's React pieces with their own head (`REACT_HEAD`).
+  `askedThing`: a page, section or screen is the word before it ("a pricing page" is pricing; it had brought
+  pagination), the phrase stops at linking words ("a flowchart of the login flow" is a flowchart), and diagrams,
+  decks, posters and org charts are page requests (`MADE_DESIGN`, with draw and sketch as make-words).
+- **Looks** (`lookFromDesignMd`: google-labs-code/design.md's front matter or the older prose shape;
+  `lookFromThemeFactory`): every name of the theme filled and every pair made readable (`lookColours`: text on cards
+  7:1, second text 4.5:1). A request that names one ("like Linear", "Stripe style": `askedLook`; a name that is also a
+  common word only in full) or `/design look <name>` (settings.json `design.look`, `AGENTIC_DESIGN_LOOK`) gets its card
+  (`lookNote`), and the page's `<meta name="studio-look">` makes the build use its theme (`themeFor`, `withLook`).
+  Never a brand's name or logo on the page: its colours, type and corners only.
+- **Cards** (private, opus/): taste (Always: one first thing, a type scale, states, no template chrome; the rules card's
+  look wins), slides, poster, diagram. The full Anthropic guides are under STUDIO/library/skills/.
+- **A page asked for and none written** goes back once to write it (agent-work.mjs, `turn.pageBack`), before Look
+  before answering, which had sent Qwen3.6 to search an empty folder after a reply that was only the six-line plan.
+- **Measured by** the Arena's **Design library before/after** (`models/evals/bench/design/library-ab.mjs`, its
+  prompts in `library.json`, its page by `library-ab-page.mjs`): `coding -p` on a model on another machine, before
+  (`--before <checkout> --cards-before <folder>`, or this code with the library off) and after; raw runs in
+  `docs/private/design-runs/`. Tests: `terminal/test/design-library.test.mjs`.
+
 ## The model at start
 
 - **The model is off when a window opens** (since 30 Sep 2026, the user's pick): `/start` loads it and

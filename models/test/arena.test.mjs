@@ -118,7 +118,7 @@ test('a check: it holds the memory as its own process, prints live and counts; o
   expect(unit).toMatchObject({ kind: 'check', test: 'unit', who: null, think: false, settings: null, status: 'done' });
   const jobs = (await get('/api/jobs?test=sorting')).jobs;
   expect(jobs.map((j) => j.model)).toEqual(['qwen', 'gemma']);
-  expect(st.checks.map((c) => c.id)).toEqual(['requests', 'long', 'sorting', 'questions', 'done', 'twoatonce', 'remote', 'vision', 'picturetokens', 'web', 'mcp', 'mcp-remote', 'subagent', 'loops', 'autoscreen', 'rulesfile', 'skills', 'lookfirst', 'habits', 'agents', 'prompt', 'thinking', 'way', 'big', 'remote-rules', 'hard', 'steps', 'claude-lean', 'ladder', 'components', 'edited', 'modelcheck', 'unit', 'check', 'reader', 'studio', 'constantkv', 'door', 'follow-through']); // the sets are not checks here
+  expect(st.checks.map((c) => c.id)).toEqual(['requests', 'long', 'sorting', 'questions', 'done', 'twoatonce', 'remote', 'vision', 'picturetokens', 'web', 'mcp', 'mcp-remote', 'subagent', 'loops', 'autoscreen', 'rulesfile', 'skills', 'lookfirst', 'habits', 'agents', 'prompt', 'thinking', 'way', 'big', 'remote-rules', 'hard', 'steps', 'claude-lean', 'ladder', 'components', 'edited', 'modelcheck', 'unit', 'check', 'reader', 'studio', 'library', 'constantkv', 'door', 'follow-through']); // the sets are not checks here
   expect(st.checks.find((c) => c.id === 'unit')).toMatchObject({ model: false, last: { none: null } });
 }, 90_000);
 

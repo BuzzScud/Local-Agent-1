@@ -56,6 +56,8 @@ export { designDir, readCards, isDesignRequest, pickCards, designNotes, scoreCar
 // The design studio's pieces and its build, for the studio check and the UI component battle's studio part.
 export { studioDir, readPieces, pickPieces, studioNotes, buildStyles, readTheme, PIECE_CHARS } from './src/agent/studio.mjs';
 export { layoutCheck, findChrome, PASSES as LAYOUT_PASSES } from './src/flows/layoutcheck.mjs';
+// The design library (downloaded pieces, looks and skills), for its before/after page.
+export { readManifest, libraryDir, librarySummary, readLooks, SOURCES as LIBRARY_SOURCES } from './src/agent/library.mjs';
 // Pictures and PDFs drawn for the Vision check (models/evals/tools/vision-check.mjs), and the
 // real app in a pseudo-terminal for its window check (loaded only when a check calls it).
 export { textImage, textPdf, pdfText, mediaTool } from './src/tools/media.mjs';

@@ -58,7 +58,10 @@ test('the thing a request asks for: its phrase, the words that say its kind, and
   expect(D.askedThing(FILE)).toEqual({ phrase: 'file or document card', words: ['file', 'document'], head: 'card' });
   expect(D.askedThing(PASS)).toEqual({ phrase: 'travel boarding pass card', words: ['travel', 'boarding', 'pass'], head: 'card' });
   expect(D.askedThing('Make one HTML file that displays a social feed post. Include an avatar.')).toEqual({ phrase: 'social feed post', words: ['social', 'feed', 'post'], head: 'post' });
-  expect(D.askedThing('redesign the settings page so it looks modern').words).toEqual(['settings', 'page']);
+  // A page or a section is the word before it (8 Oct 2026, the design library: "pricing page" had brought pagination).
+  expect(D.askedThing('redesign the settings page so it looks modern')).toMatchObject({ words: ['settings'], head: 'settings' });
+  expect(D.askedThing('create an FAQ section')).toMatchObject({ words: ['faq'], head: 'faq' });
+  expect(D.askedThing(NOTE)).toMatchObject({ words: ['notification'], head: 'card' }); // "in-app" is not the word "in"
   expect(D.askedThing('a kanban board for my tasks')).toBeNull(); // nothing says "a … <thing>": the words alone, as before
 });
 

@@ -112,6 +112,9 @@ const PROBE = String.raw`(function () {
     for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
       var cs = getComputedStyle(e);
       if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05) return false;
+      // Inside a closed <details>, all but its own <summary> is not drawn (8 Oct 2026: every FAQ and
+      // accordion of the design library read as text drawn over its question, though nothing showed).
+      if (e.tagName === 'DETAILS' && !e.open && e !== el) { var sm = el.closest && el.closest('summary'); if (!(sm && sm.parentElement === e)) return false; }
       // Text for screen readers only (Tailwind's sr-only, the usual visually-hidden CSS): never drawn.
       if (cs.clipPath === 'inset(50%)' || cs.clip === 'rect(0px, 0px, 0px, 0px)' || (cs.position === 'absolute' && cs.overflow === 'hidden' && e.offsetWidth <= 1 && e.offsetHeight <= 1)) return false;
     }
