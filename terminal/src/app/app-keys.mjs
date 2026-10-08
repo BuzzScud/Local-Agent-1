@@ -3,13 +3,13 @@
 // The functions are the App's own, moved here word for word: the App's names (and App.jsx's) are read through
 // self, which App makes at each render, so a function sees the values of the render that made it.
 import { join } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { heldRows, holdRoom, btwLayout } from './screen.jsx';
 import { recentRows } from './start.jsx';
 import { hookFormRows, startHookEdit } from './hooks-form.mjs';
 import { nextMode } from '../agent/permissions.mjs';
 import { modelPath, serverBinOf, engineOf, HOME } from '../../../models/index.mjs';
-import { clipboardImage } from '../tools/media.mjs';
+import { attachDropped, attachClipboard, quickLook, trayItems } from './attach.mjs';
 import { pasteField, rowsOf as remoteRows, startEdit, formReady, modelChoices, moveRow, openModelPick, commitEdit, editField, movePick, moveCopy, closePick, commitPick } from './remote-form.mjs';
 import { serviceRows, atRow, moveService, filterService, toggleFold } from './remote-models.mjs';
 import { moveJob, stepModel, toggleJob } from './subagents.mjs';
@@ -75,6 +75,24 @@ export function keysPart(self) {
     return v;
   };
 
+  // A file dropped into the window (Terminal types its path) or pasted as a path: a picture or PDF
+  // becomes [Image #n] or [PDF #n] at once, copied, and the tray over the box shows it (attach.mjs).
+  // Other text comes back as it was, and so does a path for a shell command of yours (!).
+  const withChips = (text) => {
+    if (!/[/~'"]/.test(text) || self.S.current.input.value.startsWith('!')) return text;
+    const pasted = self.pastedRef.current;
+    const r = attachDropped(text, { cwd: self.cwd, pasted, dir: join(HOME, 'attachments'), id: self.sessionRef.current.id });
+    if (r.failed.length) self.flash(`Could not attach ${r.failed[0].path.split('/').pop()}: ${r.failed[0].error}`, 3500);
+    else if (r.added.length) self.flash(r.added.length === 1 ? `${r.added[0].kind === 'pdf' ? 'PDF' : 'Picture'} attached as ${r.added[0].token}` : `${r.added.length} files attached`, 2500);
+    return r.text;
+  };
+  // ctrl+f, or a click on a card in the tray: the attachments full size, in Quick Look.
+  const openAttached = (ns) => {
+    const files = ns.map((n) => self.pastedRef.current.files.get(n)).filter((f) => f && existsSync(f));
+    if (!files.length) { self.flash('No picture or PDF in the prompt to open (drag one in, or ctrl+v)', 2500); return; }
+    if (!quickLook(files)) self.flash('Quick Look did not open', 2500);
+  };
+
   const onPaste = (text) => {
     self.setPopup(null); // a paste closes the /help box, like any key
     // /remote: a paste goes into the row being edited (an API key, an address), or starts editing a text row.
@@ -105,7 +123,7 @@ export function keysPart(self) {
     if (self.S.current.perm || self.S.current.picker || (self.S.current.btw && !self.S.current.answerWait)) return;
     // Text copied off this screen (your message, the prompt box) comes back as it was written:
     // without the screen's line breaks, indents, padding and │ edges. ctrl+z gives the paste as copied.
-    const raw = text.replace(/\r\n?/g, '\n');
+    const raw = withChips(text.replace(/\r\n?/g, '\n'));
     const clean = fromScreen(raw, { cols: self.width });
     self.setInput((s) => {
       const pasted = withUndo(s, insertText(s, raw));
@@ -143,6 +161,14 @@ export function keysPart(self) {
     // The footer's row is two under the box's bottom edge (a blank row between): a press on the model's label switches it.
     const f = self.footerRef.current;
     if (row === boxRows + 2 && f?.labelAt && ev.col >= f.labelAt.from && ev.col <= f.labelAt.to) { m.down = false; self.toggleFnRef.current('click'); return; }
+    // The tray sits on the rows over the box's top edge: a press on a card opens it in Quick Look.
+    const t = self.trayRef.current;
+    if (t && row < -1 && row >= -1 - t.height) {
+      m.down = false;
+      const hit = t.cards.find((c) => ev.col >= c.from && ev.col <= c.to);
+      if (hit) openAttached([hit.n]);
+      return;
+    }
     // a press counts only on one of the box's own rows
     if (row < 0 || row >= boxRows) { m.down = false; return; }
     const to = posAt(s, row, x, o);
@@ -545,19 +571,15 @@ export function keysPart(self) {
     // ctrl+v: the clipboard's picture (a screenshot copied with ctrl+shift+cmd+4, say) attached as [Image #n].
     if (key.ctrl && ch === 'v') {
       try {
-        const dir = join(HOME, 'attachments');
-        mkdirSync(dir, { recursive: true });
-        const n = self.pastedRef.current.n + 1;
-        const file = join(dir, `${self.sessionRef.current.id}-${n}.png`);
-        const info = clipboardImage(file);
-        if (!info) { self.flash('No picture on the clipboard (text pastes with cmd+v)', 2500); return; }
-        self.pastedRef.current.n = n;
-        self.pastedRef.current.files.set(n, file);
-        self.setInput((st) => withUndo(st, insertText(st, `[Image #${n}] `)));
-        self.flash(`Picture ${info.w}×${info.h} attached as [Image #${n}]`, 2500);
+        const got = attachClipboard({ pasted: self.pastedRef.current, dir: join(HOME, 'attachments'), id: self.sessionRef.current.id });
+        if (!got) { self.flash('No picture on the clipboard (text pastes with cmd+v)', 2500); return; }
+        self.setInput((st) => withUndo(st, insertText(st, `${got.token} `)));
+        self.flash(`Picture ${got.srcW}×${got.srcH} attached as ${got.token}`, 2500);
       } catch (e) { self.flash(`Could not paste the picture: ${e.message}`, 3000); }
       return;
     }
+    // ctrl+f: the pictures and PDFs in the prompt, full size in Quick Look (← → go through several).
+    if (key.ctrl && ch === 'f') { openAttached(trayItems(cur.input.value, self.pastedRef.current).map((it) => it.n)); return; }
     if (key.ctrl && ch === 'c') {
       if (self.agent.busy || cur.live.phase === 'working') { self.interrupt(); return; }
       if (cur.input.value) { self.setInput((s) => withUndo(s, { value: '', cursor: 0 })); return; } // ctrl+z brings it back
@@ -618,6 +640,11 @@ export function keysPart(self) {
       });
       self.setInput(st);
       return;
+    }
+    // A file dropped while Terminal's paste brackets are off arrives as typed keys, all at once.
+    if (ch && ch.length > 1 && !key.ctrl && !key.meta) {
+      const swapped = withChips(ch);
+      if (swapped !== ch) { self.setInput((st) => withUndo(st, insertText(st, swapped))); return; }
     }
     // Menu navigation
     if (self.menu) {

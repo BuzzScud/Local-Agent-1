@@ -31,6 +31,7 @@ import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords } from './rail.jsx';
 import { StartPage } from './start.jsx';
+import { AttachTray } from './tray.jsx';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const diffW = (width) => Math.max(40, Math.min(110, width - 12));
@@ -2155,6 +2156,7 @@ export function Screen({ app }) {
         <Box flexDirection="column">
           {app.agentsLine ? <AgentsLine segs={app.agentsLine} /> : null}
           {app.loopsLine ? <LoopsLine segs={app.loopsLine} /> : null}
+          {app.trayLayout ? <AttachTray items={app.tray} layout={app.trayLayout} width={width} mouse={app.mouse} /> : null}
           <PromptBox app={app} />
           <Menu app={app} />
           <Footer app={app} />

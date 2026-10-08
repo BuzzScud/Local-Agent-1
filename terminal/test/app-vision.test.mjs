@@ -147,3 +147,57 @@ test.skipIf(needs('pictures', mediaTool))('coding -p: a picture the model reads 
   const starts = readFileSync(args, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   expect(starts.map((s) => s.includes('--mmproj'))).toEqual([false, true]);
 }, 120_000);
+
+// A file dragged into Terminal arrives as its path, escaped; with the paste brackets on (the app asks
+// for them) it comes as a paste, else as keys all at once. A screenshot's name has spaces and a narrow
+// space before AM.
+const PASTE = (t) => `\x1b[200~${t}\x1b[201~`;
+const dragged = (p) => `${p.replace(/ /g, '\\ ')} `;
+
+test.skipIf(needs('pictures', mediaTool))('a dragged screenshot is [Image #1] at once, with a card over the box (its picture, name, size); ctrl+f opens it in Quick Look, delete takes it away in one piece, ctrl+z brings it back, and it goes to the model with where it came from', async () => {
+  const { cwd, env, base } = project();
+  const shot = join(base, 'Screenshot 2026-10-07 at 10.12.33 AM.png');
+  textImage(shot, 'HELLO 42', { w: 1440, h: 900 });
+  const pdf = join(cwd, 'invoice.pdf');
+  const ql = join(base, 'quicklook.txt');
+  const fake = await startFakeServer([{ text: 'I see the dropped picture.' }], { vision: true });
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_TEST_QUICKLOOK: ql }, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { sleep: 300 }, { type: 'what is wrong here ' },
+    { key: PASTE(dragged(shot)) }, { wait: '[Image #1]' }, { sleep: 300 }, { snapshot: 'dropped' },
+    { key: '\x06' }, { sleep: 300 }, // ctrl+f
+    { key: dragged(pdf) }, { wait: '[PDF #2]' }, { sleep: 300 }, { snapshot: 'both' }, // keys all at once, no brackets
+    { key: 'backspace' }, { key: 'backspace' }, { sleep: 300 }, { snapshot: 'deleted' },
+    { key: '\x1a' }, { sleep: 300 }, { snapshot: 'undone' }, // ctrl+z
+    { key: 'enter' }, { wait: 'I see the dropped picture.' }, { sleep: 300 }, { snapshot: 'sent' }, ...quit,
+  ] });
+  await fake.close();
+  const box = (snap) => snap.split('\n').filter((l) => /^│ [> ] /.test(l)).map((l) => l.replace(/^│ [> ] /, '').replace(/\s*│\s*$/, '')).join('|');
+  expect(box(r.snapshots.dropped)).toBe('what is wrong here [Image #1]');
+  expect(r.snapshots.dropped).toContain('Picture attached as [Image #1]');
+  // the card, over the box: the picture drawn in half blocks, the chip, the short name, the size
+  const card = r.snapshots.dropped.split('\n').slice(0, r.snapshots.dropped.split('\n').findIndex((l) => l.startsWith('╭'))).slice(-5);
+  expect(card.map((l) => l.trim().split(/\s{2,}/).at(-1))).toEqual(['[Image #1]', 'Screenshot 10.12 AM', expect.stringMatching(/^1440×900 · \d+ KB$/), expect.stringMatching(/open/), expect.any(String)]);
+  expect(card.every((l) => /^ {2}[▀▄ ]{16}( {2}|$)/.test(l))).toBe(true);
+  // and drawn in colour: each of its 16 × 5 cells has a colour of its own, top and bottom (the picture is white with black letters)
+  const buf = r.terms.dropped.buffer.active;
+  let coloured = 0;
+  for (let y = 0; y < buf.length; y++) {
+    const line = buf.getLine(y);
+    if (!(line?.translateToString(true) ?? '').startsWith('  ▀')) continue;
+    for (let x = 2; x < 18; x++) if (!line.getCell(x).isFgDefault() && !line.getCell(x).isBgDefault()) coloured++;
+  }
+  expect(coloured).toBe(80);
+  expect(readFileSync(ql, 'utf8').trim()).toBe(join(base, 'home', 'attachments', readFileSync(ql, 'utf8').trim().split('/').pop()));
+  expect(box(r.snapshots.both)).toBe('what is wrong here [Image #1] [PDF #2]');
+  expect(r.snapshots.both).toContain('PDF · 1 page');
+  expect(box(r.snapshots.deleted)).toBe('what is wrong here [Image #1]'); // the space, then the chip in one piece
+  expect(r.snapshots.deleted).not.toContain('PDF · 1 page');
+  expect(box(r.snapshots.undone)).toBe('what is wrong here [Image #1] [PDF #2]');
+  expect(r.snapshots.undone).toContain('PDF · 1 page');
+  expect(r.snapshots.sent).not.toContain('Screenshot 10.12 AM'); // the tray goes with the message
+  const req = chatWith(fake, 'what is wrong here [Image #1]');
+  expect(imageParts(req)).toHaveLength(1);
+  const said = JSON.stringify(req.messages);
+  expect(said).toContain('Total due: 1,240 dollars');
+  expect(said).toContain('dropped into the window.');
+}, T);

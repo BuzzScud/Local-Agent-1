@@ -5,6 +5,8 @@
 //   pdf-page <file.pdf> <page> <out.png> <max> → that page as a PNG, its long side at most <max> px
 //   image <in> <out.jpg> <max>                → a JPEG, long side at most <max> px → JSON {"w","h"}
 //   clipboard <out.png>                       → the clipboard's image as a PNG (exit 3: none there)
+//   thumb <in> <cols> <rows>                  → JSON {"w","h","srcW","srcH","px"}: the picture as at most cols × rows·2 dots,
+//                                               px = 6 hex digits a dot, row by row from the top ("------": see-through)
 //   text-image <out.png> <w> <h> <text>       → black text on white (the tests' pictures)
 //   text-pdf <out.pdf> <page> [<page> …]      → a PDF with one page of text per argument (the tests' PDFs)
 //   screen-access                             → "yes" when this terminal may take pictures of the screen (Screen Recording), else "no"
@@ -77,6 +79,30 @@ case "clipboard":
   guard let image = NSImage(pasteboard: pb), let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { fail("no picture on the clipboard", 3) }
   writePNG(cg, to: args[2])
   print("{\"w\":\(cg.width),\"h\":\(cg.height)}")
+
+case "thumb":
+  // A dot is half a Terminal cell (the prompt box's tray draws two in one with ▀), so a cell is two dots tall.
+  guard args.count >= 5, let cols = Int(args[3]), let rows = Int(args[4]), cols > 0, rows > 0 else { fail("usage: thumb <in> <cols> <rows>") }
+  guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: args[2]) as CFURL, nil), let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { fail("not a picture macOS can open") }
+  let s = min(Double(cols) / Double(img.width), Double(rows * 2) / Double(img.height))
+  let w = Swift.max(1, Int((Double(img.width) * s).rounded())), h = Swift.max(1, Int((Double(img.height) * s).rounded()))
+  var buf = [UInt8](repeating: 0, count: w * h * 4)
+  let drawn: Bool = buf.withUnsafeMutableBytes { raw in
+    guard let ctx = CGContext(data: raw.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+    ctx.interpolationQuality = .high
+    ctx.draw(scaled(img, max: 512), in: CGRect(x: 0, y: 0, width: w, height: h))
+    return true
+  }
+  if !drawn { fail("cannot draw") }
+  // The buffer's first row is the picture's top. Half see-through or more is left out (a window's shadow).
+  var px = ""
+  px.reserveCapacity(w * h * 6)
+  for i in 0..<(w * h) {
+    let a = Int(buf[i * 4 + 3])
+    if a < 128 { px += "------"; continue }
+    for k in 0..<3 { px += String(format: "%02x", Swift.min(255, Int(buf[i * 4 + k]) * 255 / a)) }
+  }
+  print("{\"w\":\(w),\"h\":\(h),\"srcW\":\(img.width),\"srcH\":\(img.height),\"px\":\"\(px)\"}")
 
 case "text-image":
   guard args.count >= 6, let w = Int(args[3]), let h = Int(args[4]) else { fail("usage: text-image <out.png> <w> <h> <text>") }

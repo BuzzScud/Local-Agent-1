@@ -1,8 +1,8 @@
 // The app the way a window really runs it since 3 Oct 2026: inside a keeper (sessions.mjs), the window
 // only showing it and sending the keys. The other app tests switch that off (test-env.mjs:
 // AGENTIC_SESSIONS=off), so they drive the app in its own window. These drive the everyday things
-// through the keeper: a message and its reply, a paste, /clear, the menus before the app and typing
-// after them, a mouse drag. Each ends with the app quitting and no keeper left behind.
+// through the keeper: a message and its reply, a paste, a picture dragged in, /clear, the menus before
+// the app and typing after them, a mouse drag. Each ends with the app quitting and no keeper left behind.
 // Elsewhere, also through the keeper: ctrl+b and coding attach (sessions.test.mjs), a resize
 // (resize.test.mjs, on its own resizable terminal) and /update's restart (update.test.mjs, with the launcher).
 import { test, expect, afterEach } from 'bun:test';
@@ -14,7 +14,10 @@ import { T, setup, quit, quitTyped } from './app-setup.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { MOUSE_ON, ASK_CURSOR } from '../src/app/mouse.mjs';
 
+import { needs } from './needs.mjs';
+
 const S = await import('../src/app/sessions.mjs');
+const { textImage, mediaTool } = await import('../src/tools/media.mjs');
 
 const homes = [];
 // Every keeper a test left running is stopped (a test that passes leaves none).
@@ -51,6 +54,27 @@ test.skipIf(!S.canHost())('through the keeper: a message gets its reply, ctrl+c 
     expect(r.snapshots.replied).toContain('say hello');
     expect(r.code).toBe(0);
     expect(r.text).toContain('Continue this conversation with');
+    await ranInKeeper(home, seen);
+  } finally { await fake.close(); }
+}, T);
+
+test.skipIf(!S.canHost() || needs('pictures', mediaTool))('through the keeper: a picture dragged in (its path, as a paste) is [Image #1] with its card over the box, and goes to the model as a picture', async () => {
+  const { cwd, env, home, base } = keeperEnv();
+  const shot = join(base, 'drop shot.png');
+  textImage(shot, 'DROP 7', { w: 800, h: 400 });
+  const fake = await startFakeServer([{ text: 'DROP-REPLY.' }], { vision: true });
+  const seen = {};
+  try {
+    const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+      { wait: '? for shortcuts', ms: 30_000 }, noteRecord(home, seen), { sleep: 300 }, { type: 'what does it say ' },
+      { key: PASTE(shot.replace(/ /g, '\\ ')) }, { wait: 'drop shot.png' }, { sleep: 400 }, { snapshot: 'box' },
+      { key: '\r' }, { wait: 'DROP-REPLY', ms: 20_000 }, { sleep: 300 }, ...quit,
+    ] });
+    expect(r.snapshots.box).toContain('> what does it say [Image #1]');
+    expect(r.snapshots.box).toContain('800×400');
+    const req = fake.requests.find((q) => q.stream && JSON.stringify(q.messages).includes('what does it say [Image #1]'));
+    expect((req?.messages ?? []).flatMap((m) => (Array.isArray(m.content) ? m.content.filter((c) => c.type === 'image_url') : []))).toHaveLength(1);
+    expect(r.code).toBe(0);
     await ranInKeeper(home, seen);
   } finally { await fake.close(); }
 }, T);

@@ -3,13 +3,16 @@
 // real app in a pseudo-terminal (see app.test.mjs); it plays Terminal's part
 // by hand: the mouse reports, and the answer to "where is the cursor?".
 import { test, expect } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty, emulate } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, quitTyped } from './app-setup.mjs';
 import { MOUSE_ON, MOUSE_OFF, ASK_CURSOR, WHEEL_PAUSE_MS, parseMouse, parseCursorReply, isMouseText } from '../src/app/mouse.mjs';
 import { posAt, wordAt, promptRows } from '../src/app/edit-input.mjs';
+import { needs } from './needs.mjs';
+
+const { textImage, mediaTool } = await import('../src/tools/media.mjs');
 
 test('a mouse report is read as a press, a drag, a release or a scroll, with its cell; the cursor answer as a row and a cell', () => {
   expect(parseMouse('\x1b[<0;34;12M')).toEqual({ kind: 'press', col: 34, row: 12, shift: false });
@@ -189,4 +192,34 @@ test('the mouse while Agentic Coder answers: a drag still lands on its letters w
   expect(last(r.raw, MOUSE_ON, MOUSE_OFF)).toBe(MOUSE_OFF); // …and Terminal has its mouse back
   expect(r.raw.split(MOUSE_ON).length).toBe(r.raw.split(MOUSE_OFF).length);
   expect(r.code).toBe(0);
+}, T);
+
+test.skipIf(needs('pictures', mediaTool))('a click on a card in the tray over the box opens that picture in Quick Look; a click beside the cards opens nothing', async () => {
+  const { cwd, env, base } = setup();
+  const shot = join(base, 'Screenshot 2026-10-07 at 10.12.33 AM.png');
+  textImage(shot, 'HELLO 42', { w: 1440, h: 900 });
+  const ql = join(base, 'quicklook.txt');
+  const fake = await startFakeServer([]);
+  const seen = {};
+  const r = await runInPty({ cwd, cols: 80, rows: 24, env: { ...env, AGENTIC_TEST_QUICKLOOK: ql }, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { sleep: 300 }, { type: 'look ' },
+    { key: `\x1b[200~${shot.replace(/ /g, '\\ ')}\x1b[201~` }, { wait: 'Screenshot 10.12 AM' }, { sleep: 300 }, { snapshot: 'tray' },
+    { fn: async (t) => {
+      const term = await t.screen();
+      const beside = cellOf(term, '[Image #1]');
+      await press(t, { col: beside.col + 40, row: beside.row }); t.write(`\x1b[<0;${beside.col + 40};${beside.row}m`);
+      await pause(300);
+      seen.beside = existsSync(ql);
+      const at = cellOf(term, 'Screenshot 10.12 AM');
+      await press(t, { col: at.col + 3, row: at.row }); t.write(`\x1b[<0;${at.col + 3};${at.row}m`);
+    } },
+    { sleep: 400 }, { snapshot: 'clicked' }, ...quitTyped,
+  ] });
+  await fake.close();
+  expect(r.snapshots.tray).toContain('click · ctrl+f: open');
+  expect(seen.beside).toBe(false);
+  const opened = readFileSync(ql, 'utf8').trim().split('\n');
+  expect(opened).toEqual([join(base, 'home', 'attachments', opened[0].split('/').pop())]);
+  expect(opened[0]).toEndWith('-1.png');
+  expect(r.snapshots.clicked).toContain('> look [Image #1]'); // the box is as it was
 }, T);

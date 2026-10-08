@@ -41,6 +41,7 @@ import { spinStyle } from '../ui/theme.mjs';
 import { watchUpdates, updateText } from './update.mjs';
 import { readLimits, modelWithLimits, applyLimits, applySearch } from './limits.mjs';
 import { agentsLine } from './agents-tree.mjs';
+import { trayItems, trayLayout } from './attach.mjs';
 import { IDLE, PLACEHOLDERS, liveView, pick, short } from './app-common.mjs';
 import { modelPart } from './app-model.mjs';
 import { remotePart } from './app-remote.mjs';
@@ -120,7 +121,7 @@ export function App({ opts, win, onRestart }) {
     switchModel: () => switchModel, switchService: () => switchService, thinking: () => thinking,
     timeDone: () => timeDone, timeLoad: () => timeLoad, timeLoaded: () => timeLoaded, timeWarmed: () => timeWarmed,
     timesRef: () => timesRef, timing: () => timing, toggleArmed: () => toggleArmed, toggleFnRef: () => toggleFnRef,
-    tty: () => tty, turnSpend: () => turnSpend, update: () => update, updateNow: () => updateNow,
+    trayRef: () => trayRef, tty: () => tty, turnSpend: () => turnSpend, update: () => update, updateNow: () => updateNow,
     updateRef: () => updateRef, useLocal: () => useLocal, useRemote: () => useRemote,
     visionWaitRef: () => visionWaitRef, waitForBattle: () => waitForBattle, waitForOthers: () => waitForOthers,
     waitRef: () => waitRef, wantRef: () => wantRef, weightsRef: () => weightsRef, width: () => width, win: () => win,
@@ -320,8 +321,9 @@ export function App({ opts, win, onRestart }) {
   const [remoteState, setRemoteState] = useState(remoteAtStart ? 'connecting' : null);
   const [catalog, setCatalog] = useState(null);
   const chatOnlyRef = useRef(null);
-  // Pictures pasted with ctrl+v ([Image #n] → its file), and a message waiting while vision turns on.
-  const pastedRef = useRef({ n: 0, files: new Map() });
+  // Pictures pasted with ctrl+v and files dropped in ([Image #n], [PDF #n] → its copy, and what the
+  // tray over the box shows of it: attach.mjs), and a message waiting while vision turns on.
+  const pastedRef = useRef({ n: 0, files: new Map(), info: new Map() });
   const visionWaitRef = useRef(null);
   // A model that cannot look at pictures (K2 Horizon) handed one message to a
   // model that can: the one to load again once that reply is over.
@@ -747,6 +749,8 @@ export function App({ opts, win, onRestart }) {
   const mouseArmed = (mouse || startClicks) && !perm && !picker && !btwShown && !wheelPause && !leaving && !tooSmall;
   const mouseRef = useRef({ armed: false, asked: null, waiting: [], origin: null, down: false, last: null, wheel: null });
   const footerRef = useRef(null);
+  // Where the tray over the prompt box drew each attachment's card, for a click on one (onMouse).
+  const trayRef = useRef(null);
   useEffect(() => {
     if (!mouseArmed) return undefined;
     const m = mouseRef.current;
@@ -896,5 +900,10 @@ export function App({ opts, win, onRestart }) {
   };
   // Where the footer drew the model's label, for a click on it (onMouse); an open menu takes the footer's place.
   footerRef.current = app.menu?.items?.length ? null : footerParts(app);
+  // The pictures and PDFs in the prompt box, shown over it (attach.mjs), and where each card is drawn.
+  app.tray = trayItems(input.value, pastedRef.current);
+  app.trayLayout = trayLayout(app.tray, { width: app.width, rows: app.rows, mouse });
+  app.mouse = mouse;
+  trayRef.current = app.trayLayout;
   return <Screen app={app} />;
 }

@@ -46,7 +46,8 @@ export function runPart(self) {
         .then((parts) => self.sendPrompt(value, shown, { visionAsked, mcpRead: parts, fromServer }));
       return;
     }
-    const expanded = expandMentions(value, self.cwd, self.agent.maxResultChars, self.pastedRef.current.files);
+    const dropped = new Map([...self.pastedRef.current.info].filter(([, a]) => a.from).map(([n, a]) => [n, a.from]));
+    const expanded = expandMentions(value, self.cwd, self.agent.maxResultChars, self.pastedRef.current.files, dropped);
     const { attached, images } = expanded;
     let { text } = expanded;
     for (const p of mcpRead ?? []) {
