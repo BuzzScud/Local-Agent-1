@@ -158,9 +158,9 @@ export function keysPart(self) {
       return;
     }
     const boxRows = cursorCell(s, o).rows.length;
-    // The footer's row is two under the box's bottom edge (a blank row between): a press on the model's label switches it.
+    // The footer's row is inside the box, under its dotted rule (8 Oct 2026): a press on the model's label switches it.
     const f = self.footerRef.current;
-    if (row === boxRows + 2 && f?.labelAt && ev.col >= f.labelAt.from && ev.col <= f.labelAt.to) { m.down = false; self.toggleFnRef.current('click'); return; }
+    if (row === boxRows + 1 && f?.labelAt && ev.col >= f.labelAt.from && ev.col <= f.labelAt.to) { m.down = false; self.toggleFnRef.current('click'); return; }
     // The tray sits on the rows over the box's top edge: a press on a card opens it in Quick Look.
     const t = self.trayRef.current;
     if (t && row < -1 && row >= -1 - t.height) {

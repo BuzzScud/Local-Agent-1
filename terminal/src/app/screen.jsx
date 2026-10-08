@@ -936,10 +936,14 @@ function UsagePanel({ app }) {
 // The gauges' tones (remote-footer.mjs) as colours.
 const TONE = { dim: C.dim, value: WHITE, live: C.accent, bar: C.accentDim, warn: C.warn, bad: C.bad };
 
-function Footer({ app }) {
+// The footer's rows, inside the prompt box under its dotted rule (the owner's pick "Panel", 8 Oct
+// 2026: "more uniform … even spacing between edges and borders"): the prompt, the footer and the Claude
+// API's usage line share one frame, each row one cell in from its border, so every row starts and
+// ends in the same columns. An open menu takes the footer's place, as in Claude Code: the box closes
+// under the prompt and the menu sits under it.
+const footInBox = (app) => !app.menu?.items?.length;
+function FooterRows({ app, border }) {
   const { mode, notice, width } = app;
-  // An open menu takes the footer's place, as in Claude Code.
-  if (app.menu?.items?.length) return null;
   const p = footerParts(app);
   const ms = app.modelState;
   const on = ms?.state === 'on';
@@ -956,12 +960,12 @@ function Footer({ app }) {
     p.badges ? <Text color={C.accent}>{p.badges}</Text> : null,
     modeLabel(mode, { cycle: p.cycle }),
   ].filter(Boolean);
+  const inner = width - 4;
   return (
     <Box flexDirection="column">
-      {/* One blank row above the footer: Ink keeps the last row of the window for the cursor, so the
-          footer always has one empty row under it; the same row above keeps it from hugging the box. */}
-      <Box height={1} />
-      <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
+      {/* The rule across the box, from border to border (├╌╌┤): drawn over the box's sides. */}
+      <Box marginLeft={-2} width={width} height={1}><Text color={border}>{`├${'╌'.repeat(Math.max(0, width - 2))}┤`}</Text></Box>
+      <Box width={inner} justifyContent="space-between" height={1} overflow="hidden">
         {/* A long left side (a tip) is cut to what is left; the right side stays whole, two spaces clear of it. */}
         <Box flexShrink={1} marginRight={2}>
           {p.gauges
@@ -971,10 +975,18 @@ function Footer({ app }) {
         <Box flexShrink={0}><Text wrap="truncate-start">{pieces.map((el, i) => <React.Fragment key={i}>{i ? <Text color={C.dim}> · </Text> : null}{el}</React.Fragment>)}</Text></Box>
       </Box>
       {/* On the Claude API, what is left of the month under the footer: the same ends as the footer's row (usage-bar.mjs). */}
-      {app.usage ? <Box width={width} height={1} overflow="hidden"><Segs segs={usageRow(app.usage, width, { now: app.now, live: app.usageLive })} /></Box> : null}
+      {app.usage ? <Box width={inner} height={1} overflow="hidden"><Segs segs={usageRow(app.usage, inner, { now: app.now, live: app.usageLive, pad: 0, wordsFirst: true })} /></Box> : null}
+    </Box>
+  );
+}
+// Under the box: the shortcuts, while ? shows them.
+function Footer({ app }) {
+  if (!footInBox(app) || !app.showShortcuts) return null;
+  return (
+    <Box flexDirection="column">
       {app.showShortcuts ? (
         <Box flexDirection="column" paddingX={2} marginTop={1}>
-          {shortcutsOf(ms?.remote).map(([a, b], i) => <Text key={i} color={C.dim}>{a.padEnd(36)}{b}</Text>)}
+          {shortcutsOf(app.modelState?.remote).map(([a, b], i) => <Text key={i} color={C.dim}>{a.padEnd(36)}{b}</Text>)}
         </Box>
       ) : null}
     </Box>
@@ -1029,6 +1041,7 @@ function PromptBox({ app }) {
         if (app.argHint && i === curRow && r.last && input.cursor === r.end) return <Text key={i} wrap="truncate-end">{lead}{t} <Text color={C.dim}>{app.argHint}</Text></Text>;
         return <Text key={i}>{lead}{t}</Text>;
       })}
+      {footInBox(app) ? <FooterRows app={app} border={border} /> : null}
     </Box>
   );
 }

@@ -61,7 +61,7 @@ test('/profiles is in the / menu on a service, /subagents opens it; a profile ch
   expect(readFileSync(join(cwd, 'notes.txt'), 'utf8')).toContain('Hello world');
   expect(s.done).toMatch(/Main: coder:30b → thinker:35b, from this step/);
   // the window follows: its footer names the new model (onRoute), not the one the task started on
-  const footer = s.done.trimEnd().split('\n').at(-1);
+  const footer = s.done.trimEnd().split('\n').at(-2); // inside the prompt box, over its bottom edge
   expect(footer).toMatch(/● thinker:35b on /);
   expect(footer).not.toMatch(/coder:30b/);
   // /profiles afterwards: Main on thinker:35b, with today's requests on its meter
@@ -93,9 +93,10 @@ test('on the Claude API (this Mac\'s set-up): ←→ on Main in /profiles picks 
   expect(JSON.parse(readFileSync(join(base, 'home', 'profiles.json'), 'utf8')).profiles.Main.model).toBe('claude-sonnet-5-5');
   expect(asked.at(-2)).toBe('claude-opus-5-5');
   expect(asked.at(-1)).toBe('claude-sonnet-5-5');
-  // the footer, with the Claude API's usage bar under it (usage-bar.mjs)
+  // the footer, with the Claude API's usage bar under it (usage-bar.mjs), inside the prompt box
   const tail = r.snapshots.after.trimEnd().split('\n');
-  expect(tail.at(-1)).toMatch(/^ {2}◆ /);
-  expect(tail.at(-2)).toMatch(/Sonnet 5\.5|claude-sonnet-5-5/);
+  expect(tail.at(-1)).toMatch(/^╰─+╯$/);
+  expect(tail.at(-2)).toMatch(/^│ ◆ /);
+  expect(tail.at(-3)).toMatch(/Sonnet 5\.5|claude-sonnet-5-5/);
   await claude.close();
 }, T * 2);
