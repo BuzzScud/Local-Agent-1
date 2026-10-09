@@ -56,9 +56,13 @@ export class AutoSave {
   // given server) the save waits for the window to close.
   get canRunNow() { return this.afterTaskOn && (this.agent.slots?.side !== undefined || this.onService) && !this.agent.busy && !this.running; }
 
+  // On a service each round that ended is read (lessons.mjs worthSaving every); a llama.cpp
+  // server's side slot keeps the cheaper rule (a round that taught nothing new is skipped).
+  get worth() { return worthSaving(this.agent.lessons, { every: this.onService }); }
+
   schedule(ms = this.waitMs) {
     clearTimeout(this.timer);
-    if (!this.afterTaskOn || !worthSaving(this.agent.lessons)) return;
+    if (!this.afterTaskOn || !this.worth) return;
     this.timer = setTimeout(() => { this.now().catch(() => {}); }, ms);
     this.timer.unref?.();
   }
@@ -72,7 +76,7 @@ export class AutoSave {
   }
 
   now() {
-    if (!this.canRunNow || !worthSaving(this.agent.lessons)) return Promise.resolve(null);
+    if (!this.canRunNow || !this.worth) return Promise.resolve(null);
     const ac = new AbortController();
     this.abort = ac;
     const a = this.agent;

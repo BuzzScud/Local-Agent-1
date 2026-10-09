@@ -20,6 +20,7 @@ export const KINDS = ['you', 'project', 'worked', 'failed', 'mistake', 'recipe']
 const ABOUT_YOU = new Set(['you']);
 export const RETIRE_AT = -3; // trust this low takes a fact out of use
 export const UNUSED_DAYS = 30; // never recalled for this long: retired
+export const NEWS_DAYS = 7; // a dated news fact this long after it was saved: retired, used or not
 const INDEX_LINES = 40;
 const LINE_CHARS = 90;
 
@@ -66,6 +67,11 @@ export const looksSecret = (text) => SECRETS.some((re) => re.test(String(text)))
 const DID = /^(?:created|made|wrote|added|fixed|built|ran|updated|deleted|removed|moved|saved|changed|renamed|installed|opened|started|finished|generated|implemented)\b/i;
 const HOW = /\b(?:always|never|should|must|use|prefer|avoid|when|before|after|instead|do not|don'?t|make sure|ask)\b/i;
 export const looksLikeEvent = (text) => DID.test(String(text).trim()) && !HOW.test(text);
+// News: a fact that opens with its date ("On 9 Oct 2026 main was pushed as 83b8729…", "As of
+// 9 Oct 2026, …"). It is true the day it is saved and soon out of date, yet with Claude every fact
+// comes with each request, so it kept counting as used and never reached UNUSED_DAYS (9 Oct 2026).
+const NEWS = /\b(?:\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\d{4}-\d{2}-\d{2}\b)/i;
+export const looksLikeNews = (text) => NEWS.test(String(text).trim().slice(0, 30));
 
 export function parseFact(raw, id) {
   const [head, ...rest] = String(raw).replace(/\r/g, '').split(/\n\s*\n/);
@@ -455,6 +461,8 @@ function tidyNow(dir, { today = day(), root = null } = {}) {
     seen.set(key, f);
     if (f.always || f.pinned) continue;
     if (namesMissingFile(f, root, names)) { retireFact(dir, f, 'the file it names is gone', batch); out.retired.push({ fact: f, why: 'the file it names is gone' }); continue; }
+    const age = f.saved ? Math.floor((Date.parse(today) - Date.parse(f.saved)) / 86_400_000) : 0;
+    if (looksLikeNews(f.text) && age >= NEWS_DAYS) { retireFact(dir, f, `dated news, ${age} days old`, batch); out.retired.push({ fact: f, why: `dated news, ${age} days old` }); continue; }
     const since = f.last ?? f.saved;
     const days = since ? Math.floor((Date.parse(today) - Date.parse(since)) / 86_400_000) : 0;
     if (days >= UNUSED_DAYS) { retireFact(dir, f, `not used in ${days} days`, batch); out.retired.push({ fact: f, why: `not used in ${days} days` }); }

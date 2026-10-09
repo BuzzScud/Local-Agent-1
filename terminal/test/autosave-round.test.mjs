@@ -55,6 +55,36 @@ test('the model decides, on a service with no side slot: the round is saved on i
   expect(o.seed).toBe(null);
 });
 
+// As real rounds end with Claude (9 Oct 2026): every saved fact came with the request, so the round
+// is "known", and a commit or an answer ends "done" with no file changed. The old rule skipped them all.
+test('on a service a round that ended "done" and "known" is still read; a llama.cpp side slot keeps skipping it; a declined round never runs', () => {
+  const o = inChild(`
+    const answer = { add: [{ kind: 'project', text: 'The legend fix was pushed as abc1234.', turn: 1 }], drop: [] };
+    const fake = await startFakeServer([], { route: () => ({ text: JSON.stringify(answer) }) });
+    const real = () => [{ ...lesson(), request: 'commit and push', outcome: 'done', files: [], known: true }];
+    setEndpoint(fake.url, { remote: true, kind: 'openai', model: 'some-model' });
+    const svc = new AutoSave({ agent: agentOn(fake.url, { lessons: real() }) });
+    out.svc = Boolean(await svc.now());
+    out.facts = readFacts(dirs.project).map((f) => f.text);
+    out.svcCalls = fake.requests.length;
+    const declined = new AutoSave({ agent: agentOn(fake.url, { lessons: [{ ...real()[0], outcome: 'declined' }] }) });
+    out.declined = await declined.now();
+    const llamaFake = await startFakeServer([], { route: () => ({ text: JSON.stringify(answer) }) });
+    setEndpoint(llamaFake.url, { remote: true, kind: 'llama', model: 'm' });
+    const llama = new AutoSave({ agent: agentOn(llamaFake.url, { lessons: real(), slots: { main: 0, side: 1 } }) });
+    out.llama = [llama.canRunNow, await llama.now()];
+    out.calls = [fake.requests.length, llamaFake.requests.length];
+    await fake.close();
+    await llamaFake.close();
+  `);
+  expect(o.svc).toBe(true);
+  expect(o.facts).toEqual(['The legend fix was pushed as abc1234.']);
+  expect(o.svcCalls).toBe(1);
+  expect(o.declined).toBe(null);
+  expect(o.llama).toEqual([true, null]);
+  expect(o.calls).toEqual([1, 0]);
+});
+
 test('a llama.cpp server without a side slot still waits for the window to close; with saving off nothing runs', () => {
   const o = inChild(`
     const fake = await startFakeServer([], { route: () => ({ text: '{"add":[],"drop":[]}' }) });
