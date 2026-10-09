@@ -7,8 +7,8 @@ import { isHomeFolder } from './prompt.mjs';
 import { folderCard, folderKind, namesInRequest } from './folder.mjs';
 import { basename, dirname, join } from 'node:path';
 import { routeByRules } from '../flows/index.mjs';
-import { changeTrust } from './facts.mjs';
-import { recall, recallNotes, usedFacts } from './recall.mjs';
+import { applyChanges, changeTrust, dirFor, memoryDirs, readFacts } from './facts.mjs';
+import { nearFacts, recall, recallNotes, usedFacts } from './recall.mjs';
 import { claudeText, notesDir, recallClaude, topicOf } from './claude-notes.mjs';
 import { packDir, packView } from './claude-pack.mjs';
 import { MAP_DIR, projectFiles } from '../tools/codemap.mjs';
@@ -298,19 +298,42 @@ export class MemoryPart {
 
   // Remember (the model decides): one fact saved at once, and a line says what was saved.
   // Nothing is saved from the tests' own practice work, nor with saving off.
-  rememberFact(args, seen) {
+  // New replaces old (9 Oct 2026, the owner's pick): the answer lists the saved facts about the
+  // same thing, by id; Remember again with `replaces` retires the one the new fact made out of date
+  // (moved to retired/, /memory undo brings it back). A rule or a pinned fact is the user's to change.
+  async rememberFact(args, seen) {
     const off = !this.memory ? 'the memory is off here ("memory": false in settings.json)'
       : this.memory.saveOff || process.env.AGENTIC_MEMORY_SAVE === 'off' ? 'saving to memory is off here'
       : practiceWork({ request: this.happened?.request ?? '', files: [...(this.happened?.files ?? [])] }, this.cwd) ? 'this is practice work on a test’s own files, which teaches the memory nothing'
       : null;
     if (off) { seen({ kind: 'error', message: 'Not saved' }, true); return { text: `Not saved: ${off}. Carry on.` }; }
+    const kind = args.about === 'you' ? 'you' : 'project';
+    const text = String(args.fact ?? '');
+    const dir = dirFor(memoryDirs(this.cwd, this.memory.home), kind);
+    const id = String(args.replaces ?? '').trim();
+    const old = id ? readFacts(dir).find((f) => f.id === id) : null;
+    const refuse = (why) => { seen({ kind: 'error', message: `Not saved: ${why}` }, true); return { text: `Not saved: ${why}.` }; };
+    if (id && !old) return refuse(`no saved fact ${kind === 'you' ? 'about the user' : 'about this project'} has the id "${id}" (the ids are in Remember's answer)`);
+    if (old && (old.always || old.pinned)) return refuse(`"${id}" is ${old.always ? 'a rule' : 'a pinned fact'} the user set, so only they change it (/memory)`);
     let out;
-    try { out = applySave({ cwd: this.cwd, home: this.memory.home, adds: [{ text: args.fact, kind: args.about === 'you' ? 'you' : 'project', from: 'saved by the model while it worked' }] }, { why: 'remember' }); } catch (e) { seen({ kind: 'error', message: e.message }, true); return { text: `Not saved: ${e.message}.`, error: true }; }
-    if (!out.added.length) { const why = out.refused[0]?.why ?? 'it is already saved'; seen({ kind: 'error', message: `Not saved: ${why}` }, true); return { text: `Not saved: ${why}.` }; }
+    try {
+      // The new fact was saved by the call before: only the old one goes.
+      const plain = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      out = old && readFacts(dir).some((f) => plain(f.text) === plain(text))
+        ? { added: [], replaced: [], refused: [], retired: applyChanges(dir, { retire: [{ id, reason: `replaced by: ${text.replace(/\s+/g, ' ').trim().slice(0, 120)}` }] }, { why: 'remember' }).retired }
+        : applySave({ cwd: this.cwd, home: this.memory.home, adds: [{ text, kind, from: 'saved by the model while it worked', ...(old ? { replaces: id } : {}) }] }, { why: 'remember' });
+    } catch (e) { seen({ kind: 'error', message: e.message }, true); return { text: `Not saved: ${e.message}.`, error: true }; }
+    if (!out.added.length && !out.replaced.length && !out.retired.length) return refuse(out.refused[0]?.why ?? 'it is already saved');
     seen({ kind: 'saved' });
     const line = saveLine(out);
     if (line) this.emit('note', { text: line, tone: 'dim' });
-    return { text: 'Saved to the memory.' };
+    if (old) return { text: `Saved to the memory; the old fact "${id}" is retired.` };
+    const added = out.added[0];
+    let near = [];
+    try { near = await nearFacts(readFacts(dir).filter((f) => f.id !== added.id && !f.always && !f.pinned), text, { embedder: this.memory.embedder ?? null }); } catch { /* the list is a help, the save stands */ }
+    if (!near.length) return { text: 'Saved to the memory.' };
+    const list = near.map((f) => `- ${f.id}: ${f.text.replace(/\s+/g, ' ').trim()} (saved ${f.saved ?? 'before'})`).join('\n');
+    return { text: `Saved to the memory. Saved facts about the same thing:\n${list}\nIf the new fact makes one of these out of date (a later state, a changed command), call Remember again with the same fact and replaces set to its id: the old one is retired. If they still hold, carry on.` };
   }
 
   // The folder a request works in, when it is not a code project (folder.mjs, 4 Oct 2026): what it

@@ -9,6 +9,7 @@ import { systemPrompt } from '../src/agent/prompt.mjs';
 import { toolSchemas, MODEL_TOOL_DEFS } from '../src/agent/tools.mjs';
 import { wayPrompt, hooksOn, hooksFrom, changeHooks, HOOKS, MODEL_HOOKS, MODEL_TOOL_LINES, ONE_AT_A_TIME, ANSWER_HABIT } from '../src/agent/way.mjs';
 import { decide } from '../src/agent/permissions.mjs';
+import { applyChanges, readFacts } from '../src/agent/facts.mjs';
 import { AutoSave } from '../src/app/autosave.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
@@ -277,6 +278,48 @@ test('Remember: the model saves one fact, a line says so; nothing is saved with 
   await off.agent.send('I like short answers');
   await off.fake.close();
   expect(chats(off.fake)[1].messages.find((x) => x.role === 'tool').content).toMatch(/^Not saved: the memory is off/);
+});
+
+test('Remember: new replaces old — the answer lists the fact about the same thing, replaces retires it; a rule stays', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-way-home-'));
+  const before = process.env.AGENTIC_MEMORY_SAVE;
+  delete process.env.AGENTIC_MEMORY_SAVE;
+  const OLD = 'The backend split branch was pushed on 9 Oct but not merged into main yet.';
+  const NEW = 'The backend split branch was merged into main on 9 Oct and pushed.';
+  try {
+    const cwd = taxProject();
+    const dir = join(cwd, '.agentic', 'memory');
+    applyChanges(dir, { add: [{ kind: 'project', text: OLD }, { kind: 'project', text: 'Checkout totals come from billing.mjs subtotal and addTax.' }, { kind: 'project', text: 'Never merge the backend split branch into main without asking.', always: true }] });
+    const oldId = readFacts(dir).find((f) => f.text === OLD).id;
+    const ruleId = readFacts(dir).find((f) => f.always).id;
+    const m = await agentOn('model', [
+      { tool: { name: 'Remember', args: { fact: NEW, about: 'project' } } },
+      { tool: { name: 'Remember', args: { fact: NEW, about: 'project', replaces: oldId } } },
+      { tool: { name: 'Remember', args: { fact: 'Merging the backend split is fine now.', about: 'project', replaces: ruleId } } },
+      { tool: { name: 'Remember', args: { fact: 'Something else entirely about prices.', about: 'project', replaces: 'no-such-fact' } } },
+      { text: 'Noted.' },
+    ], { cwd, memory: { home, embedder: null } });
+    await m.agent.send('the backend split is merged now');
+    await m.fake.close();
+    const answers = chats(m.fake).slice(1).map((c) => c.messages.filter((x) => x.role === 'tool').at(-1).content);
+    // 1: saved, and the old fact about the same thing is listed by id; the billing fact (another topic) and the rule are not.
+    expect(answers[0]).toContain('Saved to the memory. Saved facts about the same thing:');
+    expect(answers[0]).toContain(`- ${oldId}: ${OLD}`);
+    expect(answers[0]).not.toContain('billing.mjs');
+    expect(answers[0]).not.toContain(ruleId);
+    // 2: the same fact again with replaces: the old one is retired, the new one is kept once.
+    expect(answers[1]).toBe(`Saved to the memory; the old fact "${oldId}" is retired.`);
+    const live = readFacts(dir).map((f) => f.text);
+    expect(live.filter((t) => t === NEW).length).toBe(1);
+    expect(live).not.toContain(OLD);
+    expect(readFacts(dir, { retired: true }).find((f) => f.id === oldId).retired).toContain('replaced by: The backend split branch was merged');
+    // 3: a rule the user set is not replaced; 4: an id that is not there saves nothing.
+    expect(answers[2]).toMatch(/^Not saved: .* is a rule the user set/);
+    expect(readFacts(dir).some((f) => f.id === ruleId)).toBe(true);
+    expect(answers[3]).toMatch(/^Not saved: no saved fact about this project has the id "no-such-fact"/);
+    expect(readFacts(dir).some((f) => /entirely about prices/.test(f.text))).toBe(false);
+    expect(m.events.some((e) => e.type === 'note' && /^Memory: 1 retired/.test(e.text))).toBe(true);
+  } finally { if (before === undefined) delete process.env.AGENTIC_MEMORY_SAVE; else process.env.AGENTIC_MEMORY_SAVE = before; }
 });
 
 test('switching the way mid-conversation changes the prompt and the tools for the next message', async () => {
