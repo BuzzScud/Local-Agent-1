@@ -212,6 +212,211 @@ export function foldSteps(items, open = false) {
   if (run.length) printed.push(group(run));
   return { printed, held: null };
 }
+// Folders (9 Oct 2026, the owner: "can we make this less busy? can we group stuff and if we want to see it,
+// we click it and it expands?"; their picks over four preview rounds: a group for each stretch between the
+// model's words, drawn as a box with the row in its top edge, a small title and a colour for its main task,
+// failures and questions you answered kept in sight, the files it changed on its row, opened by a click or
+// from the keyboard, and compact: no empty rows around the model's sentences). The steps between two things
+// the model says are one group; a stretch of one step stays that step. Measured on the owner's 8 Oct
+// session: 688 rows → 194. Printed rows never change, so nothing here looks ahead.
+const WORK = new Set(['tool', 'thinking', 'looks', 'machine', 'note']);
+const isWork = (it) => Boolean(it.rail) && (WORK.has(it.type) || (it.type === 'user' && it.rail));
+// A group's id comes from its first step (/resume gives every item a new key): what it was, the first words
+// of what it said, and how many groups before it began the same way.
+function idOf(it, seen) {
+  const v = `${it.type}|${it.label ?? ''}|${String(it.arg ?? it.text ?? '').slice(0, 80)}`;
+  let h = 2166136261;
+  for (let i = 0; i < v.length; i++) { h ^= v.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const base = `w${(h >>> 0).toString(36)}`;
+  const n = seen.get(base) ?? 0;
+  seen.set(base, n + 1);
+  return n ? `${base}.${n}` : base;
+}
+// /steps: grouped (the default), open (every step, as before), words (no boxes, only what the model says).
+export const STEPS = ['grouped', 'open', 'words'];
+export const stepsOf = (v) => (STEPS.includes(v) ? v : 'grouped');
+// open: the ids of the groups you opened. working: the stretch at the end is still under way, so it is
+// held for the live area (screen.jsx LiveGroup) and printed once it ends.
+export function groupWork(printed, { working = false, open = null } = {}) {
+  const out = [];
+  const seen = new Map();
+  let run = [];
+  const flush = () => {
+    if (run.length >= 2) { const id = idOf(run[0].type === 'looks' ? run[0].list[0] : run[0], seen); const on = Boolean(open?.has(id)); out.push({ type: 'group', rail: true, key: on ? `${id}:open` : id, id, open: on, list: run }); }
+    else out.push(...run);
+    run = [];
+  };
+  for (const it of printed) {
+    if (isWork(it)) { run.push(it); continue; }
+    flush();
+    // the model's sentences without the empty rows around them (screen.jsx gapOver, gapUnder)
+    out.push(it.rail && it.type === 'text' ? { ...it, key: `${it.key}:t`, tight: true } : it);
+  }
+  let held = null;
+  if (run.length && working) held = run;
+  else flush();
+  return { printed: out, held };
+}
+const LOOKED = new Set(['read', 'same', 'list', 'search', 'screen', 'websearch', 'fetched', 'toolsearch']);
+const failed = (it) => {
+  if (it.type !== 'tool') return it.type === 'note' && (it.tone === 'error' || it.tone === 'warn');
+  if (it.error) return true;
+  if (it.view?.kind !== 'bash') return false;
+  return outcome(it.arg, it.view).color === C.bad || Boolean(it.view.timedOut);
+};
+// What a group holds, counted: its steps, reads, files changed (with lines added and taken out), commands,
+// the last test run's counts, thoughts; and the steps that stay in sight when it is closed.
+export function groupFacts(list) {
+  const flat = list.flatMap((it) => (it.type === 'looks' ? it.list : [it]));
+  const tools = flat.filter((it) => it.type === 'tool');
+  const files = new Map();
+  for (const it of tools) {
+    const v = it.view ?? {};
+    if (v.kind !== 'diff' || it.error) continue;
+    const p = v.path ?? it.arg;
+    const f = files.get(p) ?? { path: p, a: 0, r: 0, created: false };
+    f.a += v.additions ?? (v.created ? (v.hunk ?? []).length : 0);
+    f.r += v.removals ?? 0;
+    f.created ||= Boolean(v.created);
+    files.set(p, f);
+  }
+  let test = null;
+  for (const it of tools) if (it.view?.kind === 'bash') { const o = outcome(it.arg, it.view); if (/ pass · \d+ fail/.test(o.end)) test = { words: o.end.replace(/ · exit \d+$/, ''), bad: o.color === C.bad }; }
+  return {
+    task: groupTask(list),
+    steps: tools.length,
+    reads: tools.filter((it) => LOOKED.has(it.view?.kind)).length,
+    files: [...files.values()],
+    commands: tools.filter((it) => it.view?.kind === 'bash' || it.view?.kind === 'job').length,
+    test,
+    thoughts: flat.filter((it) => it.type === 'thinking').length,
+    answers: flat.filter((it) => (it.type === 'tool' && it.view?.kind === 'answer') || (it.type === 'user' && it.rail)),
+    failures: flat.filter(failed),
+  };
+}
+// What a group was mostly about (9 Oct 2026, the owner: "categorize with a very small title at the top and
+// different colors, for different main tasks"): scored from its steps, a test run counting most, then an
+// edit, another command, a web read, a file read, a thought; ties go in that order. title: its colour for
+// the small title; edge: a quieter one for the box. No green: the app's hue rule (theme.test.mjs).
+export const TASKS = {
+  testing: { label: 'TESTING', title: 'ansi256(179)', edge: 'ansi256(136)' },
+  editing: { label: 'EDITING', title: 'ansi256(141)', edge: 'ansi256(97)' },
+  running: { label: 'RUNNING', title: 'ansi256(215)', edge: 'ansi256(130)' },
+  research: { label: 'RESEARCH', title: 'ansi256(176)', edge: 'ansi256(132)' },
+  exploring: { label: 'EXPLORING', title: 'ansi256(75)', edge: 'ansi256(67)' },
+  thinking: { label: 'THINKING', title: 'ansi256(250)', edge: 'ansi256(241)' },
+  asking: { label: 'ASKING', title: 'ansi256(147)', edge: 'ansi256(103)' },
+};
+// a test run, or a look at one's results (a grep of a test log for pass and fail)
+const TEST_CMD = /\btests?\b|pytest|jest|vitest|mocha|unittest|\bpass\b|\bfail\b|\.test\./i;
+export function groupTask(list) {
+  const flat = list.flatMap((it) => (it.type === 'looks' ? it.list : [it]));
+  const tools = flat.filter((it) => it.type === 'tool');
+  const kinds = (ks) => tools.filter((it) => ks.includes(it.view?.kind));
+  const cmds = kinds(['bash', 'job']);
+  const tests = cmds.filter((it) => TEST_CMD.test(String(it.arg))).length;
+  const score = {
+    testing: tests * 3,
+    editing: kinds(['diff']).length * 2,
+    running: (cmds.length - tests) * 1.5,
+    research: kinds(['websearch', 'fetched']).length * 1.5,
+    exploring: kinds(['read', 'same', 'list', 'search', 'screen', 'toolsearch']).length,
+    thinking: flat.filter((it) => it.type === 'thinking').length * 0.3,
+  };
+  if (!tools.length && flat.some((it) => it.type === 'user')) return 'asking';
+  if (kinds(['answer']).length && tools.length <= 2) return 'asking';
+  return Object.entries(score).reduce((best, [k, v]) => (v > best[1] ? [k, v] : best), ['thinking', 0])[0];
+}
+const fileWords = (files) => {
+  const names = new Map();
+  for (const f of files) names.set(base(f.path), (names.get(base(f.path)) ?? 0) + 1);
+  return files.map((f) => `${names.get(base(f.path)) > 1 ? f.path : base(f.path)} ${f.created ? `new +${f.a}` : f.a || f.r ? `+${f.a} −${f.r}` : ''}`.trim());
+};
+// The group's words as coloured pieces: ▸ closed, ▾ open; its counts; the last test run's in red or green;
+// the files it changed last, so they are cut first. live: "Working".
+function headPieces(f, { open = false, live = false } = {}) {
+  const bits = [
+    f.reads ? `read ${f.reads}` : '',
+    f.files.length ? `changed ${plural(f.files.length, 'file')}` : '',
+    f.commands ? `ran ${plural(f.commands, 'command')}` : '',
+  ].filter(Boolean);
+  const out = [{ t: live ? '▸ ' : open ? '▾ ' : '▸ ', c: C.accent }];
+  if (live) out.push({ t: 'Working  ', c: C.accent, b: true });
+  out.push({ t: plural(f.steps, 'step'), c: WHITE, b: true });
+  if (bits.length) out.push({ t: ` · ${bits.join(' · ')}`, c: C.dim });
+  if (f.test) out.push({ t: ` · ${f.test.words}`, c: f.test.bad ? C.bad : C.ok });
+  if (f.thoughts) out.push({ t: ` · ${plural(f.thoughts, 'thought')}`, c: C.dim });
+  if (f.files.length) out.push({ t: '  ✎ ', c: C.edits }, { t: fileWords(f.files).join(', '), c: PATH });
+  return out;
+}
+// A group in words, for ctrl+o's list: its task, then its row.
+export function groupLine(list) {
+  const f = groupFacts(list);
+  return `${TASKS[f.task].label} · ${headPieces(f).slice(1).map((p) => p.t).join('')}`;
+}
+// Pieces cut to `max` cells, the last one cut with …
+function fitPieces(pieces, max) {
+  const out = [];
+  let used = 0;
+  for (const p of pieces) {
+    const w = stringWidth(p.t);
+    if (used + w <= max) { out.push(p); used += w; continue; }
+    const room = max - used;
+    if (room > 1) { let t = ''; for (const ch of p.t) { if (stringWidth(t + ch) > room - 1) break; t += ch; } out.push({ ...p, t: `${t.trimEnd()}…` }); used += stringWidth(`${t.trimEnd()}…`); }
+    break;
+  }
+  return { pieces: out, used };
+}
+const Pieces = ({ pieces, bg }) => pieces.map((p, i) => <Text key={i} color={p.c} bold={Boolean(p.b)} backgroundColor={bg}>{p.t}</Text>);
+// The group's row without a box: the stretch still under way, in the live area.
+export function GroupHead({ facts: f, open = false, live = false }) {
+  const [glyph, ...rest] = headPieces(f, { open, live });
+  return <Node g={glyph.t.trim()} c={glyph.c}><Text wrap="truncate-end"><Pieces pieces={rest} /></Text></Node>;
+}
+// The box (9 Oct 2026, the owner's pick of three looks, then "categorize with a very small title at the
+// top and different colors, for different main tasks"): its top edge holds the small title of its main
+// task and the group's row; inside, closed, what stays in sight (nothing: it is two rows), open, its steps.
+// The edge takes a quieter shade of the task's colour. width: the conversation's; the box sits two cells in
+// from each side, the rail's place.
+export function GroupBox({ facts: f, open = false, width, cwd, children = null }) {
+  const w = Math.max(30, width - 4);
+  const t = TASKS[f.task];
+  const label = `${t.label} `;
+  const room = w - 7 - stringWidth(label); // "╭─ " TITLE "─ " … " " … "╮"
+  const { pieces: fit, used } = fitPieces(headPieces(f, { open }), room);
+  const inside = open ? children : <GroupPins facts={f} cwd={cwd} />;
+  return (
+    <Box flexDirection="column" marginLeft={2} width={w}>
+      <Text><Text color={t.edge}>╭─ </Text><Text color={t.title} bold>{label}</Text><Text color={t.edge}>─ </Text><Pieces pieces={fit} /><Text color={t.edge}> {'─'.repeat(Math.max(0, room - used))}╮</Text></Text>
+      {inside
+        ? <Box width={w} borderStyle="round" borderTop={false} borderColor={t.edge} paddingX={1} flexDirection="column">{inside}</Box>
+        : <Text color={t.edge}>╰{'─'.repeat(w - 2)}╯</Text>}
+    </Box>
+  );
+}
+// The rows a closed group keeps in sight inside its box (the files it changed are on its row): the
+// questions you answered, and what failed last (the others counted on its row).
+function GroupPins({ facts: f, cwd }) {
+  const rows = [];
+  const Row = Box;
+  for (const it of f.answers) {
+    const q = it.type === 'user' ? null : cut(it.view?.question ?? it.arg, 70);
+    const a = it.type === 'user' ? it.text : it.view?.text;
+    rows.push(<Row key={`a${it.key}`}><Text wrap="truncate-end"><Text color={C.ask}>? </Text>{q ? <Text color={C.dim}>{q} → </Text> : <Text color={C.dim}>You: </Text>}<Text color={WHITE}>{cut(a, 80)}</Text></Text></Row>);
+  }
+  const last = f.failures.at(-1);
+  if (last) rows.push(<Row key={`f${last.key}`}><FailRow it={last} cwd={cwd} more={f.failures.length - 1} /></Row>);
+  return rows.length ? <Box flexDirection="column">{rows}</Box> : null;
+}
+function FailRow({ it, cwd, more = 0 }) {
+  const also = more > 0 ? <Text color={C.faint}>  · {more} more failed</Text> : null;
+  if (it.type === 'note') return <Text wrap="truncate-end"><Text color={it.tone === 'error' ? C.bad : C.warn}>{it.tone === 'error' ? '✗' : '!'} {cut(it.text, 110)}</Text>{also}</Text>;
+  const v = it.view ?? {};
+  if (v.kind === 'bash') { const o = outcome(it.arg, v); return <Text wrap="truncate-end"><Text color={C.bad}>✗ </Text><Text color={C.edits} bold>Ran</Text><Text color={PATH}>  {cut(shortCommand(cmdShown(it.arg, v.saved), cwd), 80)}</Text><Text color={o.color}> · {o.end}</Text>{also}</Text>; }
+  const why = v.message ?? v.reason ?? '';
+  return <Text wrap="truncate-end"><Text color={C.bad}>✗ </Text><Text color={C.bad} bold>{it.label}</Text><Text color={PATH}>  {cut(shortPath(String(it.arg ?? ''), cwd), 60)}</Text>{why ? <Text color={C.dim}> · {cut(why, 70)}</Text> : null}{also}</Text>;
+}
+
 // What one look says in a folded row: a file by its name (its path when two have that name), a
 // search by its words and matches, a list by its folder and paths.
 function lookPiece(it, cwd, names) {

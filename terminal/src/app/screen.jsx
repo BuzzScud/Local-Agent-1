@@ -29,7 +29,7 @@ import { hookListRows, hookLine, projectLine as hooksProjectLine, checkOn, rowWi
 import { HOOKS as APP_CHECKS } from '../agent/way.mjs';
 import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
-import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, LooksNode, RunningNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords, foldSteps } from './rail.jsx';
+import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, LooksNode, RunningNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords, foldSteps, groupFacts, GroupHead, GroupBox, groupWork } from './rail.jsx';
 import { HomePage } from './home-looks.jsx';
 import { useBot, BotLayer, KEEP_ROWS, KEEP_FROM } from './bot-layer.jsx';
 import { AttachTray } from './tray.jsx';
@@ -289,6 +289,8 @@ export function Item({ it, width, model, cwd, loaded, start }) {
     case 'tool': return it.rail ? <ToolNode it={it} cwd={cwd} /> : <ToolView it={it} width={width} />;
     // Reads, lists and searches in a row, as one row (rail.jsx foldSteps).
     case 'looks': return <LooksNode list={it.list} cwd={cwd} />;
+    // A stretch of steps between two things the model says, closed or open (rail.jsx groupWork).
+    case 'group': return <GroupView it={it} width={width} model={model} cwd={cwd} loaded={loaded} start={start} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
     case 'made': return <MadeNode files={it.files} />;
     case 'note': {
@@ -524,7 +526,9 @@ function LiveRail({ app, maxLines, held }) {
   const { live, width } = app;
   const blocks = [];
   if (live.pre) blocks.push(<MachineLine key="pre" it={live.pre} />);
-  if (held) blocks.push(held.type === 'looks' ? <LooksNode key="held" list={held.list} cwd={app.cwdShort} /> : <ToolNode key="held" it={held} cwd={app.cwdShort} />);
+  // grouped (/steps): the stretch under way, its row counting and its last two steps (rail.jsx groupWork)
+  if (Array.isArray(held)) blocks.push(<LiveGroup key="held" list={held} width={width} model={app.modelName} cwd={app.cwdShort} loaded={app.loaded} start={app.start} />);
+  else if (held) blocks.push(held.type === 'looks' ? <LooksNode key="held" list={held.list} cwd={app.cwdShort} /> : <ToolNode key="held" it={held} cwd={app.cwdShort} />);
   if (live.thinking && !live.text && !live.writing) blocks.push(<ThinkingLive key="think" thinking={live.thinking} now={app.now} width={width} cap={live.thinkCap} />);
   if (live.text) {
     const shown = tailToFit(live.text, maxLines, width - 6);
@@ -2089,8 +2093,24 @@ const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `
 // An item as printed (Tight rail, 8 Oct 2026): a turn's steps sit on consecutive rows; a reply has
 // an empty row above and under it; your message has one above and under it (a turn cut off has no
 // end line to leave one); the end line and everything outside a turn have one under them.
-export const gapOver = (it) => ((it.rail && it.type === 'text') || (!it.rail && it.type === 'user') ? 1 : 0);
-export const gapUnder = (it) => (it.rail ? (it.type === 'done' || it.type === 'text' ? 1 : 0) : it.type === 'looks' ? 0 : 1);
+// Grouped (rail.jsx groupWork): the model's sentences have none (tight).
+export const gapOver = (it) => (it.tight ? 0 : (it.rail && it.type === 'text') || (!it.rail && it.type === 'user') ? 1 : 0);
+export const gapUnder = (it) => (it.tight ? 0 : it.rail ? (it.type === 'done' || it.type === 'text' ? 1 : 0) : it.type === 'looks' ? 0 : 1);
+// A group (rail.jsx groupWork): its box, closed (what stays in sight) or open (its steps inside, narrower by
+// the box's borders and padding).
+function GroupView({ it, width, model, cwd, loaded, start }) {
+  const steps = it.open ? it.list.map((x) => <ItemFrame key={x.key} it={x} width={width - 8} model={model} cwd={cwd} loaded={loaded} start={start} />) : null;
+  return <GroupBox facts={groupFacts(it.list)} open={it.open} width={width} cwd={cwd}>{steps}</GroupBox>;
+}
+// The stretch still under way, in the live area: its row counting as it goes, and its last two steps.
+function LiveGroup({ list, width, model, cwd, loaded, start }) {
+  return (
+    <Box flexDirection="column">
+      <GroupHead facts={groupFacts(list)} live />
+      {list.slice(-2).map((x) => <ItemFrame key={x.key} it={x} width={width} model={model} cwd={cwd} loaded={loaded} start={start} />)}
+    </Box>
+  );
+}
 export function ItemFrame({ it, width, model, cwd, loaded, start }) {
   return (
     <Box flexDirection="column" marginTop={gapOver(it)} marginBottom={gapUnder(it)} width={width}>
@@ -2099,11 +2119,33 @@ export function ItemFrame({ it, width, model, cwd, loaded, start }) {
   );
 }
 // What the conversation prints: its items with each run of reads folded into one (rail.jsx
-// foldSteps); while a turn works, a run still open at the end is held for the live area.
-const printedOf = (items, working = false) => foldSteps(items, working);
+// foldSteps); while a turn works, a run still open at the end is held for the live area. view (/steps,
+// App.jsx): grouped, each stretch of steps between the model's words one box (rail.jsx groupWork; open:
+// the ones you opened; the stretch under way held whole); words, the same without the boxes; open (or
+// none), every step as before.
+function printedOf(items, working = false, view = null) {
+  if (!view || view.steps === 'open') return foldSteps(items, working);
+  const g = groupWork(foldSteps(items).printed, { working, open: view.open });
+  return view.steps === 'words' ? { printed: g.printed.filter((it) => it.type !== 'group'), held: g.held } : g;
+}
+// The groups printed, in order (ctrl+o's list, app-keys.mjs).
+export const stepGroups = (items, view) => printedOf(items, false, view).printed.filter((it) => it.type === 'group');
+// The printed item on a row of the window: up, rows over the live part (1: the one right over it); the
+// row it is counted from the item's top. null when it is not measured or not there (a click, app-keys.mjs).
+export function printedAt(items, ctx, working, up) {
+  const { printed } = printedOf(items, working, ctx.view);
+  let n = 0;
+  for (let i = printed.length - 1; i >= 0; i--) {
+    const h = itemHeights.get(rowsKey(printed[i], ctx));
+    if (h == null) return null;
+    if (up <= n + h) return { it: printed[i], row: h - (up - n) };
+    n += h;
+  }
+  return null;
+}
 export function primeRows(items, ctx) {
   let added = false;
-  for (const it of printedOf(items).printed) {
+  for (const it of printedOf(items, false, ctx.view).printed) {
     const k = rowsKey(it, ctx);
     if (itemHeights.has(k)) continue;
     if (itemHeights.size > 5000) itemHeights.clear();
@@ -2139,13 +2181,14 @@ function usedRows(app, list) {
 export function Screen({ app }) {
   const { width, modelName, cwd } = app;
   // The live part's height as last drawn, and how many items were printed then.
-  const liveRef = useRef(null);
+  const ownLive = useRef(null);
+  const liveRef = app.liveBoxRef ?? ownLive; // App reads its height for a click on a group (app-keys.mjs)
   // the bot over the live part (bot-layer.jsx): where the prompt box is, and its cells as last worked out
   const boxRef = useRef(null);
   const bot = useBot(app, liveRef, boxRef);
   const drawn = useRef({ redraw: null, height: 0, count: 0 });
   const working = app.live?.phase === 'working';
-  const folded = printedOf(app.items, working);
+  const folded = printedOf(app.items, working, app.stepsView);
   useLayoutEffect(() => {
     if (!liveRef.current) return;
     drawn.current = { redraw: app.redraw, height: measureElement(liveRef.current).height, count: app.hold ? 0 : folded.printed.length };

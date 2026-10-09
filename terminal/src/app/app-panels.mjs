@@ -822,7 +822,7 @@ export function panelsPart(self) {
     if (!s.title) return;
     // lessons: what happened in each turn, for the memory's review at night.
     const slimImages = (m) => (m.images ? { ...m, images: m.images.map(({ data, ...rest }) => rest) } : m);
-    try { saveSession(self.cwd, s.id, { title: s.title, messages: self.agent.messages.map(slimImages), items: s.items.slice(-300), mode: self.agent.mode, lessons: self.agent.lessons }); } catch {}
+    try { saveSession(self.cwd, s.id, { title: s.title, messages: self.agent.messages.map(slimImages), items: s.items.slice(-300), mode: self.agent.mode, lessons: self.agent.lessons, open: s.open ?? [] }); } catch {}
   };
   return { applyHelpers, serviceOf, serviceProps, pickHere, openWebPicker, runWebTest, saveWeb, offerList, openMcpPicker, mcpKeys, hooksList, hooksKeys, mcpNews, seeingModels, needVision, openSettings, openRewind, chooseRewind, applyRewind, openPermissions, memoryForRestart, openEffortLimits, openOwnSettings, fillSuggested, sharedValues, saveOwnSettings, keepOwnSettings, applyChoice, sayEffort, saveEffortLimits, setThinkingFn, readMacMemory, readServicePs, saveNowFn };
 }

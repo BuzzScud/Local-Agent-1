@@ -4,7 +4,8 @@
 // self, which App makes at each render, so a function sees the values of the render that made it.
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { heldRows, holdRoom, btwLayout } from './screen.jsx';
+import { heldRows, holdRoom, btwLayout, stepGroups, printedAt } from './screen.jsx';
+import { groupLine } from './rail.jsx';
 import { homeItems, homeNav, itemAt, lookOf } from './home-looks.jsx';
 import { hookFormRows, startHookEdit } from './hooks-form.mjs';
 import { nextMode } from '../agent/permissions.mjs';
@@ -227,6 +228,17 @@ export function keysPart(self) {
     const ev = parseMouse(seq);
     if (ev?.kind === 'move') { self.botPointer.current = { col: ev.col, row: ev.row }; return; } // the bot's eyes follow it (bot-layer.jsx)
     if (!ev || ev.kind === 'other') return;
+    // A press on a box in the conversation opens it, or on an open one's top edge closes it (/steps grouped):
+    // its row counted up from the live part, which ends on the row over the cursor's (screen.jsx printedAt).
+    if (ev.kind === 'press' && !self.holdRef.current && self.stepsView.steps === 'grouped') {
+      const h = self.liveBoxRef.current?.yogaNode?.getComputedHeight?.();
+      const top = h ? (self.rows ?? 40) - h : null;
+      if (top != null && ev.row < top) {
+        const hit = printedAt(self.itemsRef.current, self.measure.current, self.S.current.live?.phase === 'working', top - ev.row);
+        if (hit?.it.type === 'group' && (!hit.it.open || hit.row === 0)) self.toggleGroup(hit.it.id);
+        return;
+      }
+    }
     // A press on a Recent activity row of the start page: that conversation, as /resume would open it.
     // The page's row on screen is Ink's own layout of it (its box's top and its parents'), counted from
     // the window's first row, where the app starts drawing (cli.jsx).
@@ -595,6 +607,15 @@ export function keysPart(self) {
       else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
       return;
     }
+    // ctrl+o's list of boxes: ↑↓ one, enter opens or closes it, esc goes back
+    if (cur.picker?.kind === 'groups') {
+      const pk = cur.picker;
+      if (key.upArrow) self.setPicker({ ...pk, index: Math.max(0, pk.index - 1) });
+      else if (key.downArrow) self.setPicker({ ...pk, index: Math.min(pk.items.length - 1, pk.index + 1) });
+      else if (key.return) { self.setPicker(null); self.toggleGroup(pk.items[pk.index].key); }
+      else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
+      return;
+    }
     // Resume picker
     if (cur.picker) {
       const pk = cur.picker;
@@ -655,6 +676,11 @@ export function keysPart(self) {
     if (key.ctrl && ch === 'p') { self.runSlash('/compact'); return; }
     if (key.ctrl && ch === 'r') { secondOpinionNow(); return; }
     if (key.ctrl && ch === 'o') {
+      // grouped (/steps): the boxes printed, newest first; enter opens or closes the one picked
+      if (self.stepsView.steps !== 'open') {
+        const groups = stepGroups(self.itemsRef.current, self.stepsView).reverse();
+        if (groups.length) { self.setPicker({ kind: 'groups', title: 'Open or close a group of steps', items: groups.map((g) => ({ key: g.id, label: groupLine(g.list), desc: g.open ? '· open: enter closes it' : '' })), index: 0 }); return; }
+      }
       const s = self.folds.current;
       if (!s.list.length) { self.flash('Nothing to expand yet'); return; }
       if (s.back >= s.list.length) { self.flash('That was the first one'); return; }

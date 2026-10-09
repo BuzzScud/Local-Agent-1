@@ -1015,6 +1015,45 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   range, the same frames twice, the cells, /bot in the menu, the pointer parsed, and the real window at 150 × 50:
   over the title, onto the box, /bot hides it and brings it back, kept in settings.json).
 
+## Folders: a reply's steps in boxes (9 Oct 2026)
+
+- **What and why.** The owner, on a screenshot of a long turn: "can we make this less busy? can we group stuff and
+  if we want to see it, we click it and it expands?". Their picks over four preview rounds (private, with their own
+  sessions: `docs/private/design rounds/agentic-coder-folders-preview-2026-10-09*.html`): a group for each stretch
+  of steps between the model's words, opened in place by a click or from the keyboard; failures and the questions
+  they answered kept in sight; "compact it more" (no empty rows around the model's sentences, the files changed on
+  the group's row); "design them with boxes" (the row in a box's top edge); then "categorize with a very small
+  title at the top and different colors, for different main tasks". Their 8 Oct session: 688 rows → 194.
+- **The grouping** (`terminal/src/app/rail.jsx`): `groupWork` over foldSteps' list: a run of two or more steps
+  (`isWork`: tools, thoughts, folded reads, notes, the window's own lines, answers typed mid-turn) becomes
+  `{ type: 'group', id, open, list }`; one step stays a step; the model's sentences are marked `tight` (no gaps,
+  screen.jsx `gapOver`/`gapUnder`). Nothing looks ahead, since printed rows never change. While a turn works the
+  stretch at the end is `held` and drawn in the live area by `LiveGroup` (its row counting and its last two steps),
+  and printed closed once the model speaks or the turn ends. A group's `id` comes from its first step's words and
+  how many groups began the same way (`idOf`), so it is the same after /resume, which gives items new keys.
+- **The box**: `groupFacts` (steps, reads, files with +/−, commands, the last test run's counts by `outcome`,
+  thoughts, answers, failures) and `groupTask` (the main task, scored: a test run 3 (a command naming tests, pass or
+  fail), an edit 2, another command or a web read 1.5, a file read 1, a thought 0.3; a question to you with little
+  else is ASKING) → `TASKS` (TESTING gold, EDITING purple, RUNNING orange, RESEARCH pink, EXPLORING blue, THINKING
+  grey, ASKING lavender; no green). `GroupBox` draws the top edge by hand (`╭─ TITLE ─ ▸ row ─╮`, the row cut with …
+  by `fitPieces`, the files last so they go first) in the task's quieter shade, then, closed, `GroupPins` (your
+  answers, the newest failure with how many others failed) or the bottom edge alone (two rows); open, every step
+  as always inside it (screen.jsx `GroupView`, at the width less 8).
+- **Opening** (App.jsx `openGroups`, `toggleGroup`; kept with the conversation as `open` in its saved file, read
+  back by /resume, emptied by /clear): a click on a closed box, or on an open one's top edge (app-keys.mjs: the
+  window row counted up from the live part, whose height is `liveBoxRef`'s, then screen.jsx `printedAt` over the
+  measured heights; only what is in the window, since a click scrolled up is Terminal's), or ctrl+o: a list of the
+  boxes, newest first (`stepGroups`, `groupLine`; picker kind `groups`), enter opens or closes one. Any change of
+  the view prints the conversation again (`viewKey` → `win.clear()`, as a resize does), just after the render: the
+  redraw measures the open box with a render of its own (`primeRows`), and Ink's layout engine crashed when that
+  ran inside a commit.
+- **/steps** grouped (the default) · open (every step, as before; ctrl+o is then the old newest-fold opener) · words
+  (no boxes): settings.json `steps`, `AGENTIC_STEPS` for one window; in the / menu where there is room (`WHEN_ROOM`,
+  after /bot). The app tests run with `AGENTIC_STEPS=open` (pty.mjs, term.mjs, the keeper and sessions tests).
+- **Tests**: `terminal/test/folders.test.mjs` (the grouping, held, the id after new keys, the tasks and their colours,
+  the box's rows at 135 and 80 columns, a click's row to its box, ctrl+o's list, and the real window: a reply's
+  steps in a box, a click opens it, ctrl+o closes it, /steps open, kept in settings.json).
+
 ## Agentic Coder Web: the page, the backend and the tools server (8 Oct 2026)
 
 - **What and why.** The owner asked for "a web interface … a backend and tools server with API access … multi user

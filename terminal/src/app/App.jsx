@@ -1,7 +1,7 @@
 // Agentic Coder's terminal app: starts the model, runs the agent, and turns
 // its events into the screen; handles the prompt box, permission prompts,
 // slash commands, layouts, sessions and keys.
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { join } from 'node:path';
 import { existsSync, statSync, writeSync, readdirSync, rmSync } from 'node:fs';
@@ -25,6 +25,7 @@ import { walk } from '../tools/fs.mjs';
 import { mentionAt, selectedText } from './edit-input.mjs';
 import { MOUSE_ON, MOUSE_OFF, MOTION_ON, MOTION_OFF, isMouseText } from './mouse.mjs';
 import { botAllowed } from './bot-layer.jsx';
+import { stepsOf } from './rail.jsx';
 import { copyToClipboard } from './clipboard.mjs';
 import { matchCommands, COMMANDS } from './commands.mjs';
 import { openMemory } from '../agent/facts.mjs';
@@ -64,6 +65,7 @@ export function App({ opts, win, onRestart }) {
     MCP_EXTRAS: () => MCP_EXTRAS, S: () => S, abortRef: () => abortRef, agent: () => agent, agentRef: () => agentRef,
     agentsKey: () => agentsKey, agentsRef: () => agentsRef, agentsSize: () => agentsSize, aliveRef: () => aliveRef,
     answerRef: () => answerRef, applyChoice: () => applyChoice, applyKeep: () => applyKeep, botPointer: () => botPointer, setBotOn: () => setBotOn,
+    stepsView: () => stepsView, setSteps: () => setSteps, toggleGroup: () => toggleGroup, setOpenGroups: () => setOpenGroups, liveBoxRef: () => liveBoxRef,
     applyRewind: () => applyRewind, arrowsRef: () => arrowsRef, askBtw: () => askBtw, askCopyBack: () => askCopyBack,
     askedAtOpen: () => askedAtOpen, autoRef: () => autoRef, battleRef: () => battleRef, btwRef: () => btwRef,
     bumpLists: () => bumpLists, busyNow: () => busyNow, catalog: () => catalog, chatOnlyRef: () => chatOnlyRef,
@@ -266,6 +268,20 @@ export function App({ opts, win, onRestart }) {
   const [leaving, setLeaving] = useState(false);
   const [ramGb, setRamGb] = useState(null);
   const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
+  // /steps (rail.jsx groupWork): grouped, each stretch of steps between the model's words one box (the default),
+  // open (every step) or words; settings.json "steps", AGENTIC_STEPS for one window (the app tests: open).
+  // openGroups: the boxes opened in this conversation (a click or ctrl+o), kept with it for /resume.
+  // liveBoxRef: the live part's box, whose height places a click on the conversation (app-keys.mjs).
+  const [steps, setSteps] = useState(() => stepsOf(process.env.AGENTIC_STEPS || settings.steps));
+  const [openGroups, setOpenGroups] = useState(() => new Set());
+  const stepsView = useMemo(() => ({ steps, open: openGroups }), [steps, openGroups]);
+  const liveBoxRef = useRef(null);
+  const toggleGroup = useCallback((id) => setOpenGroups((prev) => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    sessionRef.current.open = [...n];
+    return n;
+  }), []);
   // /home: the start page, the Menu or the Launcher (home-looks.jsx), settings.json "homeLook"; AGENTIC_HOME_LOOK for one window.
   const [homeLook, setHomeLook] = useState(() => lookOf(process.env.AGENTIC_HOME_LOOK || settings.homeLook));
   // The item picked on that page from the keyboard (tab from an empty prompt, then the arrows: app-keys.mjs
@@ -487,7 +503,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog, homeLook, botOn };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog, homeLook, botOn, steps };
   const flash = useCallback(flashFn, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
   // selection settles, like Claude Code's copy on select. Not the whole of it
@@ -741,7 +757,8 @@ export function App({ opts, win, onRestart }) {
       const s = loadSession(cwd, id);
       agent.messages = s.messages;
       agent.messages[0] = { role: 'system', content: agent.messages[0].content };
-      sessionRef.current = { id: s.id, title: s.title, items: s.items ?? [] };
+      sessionRef.current = { id: s.id, title: s.title, items: s.items ?? [], open: s.open ?? [] };
+      setOpenGroups(new Set(s.open ?? []));
       rewindRef.current?.setSession(s.id);
       agent.startSession('resume').catch(() => {});
       push({ type: 'divider', text: `resumed: ${s.title}` }, ...replayed(s.items ?? []));
@@ -903,7 +920,7 @@ export function App({ opts, win, onRestart }) {
   // it has room for its Try rows, else on the footer.
   const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running };
   const tipOnPage = homeLook === 'launcher' && Boolean(tip) && pageRoom - 2 >= START_BIG; // the Menu leaves it on the footer
-  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, foot: footRows };
+  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, foot: footRows, view: stepsView };
   itemsRef.current = items;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
@@ -949,6 +966,17 @@ export function App({ opts, win, onRestart }) {
     loopsWas.current = loopsShown;
     win?.clear();
   }, [loopsShown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A box opened or closed, or /steps: the conversation printed again (as after a resize), since printed
+  // rows never change. Just after this render, not in it: the redraw measures the open box with a render of
+  // its own (primeRows), and Ink's layout engine crashes when one render starts inside another's commit.
+  const viewKey = `${steps}:${[...openGroups].sort().join(',')}`;
+  const viewWas = useRef(viewKey);
+  useEffect(() => {
+    if (viewWas.current === viewKey) return undefined;
+    viewWas.current = viewKey;
+    const t = setTimeout(() => win?.clear(), 0);
+    return () => clearTimeout(t);
+  }, [viewKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!loopsShown) return undefined;
     const id = setInterval(() => setLoopsTick((x) => x + 1), 150);
@@ -961,7 +989,7 @@ export function App({ opts, win, onRestart }) {
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     loopsFrame, loopsLine: loopsShown ? null : loopsSegs,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
-    botOn, botAllowed: botHere, botPointer,
+    botOn, botAllowed: botHere, botPointer, stepsView, liveBoxRef,
     items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, homeFocus: holdRef.current ? homeFocus : null, walk: holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff ? walkStep : null, tip: tipOnPage ? null : tip,
     // The Claude API's usage (usage-bar.mjs): the bar under the footer, and /usage; the shine runs while a reply does.
     usage: claudeModel ? usage : null, usageLive: live.phase === 'working',

@@ -202,10 +202,10 @@ test('the / menu under the live start page: the 18 of this Mac (with /jumptomac,
       { type: 'start' }, { key: 'enter' }, { wait: '● ready · effort', ms: 45_000 }, { sleep: 400 }, { snapshot: 'ready' },
       ...quit,
     ] });
-    // 18 at 155 × 43: no more fit under the page. At 173 × 55 six more do, so /loop, /loops,
-    // /mcp and /jobs (3 Oct 2026), /calc (8 Oct 2026, under /help) and /bot (9 Oct 2026) are listed there too;
-    // either way the page stays live.
-    expect(rowsOf(r.snapshots.menu)).toHaveLength(rows === 43 ? 18 : 24);
+    // 18 at 155 × 43: no more fit under the page. At 173 × 55 seven more do, so /loop, /loops,
+    // /mcp and /jobs (3 Oct 2026), /calc (8 Oct 2026, under /help), /bot and /steps (9 Oct 2026) are listed
+    // there too; either way the page stays live.
+    expect(rowsOf(r.snapshots.menu)).toHaveLength(rows === 43 ? 18 : 25);
     const names = rowsOf(r.snapshots.menu);
     if (rows === 55) expect(names.slice(0, 2)).toEqual(['/help', '/calc']); else expect(names).not.toContain('/calc');
     expect(names[names.indexOf('/remote') + 1]).toBe('/jumptomac');

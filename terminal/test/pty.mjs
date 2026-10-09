@@ -21,7 +21,8 @@ export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '
 // says "? for shortcuts" from the start, not a tip picked at random.
 // AGENTIC_NEWS=off: the start page has no What's new, which would change with every commit.
 // AGENTIC_BOT=off: no bot over the prompt box (bot-layer.jsx), so the screens are the ones the tests were
-// written against; bot.test.mjs sets it on.
+// written against; bot.test.mjs sets it on. AGENTIC_STEPS=open: every step printed, not grouped into boxes
+// (rail.jsx groupWork), for the same reason; folders.test.mjs drives the boxes.
 // AGENTIC_HOME_LOOK=launcher: the start page the app tests were written against (the Launcher, start.jsx);
 // the Menu, the start page since 8 Oct 2026, is driven by home-looks.test.mjs, which sets it back.
 // No CI, CONTINUOUS_INTEGRATION: Ink draws nothing but the last frame when it thinks it runs on a CI
@@ -49,7 +50,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   const fifo = `${out}.in`;
   execFileSync('mkfifo', [fifo]);
   const q = (x) => `'${x.replace(/'/g, `'\\''`)}'`;
-  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: withoutCi({ ...process.env, TERM: 'xterm-256color', AGENTIC_NO_OPEN: '1', AGENTIC_HUB_PORT: '0', AGENTIC_FETCH_EVERY: '0', AGENTIC_MEMORY: join(cwd, '..', 'memory-about-you'), AGENTIC_MEMORY_SAVE: 'off', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_BOT_WALK: 'off', AGENTIC_BOT: 'off', AGENTIC_NEWS: 'off', AGENTIC_HOME_LOOK: 'launcher', ...env }), stdio: 'ignore' });
+  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: withoutCi({ ...process.env, TERM: 'xterm-256color', AGENTIC_NO_OPEN: '1', AGENTIC_HUB_PORT: '0', AGENTIC_FETCH_EVERY: '0', AGENTIC_MEMORY: join(cwd, '..', 'memory-about-you'), AGENTIC_MEMORY_SAVE: 'off', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_BOT_WALK: 'off', AGENTIC_BOT: 'off', AGENTIC_STEPS: 'open', AGENTIC_NEWS: 'off', AGENTIC_HOME_LOOK: 'launcher', ...env }), stdio: 'ignore' });
   const fd = openSync(fifo, 'w');
   const stdin = { write: (s) => { try { writeSync(fd, s); } catch {} } };
   const done = new Promise((resolve) => child.on('exit', (code) => resolve(code)));
