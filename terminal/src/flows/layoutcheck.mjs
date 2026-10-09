@@ -207,7 +207,7 @@ const PROBE = String.raw`(function () {
     }
     [].slice.call(document.querySelectorAll('img')).forEach(function (im) {
       if (!shown(im) || im.hasAttribute('alt') || im.getAttribute('role') === 'presentation' || im.getAttribute('aria-hidden') === 'true') return;
-      a.alts++; if (a.noAlt.length < 3) a.noAlt.push(tag(im) + ' (' + ((im.getAttribute('src') || '').split('/').pop().slice(0, 40) || 'no src') + ')');
+      a.alts++; if (a.noAlt.length < 3) { var src = im.getAttribute('src') || ''; a.noAlt.push(tag(im) + ' (' + (/^data:/i.test(src) ? 'a picture inside the page' : src.split('/').pop().slice(0, 40) || 'no src') + ')'); }
     });
     [].slice.call(document.querySelectorAll('button, a[href], [role=button], [role=link]')).forEach(function (el) {
       if (!shown(el) || named(el)) return;
@@ -590,14 +590,15 @@ export async function layoutCheckUrl(url, { chrome = findChrome(), passes = PASS
 // → { page: as written, address, problems, secs } or { page, address, skipped }.
 export async function checkPage(target, { cwd = process.cwd(), access = false, chrome = findChrome() } = {}) {
   const page = String(target ?? '').trim();
-  if (/^https?:\/\//i.test(page)) return { page, address: true, ...(await layoutCheckUrl(page, { chrome, access })) };
+  if (/^https?:\/\//i.test(page)) return { ...(await layoutCheckUrl(page, { chrome, access })), page, address: true };
   const abs = page.startsWith('~/') ? join(homedir(), page.slice(2)) : page.startsWith('/') ? page : join(cwd, page);
   if (!page || !existsSync(abs) || !statSync(abs).isFile()) return { page, address: false, skipped: `there is no file ${page || '(none named)'} in this folder` };
   let html = '';
   try { html = readFileSync(abs, 'utf8'); } catch { return { page, address: false, skipped: `${page} could not be read` }; }
   const server = needsServer(html);
   if (server) return { page, address: false, skipped: `${server}: give its address instead, like http://localhost:5173` };
-  return { page, address: false, ...(await layoutCheck(abs, { chrome, access })) };
+  // As written in the loop (index.html), not the whole path layoutCheck answers with.
+  return { ...(await layoutCheck(abs, { chrome, access })), page, address: false };
 }
 // What a run is told above its message: what the check found, or that it found nothing, or why it could not look.
 export function pageCheckNote(r) {
