@@ -32,8 +32,10 @@ rebuild() {
   [ -n "$changed" ] || return 0
   mkdir -p "$(dirname "$APP")" "$(dirname "$LOG")"
   # A package the code now needs and this Mac does not have yet (one added to
-  # package.json, like the Claude API's SDK) is installed first, as the installer does.
-  if ! (cd "$REPO" && "$BUN" -e 'const p = require("./package.json"); process.exit(Object.keys(p.dependencies ?? {}).every((d) => require("fs").existsSync(`node_modules/${d}/package.json`)) ? 0 : 1)') >/dev/null 2>&1; then
+  # package.json, like the Claude API's SDK) is installed first, as the installer does;
+  # so is a patch of a package (patchedDependencies: patches/ink@7.1.1.patch) that is not
+  # on its installed copy yet (it is there when the patch takes back cleanly).
+  if ! (cd "$REPO" && "$BUN" -e 'const fs = require("fs"), { spawnSync } = require("child_process"), p = require("./package.json"); const has = Object.keys(p.dependencies ?? {}).every((d) => fs.existsSync(`node_modules/${d}/package.json`)); const patched = Object.entries(p.patchedDependencies ?? {}).every(([spec, file]) => spawnSync("git", ["apply", "--check", "-R", "--directory", `node_modules/${spec.slice(0, spec.lastIndexOf("@"))}`, file]).status === 0); process.exit(has && patched ? 0 : 1)') >/dev/null 2>&1; then
     printf '\033[2m↻ Installing the packages Agentic Coder now needs…\033[0m\n' >&2
     (cd "$REPO" && "$BUN" install) >"$LOG.install" 2>&1 || printf '\033[33m! bun install failed (see %s)\033[0m\n' "$(echo "$LOG.install" | sed "s|^$HOME|~|")" >&2
   fi
