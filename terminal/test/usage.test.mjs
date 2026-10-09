@@ -13,7 +13,7 @@ process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-usage-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
 const { limitsFrom, noteLimits, tierOf, capOf, noteCapped, usageNow, resetOf, setOwn, fetchBill, readBill, dollarsOf, monthOf } = await import('../src/agent/claude-usage.mjs');
 const { recordSpend, daySpend, dayOf, costOf, claudeSince } = await import('../src/agent/spend.mjs');
-const { usagePanel, usageChip, sourceWords, textOf, LABEL_W } = await import('../src/app/usage-bar.mjs');
+const { usagePanel, usageChip, sourceWords, textOf, widthOf, LABEL_W } = await import('../src/app/usage-bar.mjs');
 const { streamChat } = await import('../src/agent/client.mjs');
 const { setEndpoint, dropEndpoint, GENERIC_REMOTE, CLAUDE_HOST } = await import('../../models/index.mjs');
 const { matchCommands } = await import('../src/app/commands.mjs');
@@ -233,6 +233,43 @@ test('your limit, a figure typed from the Console and Anthropic’s bill: the ne
   expect(usageNow({ model: OPUS, now: NOW }).left).toBeCloseTo(14, 6);
   setOwn({ limit: null, spent: null });
   expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ cap: 500, ownLimit: null, source: { kind: 'meter' } });
+});
+
+test('a typed figure three whole days old asks to be typed again: in the footer and the card; fresh, the bill and the meter never do', () => {
+  freshHome();
+  const month = monthOf(NOW);
+  noteLimits(START, OPUS, NOW - 600_000);
+  setOwn({ limit: 200 });
+  const DAY = 86_400_000;
+  const typedAgo = (ms) => { setOwn({ spent: { usd: 50, at: NOW - ms, month } }); return usageNow({ model: OPUS, now: NOW }); };
+  // fresh, and a minute short of three days: no nudge
+  for (const ms of [3_600_000, 3 * DAY - 60_000]) {
+    const u = typedAgo(ms);
+    expect(u.source.stale).toBe(false);
+    expect(textOf(usageChip(u))).toBe('$150.00 left');
+    expect(usagePanel(u, 120, { now: NOW }).map(textOf).some((r) => r.includes('▲ the figure you typed'))).toBe(false);
+  }
+  // exactly three days: stale; the footer says so after what is left, in amber
+  let u = typedAgo(3 * DAY);
+  expect(u.source).toMatchObject({ kind: 'typed', days: 3, stale: true });
+  expect(textOf(usageChip(u))).toBe('$150.00 left (3 d old)');
+  expect(usageChip(u).at(-1).fg).toBe(215);
+  // the card: one amber row under where the spend comes from, the card's ends kept at every width
+  for (const w of WIDTHS) {
+    const rows = usagePanel(u, w, { now: NOW });
+    for (const r of rows) expect(widthOf(r)).toBe(w);
+    const words = rows.map(textOf).find((r) => r.includes('▲'));
+    expect(words).toContain(w - 4 >= 80 ? 'the figure you typed is 3 days old: s types the Console’s figure again' : 'typed 3 days ago · s to update');
+  }
+  // without a cap the month's words get it too; at the cap only "paused"
+  expect(textOf(usageChip({ ...u, cap: null, left: null }))).toBe(`$${u.spent.toFixed(2)} this month (3 d old)`);
+  expect(textOf(usageChip({ ...u, capped: { kind: 'own' } }))).toBe('paused');
+  // typed again: fresh
+  u = typedAgo(0);
+  expect(u.source.stale).toBe(false);
+  // the meter (nothing typed) is never stale
+  setOwn({ spent: null });
+  expect(usageNow({ model: OPUS, now: NOW }).source.stale).toBeUndefined();
 });
 
 test('Anthropic’s bill: every page of the month added up, once a minute over every window, this Mac’s answers after it on top; a refused key said, the last bill kept', async () => {

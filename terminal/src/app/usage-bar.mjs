@@ -92,11 +92,13 @@ const thinMeter = (w, frac) => fuelLine(w, frac, 0);
 // The footer's words on the Claude API (the owner's pick "3 · One row", 9 Oct 2026): "$61.68 left", amber when
 // the month runs out before the 1st at its pace, red under a tenth of the cap left, "paused" at the cap;
 // "$138.32 this month" with no cap known. The footer puts it after the model's name (screen.jsx).
+// A figure typed days ago adds "(3 d old)" in amber: /usage, then s, types it again.
 export function usageChip(u) {
   if (u.capped) return [S('paused', C.bad, null, true)];
-  if (u.cap == null) return [S(money(u.spent), C.value, null, true), S(' this month', C.dim)];
+  const old = u.source?.stale ? [S(` (${u.source.days} d old)`, C.warn)] : [];
+  if (u.cap == null) return [S(money(u.spent), C.value, null, true), S(' this month', C.dim), ...old];
   const tone = u.low ? C.bad : u.pace.beforeReset ? C.warn : null;
-  return [S(money(u.left), tone ?? C.value, null, true), S(' left', tone ?? C.dim)];
+  return [S(money(u.left), tone ?? C.value, null, true), S(' left', tone ?? C.dim), ...old];
 }
 
 // Where the month's spend comes from, in words (the card's last row). since: this Mac's answers after it.
@@ -162,6 +164,7 @@ export function usagePanel(u, width, { now = Date.now(), live = false, asking = 
   } else line([S(''.padEnd(LABEL_W)), S('nothing yet: a reply brings them, or r asks now (a fraction of a cent)', C.dim)]);
   blank();
   line([S(sourceWords(u, now, wide), C.sep)]);
+  if (u.source?.stale) line([S('▲ ', C.warn), S(wide ? `the figure you typed is ${u.source.days} days old: s types the Console’s figure again` : `typed ${u.source.days} days ago · s to update`, C.warn)]);
   if (u.source?.error) line([S('■ ', C.warn), S(`Anthropic’s bill: ${u.source.error.status ? `${u.source.error.status} · ` : ''}${u.source.error.message}${u.source.error.status === 401 || u.source.error.status === 403 ? ' (k: the key again)' : ''}`, C.warn)]);
   else if (u.admin && u.source?.kind !== 'bill') line([S('asking Anthropic for the bill…', C.sep)]);
   line([S(wide ? `limits from Anthropic’s last reply${u.limits ? `, ${ago(now - u.limits.at)}` : ''}` : `limits: last reply${u.limits ? `, ${ago(now - u.limits.at)}` : ''}`, C.sep)]);
