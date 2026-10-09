@@ -13,7 +13,7 @@
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { HOME, ModelServer, LINGER_SECS, stopIdleServers, runningServer, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord, connectRemote } from '../../../models/index.mjs';
+import { HOME, ModelServer, LINGER_SECS, stopIdleServers, runningServer, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord, connectRemote, endpointOf } from '../../../models/index.mjs';
 import { loadSettings } from './store.mjs';
 import { saveLessons, seedMemory, worthSaving, saveLine, proposeSave, applySave, shownOf, rememberDeclined } from '../agent/lessons.mjs';
 import { memoryDirs, countDay, readFacts } from '../agent/facts.mjs';
@@ -44,15 +44,21 @@ export class AutoSave {
   }
 
   // When the model decides (agent/way.mjs), it saves with its Remember tool as it works: the
-  // app's own saves (after a task, the second look at quit, the first-use reading) stay off.
+  // app's second look at quit and the first-use reading stay off.
   get on() { return Boolean(this.agent.memory) && savingOn() && this.agent.way !== 'model'; }
-  // Mid-conversation saves need the side slot; without one (a shared or a
+  // The save after each round runs whoever decides (9 Oct 2026, the owner: "auto updates memory after
+  // each round is done"): a model that decides (Claude) gets it too, on top of its own Remember.
+  get afterTaskOn() { return Boolean(this.agent.memory) && savingOn(); }
+  // A service (Claude, OpenAI-style, Ollama) takes the save's call beside the conversation; a llama.cpp
+  // server (this Mac's, or `coding serve`) needs its side slot, as its one slot is the conversation's.
+  get onService() { const kind = endpointOf(this.agent.url)?.kind; return Boolean(kind) && kind !== 'llama'; }
+  // Mid-conversation saves need the side slot or a service; without either (a shared or a
   // given server) the save waits for the window to close.
-  get canRunNow() { return this.on && this.agent.slots?.side !== undefined && !this.agent.busy && !this.running; }
+  get canRunNow() { return this.afterTaskOn && (this.agent.slots?.side !== undefined || this.onService) && !this.agent.busy && !this.running; }
 
   schedule(ms = this.waitMs) {
     clearTimeout(this.timer);
-    if (!this.on || !worthSaving(this.agent.lessons)) return;
+    if (!this.afterTaskOn || !worthSaving(this.agent.lessons)) return;
     this.timer = setTimeout(() => { this.now().catch(() => {}); }, ms);
     this.timer.unref?.();
   }
@@ -70,7 +76,7 @@ export class AutoSave {
     const ac = new AbortController();
     this.abort = ac;
     const a = this.agent;
-    this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots.side, use: a.sideUse?.(), cwd: a.cwd, home: a.memory.home, lessons: a.lessons, messages: a.messages, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
+    this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots?.side, use: a.sideUse?.(), cwd: a.cwd, home: a.memory.home, lessons: a.lessons, messages: a.messages, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
       .then((out) => { if (out?.skipped) this.say('Not saved · /update memory saves what matters at any time'); const line = saveLine(out); if (line) this.say(line); return out; })
       .catch(() => null)
       .finally(() => { this.running = null; if (this.abort === ac) this.abort = null; });
@@ -119,13 +125,13 @@ export class AutoSave {
 
   // First use in this project: what is already written is read once.
   seed() {
-    if (!this.canRunNow) return Promise.resolve(null);
+    if (!this.on || !this.canRunNow) return Promise.resolve(null);
     const ac = new AbortController();
     this.abort = ac;
     const a = this.agent;
     let record = [];
     try { record = readRecord().filter((r) => r.kind === 'bug' || r.kind === 'tasks'); } catch { /* no record yet */ }
-    this.running = seedMemory({ url: a.url, model: a.model, slot: a.slots.side, cwd: a.cwd, home: a.memory.home, sessionsDir: this.sessionsDir, record, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
+    this.running = seedMemory({ url: a.url, model: a.model, slot: a.slots?.side, cwd: a.cwd, home: a.memory.home, sessionsDir: this.sessionsDir, record, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
       .then((out) => { if (out?.added?.length) this.say(`Memory: ${out.added.length} fact${out.added.length === 1 ? '' : 's'} from what was done here before · /memory shows them`); return out; })
       .catch(() => null)
       .finally(() => { this.running = null; if (this.abort === ac) this.abort = null; });

@@ -128,6 +128,10 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   `--check` only checks the questions still point at code). This repo's questions are in
   `models/evals/bench/code/`; a private project's stay on the Mac in `~/.agentic-coder/evals/code/`.
   After a task it ASKS before saving (the user's pick, 28 Sep 2026); "update memory" and `/update memory` save at once.
+  Since 9 Oct 2026 (the owner: "auto updates memory after each round"; their settings.json has `"memorySave": "auto"`)
+  the save after each round runs when the model decides too (Claude, on top of its Remember), and on a service
+  (Claude, OpenAI-style, Ollama) without a side slot; only a llama.cpp server still needs its side slot
+  (`AutoSave.afterTaskOn`, `onService`; `terminal/test/autosave-round.test.mjs`). The quit and first-use saves stay off when the model decides.
   Since 30 Sep 2026: a test's prompt pasted into the app is practice too (`isTestPrompt`, against `testPrompts()`
   in `models/evals/prompts.mjs`: the Arena's tests and the design runs' `pages.json` / `components.json`);
   trust moves only for the facts a turn really used (`usedFacts` in `recall.mjs`); a save shows the model the 15
