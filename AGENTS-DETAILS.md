@@ -530,6 +530,35 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the form, ^D), `loops.test.mjs` (the wizard's steps and picture, a sentence filled in) and `app-loops.test.mjs` (the
   real window: the Library, + New loop, a sentence started from the wizard, the cards, tab).
 
+## Loops 11–15 for UI and design, and a loop's page check (9 Oct 2026)
+
+- **What and why.** The owner: "can we add an 11-15 loop to the agentic coder? for ui and design?". Their picks: the
+  full build (the five loops and the page check inside a loop, for files and addresses), Design review as the fifth,
+  the model confirming the end of Polish until clean, and a page first (private:
+  `docs/private/loops-preview/Loop presets - 11-15 UI and design.html`, built by `presets-ui/build.mjs` with the real
+  code); then "perfect, commit and push" and "just implement it, I will test it" (no tests were run for this change).
+- **The five** (`terminal/rules/loops/`, after the ten, so 11–15 on the shelf): Layout watch (every 15 min, what broke or
+  got fixed), Polish until clean (fixes what the check finds until it is clean: 10 runs, $1, Accept edits), Theme guard
+  (colours, sizes and spacing in the diff not from the theme), Accessibility pass (the check with "who can use it", and
+  what the code shows), Design review (three changes an hour, Plan mode).
+- **A loop's page check** (`- Page check: {page}` in its file, `· who can use it` for that part too; `fields.check`
+  only when a loop has one, so the other loops read as before; `readCheck` in loops.mjs → `l.check` { page, access }).
+  The blank is filled as the message is (setupFields, the form's ^G). The window passes it to each run
+  (`startRun` spec `check`, with `after` for a loop that runs until done); the run (cli.jsx `--loop-events`) checks the
+  page before the model starts (`checkPage`, flows/layoutcheck.mjs) and puts `pageCheckNote` above the message, and
+  says `{ t: 'page', when: start|before|after }` (loop-run.mjs `page`), which the board shows as a line (`pageWords`).
+- **A file or an address** (`checkPage`): a file in the project goes through `layoutCheck` as after an edit (buttons
+  pressed); a page that needs its dev server says to give its address. An address (`layoutCheckUrl`) must be on this
+  Mac or a private network (`isLocalAddress`: localhost, 127/8, 10/8, 172.16/12, 192.168/16, 100.64/10, .local); it is
+  opened in Chrome over its debugging connection (`devtools`, a free port, the probe put in before the page's scripts
+  with Page.addScriptToEvaluateOnNewDocument) at the same three sizes, and its buttons are never pressed.
+- **Who can use it** (`ACCESS_PROBE`, `accessLook` in the probe, `accessProblems`): no lang on <html>, pictures with no
+  alt, buttons and links with no name, boxes with no label (a placeholder is not one), headings that skip a level. Only
+  a loop that asks for it gets it; the check after an edit is as it was.
+- **Polish until clean ends** when the model says LOOP DONE (the owner's pick); tests passing no longer end a loop with a
+  page check, and it waits as stuck when the problems left after two runs did not go down (`stuckWhy`, `run.page.left`).
+  The wizard and the shelf say "until clean" and "still broken? again".
+
 ## Staying on task on a model on another machine (4 Oct 2026)
 
 - **What and why.** The owner asked how to keep a model on task in long runs on /remote, where a model holds up to

@@ -233,7 +233,7 @@ test('/loop in the app: the Library with no loop yet, + New loop is the wizard, 
     expect(board.text).toMatch(/The loop board is closed\. The loops go on in their window/);
     // The Library, then the wizard, here in this window, and test5m asked about.
     expect(r.snapshots.library).toMatch(/esc {2}chat › ↻ Loops/);
-    expect(r.snapshots.library).toMatch(/Running 0 {3}Library 10/);
+    expect(r.snapshots.library).toMatch(/Running 0 {3}Library 15/);
     expect(r.snapshots.library).toMatch(/Yours[\s\S]*\+ New loop[\s\S]*Ready-made[\s\S]*TEST {2}Watch the tests/);
     expect(r.snapshots.setup).toMatch(/esc {2}chat › ↻ New loop/);
     expect(r.snapshots.setup).toMatch(/◉ 1 What {2}── {2}○ 2 Where {2}── {2}○ 3 How often {2}── {2}○ 4 Until {2}── {2}○ 5 Start/);
@@ -260,7 +260,7 @@ test('/loop in the app: the Library with no loop yet, + New loop is the wizard, 
     expect(r.snapshots.watch).toMatch(/> make a file called made\.txt[\s\S]*\? May it run: touch made\.txt[\s\S]*> also say nothing more[\s\S]*⏺ Bash\(touch made\.txt\)\s+⎿ it read your note with the result of Bash\(touch made\.txt\)[\s\S]*● Noted\./);
     expect(r.snapshots.watch).toMatch(/esc back to the cards/);
     // The Library beside it, a rule, the stop.
-    expect(r.snapshots.library2).toMatch(/Running 1 {3}Library 10/);
+    expect(r.snapshots.library2).toMatch(/Running 1 {3}Library 15/);
     expect(r.snapshots.rule).toMatch(/make a file called made\.txt: saved · task · every 3s · \d+ of 50 runs/);
     expect(r.snapshots.stopped).not.toMatch(/↻ 1 loop/); // a stopped loop is not counted
     expect(existsSync(join(cwd, 'made.txt'))).toBe(true);

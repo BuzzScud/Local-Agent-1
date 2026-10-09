@@ -188,6 +188,15 @@ export function readSteps(text) {
   if (NONE.test(t) || /^(default|as \/?effort)$/i.test(t)) return { steps: null };
   return /^\d+$/.test(t) && Number(t) >= 5 && Number(t) <= 200 ? { steps: Number(t) } : { error: 'Steps a run: 5 to 200, or "as /effort"' };
 }
+// A loop's page check (rules/loops: "- Page check: {page}"), its blank answered: "index.html · who can use it"
+// → { page, access }; nothing → null. Its run checks the page before it starts (cli.jsx, flows/layoutcheck.mjs).
+export function readCheck(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return null;
+  const page = t.replace(/\s*·.*$/, '').trim();
+  return page ? { page, access: /·\s*(who can use it|access)/i.test(t) } : null;
+}
+export const checkWords = (c) => (c ? `${c.page}${c.access ? ' · who can use it' : ''}` : '');
 // The form's fields, as typed, made into a loop's rules. Answers { rules } or { error, field }.
 export function rulesOf(f, { now = Date.now(), min = minSecs() } = {}) {
   const message = String(f.message ?? '').trim();
@@ -200,11 +209,11 @@ export function rulesOf(f, { now = Date.now(), min = minSecs() } = {}) {
   const [every, runs, stopAt, cap, st] = steps.map(([, r]) => r);
   // A loop loaded or saved by name keeps it (loop-files.mjs); else a name from its words.
   const name = String(f.name ?? '').trim().slice(0, 60) || (PRESET[kind] === message ? PRESET_NAME[kind] : nameOf(message));
-  return { rules: { message, kind, name, every: every.every, until: every.until, maxRuns: runs.maxRuns, stopAt: stopAt.stopAt, usdCap: cap.usdCap, steps: st.steps, mode, askFirst: Boolean(f.askFirst), picture: f.picture ?? null }, note: every.note };
+  return { rules: { message, kind, name, every: every.every, until: every.until, maxRuns: runs.maxRuns, stopAt: stopAt.stopAt, usdCap: cap.usdCap, steps: st.steps, mode, askFirst: Boolean(f.askFirst), picture: f.picture ?? null, ...('check' in f ? { check: readCheck(f.check) } : {}) }, note: every.note };
 }
 // A loop's rules as the form shows them, to change them.
 export function fieldsOf(l) {
-  return { message: l.message, kind: l.kind, every: l.until ? 'until done' : l.every ? everyWord(l.every) : 'own pace', runs: l.maxRuns ? String(l.maxRuns) : 'no limit', stopAt: l.stopAt ? hm(l.stopAt) : 'none', cap: l.usdCap ? money(l.usdCap) : 'none', steps: l.steps ? String(l.steps) : STEPS_WORD, mode: l.mode ?? 'ask', askFirst: Boolean(l.askFirst) };
+  return { message: l.message, kind: l.kind, every: l.until ? 'until done' : l.every ? everyWord(l.every) : 'own pace', runs: l.maxRuns ? String(l.maxRuns) : 'no limit', stopAt: l.stopAt ? hm(l.stopAt) : 'none', cap: l.usdCap ? money(l.usdCap) : 'none', steps: l.steps ? String(l.steps) : STEPS_WORD, mode: l.mode ?? 'ask', askFirst: Boolean(l.askFirst), ...(l.check ? { check: checkWords(l.check) } : {}) };
 }
 // Why a loop has reached one of its limits, or null. Runs stopped to start over do not count.
 export function limitWhy(l, now = Date.now()) {
@@ -255,6 +264,12 @@ export function loopNote(loop, n, { now = Date.now() } = {}) {
 export function stuckWhy(loop) {
   if (loop.kind !== 'debug') return null;
   const [b, a] = loop.runs.slice(-2);
+  // A loop that fixes a page (its page check): by the problems the check still found after each run.
+  if (loop.check) {
+    const left = (r) => r?.page?.left;
+    if (!a || !b || [a, b].some((r) => r.reason === 'interrupted') || !(left(a) > 0) || !(left(b) > 0) || left(a) < left(b)) return null;
+    return `${left(a)} problem${left(a) === 1 ? '' : 's'} still on the page after runs ${b.n} and ${a.n}: it is not getting closer`;
+  }
   if (!a || !b || [a, b].some((r) => r.reason === 'interrupted') || !(a.failing > 0) || !(b.failing > 0) || a.failing < b.failing) return null;
   const n = a.failing;
   return `${n} test${n === 1 ? '' : 's'} still fail${n === 1 ? 's' : ''} after runs ${b.n} and ${a.n}: it is not getting closer`;
@@ -264,6 +279,13 @@ export function readEnding(text) {
   const t = String(text ?? '');
   const next = /^\W*NEXT RUN IN (\d+(?:\.\d+)?)\s*MIN/im.exec(t);
   return { done: /^\W*LOOP DONE\W*$/im.test(t), nextSecs: next ? Math.min(3600, Math.max(60, Math.round(Number(next[1]) * 60))) : null, said: t.replace(/^\W*(LOOP DONE|NEXT RUN IN [\d.]+\s*MIN\w*)\W*$/gim, '').trim() };
+}
+// The page check's line on the board: checking, what it found, or why it could not look.
+export function pageWords(ev) {
+  const what = ev.when === 'after' ? 'After the run, the page check' : 'The page check';
+  if (ev.when === 'start') return `Checking ${ev.page} in a hidden browser…`;
+  if (ev.skipped) return `${what} of ${ev.page} could not run: ${ev.skipped}`;
+  return `${what} of ${ev.page}: ${ev.count ? `${ev.count} problem${ev.count === 1 ? '' : 's'}` : 'nothing broken'} (${Number(ev.secs ?? 0).toFixed(1)} s)`;
 }
 // One line about how a run ended, for the board.
 export function summaryOf(said, reason) {
@@ -327,7 +349,7 @@ export function startRun(spec, { self = selfCommand(), env = process.env } = {})
   const child = spawn(self[0], [...self.slice(1), ...args], {
     cwd: spec.folder, stdio: ['pipe', 'pipe', 'pipe'],
     // The memory is read, never saved to, by a run nobody watches; what it costs counts under its window.
-    env: { ...env, AGENTIC_LOOP_SPEC: JSON.stringify({ prompt: spec.prompt, allow: spec.allow ?? [], steps: spec.steps ?? null, rewind: spec.rewind ?? null, ...(spec.resume ? { resume: spec.resume } : {}) }), AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_SPEND_PID: String(spec.owner ?? process.pid), AGENTIC_OPEN: 'off' },
+    env: { ...env, AGENTIC_LOOP_SPEC: JSON.stringify({ prompt: spec.prompt, allow: spec.allow ?? [], steps: spec.steps ?? null, rewind: spec.rewind ?? null, ...(spec.resume ? { resume: spec.resume } : {}), ...(spec.check ? { check: spec.check } : {}) }), AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_SPEND_PID: String(spec.owner ?? process.pid), AGENTIC_OPEN: 'off' },
   });
   const fns = [];
   let carry = '', err = '', ended = false;
@@ -405,7 +427,7 @@ export class Loops {
   add(parsed, { folder = this.folder, mode = 'ask' } = {}) {
     const t = this.now();
     const l = { id: this.nextId++, kind: parsed.kind, name: parsed.name, message: parsed.message, every: parsed.every, until: parsed.until, folder, mode: parsed.mode ?? mode, state: 'waiting', nextAt: t + 1000, endsAt: t + this.maxHours * 3_600_000, created: t, runs: [], current: null, note: null, queued: false, pauseAfter: false, allowed: [], doneWhy: null, gap: null, stuck: null,
-      maxRuns: parsed.maxRuns ?? null, stopAt: parsed.stopAt ?? null, usdCap: parsed.usdCap ?? null, steps: parsed.steps ?? null, askFirst: Boolean(parsed.askFirst), counted: 0, spent: 0, ready: null, go: false, lastNote: null, picture: parsed.picture ?? null };
+      maxRuns: parsed.maxRuns ?? null, stopAt: parsed.stopAt ?? null, usdCap: parsed.usdCap ?? null, steps: parsed.steps ?? null, askFirst: Boolean(parsed.askFirst), counted: 0, spent: 0, ready: null, go: false, lastNote: null, picture: parsed.picture ?? null, check: parsed.check ?? null };
     this.loops.push(l);
     this.say(l, 'new', parsed.message);
     this.changed();
@@ -462,7 +484,7 @@ export class Loops {
     }
     this.say(l, 'start', `run ${run.n}`, { n: run.n });
     let h;
-    try { h = this.start({ folder: l.folder, prompt, mode: l.mode, url: st.url ?? null, slots: st.slots ?? 1, local: Boolean(st.local), flows: st.flows, allow: l.allowed, owner: this.pid, steps: l.steps, rewind: sessionOf(this.pid, l.id) }); }
+    try { h = this.start({ folder: l.folder, prompt, mode: l.mode, url: st.url ?? null, slots: st.slots ?? 1, local: Boolean(st.local), flows: st.flows, allow: l.allowed, owner: this.pid, steps: l.steps, rewind: sessionOf(this.pid, l.id), check: l.check ? { ...l.check, after: Boolean(l.until) } : null }); }
     catch (e) { this.finish(l, run, { reason: 'error', final: `The run could not start: ${e.message}` }); return; }
     this.handles.set(l.id, h);
     h.on((ev) => this.onEvent(l, run, ev));
@@ -482,6 +504,11 @@ export class Loops {
       if (l.lastNote && !l.lastNote.read) l.lastNote.read = { after: ev.after ?? null, n: run.n };
     }
     else if (ev.t === 'text') this.line(l, run, 'text', ev.text);
+    // The page check (cli.jsx): before the run, and for a loop that fixes until done, again after it.
+    else if (ev.t === 'page') {
+      run.page = { ...(run.page ?? {}), [ev.when === 'after' ? 'left' : 'found']: ev.skipped ? null : ev.count };
+      this.line(l, run, 'note', pageWords(ev));
+    }
     else if (ev.t === 'ask') {
       run.needs = { id: ev.id, kind: ev.kind, name: ev.name, text: ev.text, options: ev.options ?? [], always: ev.always ?? null, sig: ev.sig ?? null, since: this.now() };
       l.state = 'needs';
@@ -507,7 +534,7 @@ export class Loops {
     const usd = Number(ev.usd) || 0;
     l.spent = (l.spent ?? 0) + usd;
     if (!run.redo) l.counted = (l.counted ?? 0) + 1;
-    l.runs.push({ n: run.n, startedAt: run.startedAt, endedAt: run.endedAt, ok: run.ok, summary: run.summary, said: run.said, lines: run.lines, reason: ev.reason, failing: Number.isFinite(tests?.count) ? tests.count : null, usd, point: ev.point ?? null, until: ev.until ?? ev.point ?? null, files: ev.files ?? [], redo: run.redo ?? null });
+    l.runs.push({ n: run.n, startedAt: run.startedAt, endedAt: run.endedAt, ok: run.ok, summary: run.summary, said: run.said, lines: run.lines, reason: ev.reason, failing: Number.isFinite(tests?.count) ? tests.count : null, page: run.page ?? null, usd, point: ev.point ?? null, until: ev.until ?? ev.point ?? null, files: ev.files ?? [], redo: run.redo ?? null });
     if (l.runs.length > 60) l.runs.shift();
     l.current = null;
     this.say(l, 'end', run.summary, { ok: run.ok, n: run.n, ms: run.endedAt - run.startedAt });
@@ -515,7 +542,7 @@ export class Loops {
     // Stopped to start over: it waits for the run's copy (lateEnd), puts its changes back if you said so, then runs again.
     if (run.redo) { l.state = 'redoing'; this.redoWait(l, l.runs.at(-1)); this.changed(); return; }
     // The job is done: the run said so, or a debugging loop's tests pass.
-    if (ev.reason === 'done' && (end.done || (l.until && tests?.ok))) { this.end(l, 'done', end.done ? 'the run said its job is done' : `the tests pass after ${run.n} run${run.n === 1 ? '' : 's'}`); return; }
+    if (ev.reason === 'done' && (end.done || (l.until && tests?.ok && !l.check))) { this.end(l, 'done', end.done ? 'the run said its job is done' : `the tests pass after ${run.n} run${run.n === 1 ? '' : 's'}`); return; }
     const limit = limitWhy(l, this.now());
     if (limit) { this.end(l, 'done', limit); return; }
     l.gap = end.nextSecs;
@@ -666,7 +693,7 @@ export class Loops {
     const was = { every: l.every, until: l.until };
     // Its name stays unless its message changed.
     if ('message' in rules && rules.message !== l.message && rules.name) l.name = rules.name;
-    for (const k of ['message', 'kind', 'every', 'until', 'maxRuns', 'stopAt', 'usdCap', 'steps', 'mode', 'askFirst']) if (k in rules) l[k] = rules[k];
+    for (const k of ['message', 'kind', 'every', 'until', 'maxRuns', 'stopAt', 'usdCap', 'steps', 'mode', 'askFirst', 'check']) if (k in rules) l[k] = rules[k];
     const t = this.now();
     if (ended) {
       Object.assign(l, { state: 'waiting', nextAt: t + 1000, endsAt: t + this.maxHours * 3_600_000, doneWhy: null, counted: 0, spent: 0, stuck: null, ready: null, go: false, pauseAfter: false });
