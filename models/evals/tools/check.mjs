@@ -387,7 +387,15 @@ async function packages({ offline }) {
     const ci = await run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline'], { cwd: tmp, timeout: 120_000 });
     if (ci.code !== 0) notes.push('a fresh copy could not be fetched from npm to compare with');
     else {
-      const skip = (rel, e) => e.isSymbolicLink() || /(^|\/)(\.bin|\.cache|\.package-lock\.json|\.DS_Store)$/.test(rel);
+      // A package the repo patches (bun's patchedDependencies: patches/ink@7.1.1.patch, 9 Oct 2026) gets the same
+      // patch on npm's copy, so the patch is the only difference allowed; bun marks a patched copy with a .bun-tag file.
+      const patched = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).patchedDependencies ?? {};
+      for (const [spec, file] of Object.entries(patched)) {
+        const name = spec.slice(0, spec.lastIndexOf('@'));
+        const put = await run('git', ['apply', '--directory', `node_modules/${name}`, join(root, file)], { cwd: tmp, timeout: 30_000 });
+        if (put.code !== 0) bad.push(`${file} does not apply to ${name} as npm publishes it`);
+      }
+      const skip = (rel, e) => e.isSymbolicLink() || /(^|\/)(\.bin|\.cache|\.package-lock\.json|\.DS_Store|\.bun-tag-[0-9a-f]+)$/.test(rel);
       const mine = filesUnder(mods, skip), fresh = new Set(filesUnder(join(tmp, 'node_modules'), skip));
       const diff = mine.filter((f) => !ownCopy(f) && (!fresh.has(f) || !readFileSync(join(mods, f)).equals(readFileSync(join(tmp, 'node_modules', f)))));
       const missing = [...fresh].filter((f) => !existsSync(join(mods, f)));
