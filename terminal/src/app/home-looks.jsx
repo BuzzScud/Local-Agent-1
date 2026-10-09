@@ -14,6 +14,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { HUE } from '../ui/theme.mjs';
 import { StartPage, recentRows, ago, recentOf, subjectOf, tidySubject, gitWords, notesWords } from './start.jsx';
+import { helpersWords } from './start-notes.jsx';
 
 export const HOME_LOOKS = [
   { id: 'menu', name: 'Menu', note: 'one list: the conversations, then what you can do, each with its key' },
@@ -107,14 +108,29 @@ export function actionsOf(s, loading = null, k = 0) {
       : state === 'loading'
         ? { id: 'start', wide: 15, label: `Starting ${TURN[k % 4]} ${Math.floor(loading.secs)}s`, key: 'ctrl+t', does: 'stops the start', busy: true }
         : { id: 'start', wide: 15, label: 'Stop the model', key: 'ctrl+t', does: 'unloads the model and gives its memory back' }]),
-    { id: 'model', label: 'Switch model', key: '/model', does: 'opens the list of models' },
-    { id: 'mode', label: `Mode · ${s.mode ?? 'manual'}`, key: 'shift+tab', does: 'switches to the next mode' },
+    modelRow(s),
+    modeRow(s),
+    ...helpersRow(s),
     ...(all.length ? [{ id: 'resume', label: `All conversations · ${all.length}`, key: '/resume', does: 'lists every conversation in this folder' }] : []),
     ...(s.notes?.includes('AGENTS.md') ? [] : [{ id: 'init', label: 'Write AGENTS.md', key: '/init', does: 'writes notes about this project for the model to read' }]),
     { id: 'settings', label: 'Settings', key: '/settings', does: 'opens every setting in one menu' },
     { id: 'look', label: 'The Launcher', key: '/home', does: 'shows this page as it was before: the bot and one column' },
   ];
 }
+// What the start said (start-notes.jsx), in the rows it is about (the owner's pick "2 · In the page", 9 Oct
+// 2026; before, three notes under the page): where the model runs and how fast it answered, the mode kept
+// from the last window (Bypass in its red, as the footer has it), the helpers left on another server.
+const BYPASS = 203;
+function modelRow(s) {
+  const r = s.said?.remote;
+  if (!r) return { id: 'model', label: 'Switch model', key: '/model', does: 'opens the list of models' };
+  return { id: 'model', label: `Model · ${r.where}${r.ms != null ? ` · ${r.ms} ms` : ''}`, key: '/model', does: `opens the list of models (your prompts and files go to ${r.claude ? 'the Claude API' : r.label})` };
+}
+function modeRow(s) {
+  const kept = s.said?.mode && s.said.mode.mode === s.modeId;
+  return { id: 'mode', label: `Mode · ${s.mode ?? 'manual'}`, after: kept ? ' · kept from the last window' : '', key: 'shift+tab', does: 'switches to the next mode', ...(s.modeId === 'bypass' ? { tone: BYPASS } : {}) };
+}
+const helpersRow = (s) => (s.said?.remote?.helpers?.length ? [{ id: 'helpers', label: `Helpers · ${helpersWords(s.said.remote.helpers)}`, key: '/profiles', does: 'opens /profiles: which model each helper uses' }] : []);
 // The last row: how to get into the page, or, with an item picked, what enter does with it.
 function hintParts(items, focus, w) {
   const it = items.find((x) => x.key === focus);
@@ -217,7 +233,7 @@ function menu({ s, width, room, loading, k, walk, focus }) {
   const title = mid([P('Agentic Coder', WHITE, { b: true }), P('    '), P(s.model ?? 'the model', LIGHT), P('  '), ...chipParts(state, loading, k, walk)]);
   const sub = mid([P(fitPath(where(s.cwd), Math.floor(BW / 2)), PATH), P('  ·  ', FAINT), P(gitShort(s), DIM), P('  ·  ', FAINT), P(notesWords(s.notes), DIM)]);
   const convRow = (r, i, on) => spread([P(on ? '❯ ' : '  ', HUE.accent), P(String(i + 1).padStart(2), WHITE), P('  '), P(subject(r), on ? WHITE : PATH, { b: on })], [P(ago(r.updated, now), on ? LIGHT : FAINT)], inner);
-  const actRow = (a, on) => spread([P(on ? '❯ ' : '  ', HUE.accent), P('    '), P(a.label, a.busy ? HUE.bright : WHITE, { b: on })], a.busy ? barParts(loading, Math.min(32, inner - 30)) : [P(a.key, on ? LIGHT : FAINT)], inner);
+  const actRow = (a, on) => spread([P(on ? '❯ ' : '  ', HUE.accent), P('    '), P(a.label, a.busy ? HUE.bright : a.tone ?? WHITE, { b: on }), ...(a.after ? [P(a.after, on ? LIGHT : DIM)] : [])], a.busy ? barParts(loading, Math.min(32, inner - 30)) : [P(a.key, on ? LIGHT : FAINT)], inner);
   const page = (on, n) => {
     const out = [];
     const items = [];

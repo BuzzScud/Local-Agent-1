@@ -9,7 +9,7 @@ import { test, expect } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { fakeOllama } from './fake-ollama.mjs';
 
 const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' };
@@ -34,7 +34,7 @@ test('their keys, ↑ then enter, now connect: ↑ from Run on lands on Connect;
     ...open, { snapshot: 'open' },
     ...right(3), { sleep: 200 }, { snapshot: 'service' },
     { key: 'up' }, { sleep: 200 }, { snapshot: 'up' },
-    { key: 'enter' }, { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' },
+    { key: 'enter' }, { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' },
     ...quit,
   ] });
   await svc.close();
@@ -47,7 +47,7 @@ test('their keys, ↑ then enter, now connect: ↑ from Run on lands on Connect;
   // ↑: the button row, on Connect (Save only is beside it, not under it)
   expect(s.up).toMatch(/❯\s+Connect\s+Save only\s+checks it answers, saves it, then this window uses coder:30b there/);
   expect(flat(s.on)).toContain(`On the remote: coder:30b · ${label} · OpenAI-compatible`);
-  expect(flat(s.on)).toContain('your prompts and files go there');
+  expect(flat(s.on)).toMatch(/OpenAI-compatible · answered in \d+ ms/); // one line now (start-notes.jsx remoteNote)
   expect(settingsOf(base).remote).toMatchObject({ source: 'openai', use: true });
 }, T);
 
@@ -59,7 +59,7 @@ test('Save only asks “Connect now?” as the app’s questions do, naming serv
     ...open, ...right(3), { key: 'up' }, { sleep: 120 }, { key: 'right' }, { sleep: 200 }, { snapshot: 'save' },
     { key: 'enter' }, { wait: 'now?' }, { sleep: 300 }, { snapshot: 'ask' },
     { key: 'down' }, { sleep: 200 }, { snapshot: 'notNow' }, { key: 'up' }, { sleep: 150 },
-    { key: 'enter' }, { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' },
+    { key: 'enter' }, { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' },
     ...quit,
   ] });
   await svc.close();
@@ -85,7 +85,7 @@ test('Save only, then esc: left saved and not connected, and it says how; then e
     { key: 'enter' }, { wait: 'now?' }, { sleep: 200 }, { key: 'esc' }, { wait: 'Left saved' }, { sleep: 300 }, { snapshot: 'left' },
     { fn: () => { chatsAfterEsc = svc.chats().length; } },
     { type: '/remote' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 200 }, ...right(3), { sleep: 150 },
-    { key: 'enter' }, { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' },
+    { key: 'enter' }, { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' },
     ...quit,
   ] });
   await svc.close();

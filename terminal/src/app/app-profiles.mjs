@@ -165,22 +165,24 @@ export function profilesPart(self) {
   // now, in the file every window reads (9 Oct 2026, the owner's picks: "Connect makes the new model Main",
   // the other windows follow from their next step, the helpers keep their own profiles). Before, the
   // router moved the conversation back to Main at the next step: /remote looked as if it did nothing.
+  // Returns the helpers left on another server (helpersAway), which the line saying where the
+  // conversation runs now names (app-remote.mjs, start-notes.jsx), and the note saying Main moved, said
+  // after that line.
   const mainToRemote = (r, model) => {
     self.agent.pinned = null;
-    if (!profilesSaved()) return;
+    if (!profilesSaved()) return { away: [], note: null };
     const d = data();
     const moved = withMain(d, { ...r, model });
     const now = moved ? moved.data : d;
+    let note = null;
     if (moved) {
       writeProfiles(now);
       router.seenStamp = router.stamp();
       const was = moved.was ? `${moved.was.model} · ${serverWord(moved.was.server)}` : 'none';
-      self.push({ type: 'note', tone: 'dim', text: `${moved.name} → ${model} · ${serverWord(serverOf(r))} (was ${was}): your conversation, and every other window on this Mac from its next step. /profiles changes it.` });
+      note = { type: 'note', tone: 'dim', text: `${moved.name} → ${model} · ${serverWord(serverOf(r))} (was ${was}): your conversation, and every other window on this Mac from its next step. /profiles changes it.` };
     }
     self.agent.routeName = moved?.name ?? router.mainName();
-    const away = helpersAway(now);
-    const one = away.every((h) => h.where === away[0]?.where);
-    if (away.length) self.push({ type: 'note', tone: 'dim', text: `The helpers keep their own profiles: ${away.map((h) => `${h.label} → ${h.model}${one ? '' : ` (${h.where})`}`).join(' · ')}${one ? ` (on the ${away[0].where})` : ''}. /profiles moves them.` });
+    return { away: helpersAway(now), note };
   };
 
   // ---- following the file -------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import { test, expect } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { fakeOllama } from './fake-ollama.mjs';
 
 const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' };
@@ -25,7 +25,7 @@ test('Keep loaded while open: each request keeps the model 15 min, the open wind
   const letGo = () => svc.seen.filter((x) => x.path === '/api/generate' && x.body.keep_alive === 0);
   const at = {};
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_MODEL_AT_START: 'off', AGENTIC_UNLOAD: 'on', AGENTIC_PS_EVERY: '300' }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 },
+    { wait: ON_REMOTE, ms: 25_000 },
     { type: 'hello' }, { key: 'enter' }, { wait: 'From coder:30b.', ms: 20_000 },
     // 14 of its 15 min left: nothing asked; 1 min left: kept another 15; kept for ever: brought down to 15
     { sleep: 1500 }, { fn: () => { at.far = renewals().length; left = 60_000; } },

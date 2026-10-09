@@ -7,7 +7,7 @@ import { test, expect } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
-import { setup, quit } from './app-setup.mjs';
+import { setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { fakeOllama } from './fake-ollama.mjs';
 
 const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' };
@@ -19,7 +19,7 @@ test('on an Ollama service: gauges after the first answer with GPU spilling in a
   const r0 = { source: 'openai', address: svc.url, port: null, connect: 'http', kind: 'openai', model: 'coder:30b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_PS_EVERY: '400' }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { wait: '? for shortcuts' }, { sleep: 300 }, { snapshot: 'start' },
+    { wait: ON_REMOTE, ms: 25_000 }, { wait: '? for shortcuts' }, { sleep: 300 }, { snapshot: 'start' },
     { type: 'say hello' }, { key: 'enter' }, { wait: 'From coder:30b.', ms: 20_000 }, { wait: '↓40 tok/s', ms: 10_000 }, { sleep: 600 }, { snapshot: 'gauges' },
     { key: 'ctrlT' }, { wait: 'Loaded on the service' }, { sleep: 200 }, { snapshot: 'list' }, { key: 'esc' }, { sleep: 300 },
     { type: '?' }, { wait: 'ctrl+r for a second opinion now' }, { sleep: 150 }, { snapshot: 'keys' }, { type: '?' }, { sleep: 200 },

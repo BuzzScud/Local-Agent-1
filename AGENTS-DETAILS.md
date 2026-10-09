@@ -1012,6 +1012,30 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   The app tests run with the Launcher (`pty.mjs`, `term.mjs` and the keeper tests set `AGENTIC_HOME_LOOK`), since
   they were written against it; `terminal/test/home-looks.test.mjs` drives the Menu, in a real window too.
 
+## What the start says: in the page (9 Oct 2026)
+
+- **What and why.** Under the start page three notes said the mode the last window left ("Started in bypass
+  permissions…"), where the model runs ("On the remote: … your prompts and files go there") and where the helpers
+  run ("The helpers keep their own profiles: …"), a paragraph each with a blank row after it: 8 to 10 rows, mostly
+  what the footer already says; in a 100 × 30 window they left the page one conversation. The owner, on a
+  screenshot of it: "how do we make this simpler? less busy?". Four designs drawn by the real app (private:
+  `docs/private/design rounds/agentic-coder-start-notes-4-designs-2026-10-09.html`); their picks: **2 · In the
+  page**, one line under the Launcher, one line for a later /remote, the footer's tip kept.
+- **How** (`terminal/src/app/start-notes.jsx`; App.jsx `sayStart`): while the start page is held, each part
+  (`mode`, `remote` with its helpers from `mainToRemote`, which now returns them and the Main-moved note instead
+  of saying them) goes into one item, `startnotes`, made again as the next comes. The Menu draws nothing for it
+  (screen.jsx `ItemFrame`; its height is 0, `rowsKey` keyed by the look) and shows it in its rows instead
+  (home-looks.jsx `modelRow`, `modeRow`, `helpersRow`): "Model · Claude API · 408 ms" (enter: /model; the line it
+  says names where your prompts go), "Mode · bypass permissions · kept from the last window" (red while Bypass, as
+  the footer), "Helpers · 5 models on the service" (enter or a click: /profiles). The Launcher draws it as one
+  centred line (`StartLine`), which loses "kept from", the time, then the helpers as the window narrows. Once the
+  page has gone (your first message, a panel, `--url`), a part is the note it is given: the mode's as before, a
+  /remote's one line (`remoteNote`, "On the remote: … answered in 408 ms · 5 helpers stay on the service").
+  `replayed` leaves the item out of a resumed conversation.
+- **Tests**: `terminal/test/start-notes.test.mjs` (the rows, the Menu at four sizes, the one line at six widths, the
+  /remote line, and the real window on the Menu and on the Launcher). The app tests that waited for "On the remote:"
+  wait for `ON_REMOTE` (app-setup.mjs): the start page's line or the /remote note; `pty.mjs` waits for a pattern too.
+
 ## Where should it work? The folder page, "2 · Doors" (9 Oct 2026)
 
 - **What and why.** `coding` typed in the home folder first asks which folder to work in (start-folder.mjs

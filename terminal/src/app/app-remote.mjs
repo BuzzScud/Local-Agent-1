@@ -20,6 +20,7 @@ import { Loops } from './loops.mjs';
 import { loopsLine } from './loops-draw.mjs';
 import { modelWithLimits } from './limits.mjs';
 import { IDLE, remoteConfOf } from './app-common.mjs';
+import { remoteNote } from './start-notes.jsx';
 
 export function remotePart(self) {
   const useRemote = async (r, { atStart = false } = {}) => {
@@ -82,9 +83,14 @@ export function remotePart(self) {
     await self.agent.mcpTake({ settled: true }).catch(() => {});
     try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: self.agent.messages[0].content, tools: self.agent.tools(), thinking: self.agent.thinking, effort: self.agent.effort, slot: self.agent.slots?.main, onPhase: self.setStartPhase }); } catch {}
     self.setStarting(false);
-    self.push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · your prompts and files go there; /remote switches back`, tone: 'dim' });
     // The conversation's profile follows (app-profiles.mjs): else the router moved it back at the next step.
-    self.mainToRemote(r, m.remote?.model ?? r.model);
+    const main = self.mainToRemote(r, m.remote?.model ?? r.model);
+    // Where it runs now, and the helpers that stay where they are (start-notes.jsx): the start page's rows
+    // while it is up, else one note (the owner's pick, 9 Oct 2026; before, two notes of a paragraph each).
+    const label = m.remote?.label ?? '';
+    const said = { kind: 'remote', name: m.name, model: label ? m.name.replace(` · ${label}`, '') : m.name, label, claude: r.kind === 'claude', where: kindWord(r.kind), ms: conn.info.ms ?? null, helpers: main.away };
+    self.sayStart(said, { type: 'note', tone: 'dim', text: remoteNote(said) });
+    if (main.note) self.push(main.note);
     self.setRemoteState('on');
     // A model still loading on the service: a waiting message goes once it has (preloadRemote).
     const loading = preloadRemote(conn);

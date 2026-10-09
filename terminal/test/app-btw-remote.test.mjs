@@ -5,7 +5,7 @@ import { test, expect } from 'bun:test';
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
-import { setup, quit } from './app-setup.mjs';
+import { setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { fakeOllama } from './fake-ollama.mjs';
 import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 
@@ -43,7 +43,7 @@ test('on an Ollama service: /btw is in the menu, the lowest model answers, and t
   const svc = await fakeOllama();
   onService(base, svc);
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { wait: '? for shortcuts' }, { sleep: 300 },
+    { wait: ON_REMOTE, ms: 25_000 }, { wait: '? for shortcuts' }, { sleep: 300 },
     { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 250 }, { snapshot: 'menu' },
     { type: 'btw what are you doing?' }, { sleep: 150 }, { key: 'enter' },
     { wait: 'Side answer by tiny:3b.', ms: 20_000 }, { wait: 'answered by tiny:3b' }, { sleep: 200 }, { snapshot: 'answered' },
@@ -62,7 +62,7 @@ test('on a service that loads no second model: one short try of the lowest, said
   const svc = await fakeOllama({ stuck: ['tiny:3b', 'words:7b', 'jsontext:14b'], sideDelay: 1500 });
   onService(base, svc);
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_BTW_TRY_MS: '700' }, args: ['--no-flows'], timeoutMs: 70_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { wait: '? for shortcuts' }, { sleep: 300 },
+    { wait: ON_REMOTE, ms: 25_000 }, { wait: '? for shortcuts' }, { sleep: 300 },
     { type: '/btw what are you doing?' }, { key: 'enter' },
     { wait: 'tiny:3b is not ready on the service; coder:30b answers', ms: 15_000 }, { snapshot: 'falling' },
     { wait: 'Side answer by coder:30b.', ms: 20_000 }, { wait: 'answered by coder:30b' }, { sleep: 200 }, { snapshot: 'answered' },

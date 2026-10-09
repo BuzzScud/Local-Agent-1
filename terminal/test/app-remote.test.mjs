@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 
 // The model on this Mac in these tests is the default one (its file, name and size).
@@ -46,7 +46,7 @@ test('/remote: Run on My other computer, its rows filled in (a pasted key); a Co
     ...down(4), { key: 'enter' }, { wait: 'it did not work' }, { sleep: 150 }, { snapshot: 'failed' }, // Connect (past Memory sent): the wrong key
     { fn: () => { afterFail = existsSync(join(base, 'home', 'settings.json')) ? settingsOf(base).remote ?? null : null; } },
     ...up(7), { key: `\x1b[200~${KEY}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 80 }, // API key again
-    ...down(6), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect
+    ...down(6), { key: 'enter' }, { wait: ON_REMOTE }, { sleep: 200 }, { snapshot: 'on' }, // Connect
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the remote.' },
     { type: '/doctor' }, { key: 'enter' }, { wait: 'Doctor · on a remote model' }, { sleep: 150 }, { snapshot: 'doctor' },
     ...quit,
@@ -71,7 +71,7 @@ test('/remote: Run on My other computer, its rows filled in (a pasted key); a Co
   expect(r.snapshots.failed).toContain('the API key was not accepted');
   expect(afterFail).toBe(null); // nothing saved by a Connect that did not work
   expect(r.snapshots.on).toContain(`On the remote: Gemma 4 12B QAT · 127.0.0.1:${remote.port} · llama.cpp`);
-  expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain('your prompts and files go there; /remote switches back');
+  expect(r.snapshots.on.replace(/\s+/g, ' ')).toMatch(/llama\.cpp · answered in \d+ ms/); // one line now (start-notes.jsx remoteNote)
   expect(r.snapshots.doctor).toContain('in the key file (••••6789)');
   // the chat went to the remote with the key; nothing went there with the right key but /health and the checks
   const chats = remote.seen.filter((x) => x.path === '/v1/chat/completions' && x.auth === `Bearer ${KEY}`);
@@ -93,7 +93,7 @@ test('a remote saved as on is used from the start: nothing loads on this Mac, th
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { use: true, address: '127.0.0.1', port: remote.port, connect: 'http', kind: 'llama', model: '', context: 0, key: true, keyEnd: '6789' } }));
   writeFileSync(join(base, 'home', 'remote-keys.json'), JSON.stringify({ default: KEY }), { mode: 0o600 });
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_REMOTE_KEYSTORE: 'file' }, args: ['--no-flows'], steps: [
-    { wait: 'On the remote:', ms: 20_000 }, { sleep: 200 }, { snapshot: 'on' },
+    { wait: ON_REMOTE, ms: 20_000 }, { sleep: 200 }, { snapshot: 'on' },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Straight to the remote.' },
     { type: '/model' }, { key: 'enter' }, { wait: 'Pick the model' }, { sleep: 150 }, { snapshot: 'model' }, { key: 'esc' },
     ...quit,
@@ -133,7 +133,7 @@ test('the remote goes away in the middle: it tries to connect again once, then t
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { use: true, address: '127.0.0.1', port: remote.port, connect: 'http', kind: 'llama', model: '', context: 0, key: true, keyEnd: '6789' } }));
   writeFileSync(join(base, 'home', 'remote-keys.json'), JSON.stringify({ default: KEY }), { mode: 0o600 });
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_REMOTE_KEYSTORE: 'file' }, args: ['--no-flows'], steps: [
-    { wait: 'On the remote:', ms: 20_000 },
+    { wait: ON_REMOTE, ms: 20_000 },
     { type: 'one' }, { key: 'enter' }, { wait: 'First answer.' }, { sleep: 300 },
     { fn: () => remote.kill() }, { sleep: 200 },
     { type: 'two' }, { key: 'enter' }, { wait: 'The remote model is not answering', ms: 20_000 }, { sleep: 200 }, { snapshot: 'asked' },
@@ -197,7 +197,7 @@ test('/remote with Run on: Claude API: a key, a model from the list, its address
     ...right(1), { sleep: 100 }, { snapshot: 'model' }, // Model: Opus 5.5 → Sonnet 5.5
     ...down(1), ...right(1), { sleep: 100 }, // More opens (→: with a key, enter connects)
     ...down(1), { type: claude.url }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address: the stand-in (enter: on to Context)
-    ...down(2), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect (past Memory sent)
+    ...down(2), { key: 'enter' }, { wait: ON_REMOTE }, { sleep: 200 }, { snapshot: 'on' }, // Connect (past Memory sent)
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.' }, { sleep: 200 },
     ...quit,
   ] });
@@ -233,7 +233,7 @@ test('/remote claude with no key yet asks only for it, then Connect; the compute
   }));
   writeFileSync(join(base, 'home', 'remote-keys.json'), JSON.stringify({ default: KEY }), { mode: 0o600 });
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], steps: [
-    { wait: 'On the remote:', ms: 20_000 }, { sleep: 200 },
+    { wait: ON_REMOTE, ms: 20_000 }, { sleep: 200 },
     { type: 'one' }, { key: 'enter' }, { wait: 'From the computer.' }, { sleep: 200 },
     { type: '/remote claude' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 }, { snapshot: 'asked' },
     { key: `\x1b[200~${claude.key}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 100 }, { snapshot: 'ready' }, // the key; enter: on to Connect
@@ -278,7 +278,7 @@ test('/remote Another service: Connect lists the models, a coder is highlighted,
     ...right(3), { sleep: 100 }, // Run on: Another service
     ...down(1), { type: srv.url }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address (enter: on to API key)
     ...down(3), { key: 'enter' }, { wait: 'has 3 models' }, { sleep: 150 }, { snapshot: 'list' }, // Connect → the list
-    { key: 'down' }, { sleep: 80 }, { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' },
+    { key: 'down' }, { sleep: 80 }, { key: 'enter' }, { wait: ON_REMOTE }, { sleep: 200 }, { snapshot: 'on' },
     ...quit,
   ] });
   await here.close();
@@ -366,7 +366,7 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   const where = `127.0.0.1:${srv.port}`;
   let loadsAtMenu = -1;
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 50_000, steps: [
-    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 }, { snapshot: 'start' },
+    { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 }, { snapshot: 'start' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From tiny:3b, reply 1.' }, { sleep: 200 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'list' },
     { type: 'coder' }, { sleep: 200 }, { snapshot: 'filtered' },
@@ -429,7 +429,7 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (mo
   const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 50_000, steps: [
-    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
+    { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'list' },
     { type: 'coder' }, { sleep: 200 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'Big-model mode for coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From coder:30b, reply 1.' }, { sleep: 200 },
@@ -468,7 +468,7 @@ test('a service whose own size is less than the agent works in (Ollama’s 4k): 
   const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 40_000, steps: [
-    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
+    { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
     { type: 'coder' }, { sleep: 150 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'loaded' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From coder:30b, reply 1.' }, { sleep: 200 },
@@ -491,7 +491,7 @@ test('a model that does not fit on the service: tried again at half the context 
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
   const where = `127.0.0.1:${srv.port}`.replace('.', '\\.');
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 55_000, steps: [
-    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
+    { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 },
     // huge: 256k and 128k do not fit, 64k does
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
     { type: 'huge' }, { sleep: 150 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'huge:120b is loaded on the service' }, { sleep: 300 }, { snapshot: 'fitted' },
@@ -552,7 +552,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
   let lagunaLoadsAtMenu = -1;
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
+    { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 },
     { type: 'laguna' }, { sleep: 200 }, { key: 'enter' }, { wait: '2 of 3' }, { sleep: 150 }, { key: 'up' }, { sleep: 150 }, { key: 'enter' }, { wait: 'laguna-s-2.1:latest · its own settings' }, { sleep: 300 }, { snapshot: 'menu' },
     { fn: () => { lagunaLoadsAtMenu = srv.loads.filter((l) => l.model === 'laguna-s-2.1:latest').length; } },
