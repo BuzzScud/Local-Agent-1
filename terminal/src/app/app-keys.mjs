@@ -15,7 +15,7 @@ import { pasteField, rowsOf as remoteRows, startEdit, formReady, modelChoices, m
 import { serviceRows, atRow, moveService, filterService, toggleFold } from './remote-models.mjs';
 import { WEB_ROWS, moveWebRow } from './web-form.mjs';
 import { withUndo, insertText, promptTextWidth, cursorCell, posAt, wordAt, moveBy, cursorLine, selectedText, undoEdit, redoEdit, editInput } from './edit-input.mjs';
-import { DOUBLE_CLICK_MS, parseCursorReply, parseMouse, WHEEL_PAUSE_MS, ASK_CURSOR } from './mouse.mjs';
+import { DOUBLE_CLICK_MS, parseCursorReply, parseMouse, REST_MS, ASK_CURSOR } from './mouse.mjs';
 import { copyToClipboard } from './clipboard.mjs';
 import { fromScreen } from './screen-copy.mjs';
 import { addHistory, saveSettings } from './store.mjs';
@@ -97,6 +97,7 @@ export function keysPart(self) {
 
   const onPaste = (text) => {
     self.setPopup(null); // a paste closes the /help box, like any key
+    self.setHandedBack(false); // and takes the mouse back from Terminal (handBack)
     // /remote: a paste goes into the row being edited (an API key, an address), or starts editing a text row.
     const rp = self.S.current.picker;
     // /mcp's form: a paste goes into the row being edited, or starts editing a text row (a key, a command, an address).
@@ -216,6 +217,29 @@ export function keysPart(self) {
     if (again) { const [a, b] = wordAt(s.value, to); self.setInput((p) => withUndo(p, { value: p.value, cursor: b, anchor: a })); return; }
     self.setInput((p) => withUndo(p, { value: p.value, cursor: to, anchor: ev.shift ? (p.anchor ?? p.cursor) : to }));
   };
+  // What the pointer is on, above the live part (the prompt box, the footer, the tray, the bot and the reply
+  // under way, which stay the app's): { kind: 'group', id } on a box of steps a click opens or closes, else
+  // { kind: 'text' }, the printed conversation, Terminal's to highlight. null on the live part, or while the
+  // start page is up (its rows take clicks, printed or not). The row is counted up from the live part, which
+  // ends on the row over the cursor's (screen.jsx printedAt).
+  const onConversation = (ev) => {
+    if (self.holdRef.current || self.startClicks) return null;
+    const h = self.liveBoxRef.current?.yogaNode?.getComputedHeight?.();
+    const top = h ? (self.rows ?? 40) - h : null;
+    if (top == null || ev.row >= top) return null;
+    if (self.stepsView.steps !== 'grouped') return { kind: 'text' };
+    const hit = printedAt(self.itemsRef.current, self.measure.current, self.S.current.live?.phase === 'working', top - ev.row);
+    return hit?.it.type === 'group' && (!hit.it.open || hit.row === 0) ? { kind: 'group', id: hit.it.id } : { kind: 'text' };
+  };
+  // The mouse back to Terminal until a key or a paste (App.jsx handedBack): its own highlight, double and
+  // triple click and scrolling, as in Claude Code. Said once a window.
+  const handBack = () => {
+    const m = self.mouseRef.current;
+    clearTimeout(m.rest);
+    m.down = false;
+    self.setHandedBack(true);
+    if (!m.told) { m.told = true; self.flash('The conversation’s text is Terminal’s: drag to highlight, ⌘C copies · any key gives the mouse back', 4000); }
+  };
   const onTerminalReply = (seq) => {
     const m = self.mouseRef.current;
     if (!m.armed || typeof seq !== 'string') return;
@@ -230,18 +254,21 @@ export function keysPart(self) {
       return;
     }
     const ev = parseMouse(seq);
-    if (ev?.kind === 'move') { self.botPointer.current = { col: ev.col, row: ev.row }; return; } // the bot's eyes follow it (bot-layer.jsx)
+    if (ev?.kind === 'move') {
+      self.botPointer.current = { col: ev.col, row: ev.row }; // the bot's eyes follow it (bot-layer.jsx)
+      // Resting on the conversation's text, the pointer hands the mouse to Terminal (mouse.mjs REST_MS).
+      clearTimeout(m.rest);
+      if (self.mouse && onConversation(ev)?.kind === 'text') m.rest = setTimeout(handBack, REST_MS);
+      return;
+    }
     if (!ev || ev.kind === 'other') return;
-    // A press on a box in the conversation opens it, or on an open one's top edge closes it (/steps grouped):
-    // its row counted up from the live part, which ends on the row over the cursor's (screen.jsx printedAt).
-    if (ev.kind === 'press' && !self.holdRef.current && self.stepsView.steps === 'grouped') {
-      const h = self.liveBoxRef.current?.yogaNode?.getComputedHeight?.();
-      const top = h ? (self.rows ?? 40) - h : null;
-      if (top != null && ev.row < top) {
-        const hit = printedAt(self.itemsRef.current, self.measure.current, self.S.current.live?.phase === 'working', top - ev.row);
-        if (hit?.it.type === 'group' && (!hit.it.open || hit.row === 0)) self.toggleGroup(hit.it.id);
-        return;
-      }
+    // A press on the conversation: on a box of steps it opens it, or on an open one's top edge closes it
+    // (/steps grouped); on its text it hands the mouse to Terminal, for the drag to be Terminal's own.
+    const on = ev.kind === 'press' ? onConversation(ev) : null;
+    if (on?.kind === 'group') { self.toggleGroup(on.id); return; }
+    if (on) {
+      if (self.mouse) { handBack(); self.flash('Terminal has the mouse now: drag again to highlight, ⌘C copies · any key gives it back', 3500); }
+      return;
     }
     // A press on a Recent activity row of the start page: that conversation, as /resume would open it.
     // The page's row on screen is Ink's own layout of it (its box's top and its parents'), counted from
@@ -252,12 +279,7 @@ export function keysPart(self) {
       if (hit) { doHomeItem(hit); return; }
     }
     if (!self.mouse) return; // armed only for the start page's rows
-    if (ev.kind === 'wheel') {
-      self.setWheelPause(true);
-      clearTimeout(m.wheel);
-      m.wheel = setTimeout(() => self.setWheelPause(false), WHEEL_PAUSE_MS);
-      return;
-    }
+    if (ev.kind === 'wheel') { handBack(); return; }
     if (ev.kind === 'press') {
       clearTimeout(m.asked);
       m.origin = null;

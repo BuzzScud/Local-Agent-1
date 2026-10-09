@@ -13,9 +13,11 @@ export const MOTION_OFF = '\x1b[?1003l';
 export const ASK_CURSOR = '\x1b[6n';
 
 export const DOUBLE_CLICK_MS = 400;
-// A scroll hands the mouse back to Terminal for this long, so the rest of the
-// scroll moves the conversation as it always did.
-export const WHEEL_PAUSE_MS = 1500;
+// The conversation's text is Terminal's to highlight, as in Claude Code (9 Oct 2026): the pointer resting
+// this long on it hands the mouse back to Terminal, so a drag there is Terminal's own highlight (⌘C
+// copies). A scroll hands it back at once, so the scroll moves the conversation as it always did. Any
+// key or paste takes it again, for the prompt box, the boxes of steps and the bot (app-keys.mjs).
+export const REST_MS = 250;
 
 // One mouse report: { kind, col, row, shift }, cells counted from 1.
 // kind: press · drag · release (the left button), wheel, move (no button: MOTION_ON), or other.

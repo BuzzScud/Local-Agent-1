@@ -13,6 +13,7 @@ import { ItemFrame, primeRows, printedAt, stepGroups } from '../src/app/screen.j
 import { runInPty } from './pty.mjs';
 import { setup, quit } from './app-setup.mjs';
 import { startFakeServer } from './fake-server.mjs';
+import { MOUSE_ON, MOUSE_OFF, REST_MS } from '../src/app/mouse.mjs';
 
 const h = React.createElement;
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
@@ -120,7 +121,7 @@ test('a click finds the printed box by its rows up from the live part; ctrl+o’
   expect(stepGroups(items, view).map((g) => g.list.length)).toEqual([2, 2]);
 });
 
-test('the real window: a reply’s steps in a box; a click opens it, ctrl+o closes it; /steps open shows every step, kept', async () => {
+test('the real window: a reply’s steps in a box; the pointer resting on it keeps the mouse, a click opens it, ctrl+o closes it; resting on the reply’s words gives Terminal the mouse; /steps open shows every step, kept', async () => {
   const { ENGINE, MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs'); // inside the test: an early import would fix HOME for later files
   const D = MODELS[DEFAULT_MODEL];
   const { cwd, env, base } = setup();
@@ -135,6 +136,8 @@ test('the real window: a reply’s steps in a box; a click opens it, ctrl+o clos
     { text: 'It turns trades into CSV rows.' },
   ]);
   let boxRow = null;
+  const seen = {};
+  const mouseNow = (name) => ({ fn: ({ raw }) => { seen[name] = raw().lastIndexOf(MOUSE_ON) > raw().lastIndexOf(MOUSE_OFF) ? 'app' : 'Terminal'; } });
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_STEPS: '' }, args: ['--url', fake.url, '--no-flows'], cols: 120, rows: 40, timeoutMs: 90_000, steps: [
     { wait: '? for shortcuts' }, { sleep: 300 },
     { type: 'what does this project do?' }, { key: 'enter' }, { wait: 'It turns trades into CSV rows.', ms: 30_000 }, { sleep: 800 }, { snapshot: 'closed' },
@@ -143,11 +146,20 @@ test('the real window: a reply’s steps in a box; a click opens it, ctrl+o clos
       const lines = text.split('\n');
       const at = lines.findIndex((l) => l.includes('╭─ EXPLORING'));
       boxRow = at < 0 ? -1 : at - (lines.length - 40);
-      if (boxRow >= 0) write(`\x1b[<0;20;${boxRow + 1}M`);
+      if (boxRow >= 0) write(`\x1b[<35;20;${boxRow + 1}M`); // the pointer resting on the box first (9 Oct 2026)
     } },
+    { sleep: REST_MS + 350 }, mouseNow('onBox'),
+    { fn: ({ write }) => { if (boxRow >= 0) write(`\x1b[<0;20;${boxRow + 1}M`); } },
     { sleep: 150 }, { fn: ({ write }) => { if (boxRow >= 0) write(`\x1b[<0;20;${boxRow + 1}m`); } },
     { wait: '▾ 3 steps', ms: 10_000 }, { sleep: 500 }, { snapshot: 'opened' },
     { key: 'ctrlO' }, { wait: 'Open or close a group of steps' }, { snapshot: 'list' }, { key: 'enter' }, { waitGone: '▾ 3 steps', ms: 10_000 }, { sleep: 500 }, { snapshot: 'shut' },
+    // resting on the reply's own words: Terminal's, for its own highlight; typing takes it back
+    { fn: ({ text, write }) => {
+      const lines = text.split('\n');
+      const at = lines.findLastIndex((l) => l.includes('It turns trades into CSV rows.'));
+      write(`\x1b[<35;10;${at - (lines.length - 40) + 1}M`);
+    } },
+    { sleep: REST_MS + 350 }, mouseNow('onWords'),
     { type: '/steps open' }, { sleep: 200 }, { key: 'enter' }, { wait: 'Open: every step' }, { sleep: 800 }, { snapshot: 'open' },
     ...quit,
   ] });
@@ -155,6 +167,8 @@ test('the real window: a reply’s steps in a box; a click opens it, ctrl+o clos
   expect(r.snapshots.closed).toMatch(/╭─ EXPLORING ─ ▸ 3 steps · read 3 · 2 thoughts/);
   expect(r.snapshots.closed).not.toContain('I will read the export first');
   expect(boxRow).toBeGreaterThan(0);
+  expect(seen.onBox).toBe('app');
+  expect(seen.onWords).toBe('Terminal');
   expect(r.snapshots.opened).toContain('I will read the export first'); // the thought, inside the open box
   expect(r.snapshots.list).toMatch(/EXPLORING · 3 steps/);
   expect(r.snapshots.shut).toContain('▸ 3 steps');

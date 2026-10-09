@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty, emulate } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
-import { MOUSE_ON, MOUSE_OFF, ASK_CURSOR, WHEEL_PAUSE_MS, parseMouse, parseCursorReply, isMouseText } from '../src/app/mouse.mjs';
+import { MOUSE_ON, MOUSE_OFF, MOTION_ON, ASK_CURSOR, REST_MS, parseMouse, parseCursorReply, isMouseText } from '../src/app/mouse.mjs';
 import { posAt, wordAt, promptRows } from '../src/app/edit-input.mjs';
 import { needs } from './needs.mjs';
 
@@ -78,7 +78,7 @@ const press = async ({ write, raw }, at, cursor) => {
   write(`\x1b[${c.row};${c.col}R`);
 };
 
-test('the mouse is on from the start (/mouse off gives it back); /mouse on: a drag in the prompt box highlights across rows and copies, delete removes it, a double click takes a word, a scroll hands the mouse back, an empty box keeps it (for the footer\'s model label)', async () => {
+test('the mouse is on from the start (/mouse off gives it back); /mouse on: a drag in the prompt box highlights across rows and copies, delete removes it, a double click takes a word, a scroll hands the mouse back until a key, an empty box keeps it (for the footer\'s model label)', async () => {
   const { cwd, env, base } = setup();
   const clip = join(base, 'clipboard.txt');
   const fake = await startFakeServer([]);
@@ -121,10 +121,11 @@ test('the mouse is on from the start (/mouse off gives it back); /mouse on: a dr
     } },
     { wait: 'copied 5 chars to clipboard' },
     { fn: () => { seen.wordClip = readFileSync(clip, 'utf8'); } },
-    // a scroll: the mouse goes back to Terminal, and comes back a moment later
+    // a scroll: the mouse goes back to Terminal until a key (9 Oct 2026; before, for 1.5 s)
     { key: '\x1b[<64;10;10M' }, { sleep: 300 }, { fn: ({ raw }) => { seen.scrolled = last(raw(), MOUSE_ON, MOUSE_OFF); } },
-    { sleep: WHEEL_PAUSE_MS }, { fn: ({ raw }) => { seen.after = last(raw(), MOUSE_ON, MOUSE_OFF); } },
-    { type: 'X' }, { sleep: 300 }, { snapshot: 'replaced' }, // typing replaces the word
+    { sleep: 1600 }, { fn: ({ raw }) => { seen.after = last(raw(), MOUSE_ON, MOUSE_OFF); } },
+    { type: 'X' }, { sleep: 300 }, { snapshot: 'replaced' }, // typing replaces the word…
+    { fn: ({ raw }) => { seen.typedBack = last(raw(), MOUSE_ON, MOUSE_OFF); } }, // …and takes the mouse back
     { key: 'ctrlC' }, { sleep: 300 }, { fn: ({ raw }) => { seen.cleared = last(raw(), MOUSE_ON, MOUSE_OFF); } },
     { key: '\x1b[<0;9;9M' }, { sleep: 200 }, { snapshot: 'stray' }, // one that was still on its way
     ...quit,
@@ -147,7 +148,8 @@ test('the mouse is on from the start (/mouse off gives it back); /mouse on: a dr
   expect(prompt(r.snapshots.deleted)).toBe('alpha bravo november oscar papa');
   expect(seen.wordClip).toBe('oscar');
   expect(seen.scrolled).toBe(MOUSE_OFF);
-  expect(seen.after).toBe(MOUSE_ON);
+  expect(seen.after).toBe(MOUSE_OFF); // still Terminal's: the scroll is not over until you type
+  expect(seen.typedBack).toBe(MOUSE_ON);
   expect(prompt(r.snapshots.replaced)).toBe('alpha bravo november X papa');
   expect(seen.cleared).toBe(MOUSE_ON); // an empty box keeps it
   expect(r.snapshots.stray).not.toContain('[<0;9;9M');
@@ -191,6 +193,61 @@ test('the mouse while Agentic Coder answers: a drag still lands on its letters w
   expect(seen.leaving).toBe(MOUSE_ON); // text in the box as it quits…
   expect(last(r.raw, MOUSE_ON, MOUSE_OFF)).toBe(MOUSE_OFF); // …and Terminal has its mouse back
   expect(r.raw.split(MOUSE_ON).length).toBe(r.raw.split(MOUSE_OFF).length);
+  expect(r.code).toBe(0);
+}, T);
+
+// The pointer moving with no button held, as Terminal reports it once the app asks for every move (MOTION_ON).
+const move = (at) => `\x1b[<35;${at.col};${at.row}M`;
+
+test('the conversation’s text is Terminal’s, as in Claude Code: the pointer resting on it gives Terminal the mouse (passing over it does not), any key or paste takes it back; a press on it or a scroll gives it too; the box keeps its clicks', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([{ text: 'Some words to copy: alpha bravo charlie.' }]);
+  const seen = {}, at = {};
+  const mouseNow = (name) => ({ fn: ({ raw }) => { seen[name] = last(raw(), MOUSE_ON, MOUSE_OFF); } });
+  const rest = { sleep: REST_MS + 350 };
+  const r = await runInPty({ cwd, cols: 80, rows: 24, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { sleep: 300 },
+    { type: 'say something' }, { key: 'enter' }, { wait: 'alpha bravo charlie' }, { waitGone: 'esc to interrupt' }, { sleep: 600 },
+    { fn: async (t) => {
+      const term = await t.screen();
+      at.text = cellOf(term, 'alpha bravo');
+      at.box = cursorOf(term); // the cursor sits in the prompt box
+      seen.motion = t.raw().lastIndexOf(MOTION_ON) > t.raw().lastIndexOf(MOUSE_OFF); // every move asked for, bot or not
+    } },
+    mouseNow('ready'),
+    // over the text on the way to the box: still the app's
+    { fn: async ({ write }) => { write(move(at.text)); await pause(60); write(move({ col: at.text.col, row: at.box.row })); } },
+    rest, mouseNow('passed'),
+    // resting on the box: still the app's
+    { fn: ({ write }) => write(move(at.box)) }, rest, mouseNow('onBox'),
+    // resting on the text: Terminal's, said once
+    { fn: ({ write }) => write(move(at.text)) }, rest, mouseNow('rested'), { snapshot: 'rested' },
+    { type: 'x' }, { sleep: 300 }, mouseNow('key'), // a key takes it back
+    // a press on the text (too quick to rest first): Terminal's at once, and the window says to drag again
+    { fn: ({ write }) => write(`\x1b[<0;${at.text.col};${at.text.row}M`) }, { sleep: 300 }, mouseNow('pressed'), { snapshot: 'pressed' },
+    { key: '\x1b[200~ pasted\x1b[201~' }, { sleep: 300 }, mouseNow('paste'), // a paste takes it back
+    // the box keeps its clicks: a press there asks where the cursor is, to place it
+    { fn: async (t) => { await press(t, at.box); t.write(`\x1b[<0;${at.box.col};${at.box.row}m`); } }, { sleep: 300 }, mouseNow('clicked'),
+    { key: '\x1b[<64;10;10M' }, { sleep: 1600 }, mouseNow('scrolled'), // a scroll: Terminal's until a key
+    { type: 'y' }, { sleep: 300 }, mouseNow('back'),
+    ...quitTyped,
+  ] });
+  await fake.close();
+  expect(seen.motion).toBe(true);
+  expect(seen.ready).toBe(MOUSE_ON);
+  expect(at.text.row).toBeLessThan(at.box.row);
+  expect(seen.passed).toBe(MOUSE_ON);
+  expect(seen.onBox).toBe(MOUSE_ON);
+  expect(seen.rested).toBe(MOUSE_OFF);
+  expect(r.snapshots.rested).toContain('The conversation’s text is Terminal’s');
+  expect(seen.key).toBe(MOUSE_ON);
+  expect(seen.pressed).toBe(MOUSE_OFF);
+  expect(r.snapshots.pressed).toContain('drag again to highlight');
+  expect(seen.paste).toBe(MOUSE_ON);
+  expect(seen.clicked).toBe(MOUSE_ON);
+  expect(seen.scrolled).toBe(MOUSE_OFF);
+  expect(seen.back).toBe(MOUSE_ON);
+  expect(r.raw.split(MOUSE_ON).length).toBe(r.raw.split(MOUSE_OFF).length); // given back every time it was taken
   expect(r.code).toBe(0);
 }, T);
 

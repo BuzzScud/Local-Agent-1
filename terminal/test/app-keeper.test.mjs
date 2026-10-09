@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { runInPty, emulate } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
 import { startFakeServer } from './fake-server.mjs';
-import { MOUSE_ON, ASK_CURSOR } from '../src/app/mouse.mjs';
+import { MOUSE_ON, MOUSE_OFF, ASK_CURSOR } from '../src/app/mouse.mjs';
 
 import { needs } from './needs.mjs';
 
@@ -162,7 +162,7 @@ const press = async ({ write, raw }, at) => {
   write(`\x1b[${b.cursorY + 1};${b.cursorX + 1}R`);
 };
 
-test.skipIf(!S.canHost())('through the keeper: /mouse on, and a drag in the prompt box highlights and copies what it covered', async () => {
+test.skipIf(!S.canHost())('through the keeper: /mouse on, and a drag in the prompt box highlights and copies what it covered; a scroll gives Terminal the mouse until a key', async () => {
   const { cwd, env, home, base } = keeperEnv();
   const clip = join(base, 'clipboard.txt');
   const fake = await startFakeServer([]);
@@ -184,10 +184,14 @@ test.skipIf(!S.canHost())('through the keeper: /mouse on, and a drag in the prom
         t.write(`\x1b[<0;${to.col};${to.row}m`);
       } },
       { wait: `copied ${picked.length} chars to clipboard` }, { fn: () => { seen.clip = readFileSync(clip, 'utf8'); } },
+      { key: '\x1b[<64;10;10M' }, { sleep: 400 }, { fn: ({ raw }) => { seen.scrolled = raw().lastIndexOf(MOUSE_OFF) > raw().lastIndexOf(MOUSE_ON); } },
+      { type: 'z' }, { sleep: 400 }, { fn: ({ raw }) => { seen.back = raw().lastIndexOf(MOUSE_ON) > raw().lastIndexOf(MOUSE_OFF); } },
       ...quitTyped,
     ] });
     expect(seen.mouseAsked).toBe(true);
     expect(seen.clip).toBe(picked);
+    expect(seen.scrolled).toBe(true); // the keeper passed the mouse back to the window…
+    expect(seen.back).toBe(true); // …and took it again with the key
     expect(r.code).toBe(0);
     await ranInKeeper(home, seen);
   } finally { await fake.close(); }

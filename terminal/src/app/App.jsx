@@ -121,7 +121,7 @@ export function App({ opts, win, onRestart }) {
     setServiceCtx: () => setServiceCtx, setShowShortcuts: () => setShowShortcuts, setStartPhase: () => setStartPhase,
     setStartTook: () => setStartTook, setStartedAt: () => setStartedAt, setStarting: () => setStarting,
     setStats: () => setStats, setThinking: () => setThinking, setThinkingState: () => setThinkingState,
-    setTip: () => setTip, setWaiting: () => setWaiting, setWheelPause: () => setWheelPause, settings: () => settings,
+    setTip: () => setTip, setWaiting: () => setWaiting, setHandedBack: () => setHandedBack, settings: () => settings,
     sharedRef: () => sharedRef, sharedValues: () => sharedValues, showShortcuts: () => showShortcuts,
     sideMemo: () => sideMemo, signinOpen: () => signinOpen, start: () => start, startAgents: () => startAgents,
     startClicks: () => startClicks, startCopy: () => startCopy, startFnRef: () => startFnRef, starting: () => starting,
@@ -296,7 +296,7 @@ export function App({ opts, win, onRestart }) {
   const [botOn, setBotOn] = useState(settings.bot !== false);
   const botPointer = useRef(null);
   const botHere = useRef(botAllowed()).current;
-  const [wheelPause, setWheelPause] = useState(false); // a scroll just came in: the mouse is Terminal's for a moment
+  const [handedBack, setHandedBack] = useState(false); // the mouse is Terminal's for its own highlight, until a key (app-keys.mjs handBack)
   // /btw: a side question and its answer, in a panel in the prompt box's place
   // (Claude Code's /btw); gone when closed. The main job's own question wins
   // the place while one is open: answerWait is "type your answer" to it.
@@ -826,8 +826,10 @@ export function App({ opts, win, onRestart }) {
   // click on the model's label in the footer starts or stops the model): a
   // press puts the cursor there, a drag highlights (the selection shift +
   // arrows make: copied at once, delete removes it) and a double click takes
-  // the word. A scroll gives the mouse back for a moment, so the rest of it
-  // moves the conversation as it always did; fn held is Terminal's own highlight.
+  // the word. The conversation's text is Terminal's, as in Claude Code (9 Oct
+  // 2026): the pointer resting on it, a press on it or a scroll gives the mouse
+  // back until a key or a paste, so a drag there is Terminal's own highlight and
+  // a scroll moves the conversation; fn held is Terminal's own highlight anywhere.
   const { internal_eventEmitter: rawKeys } = useStdin();
   const tty = win?.out ?? process.stdout;
   // The start page's Recent activity rows open with a click (start.jsx recentRows), so while the page
@@ -845,25 +847,26 @@ export function App({ opts, win, onRestart }) {
     const id = setInterval(() => setWalkStep((n) => n + 1), 250);
     return () => clearInterval(id);
   }, [walking]);
-  const mouseArmed = (mouse || startClicks) && !perm && !picker && !btwShown && !wheelPause && !leaving && !tooSmall;
-  const mouseRef = useRef({ armed: false, asked: null, waiting: [], origin: null, down: false, last: null, wheel: null });
+  const mouseArmed = (mouse || startClicks) && !perm && !picker && !btwShown && !handedBack && !leaving && !tooSmall;
+  const mouseRef = useRef({ armed: false, asked: null, waiting: [], origin: null, down: false, last: null, rest: null, told: false });
   const footerRef = useRef(null);
   // Where the tray over the prompt box drew each attachment's card, for a click on one (onMouse).
   const trayRef = useRef(null);
-  // With the bot shown, every move of the pointer too (MOTION_ON), so its eyes can follow it.
-  const botMotion = botHere && botOn;
+  // Every move of the pointer too (MOTION_ON): with /mouse on, so resting on the conversation's text hands
+  // the mouse to Terminal, and with the bot shown, so its eyes can follow it.
+  const motion = mouse || (botHere && botOn);
   useEffect(() => {
     if (!mouseArmed) return undefined;
     const m = mouseRef.current;
     m.armed = true;
-    tty.write(botMotion ? MOUSE_ON + MOTION_ON : MOUSE_ON);
-    return () => { clearTimeout(m.asked); Object.assign(m, { armed: false, asked: null, waiting: [], origin: null, down: false }); botPointer.current = null; tty.write(botMotion ? MOTION_OFF + MOUSE_OFF : MOUSE_OFF); };
-  }, [mouseArmed, tty, botMotion]);
+    tty.write(motion ? MOUSE_ON + MOTION_ON : MOUSE_ON);
+    return () => { clearTimeout(m.asked); clearTimeout(m.rest); Object.assign(m, { armed: false, asked: null, waiting: [], origin: null, down: false }); botPointer.current = null; tty.write(motion ? MOTION_OFF + MOUSE_OFF : MOUSE_OFF); };
+  }, [mouseArmed, tty, motion]);
   // However the app ends, Terminal gets its mouse back.
   useEffect(() => {
     const off = () => { if (mouseRef.current.armed) { try { writeSync(1, MOTION_OFF + MOUSE_OFF); } catch {} } };
     process.on('exit', off);
-    return () => { process.off('exit', off); clearTimeout(mouseRef.current.wheel); };
+    return () => { process.off('exit', off); clearTimeout(mouseRef.current.rest); };
   }, []);
   // What Terminal sends for the mouse arrives with the keys. A press first
   // asks where the cursor is (it sits where you type, so the answer places
@@ -883,6 +886,7 @@ export function App({ opts, win, onRestart }) {
 
   useInput((ch, key) => {
     if (isMouseText(ch)) return; // the mouse's reports are handled above, never typed
+    setHandedBack(false); // any key takes the mouse back from Terminal (app-keys.mjs handBack)
     const cur = S.current;
     const arrow = (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) && !key.shift && !key.meta && !key.ctrl;
     if (arrow && !cur.tooSmall && !cur.perm && !cur.picker && !(cur.btw && !cur.answerWait) && !waitRef.current && !cur.loopsOn) {
