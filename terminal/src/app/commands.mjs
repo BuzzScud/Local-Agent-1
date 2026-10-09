@@ -30,8 +30,7 @@ export const COMMANDS = [
   { name: 'usage', desc: 'What the Claude API has left: this month against your spend cap, today’s dollars, and the limits each minute (r asks Anthropic now)' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
   { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone: a box of your saved Macs, online or not)', arg: '[mac]', picker: true },
-  { name: 'loop', desc: 'Send a message again by itself, every so often or until its job is done: /loop test 5m, /loop debug, /loop web 30m <what to read>, /loop 10m <message>; alone: this window’s loops', arg: '[debug|test|web] [10m] [message]' },
-  { name: 'loops', desc: 'Open the loop board in this window: a card per loop that says what it is doing, and a box to tell it what to do' },
+  { name: 'loop', desc: 'A message sent again by itself, every so often or until its job is done. Alone: your loops, or a page to set one up; with words: /loop run the tests every 10 min until 6pm', arg: '[what it should do, how often, when it stops]' },
   { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'mcp', desc: 'Your MCP servers: tools from programs on this Mac and services on the internet (GitHub, a database, your own scripts); add one, Test it, switch its tools on or off and mark the ones that only read; each tool asks before its first use' },
   { name: 'jobs', desc: 'The commands the model runs in the background (a dev server, a long test run): each one, how long it has run, its last lines; /jobs stop <id|all> stops them', arg: '[stop <id|all>]' },
@@ -103,15 +102,16 @@ const CLAUDE_MENU = new Set(['usage']);
 // In the / menu where it fits (3 Oct 2026, the owner: "i dont see the new command?"; it had been
 // typed only, so nothing showed it, not even /jump): listed in the whole menu in a window with room
 // for one more row than the 18 an 80 × 24 window holds, and found in any window once its name is typed.
-// /loop and /loops (3 Oct 2026) follow it the same way, and /mcp after them (the owner's pick: typed in
+// /loop (3 Oct 2026) follows it the same way, and /mcp after it (the owner's pick: typed in
 // full, like /jumptomac; the hub's Help page lists it), in this order: a window with one free row
-// shows /jumptomac, with four all of them.
+// shows /jumptomac, with three all of them. /loops, the board, had a row of its own until 9 Oct 2026
+// ("can we make 1 command for it all?"): /loop alone opens it now, and /loops typed still does.
 // /jobs (3 Oct 2026): the background commands, listed and stopped.
 // /calc (8 Oct 2026, the owner: "add it to the agentic coder commands, under the hub (/help) command") last:
 // in a window with room it is the row under /help, and typing /c finds it anywhere.
 // /bot (9 Oct 2026): hides or shows the bot over the prompt box (bot-layer.jsx); last, so it goes first.
 // /steps (9 Oct 2026): how a reply's steps show (task-rows.jsx); after /bot.
-export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'calc', 'bot', 'steps']);
+export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'mcp', 'jobs', 'calc', 'bot', 'steps']);
 const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On

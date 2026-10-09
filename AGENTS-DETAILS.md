@@ -430,7 +430,7 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   TodoWrite list, a line with the step under way and the next ones goes on the end of that step's result
   (`planDue`, `planReminder`; on the end so the conversation before it is not read again), and when memory fills the
   whole list goes into its notes (`restartFrom`). Only a plan written in the same message counts.
-- **The board** (`/loops`, and `coding loops` from another terminal; `loops-board.mjs`, drawn by `loops-draw.mjs`).
+- **The board** (`/loop`, and `coding loops` from another terminal; `loops-board.mjs`, drawn by `loops-draw.mjs`).
   Since 4 Oct 2026 (round three: "/loop test5m" had made a loop whose whole task was that word, and the letters the
   owner typed were read as keys and stopped it; their picks from docs/design rounds/
   agentic-coder-loops-4-designs-2026-10-04.html) it is **the coding window's own screen**, as /agents' tree is
@@ -441,13 +441,12 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   is the **Cards**: a card per loop with Now (the step its run is on, read off its lines: `nowWords`), Last, Next and
   You (your last note and what became of it, `lastNote`/`youWords`: sent, read after a step (`heard`), read at the
   start of a run, read as it gave its answer), then what happened, newest first, a line for what waits for you, the
-  box and the keys. **Typing always goes in the box; the commands are ctrl keys** (^N new, ^R run now, ^P pause, ^S
-  stop, ^O rules, ^X start over, ^B undo, ^G whole run, ↑↓ pick). A question is answered in the box (y, a or n; a
+  box and the keys. **Typing always goes in the box**; since 9 Oct 2026 each card has its buttons (below), and the ctrl
+  keys still work (^N the Library, ^R run now, ^P pause, ^S stop, ^O rules, ^X start over, ^B undo, ^G whole run, ↑↓ pick). A question is answered in the box (y, a or n; a
   number for one of its choices; other words to a question that wants a yes go to it as a note), and so is Ask
   first's go (y or n). A stop asks, and only y stops it: enter does nothing there. A note typed to a loop that ended
-  starts it again with the note. **A new loop a step at a time** (`openSetup`, `setupKey`, `drawSetup`): what each
-  run does → how often → when it stops → a read-back, then enter; it opens for /loops or /loop with no loop yet and
-  for ^N, and ^O there is the form with every rule. **An unclear task is asked about first** (`unclearOf`, rules
+  starts it again with the note. **A new loop a step at a time**: the setup wizard (9 Oct 2026, below).
+  **An unclear task is asked about first** (`unclearOf`, rules
   only, no model: a kind and a time typed together like "test5m", or a single word), from the chat and the box.
 - **More control** (4 Oct 2026, the owner's ask: "i want to be able to control it more"; their picks: everything, a
   preview first). Each loop has rules of its own (`rulesOf`, `fieldsOf`): its mode, how many runs (`maxRuns`), a stop
@@ -455,8 +454,8 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   now counts its loops' runs too, which before it did not), steps a run (`steps`, over /effort's; `--loop-events`
   reads it from `AGENTIC_LOOP_SPEC`) and Ask first (`askFirst`: a due run waits as `ready` for y / `/loop <n> go`; n
   leaves one out, or pauses a loop with no time of its own). `limitWhy` ends a loop at its limits; a run stopped to
-  start over does not count. The board's **form** (^O, from the cards or the setup; an ended loop starts again from it, its counts
-  from nothing) is `openForm`/`formKey` in loops-board.mjs, drawn by `drawForm`; `/loop <n> every 7m · runs 5 · stop
+  start over does not count. ^O (or a card's Rules) opens a loop's rules at the wizard's last step; an ended loop starts
+  again from there, its counts from nothing (the 4 Oct form, `openForm`/`drawForm`, is gone since 9 Oct). `/loop <n> every 7m · runs 5 · stop
   18:30 · cap $1 · mode auto · steps 20 · ask on · go · skip · undo · redo · note · message · again` does the same
   from the window or the board's box (`loopCommand`; `isLoopCommand` tells "/loop 2 every 7m" from "/loop 10 minutes …").
   **A note reaches the run at its next step**: `steering()` in loop-run.mjs hands it to the agent, which puts it on
@@ -472,12 +471,64 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   (`redoWait`/`lateEnd`/`redoNext`), and a run starts with your note. A question's choices are numbered: a number typed picks one.
   The preview the build followed ran on this code with a recorded Qwen run (docs/private/loops-preview/proto3).
 - **Tests**: `terminal/test/loops.test.mjs` (no model: what /loop reads, when a loop runs, the files, the Cards at
-  six sizes, the keys, the setup, an unclear task, a note to a loop that ended; the rules, limits, Ask first, edit, start over on a pretend store, undo on the real one, the
-  form) and `app-loops.test.mjs` (a stand-in model: one run that asks and takes a note at its next step, a note as it
-  answers, a run's copy put back, its own steps, the half-fix kept and put back, the app with /loops in its own window and `coding loops` in a
+  six sizes, the keys, the wizard, an unclear task, a note to a loop that ended; the rules, limits, Ask first, edit, start over on a pretend store, undo on the real one),
+  `loop-library.test.mjs` (the ready-made loops, keeping one, the Library, the form; below) and `app-loops.test.mjs` (a stand-in model: one run that asks and takes a note at its next step, a note as it
+  answers, a run's copy put back, its own steps, the half-fix kept and put back, the app with /loop in its own window and `coding loops` in a
   second pseudo-terminal). The Arena's **Loop controls check** (`models/evals/tools/loop-check.mjs`, `/test loops`) does the
-  note, the copy, undo, start over and the steps with the real model. `/loop` and `/loops` are in the / menu
-  where the window has room (`WHEN_ROOM`, after /jumptomac).
+  note, the copy, undo, start over and the steps with the real model. `/loop` is in the / menu where the window has room
+  (`WHEN_ROOM`, after /jumptomac); `/loops` typed still opens the board.
+
+## One /loop: the wizard, the Library and loops you keep (9 Oct 2026)
+
+- **What and why.** The owner, on a screenshot of `/loops` opening its 4-step setup: "can we make 1 command for it
+  all? i want to make it easier to set up and use? for me, its a bit confusing"; then, on the one-page setup that
+  followed, "can we make this step easier? like a step by step wizard? with a nice ui / visual of the actual loops";
+  then "can we make pre made loops? that we can load? make 10? … a ui to create fresh loops from scratch? all in the
+  loop command?". Their picks over three rounds of live previews (private: `docs/private/loops-preview/`, previews
+  4–6, and the page of the ten, `Loop presets - 10 ready-made.html`): one command, buttons on the cards, the model
+  turned on by Start, a warning for the home folder, the full library build, new loops made with the wizard and kept
+  with Save, a one-page form for a kept loop, kept for you and in a project, a loaded loop checked before it starts,
+  and of two designs "2 · a shelf beside your loops" (the other was tabs in the wizard's first step).
+- **One command** (`app-slash.mjs` → `openLoops({ arg })` → `loops-board.mjs openFromChat`): `/loop` alone opens the
+  board in this window (the cards, or the Library with no loop yet); `/loop <a sentence>` reads it (`readSentence`
+  in loops.mjs: every 10 min, hourly, until 6pm, stop at 18:30, for 2 hours, after 5 runs, N times; a goal like
+  "until they pass" stays in the message and makes a fixing loop run until done; no model) and opens the wizard's
+  last step filled in; `/loop <a kept loop's name>` loads it there (`findByName`); `/loop stop|pause|run` and
+  `/loop <n> <rule>` act as before without opening anything. `/loops` typed is the same command (no / menu row).
+- **The wizard** (`openSetup`, `setupKey`, `stepRows`, `drawSetup`): 1 What (five examples and a box; typing over an
+  untouched example starts your own words) · 2 Where (this window's folder and your recent projects, `places()` =
+  store.mjs `recentFolders` less the home folder, each saying whether it has tests: `hasTests`; not asked when changing
+  a loop) · 3 How often · 4 Until · 5 Start (the warnings, More rules: mode, cap, steps, ask first; Save as). Beside it
+  **Your loop** (`loopPicture`): the message, its three steps in boxes with the way back to the next run, a timeline of
+  the next runs (`runsAhead`) and where, how, on what and until when; parts not reached yet are faint. Under 118
+  columns the two stand one above the other. With the model off Start turns it on (`wake` = the window's /start;
+  the snapshot's `model.wake`), and a loop's runs wait while it loads.
+- **The cards' buttons** (`buttonsOf`, `watchButtonsOf`, `press`): by what the loop is doing (Run now · Pause · Stop ·
+  Undo · Open; Yes · Always · No when a run asks; Answer 1–3 for a question; Go · Skip · Rules for Ask first; Turn the
+  model on; Start again); ←→ picks one and enter presses it when the box is empty. The run opened full size has Rules
+  and Save too.
+- **Loops kept** (`loop-files.mjs`): one Markdown shape for all (`# Name`, a line about it, `- Kind/Every/Until/Mode/
+  Cap/Steps/Ask first/Picture/Asks:`, then `## Each run` and what each run is told). The ten ready-made ones are
+  `terminal/rules/loops/*.md`, imported as text so the built app carries them; yours are `<home>/loop-library/*.md`;
+  a project's are `<project>/.agentic/loops/*.md` (shared through git). A `{word}` in the message is a blank asked
+  for when loaded, with its ready answer from `- Asks:` (`{repo}` is read from the folder's git remote). A project's
+  loop that you did not save there runs only after Start, your yes to that very file (its fingerprint, kept in
+  `loop-library/trusted.json`; a changed file asks again). The window reads the library every 5 s at most
+  (`Loops.libraryNow`, in the snapshot), saves with the op `save` (or `add` with `save`: Save and start, kept first,
+  so a name taken stops it) and removes with `remove` (only a file where loops are kept).
+- **The Library** (`loops-library.mjs`): the board has two tabs, Running and Library (`shelfTabs`; tab or ^N switches),
+  and the Library is a shelf of cards (`drawShelf`, `shelfKey`): Yours with + New loop first, then Projects, then the
+  ready-made ones; the arrows move over the cards, typing finds one by its name or what it is about, enter loads it
+  (`loadInto`: every step filled in, the wizard at Start with a "Loaded" line and a row for each blank) or opens the
+  wizard for + New loop; esc in the wizard goes back to the Library. ^E on a kept loop opens **the form** (`drawEditor`,
+  `editorKey`): every field on one page (its name, what each run is told, its blanks, its three steps, where, how often,
+  until, the rules, kept for you or in the project) with the picture beside it; enter saves (a new name replaces the
+  old file), ^G saves and starts it, ^D removes it after a y. A loop runs under the name you kept it by.
+- **Tests**: `terminal/test/loop-library.test.mjs` (the ten files and their rules, a file written and read back, kept
+  for you or in a project, a name taken, renamed, removed, trust by the file's text, the Library at four sizes,
+  typing finds, loading with a blank, Save and start, a project's loop's yes, `{repo}` from git, `/loop <name>`, ^S,
+  the form, ^D), `loops.test.mjs` (the wizard's steps and picture, a sentence filled in) and `app-loops.test.mjs` (the
+  real window: the Library, + New loop, a sentence started from the wizard, the cards, tab).
 
 ## Staying on task on a model on another machine (4 Oct 2026)
 
