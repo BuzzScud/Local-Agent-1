@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { recentOf } from './start.jsx';
 import { HOME_LOOKS, lookOf, nextLook } from './home-looks.jsx';
 import { botAllowed } from './bot-layer.jsx';
+import { STEPS } from './rail.jsx';
 import { helpersEnv, helperRows, changeHelpers } from './helpers.mjs';
 import { changeHooks, leanEnv } from '../agent/way.mjs';
 import { modeOf } from '../agent/permissions.mjs';
@@ -58,6 +59,7 @@ export function slashPart(self) {
           // Back in the folder Agentic Coder was started in, if a "Work in <project>?" moved it.
           const back = self.agent.startOver(self.copyRef.current?.work ?? self.opts.cwd); // a window in its own copy stays there
           self.sessionRef.current = { id: newSessionId(), title: null, items: [] };
+          self.setOpenGroups(new Set());
           // Like Claude Code's /clear: nothing of the old conversation is left on
           // the screen, in the scrollback, behind ctrl+o or in the status line;
           // only the start page, drawn again. The old one stays in /resume.
@@ -723,6 +725,17 @@ export function slashPart(self) {
         try { saveSettings({ homeLook: look }); } catch {}
         const { name, note } = HOME_LOOKS.find((l) => l.id === look);
         self.flash(self.holdRef.current ? `${name}: ${note} · /home again for the other` : `${name} it is: /clear shows it now, and every new window starts with it`, 6000);
+        break;
+      }
+      case 'steps': {
+        // How a reply's steps show (rail.jsx groupWork): typed alone the next one, else the one named; kept in
+        // settings.json. The conversation is printed again in the new way (App.jsx viewKey).
+        const w = arg.trim().toLowerCase();
+        if (w && !STEPS.includes(w)) { self.flash('/steps grouped, open or words (alone: the next one)'); break; }
+        const next = w || STEPS[(STEPS.indexOf(self.S.current.steps) + 1) % STEPS.length];
+        self.setSteps(next);
+        try { saveSettings({ steps: next }); } catch {}
+        self.flash({ grouped: 'Grouped: each stretch of work is one box · a click or ctrl+o opens it', open: 'Open: every step, as before', words: 'Words: only what the model says, your messages and the end lines' }[next], 5000);
         break;
       }
       case 'bot': {

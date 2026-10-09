@@ -207,7 +207,7 @@ test('"/" menu like Claude Code: the 18 commands of a window on this Mac (no /bt
   expect(names(small.snapshots.j)).toEqual(['/jumptomac', '/jobs']); // /jumptomac, then /jobs (3 Oct 2026), found by their first letter
   expect(small.snapshots.j).toContain('Jump this window to your other');
   const wide = names(r.snapshots.all);
-  expect(wide).toHaveLength(24); // with /loop, /loops, /mcp and /jobs where they fit, /calc (8 Oct 2026) and /bot (9 Oct 2026)
+  expect(wide).toHaveLength(25); // with /loop, /loops, /mcp and /jobs where they fit, /calc (8 Oct 2026), /bot and /steps (9 Oct 2026)
   expect(wide.slice(0, 2)).toEqual(['/help', '/calc']); // the calculator link, the row under /help
   expect(all).not.toContain('/calc'); // 80 × 24 has no row for it: typed, it is found
   expect(wide.slice(wide.indexOf('/remote'), wide.indexOf('/remote') + 4)).toEqual(['/remote', '/jumptomac', '/loop', '/loops']);

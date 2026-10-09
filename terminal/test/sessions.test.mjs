@@ -126,7 +126,7 @@ function sessionsEnv() {
   const { cwd, env, base } = setup();
   homes.push(env.AGENTIC_HOME);
   // What runInPty gives the app it starts, for one started here (coding --bg) too.
-  const quiet = { AGENTIC_NO_OPEN: '1', AGENTIC_FETCH_EVERY: '0', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_HOME_LOOK: 'launcher', AGENTIC_BOT: 'off', TERM: 'xterm-256color' };
+  const quiet = { AGENTIC_NO_OPEN: '1', AGENTIC_FETCH_EVERY: '0', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_HOME_LOOK: 'launcher', AGENTIC_BOT: 'off', AGENTIC_STEPS: 'open', TERM: 'xterm-256color' };
   return { cwd, base, env: { ...env, ...quiet, AGENTIC_SESSIONS: 'on', AGENTIC_MEMORY_SAVE: 'off' } };
 }
 const coding = (args, { cwd, env }) => spawnSync('bun', [cli, ...args], { cwd, env: { ...process.env, ...env }, encoding: 'utf8', timeout: 20_000 });
@@ -527,7 +527,7 @@ test.skipIf(!S.canHost())('through the door, a new session in a folder typed the
   mkdirSync(join(env.AGENTIC_HOME, 'models'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(env.AGENTIC_HOME, 'engine', ENGINE.tag, 'llama-server'));
   writeFileSync(join(env.AGENTIC_HOME, 'models', MODELS[DEFAULT_MODEL].file), 'stand-in');
-  const startEnv = { ...process.env, ...env, AGENTIC_MODEL_AT_START: 'off', AGENTIC_MEMORY: join(cwd, '..', 'memory-about-you'), AGENTIC_NO_OPEN: '1', AGENTIC_HUB_PORT: '0', AGENTIC_FETCH_EVERY: '0', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_HOME_LOOK: 'launcher', AGENTIC_BOT: 'off', TERM: 'xterm-256color' };
+  const startEnv = { ...process.env, ...env, AGENTIC_MODEL_AT_START: 'off', AGENTIC_MEMORY: join(cwd, '..', 'memory-about-you'), AGENTIC_NO_OPEN: '1', AGENTIC_HUB_PORT: '0', AGENTIC_FETCH_EVERY: '0', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_HOME_LOOK: 'launcher', AGENTIC_BOT: 'off', AGENTIC_STEPS: 'open', TERM: 'xterm-256color' };
   // The door runs inside this test, so the app it starts is named: the code's own.
   const opts = { host: '127.0.0.1', key: 'acd-test-key', mac: 'server-1', peerName: () => 'mac-mini', show: (name, size) => windows.push({ name, ...size }), startEnv, start: (o) => S.startHost({ ...o, self: ['bun', cli] }) };
   let door = await D.openDoor({ ...opts, port: 0 });
