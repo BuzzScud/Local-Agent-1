@@ -8,6 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [diagrams/agentic-coder-memory-flow-2026-10-09.html](diagrams/agentic-coder-memory-flow-2026-10-09.html) | page | How Agentic Coder's memory works | 8 KB | 2026-10-09 |
 | [reports/agentic-coder-big-files-split-2026-10-09.html](reports/agentic-coder-big-files-split-2026-10-09.html) | page | Big files split · before and after | 15 KB | 2026-10-09 |
 | [other/agentic-coder-backend-split-plan-2026-10-09.html](other/agentic-coder-backend-split-plan-2026-10-09.html) | page | Backend clean-up plan · split and test · 9 Oct 2026 | 11 KB | 2026-10-09 |
 | [reports/agentic-coder-terminal-backend-analysis-2026-10-09.html](reports/agentic-coder-terminal-backend-analysis-2026-10-09.html) | page | The terminal's backend · analysis · 9 Oct 2026 | 38 KB | 2026-10-09 |
