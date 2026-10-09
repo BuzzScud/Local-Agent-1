@@ -2,7 +2,7 @@
 // colour here is an exact xterm-256 entry and looks the same everywhere.
 // The app's own hue is Ocean, a sky blue (8 Oct 2026, the owner's pick "1 · Ocean" of four palettes:
 // "i want to change the green to something else"; docs/private/design rounds/agentic-coder-palettes-4-2026-10-08.html).
-// Its shades by job, for whatever draws by number (the bot, the loop board, the usage line); until then
+// Its shades by job, for whatever draws by number (the bot, the loop board, the usage card's line); until then
 // these were greens: 114, 71, 65, 120, 157, 194, and 22 under added lines.
 export const HUE = {
   accent: 75,   // #5fafff  ●, ❯, Made, the wordmark, ✓

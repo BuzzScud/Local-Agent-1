@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { join } from 'node:path';
-import { existsSync, statSync, writeSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, statSync, writeSync, readdirSync, rmSync, mkdirSync, watch } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, heldRows, MENU_ROWS, menuHeight, shortcutRows, footerParts } from './screen.jsx';
 import { askState } from './app-ask.mjs';
@@ -19,8 +19,8 @@ import { UserHooks } from '../agent/user-hooks.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { warmUp, MODELS, DEFAULT_MODEL, thinkingLevel, readEditedAll, modelById, Embedder, embedderReady, HOME, remoteLabel, remoteModel, withVision, visionPath, authHeaders, endpointOf } from '../../../models/index.mjs';
-import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
-import { usageNow, usageEvents, askLimits } from '../agent/claude-usage.mjs';
+import { spendEvents, spendLabel, windowSpend, spendDir } from '../agent/spend.mjs';
+import { usageNow, usageEvents, askLimits, usageDir, adminKey, saveAdminKey, fetchBill, setOwn as setUsageOwn, dollarsOf, monthOf, clearBill } from '../agent/claude-usage.mjs';
 import { webSettings } from './web-form.mjs';
 import { walk } from '../tools/fs.mjs';
 import { mentionAt, selectedText } from './edit-input.mjs';
@@ -91,7 +91,7 @@ export function App({ opts, win, onRestart }) {
     openHub: () => openHub, openJumpBox: () => openJumpBox, openLoops: () => openLoops,
     openMcpPicker: () => openMcpPicker, openModelPicker: () => openModelPicker, openOwnSettings: () => openOwnSettings,
     openPermissions: () => openPermissions, openRemoteForm: () => openRemoteForm, openRewind: () => openRewind,
-    openSettings: () => openSettings, askUsage: () => askUsage, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, followProfiles: () => followProfiles, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, mainToRemote: () => mainToRemote, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
+    openSettings: () => openSettings, askUsage: () => askUsage, saveUsageEdit: () => saveUsageEdit, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, followProfiles: () => followProfiles, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, mainToRemote: () => mainToRemote, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
     pendingContext: () => pendingContext, pendingSaveRef: () => pendingSaveRef, pickHere: () => pickHere,
     pickLevel: () => pickLevel, pickLevels: () => pickLevels, pre: () => pre, preloadRemote: () => preloadRemote,
@@ -328,29 +328,71 @@ export function App({ opts, win, onRestart }) {
     t.unref?.();
     return () => { spendEvents.off('change', show); clearInterval(t); };
   }, []);
-  // The Claude API's usage (claude-usage.mjs): the bar under the footer and /usage, while this window
-  // runs on the Claude API. Worked out again after each answer (every window's), and every minute
-  // for a new day; read at once, so the first frame already has the bar's row.
+  // The Claude API's usage (claude-usage.mjs): "$61.68 left" in the footer and /usage, while this window
+  // runs on the Claude API (9 Oct 2026, the owner: "updated in real time and is true"). Worked out again the
+  // moment anything spends: this window's answers (spendEvents), another window's or Anthropic's bill (their
+  // files change: a watch on the spend and usage folders), and every 15 s for a new day or a missed change.
+  // With an Admin key the bill is read once a minute over every window. Only a change of what shows
+  // redraws (a redraw at rest breaks copying text off the screen). Read at once, for the first frame.
   const claudeModel = model.remote?.kind === 'claude' ? model.remote.model : null;
-  const [usage, setUsage] = useState(() => (claudeModel ? usageNow({ model: claudeModel }) : null));
+  const adminRef = useRef(null); // an Admin key is kept (the Keychain is read once, and again after k in /usage)
+  const hasAdmin = () => { if (adminRef.current == null) adminRef.current = Boolean(adminKey()); return adminRef.current; };
+  const [usage, setUsage] = useState(() => (claudeModel ? usageNow({ model: claudeModel, admin: hasAdmin() }) : null));
   useEffect(() => {
     if (!claudeModel) { setUsage(null); return undefined; }
-    const show = () => setUsage(usageNow({ model: claudeModel }));
+    let shown = '';
+    const show = () => {
+      const u = usageNow({ model: claudeModel, admin: hasAdmin() });
+      const key = JSON.stringify([u.spent.toFixed(2), u.left, u.cap, u.tierCap, u.capped, u.low, u.pace.beforeReset, u.pace.runsOut, u.today, u.window.toFixed(2), u.source, u.limits?.at, u.admin]);
+      if (key !== shown) { shown = key; setUsage(u); }
+    };
+    const bill = () => { if (hasAdmin()) fetchBill().catch(() => {}); };
+    let soon = null;
+    const later = () => { if (!soon) soon = setTimeout(() => { soon = null; show(); }, 150); };
+    const watches = [];
+    for (const dir of [spendDir(), usageDir()]) {
+      try { mkdirSync(dir, { recursive: true }); const w = watch(dir, { recursive: true }, later); w.on('error', () => {}); watches.push(w); } catch { /* the 15 s look still finds it */ }
+    }
     show();
+    bill();
     usageEvents.on('change', show);
     spendEvents.on('change', show);
-    const t = setInterval(show, 60_000);
+    const t = setInterval(() => { show(); bill(); }, 15_000);
     t.unref?.();
-    return () => { usageEvents.off('change', show); spendEvents.off('change', show); clearInterval(t); };
+    return () => { usageEvents.off('change', show); spendEvents.off('change', show); clearInterval(t); clearTimeout(soon); for (const w of watches) { try { w.close(); } catch {} } };
   }, [claudeModel]);
-  // r in /usage: one tiny request for the limits now.
+  // r in /usage: one tiny request for the limits now, and Anthropic's bill with an Admin key.
   const askUsage = async () => {
     const url = agent.url;
     const ep = endpointOf(url);
     if (!claudeModel || ep?.kind !== 'claude') return;
     setPicker((p) => (p?.kind === 'usage' ? { ...p, asking: true } : p));
-    try { await askLimits({ url, ep }); } catch (e) { flash(`could not ask Anthropic: ${String(e.message ?? e).slice(0, 120)}`, 4000); }
+    try { await Promise.all([askLimits({ url, ep }), hasAdmin() ? fetchBill({ force: true }) : null]); } catch (e) { flash(`could not ask Anthropic: ${String(e.message ?? e).slice(0, 120)}`, 4000); }
     setPicker((p) => (p?.kind === 'usage' ? { ...p, asking: false } : p));
+  };
+  // enter on a value typed in /usage (l your limit, s the month's spend as the Console shows it, k an Admin key),
+  // and /usage limit 200 · /usage spent 112.40. Returns the words said, or null when the value was refused
+  // (the box stays open to type it again).
+  const saveUsageEdit = (e) => {
+    const said = (text, tone = 'dim') => { setPicker((p) => (p?.kind === 'usage' ? { ...p, editing: null } : p)); push({ type: 'note', text, tone }); return text; };
+    const v = e.value.trim();
+    if (e.id === 'key') {
+      if (v && !/^sk-ant-admin/.test(v)) { flash('An Admin key starts sk-ant-admin… (Console → Settings → Admin keys)', 4000); return null; }
+      try { saveAdminKey(v || null); } catch (err) { flash(`could not keep it: ${String(err.message ?? err).slice(0, 120)}`, 4000); return null; }
+      adminRef.current = Boolean(v);
+      if (!v) { clearBill(); return said('/usage: Admin key taken out. The month’s spend is this Mac’s meter again (or the figure you typed).'); }
+      fetchBill({ key: v, force: true }).catch(() => {});
+      return said('/usage: Admin key kept in the Keychain. Anthropic’s bill is read once a minute; this Mac’s answers are added the moment they come.');
+    }
+    const off = !v || /^(off|none|clear)$/i.test(v);
+    const usd = off ? null : dollarsOf(v);
+    if (!off && usd == null) { flash('Type dollars, like 200 or 112.40', 3000); return null; }
+    if (e.id === 'limit') {
+      setUsageOwn({ limit: usd > 0 ? usd : null });
+      return said(usd > 0 ? `/usage: your limit is $${usd.toFixed(2)} a month. "$ left" counts down from it.` : '/usage: your own limit taken out; the tier’s cap counts again.');
+    }
+    setUsageOwn({ spent: off ? null : { usd, at: Date.now(), month: monthOf() } });
+    return said(off ? '/usage: the typed figure taken out; the month’s spend is this Mac’s meter again.' : `/usage: this month’s spend is $${usd.toFixed(2)} as of now; this Mac’s answers are added to it as they come.`);
   };
   // Several windows in one project (copies.mjs): this window's own copy (null: the folder itself),
   // the other windows found there as it opened, and the changes last asked about.
@@ -505,7 +547,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog, homeLook, botOn, steps };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog, homeLook, botOn, steps, usage };
   const flash = useCallback(flashFn, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
   // selection settles, like Claude Code's copy on select. Not the whole of it
@@ -803,8 +845,6 @@ export function App({ opts, win, onRestart }) {
   const { submitFn, onPaste, onTerminalReply, flushArrows, onKey } = keysPart(self);
   const submit = useCallback(submitFn, [agent, cwd, push, quit, runShell, runSlash, sendPrompt]);
 
-  // The bar under the footer on the Claude API: one more row wherever the footer's are counted.
-  const footRows = claudeModel && usage ? 1 : 0;
   // Menu under the prompt: slash commands or @files.
   const inputMode = input.value.startsWith('!') ? 'bash' : 'prompt';
   let menu = null;
@@ -814,7 +854,7 @@ export function App({ opts, win, onRestart }) {
     // footer and their gaps take 5; the box's edge is the window's last line). Under the start page while
     // it is still live, the rows it can give up and still show its bot (2 + START_BIG and its blank line;
     // start.room, below, shrinks it to fit).
-    const fits = holdRef.current ? (rows ?? 40) - 7 - footRows - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 5 - footRows;
+    const fits = holdRef.current ? (rows ?? 40) - 7 - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 5;
     const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
     const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined), remote: Boolean(model.remote), claude: Boolean(claudeModel) }) : [];
     if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
@@ -941,17 +981,17 @@ export function App({ opts, win, onRestart }) {
   // Big-model mode and its load. Once printed it keeps the room it was shown with, until the window
   // changes size.
   const underRows = heldRows(items, measure.current) + (menu ? menuHeight({ ...menu, index: menuIdx }, width) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
-  const heldRoom = (rows ?? 40) - 7 - footRows - underRows;
+  const heldRoom = (rows ?? 40) - 7 - underRows;
   if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRoom >= START_MIN)) holdRef.current = false;
   if (holdRef.current) pageRoomRef.current = { room: heldRoom, rows: rows ?? 40 };
   const kept = pageRoomRef.current;
   const comingNotes = (startedIn.from === 'last' && startedIn.mode !== 'ask' ? 2 : 0) + (remoteAtStart ? 2 : 0);
-  const pageRoom = holdRef.current ? heldRoom : kept?.rows === (rows ?? 40) ? kept.room : Math.max(START_MIN, (rows ?? 40) - 7 - footRows - comingNotes);
+  const pageRoom = holdRef.current ? heldRoom : kept?.rows === (rows ?? 40) ? kept.room : Math.max(START_MIN, (rows ?? 40) - 7 - comingNotes);
   // What primeRows needs to measure items as they are printed. The tip (startTip) is on the page while
   // it has room for its Try rows, else on the footer.
   const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running, said: items.find((x) => x.type === 'startnotes')?.said ?? null, modeId: mode };
   const tipOnPage = homeLook === 'launcher' && Boolean(tip) && pageRoom - 2 >= START_BIG; // the Menu leaves it on the footer
-  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, foot: footRows, view: stepsView };
+  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, view: stepsView };
   itemsRef.current = items;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);

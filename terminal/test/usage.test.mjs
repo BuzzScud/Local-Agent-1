@@ -1,7 +1,8 @@
-// /usage and the bar under the footer on the Claude API (claude-usage.mjs, usage-bar.mjs, 8 Oct 2026):
-// the limits each reply carries, the month from the cost meter (the Claude API's dollars only)
-// against the tier's cap, the cap's stop said plainly and not tried again, and the bar and the card
-// with the same ends as the footer and the prompt box. Against a stand-in Claude API: no key, no bill.
+// /usage and "$ left" in the footer on the Claude API (claude-usage.mjs, usage-bar.mjs, 8 Oct 2026; "3 · One row"
+// and your own limit, 9 Oct 2026): the limits each reply carries, the month from the cost meter (the Claude API's
+// dollars only), a figure typed from the Console or Anthropic's bill, against your limit or the tier's cap, the
+// cap's stop said plainly and not tried again, and the card with the prompt box's ends. Against a stand-in
+// Claude API: no key, no bill.
 import { test, expect, afterEach } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,9 +11,9 @@ import { startFakeAnthropic } from './fake-anthropic.mjs';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-usage-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { limitsFrom, noteLimits, tierOf, capOf, noteCapped, usageNow, resetOf } = await import('../src/agent/claude-usage.mjs');
-const { recordSpend, daySpend, dayOf } = await import('../src/agent/spend.mjs');
-const { usageRow, usagePanel, textOf, widthOf, MIN_LINE, LABEL_W } = await import('../src/app/usage-bar.mjs');
+const { limitsFrom, noteLimits, tierOf, capOf, noteCapped, usageNow, resetOf, setOwn, fetchBill, readBill, dollarsOf, monthOf } = await import('../src/agent/claude-usage.mjs');
+const { recordSpend, daySpend, dayOf, costOf, claudeSince } = await import('../src/agent/spend.mjs');
+const { usagePanel, usageChip, sourceWords, textOf, LABEL_W } = await import('../src/app/usage-bar.mjs');
 const { streamChat } = await import('../src/agent/client.mjs');
 const { setEndpoint, dropEndpoint, GENERIC_REMOTE, CLAUDE_HOST } = await import('../../models/index.mjs');
 const { matchCommands } = await import('../src/app/commands.mjs');
@@ -98,7 +99,7 @@ test('stopped at the cap: paused until the 1st (UTC); the next reply that comes 
   noteLimits(START, OPUS, NOW);
   noteCapped('tier', NOW);
   expect(usageNow({ model: OPUS, now: NOW }).capped).toMatchObject({ kind: 'tier', until: Date.parse('2026-11-01T00:00:00Z') });
-  expect(textOf(usageRow(usageNow({ model: OPUS, now: NOW }), 120, { now: NOW }))).toContain('paused · cap reached · back Nov 1');
+  expect(textOf(usageChip(usageNow({ model: OPUS, now: NOW })))).toBe('paused');
   noteLimits(START, OPUS, NOW + 1000);
   expect(usageNow({ model: OPUS, now: NOW }).capped).toBeNull();
 });
@@ -107,41 +108,19 @@ test('stopped at the cap: paused until the 1st (UTC); the next reply that comes 
 const U = { model: OPUS, modelName: 'Opus 5.5', cap: 500, tier: 'Start', spent: 66.56, left: 433.44, monthName: 'October', days: [0, 0, 0, 0, 0, 0, 9.85, 56.71], last14: [...Array(12).fill(0), 9.85, 56.71], today: { usd: 56.71, windows: 2 }, window: 8.82, pace: { perDay: 33.28, runsOut: new Date(2026, 9, 22).getTime(), beforeReset: true }, limits: limitsFrom(startHeaders(new Date(NOW - 599_000).toISOString()), OPUS, NOW - 600_000), resetsOn: Date.parse('2026-11-01T00:00:00Z'), capped: null };
 const WIDTHS = [60, 72, 80, 100, 120, 152, 177];
 
-// "1 · Tidy" (9 Oct 2026): the line's row is drawn at the footer's inner width, inside the prompt box; what is
-// left on the left, today and the run-out day on the right, ending on the row's last cell as the footer's words
-// above it do, the line between them.
-test('the usage line has the footer’s ends at every width: ◆ and what is left first, today and the run-out day ending on the last cell, the line between; narrower never says more', () => {
-  let words = Infinity;
-  for (const W of [...WIDTHS].reverse()) {
-    const row = usageRow(U, W, { now: NOW });
-    const t = textOf(row);
-    expect(widthOf(row)).toBe(W);
-    expect(t).toMatch(/^◆ \$433(\.44)? left/);
-    expect(t.at(-1)).not.toBe(' '); // the last word ends where the footer's right side does
-    expect(t).toMatch(/ {2}today \$56\.71 · out (by )?Oct 22$/);
-    const line = t.match(/[━╸─]+/)[0].length;
-    expect(line).toBeGreaterThanOrEqual(MIN_LINE);
-    expect(t.length - line).toBeLessThanOrEqual(words);
-    words = t.length - line;
-  }
-  expect(textOf(usageRow(U, 152, { now: NOW }))).toMatch(/^◆ \$433\.44 left of \$500 {2}━[━╸─]+ {2}today \$56\.71 · out by Oct 22$/);
-  // the limits only once the tightest is under half; the daily pace is /usage's
-  expect(textOf(usageRow(U, 152, { now: NOW }))).not.toMatch(/limits|\/day/);
-  const low = { ...U, limits: { requests: { limit: 1000, remaining: 300, reset: NOW + 30_000 } } };
-  expect(textOf(usageRow(low, 152, { now: NOW }))).toMatch(/today \$56\.71 · out by Oct 22 · limits 30% · full in 30s$/);
-  // the line is what is left: about 87% of it, then today's 11% in amber, then the rest faint
-  const line = usageRow(U, 177, { now: NOW }).filter((s) => /^[━╸─]+$/.test(s.t));
-  const cells = (pred) => line.filter(pred).reduce((n, s) => n + s.t.length, 0);
-  const all = cells(() => true);
-  expect(cells((s) => s.fg !== 94 && s.fg !== 237) / all).toBeCloseTo(0.867, 1);
-  expect(cells((s) => s.fg === 94) / all).toBeCloseTo(0.113, 1);
+// "3 · One row" (9 Oct 2026): no row of its own; "$433.44 left" in the footer's right side, after the model.
+test('the footer’s words: what is left in cents, amber when it runs out before the 1st, red under a tenth, paused at the cap, the month without a cap', () => {
+  const chip = (u) => usageChip(u).map((x) => `${x.t}@${x.fg}`).join('|');
+  expect(textOf(usageChip(U))).toBe('$433.44 left');
+  expect(chip(U)).toBe('$433.44@215| left@215'); // U runs out on Oct 22: amber
+  expect(chip({ ...U, pace: { ...U.pace, beforeReset: false } })).toBe('$433.44@255| left@245');
+  expect(chip({ ...U, left: 14.99, low: true })).toBe('$14.99@203| left@203');
+  expect(textOf(usageChip({ ...U, capped: { kind: 'own' } }))).toBe('paused');
+  expect(textOf(usageChip({ ...U, cap: null, left: null }))).toBe('$66.56 this month');
 });
 
-test('the bar before the first reply (no cap known), and at rest it holds still while a reply makes it shine', () => {
-  const none = { ...U, cap: null, left: null, tier: null, limits: null, pace: { perDay: 33.28, runsOut: null, beforeReset: false } };
-  expect(textOf(usageRow(none, 152, { now: NOW }))).toMatch(/^◆ \$66\.56 this month {2}─+ {2}today \$56\.71 · the cap shows after a reply$/);
-  expect(textOf(usageRow(U, 152, { now: NOW }))).toBe(textOf(usageRow(U, 152, { now: NOW + 777 })));
-  const colours = (now, live) => usageRow(U, 152, { now, live }).map((s) => `${s.fg}:${s.t.length}`).join(',');
+test('the card’s line holds still at rest and shines while a reply runs', () => {
+  const colours = (now, live) => usagePanel(U, 152, { now, live })[3].map((s) => `${s.fg}:${s.t.length}`).join(',');
   expect(colours(NOW, false)).toBe(colours(NOW + 777, false));
   expect(colours(NOW, true)).not.toBe(colours(NOW + 777, true));
 });
@@ -150,7 +129,7 @@ test('the /usage card has the prompt box’s ends: the whole width, round corner
   for (const W of [72, 80, 120, 152, 177]) {
     const rows = usagePanel(U, W, { now: NOW }).map(textOf);
     expect(rows.every((r) => [...r].length === W)).toBe(true);
-    expect(rows[0]).toMatch(/^╭─ ◆ Usage · Claude API · Opus 5\.5 ─+ r refresh · esc close ─╮$/);
+    expect(rows[0]).toMatch(W >= 84 ? /^╭─ ◆ Usage · Claude API · Opus 5\.5 ─+ r refresh · l limit · s spent · k admin key · esc ─╮$/ : /^╭─ ◆ Usage · Claude API · Opus 5\.5 ─+ r · l · s · k · esc ─╮$/);
     expect(rows.at(-1)).toBe(`╰${'─'.repeat(W - 2)}╯`);
     for (const r of rows.slice(1, -1)) { expect(r.startsWith('│ ')).toBe(true); expect(r.endsWith(' │')).toBe(true); }
     const inner = rows.slice(1, -1).map((r) => r.slice(2, -2));
@@ -202,4 +181,93 @@ test('/usage is in the / menu on the Claude API only, and shows without scrollin
   expect(names({ claude: true }).indexOf('usage')).toBeLessThan(18); // among the 18 rows shown before any scrolling
   expect(names({})).not.toContain('usage');
   expect(matchCommands('/us', { claude: true, remote: true }).map((c) => c.name)[0]).toBe('usage');
+});
+
+// 9 Oct 2026 (the owner: "ensure that the api $ left is updated in real time and is true. my limit is $200").
+test('the price of a cache hit is the model’s own: 5% of input on Opus 5.5, a tenth where none is named', () => {
+  const hit = { prompt_tokens: 1_000_000, cached_tokens: 1_000_000, completion_tokens: 0 };
+  expect(costOf(hit, { in: 4, out: 20, hit: 0.2 })).toBeCloseTo(0.2, 6);
+  expect(costOf(hit, { in: 4, out: 20 })).toBeCloseTo(0.4, 6);
+  expect(costOf({ prompt_tokens: 1_100_000, cached_tokens: 900_000, cache_write_tokens: 100_000, completion_tokens: 10_000 }, { in: 4, out: 20, hit: 0.2 })).toBeCloseTo(0.4 + 0.18 + 0.5 + 0.2, 6);
+});
+
+test('each Claude API answer is kept with its moment, so what came after a figure can be added to it', () => {
+  const home = freshHome();
+  const claude = { remote: true, kind: 'claude', label: CLAUDE_HOST, price: { in: 4, out: 20, hit: 0.2 } };
+  const other = { remote: true, kind: 'openai', label: 'openrouter.ai', price: { in: 1, out: 1 } };
+  recordSpend(claude, { prompt_tokens: 1_000_000, completion_tokens: 0 }, { now: new Date(NOW - 7_200_000), pid: 1 });
+  recordSpend(claude, { prompt_tokens: 250_000, completion_tokens: 0 }, { now: new Date(NOW - 60_000), pid: 2 });
+  recordSpend(other, { prompt_tokens: 1_000_000, completion_tokens: 0 }, { now: new Date(NOW - 30_000), pid: 2 });
+  expect(claudeSince(NOW - 3_600_000, { dir: join(home, 'spend'), now: new Date(NOW) })).toBeCloseTo(1, 6);
+  expect(claudeSince(NOW - 86_400_000, { dir: join(home, 'spend'), now: new Date(NOW) })).toBeCloseTo(5, 6);
+  expect(claudeSince(NOW, { dir: join(home, 'spend'), now: new Date(NOW) })).toBe(0);
+});
+
+test('your limit, a figure typed from the Console and Anthropic’s bill: the newest of the two, plus this Mac since; the meter without either', () => {
+  freshHome();
+  const month = monthOf(NOW);
+  const claude = { remote: true, kind: 'claude', label: CLAUDE_HOST, price: { in: 4, out: 20 } };
+  recordSpend(claude, { prompt_tokens: 2_500_000, completion_tokens: 0 }, { now: new Date(NOW - 7_200_000), pid: 1 }); // $10, two hours ago
+  noteLimits(START, OPUS, NOW - 600_000);
+  let u = usageNow({ model: OPUS, now: NOW });
+  expect(u).toMatchObject({ cap: 500, tierCap: 500, ownLimit: null, source: { kind: 'meter' } });
+  expect(u.spent).toBeCloseTo(10, 6);
+  setOwn({ limit: 200 });
+  u = usageNow({ model: OPUS, now: NOW });
+  expect(u).toMatchObject({ cap: 200, tierCap: 500, ownLimit: 200, low: false });
+  expect(u.left).toBeCloseTo(190, 6);
+  // the Console said $120 an hour ago; $1 since on this Mac
+  setOwn({ spent: { usd: 120, at: NOW - 3_600_000, month } });
+  recordSpend(claude, { prompt_tokens: 250_000, completion_tokens: 0 }, { now: new Date(NOW - 60_000), pid: 2 });
+  u = usageNow({ model: OPUS, now: NOW });
+  expect(u.source).toMatchObject({ kind: 'typed', usd: 120 });
+  expect(u.spent).toBeCloseTo(121, 6);
+  expect(u.left).toBeCloseTo(79, 6);
+  expect(sourceWords(u, NOW)).toBe('spent: the $120.00 you typed 60 min ago + $1.00 this Mac since · other Macs after it not counted');
+  // a typed figure from another month is not this month's
+  setOwn({ spent: { usd: 120, at: NOW - 3_600_000, month: '2026-09' } });
+  expect(usageNow({ model: OPUS, now: NOW }).source.kind).toBe('meter');
+  // under a tenth left: low
+  setOwn({ spent: { usd: 185, at: NOW - 3_600_000, month } });
+  expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ low: true });
+  expect(usageNow({ model: OPUS, now: NOW }).left).toBeCloseTo(14, 6);
+  setOwn({ limit: null, spent: null });
+  expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ cap: 500, ownLimit: null, source: { kind: 'meter' } });
+});
+
+test('Anthropic’s bill: every page of the month added up, once a minute over every window, this Mac’s answers after it on top; a refused key said, the last bill kept', async () => {
+  freshHome();
+  const ADMIN = 'stand-in-admin-key-for-the-test';
+  const fake = await startFakeAnthropic([], { bill: { adminKey: ADMIN, cents: ['1000', '2050.5', null, '4999.5', '4000'] } });
+  process.env.AGENTIC_ADMIN_URL = fake.url;
+  try {
+    const now = Date.now();
+    const bill = await fetchBill({ key: ADMIN, now });
+    expect(bill).toMatchObject({ month: monthOf(now), usd: 120.5, at: now });
+    expect(fake.seen.filter((x) => x.path.startsWith('/v1/organizations/cost_report'))).toHaveLength(3); // three pages
+    const first = fake.seen.find((x) => x.path.startsWith('/v1/organizations/cost_report'));
+    expect(first).toMatchObject({ key: ADMIN, version: '2023-06-01' });
+    expect(new URL(first.path, 'http://x').searchParams.get('starting_at')).toBe(`${monthOf(now)}-01T00:00:00.000Z`);
+    expect(await fetchBill({ key: ADMIN, now: now + 30_000 })).toMatchObject({ at: now }); // read under a minute ago: not again
+    const claude = { remote: true, kind: 'claude', label: CLAUDE_HOST, price: { in: 4, out: 20 } };
+    recordSpend(claude, { prompt_tokens: 500_000, completion_tokens: 0 }, { now: new Date(now + 1000), pid: 3 });
+    const u = usageNow({ model: OPUS, now: now + 2000, admin: true });
+    expect(u.source).toMatchObject({ kind: 'bill', usd: 120.5 });
+    expect(u.spent).toBeCloseTo(122.5, 6);
+    // a bill nobody reads any more counts for 15 minutes, then the meter again
+    expect(usageNow({ model: OPUS, now: now + 16 * 60_000 }).source.kind).not.toBe('bill');
+    const refused = await fetchBill({ key: 'a-wrong-stand-in-key', now: now + 120_000 });
+    expect(refused).toMatchObject({ usd: 120.5, error: { status: 401 } });
+    expect(readBill().error.message).toMatch(/Admin API/);
+    expect(usageNow({ model: OPUS, now: now + 121_000, admin: true }).source.error).toMatchObject({ status: 401 });
+  } finally { delete process.env.AGENTIC_ADMIN_URL; await fake.close(); }
+});
+
+test('dollars typed: $, commas and cents; off takes a value out; words are not dollars', () => {
+  expect(dollarsOf('200')).toBe(200);
+  expect(dollarsOf('$1,000.505')).toBe(1000.51);
+  expect(dollarsOf(' 112.40 ')).toBe(112.4);
+  expect(dollarsOf('off')).toBe(0);
+  expect(dollarsOf('lots')).toBeNull();
+  expect(dollarsOf('')).toBeNull();
 });

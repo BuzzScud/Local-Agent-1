@@ -18,7 +18,7 @@ import { AgentsView, AgentsLine } from './agents-view.jsx';
 import { LoopsView, LoopsLine } from './loops-view.jsx';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { gaugesOf, gaugeLine, fitRemote, meterWords } from './remote-footer.mjs';
-import { usageRow, usagePanel } from './usage-bar.mjs';
+import { usagePanel, usageChip, textOf as segsText } from './usage-bar.mjs';
 import { showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
 import { jumpRows, rowStatus, jumpInfo } from './jump-box.mjs';
 import { DETACH_LABEL } from './sessions.mjs';
@@ -965,14 +965,16 @@ function wholeTip(app, left, right) {
 // On a remote (remote-footer.mjs): no Mac's memory, which holds no model then, and no cost meter
 // (/meters has it). Once the first answer has a speed, gauges take the left side, unless a note,
 // a tip or shell mode is there; the right is the model, where it runs and the mode. On the Claude
-// API with its usage line, the model's name goes alone: the line under it is the Claude API's.
+// API the model's name goes alone, then what is left of the month ("$61.68 left", usageChip).
 function remoteParts(app, left, badges) {
   const { width, mode } = app;
   const ms = app.modelState;
   const modeText = MODE_SHORT[mode] ?? '';
   const labels = modelLabels(ms);
   const near = app.usage && ms.state === 'on' ? labels[1] : labels[0];
-  const rightOf = (label) => [label, badges, modeText].filter(Boolean).join(' · ');
+  // On the Claude API, what is left of the month after the model's name (usage-bar.mjs usageChip).
+  const chip = app.usage ? segsText(usageChip(app.usage)) : '';
+  const rightOf = (label) => [label, chip, badges, modeText].filter(Boolean).join(' · ');
   const list = gaugesOf(app.gaugeList);
   const quiet = !app.notice && app.inputMode !== 'bash' && !app.tip;
   const g = ms.state === 'on' && quiet && app.gauges && gaugeLine(app.gauges, list).length ? app.gauges : null;
@@ -998,17 +1000,18 @@ function Segs({ segs }) {
 // /usage (app-slash.mjs): the card over the prompt, live while it is open; esc closes it.
 function UsagePanel({ app }) {
   if (!app.usage) return null;
-  return <Box flexDirection="column" width={app.width}>{usagePanel(app.usage, app.width, { now: app.now, live: app.usageLive, asking: app.picker?.asking }).map((r, i) => <Segs key={i} segs={r} />)}</Box>;
+  return <Box flexDirection="column" width={app.width}>{usagePanel(app.usage, app.width, { now: app.now, live: app.usageLive, asking: app.picker?.asking, edit: app.picker?.editing }).map((r, i) => <Segs key={i} segs={r} />)}</Box>;
 }
 // The gauges' tones (remote-footer.mjs) as colours.
 const TONE = { dim: C.dim, value: WHITE, live: C.accent, bar: C.accentDim, warn: C.warn, bad: C.bad };
 
 // The footer's rows, inside the prompt box under its dotted rule (the owner's pick "Panel", 8 Oct
 // 2026: "more uniform … even spacing between edges and borders"): the prompt, the footer and the Claude
-// API's usage line share one frame, each row one cell in from its border, so every row starts and
+// API's usage share one frame, each row one cell in from its border, so every row starts and
 // ends in the same columns. Tidied on 9 Oct 2026 (the owner's pick "1 · Tidy"): each row is words on
-// the left and words on the right, ending on the same column, with the usage line's line between its
-// words; the box's bottom edge is the window's last row (patches/ink@7.1.1.patch). An open menu takes
+// the left and words on the right, ending on the same column; the box's bottom edge is the window's
+// last row (patches/ink@7.1.1.patch). Since "3 · One row" (9 Oct 2026) the Claude API's usage is no row
+// of its own: "$61.68 left" sits in the footer's right side, after the model. An open menu takes
 // the footer's place, as in Claude Code: the box closes under the prompt and the menu sits under it.
 const footInBox = (app) => !app.menu?.items?.length;
 function FooterRows({ app, border }) {
@@ -1025,6 +1028,7 @@ function FooterRows({ app, border }) {
   const pieces = [
     p.spend ? <Text color={C.dim}>{p.spend}</Text> : null,
     p.label ? <Text color={down ? C.bad : C.dim}><Text color={dot}>{p.label[0]}</Text>{named ? <><Text> </Text><Text color={WHITE}>{ms.name}</Text>{p.label.slice(2 + ms.name.length)}</> : p.label.slice(1)}</Text> : null,
+    app.usage ? <Text>{usageChip(app.usage).map((x, i) => <Text key={i} color={`ansi256(${x.fg})`} bold={x.b}>{x.t}</Text>)}</Text> : null,
     p.mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {p.mac}</Text> : null,
     p.badges ? <Text color={C.accent}>{p.badges}</Text> : null,
     modeLabel(mode, { short: true }),
@@ -1043,8 +1047,6 @@ function FooterRows({ app, border }) {
         </Box>
         <Box flexShrink={0}><Text wrap="truncate-start">{pieces.map((el, i) => <React.Fragment key={i}>{i ? <Text color={C.dim}> · </Text> : null}{el}</React.Fragment>)}</Text></Box>
       </Box>
-      {/* On the Claude API, what is left of the month under the footer: the same ends as the footer's row (usage-bar.mjs). */}
-      {app.usage ? <Box width={inner} height={1} overflow="hidden"><Segs segs={usageRow(app.usage, inner, { now: app.now, live: app.usageLive })} /></Box> : null}
     </Box>
   );
 }
@@ -2240,7 +2242,7 @@ const heightOf = (it, app) => itemHeights.get(rowsKey(it, app));
 export const heldRows = (items, ctx) => items.slice(1).reduce((n, it) => n + (itemHeights.get(rowsKey(it, ctx)) ?? Infinity), 0);
 // Rows the held page leaves under it: the window less the page (18 until it is measured), the
 // prompt box, the blank row above the footer, the footer and the cursor's line.
-export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 18) - 6 - (ctx?.foot ?? 0);
+export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 18) - 6;
 // Rows the conversation fills from the top of the window (at most the
 // window). An item not measured yet counts as a full window: no space, never
 // a prompt box pushed below the window.

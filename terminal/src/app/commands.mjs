@@ -27,7 +27,7 @@ export const COMMANDS = [
   { name: 'stop', desc: 'Unload the model and give its memory back to the Mac (ctrl+t too); /start loads it again' },
   { name: 'subagents', desc: 'The helper models, one per job (pictures, side jobs, code search, a second opinion, UI design): opens /profiles on its AIs group' },
   // On the Claude API only (8 Oct 2026): what is left of the month's spend cap, today, and the limits each minute.
-  { name: 'usage', desc: 'What the Claude API has left: this month against your spend cap, today’s dollars, and the limits each minute (r asks Anthropic now)' },
+  { name: 'usage', desc: 'What the Claude API has left: this month against your limit, today’s dollars, and the limits each minute (l sets your limit, s the Console’s figure, k an Admin key)' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
   { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone: a box of your saved Macs, online or not)', arg: '[mac]', picker: true },
   { name: 'loop', desc: 'A message sent again by itself, every so often or until its job is done. Alone: your loops, or a page to set one up; with words: /loop run the tests every 10 min until 6pm', arg: '[what it should do, how often, when it stops]' },

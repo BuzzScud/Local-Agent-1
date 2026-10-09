@@ -36,6 +36,10 @@ export function slashModel(self) {
       case 'usage': {
         // The Claude API's usage (claude-usage.mjs, usage-bar.mjs): a card over the prompt, esc closes it.
         if (self.model.remote?.kind !== 'claude') { self.push({ type: 'note', text: `/usage shows what the Claude API has left; this window runs on ${self.model.remote ? self.model.remote.label : 'this Mac'}. /remote claude connects it.`, tone: 'dim' }); break; }
+        // /usage limit 200 · /usage spent 112.40 (off takes either out) · /usage key opens the card to paste an Admin key.
+        const [what, ...rest] = arg.trim().split(/\s+/);
+        if (/^(limit|spent)$/i.test(what ?? '') && rest.length) { self.saveUsageEdit({ id: what.toLowerCase(), value: rest.join(' ') }); break; }
+        if (/^(limit|spent|key)$/i.test(what ?? '')) { self.setPicker({ kind: 'usage', asking: false, editing: { id: what.toLowerCase(), value: '', cursor: 0 } }); break; }
         self.setPicker({ kind: 'usage', asking: false });
         break;
       }

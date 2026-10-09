@@ -12,7 +12,7 @@ import { hookFormRows, startHookEdit } from './hooks-form.mjs';
 import { nextMode } from '../agent/permissions.mjs';
 import { HOME } from '../../../models/index.mjs';
 import { attachDropped, attachClipboard, quickLook, trayItems } from './attach.mjs';
-import { pasteField, rowsOf as remoteRows, startEdit } from './remote-form.mjs';
+import { pasteField, editField, rowsOf as remoteRows, startEdit } from './remote-form.mjs';
 import { WEB_ROWS } from './web-form.mjs';
 import { withUndo, insertText, promptTextWidth, cursorCell, posAt, wordAt, moveBy, cursorLine, selectedText, undoEdit, redoEdit, editInput } from './edit-input.mjs';
 import { DOUBLE_CLICK_MS, parseCursorReply, parseMouse, REST_MS, ASK_CURSOR } from './mouse.mjs';
@@ -117,6 +117,11 @@ export function keysPart(self) {
       const row = (rp.kind === 'web' ? WEB_ROWS : remoteRows(rp))[rp.index];
       if (rp.editing) self.setPicker({ ...rp, editing: pasteField(rp.editing, text) });
       else if (row?.type === 'text' || row?.type === 'secret') self.setPicker({ ...startEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
+      return;
+    }
+    // /usage: a paste goes into the value being typed (an Admin key, a figure from the Console).
+    if (rp?.kind === 'usage') {
+      if (rp.editing) self.setPicker({ ...rp, editing: pasteField(rp.editing, text) });
       return;
     }
     // Agentic Coder's question: a paste goes into the row you type into.
@@ -374,9 +379,20 @@ export function keysPart(self) {
     // /rewind: ↑↓ a message, enter shows what would go back; then ↑↓ or a
     // number picks what to put back, esc goes back to the list.
     if (cur.picker?.kind === 'rewind') { rewindKeys(cur, ch, key); return; }
-    // /usage: r asks Anthropic for the limits now (one tiny request); esc, enter or q closes it.
+    // /usage: r asks Anthropic for the limits now (one tiny request) and its bill; l your limit, s the month's
+    // spend as the Console shows it, k an Admin key, each typed in the card's last row (enter saves, esc
+    // goes back); esc, enter or q closes it.
     if (cur.picker?.kind === 'usage') {
-      if (ch === 'r' && !cur.picker.asking) self.askUsage();
+      const pk = cur.picker;
+      if (pk.editing) {
+        if (key.return) self.saveUsageEdit(pk.editing);
+        else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker({ ...pk, editing: null });
+        else self.setPicker({ ...pk, editing: editField(pk.editing, ch, key) });
+        return;
+      }
+      const id = { l: 'limit', s: 'spent', k: 'key' }[ch];
+      if (ch === 'r' && !pk.asking) self.askUsage();
+      else if (id) { const value = id === 'limit' && self.S.current.usage?.ownLimit ? String(self.S.current.usage.ownLimit) : ''; self.setPicker({ ...pk, editing: { id, value, cursor: value.length } }); }
       else if (key.escape || key.return || ch === 'q' || (key.ctrl && ch === 'c')) self.setPicker(null);
       return;
     }
