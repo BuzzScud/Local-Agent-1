@@ -5,7 +5,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
-import { permissionOptions } from './screen.jsx';
+import { permissionOptions } from './permission-options.mjs';
 import { hooksEnv, changeHooks, HOOKS } from '../agent/way.mjs';
 import { writeUserHooks, eventOf, answerProjectHooks } from '../agent/user-hooks.mjs';
 import { openHooksList, testHookForm, hookWarning, toHook, hookListRows, hookFormRows, startHookEdit, commitHookEdit, moveHookRow, openHookForm, checkOn } from './hooks-form.mjs';
