@@ -59,7 +59,28 @@ test('what a box was about: tests, edits, commands, the web, reads, thoughts, a 
   expect(f.test).toEqual({ words: '3 pass · 1 fail', bad: true });
   expect(f.files).toEqual([{ path: 'src/a.mjs', a: 4, r: 2, created: false }]);
   expect(f.failures).toHaveLength(2);
-  for (const t of Object.values(TASKS)) for (const c of [t.title, t.edge]) expect([114, 71, 65, 120, 157, 194, 22]).not.toContain(Number(/\d+/.exec(c)[0]));
+  for (const t of Object.values(TASKS)) for (const c of [t.title, t.edge]) expect([114, 71, 65, 120, 157, 194, 22]).not.toContain(Number(/\((\d+)\)/.exec(c)[1]));
+});
+
+// 9 Oct 2026, the owner: "i dont really like the purple and orange" → "3 · Nord".
+test('the box colours: Nord by their numbers, no purple or orange in any box', () => {
+  const n = (c) => Number(/\((\d+)\)/.exec(c)[1]);
+  expect(Object.fromEntries(Object.entries(TASKS).map(([k, t]) => [k, [n(t.title), n(t.edge)]]))).toEqual({
+    testing: [222, 101], editing: [117, 31], running: [109, 66], research: [253, 243], exploring: [110, 60], thinking: [245, 239], asking: [174, 95],
+  });
+  // an xterm-256 colour's hue; purple 250°–330°, orange 15°–39° (gold, 40° and up, is not)
+  const hue = (i) => {
+    if (i >= 232) return null;
+    const v = [0, 95, 135, 175, 215, 255], c = i - 16, [r, g, b] = [v[Math.floor(c / 36)], v[Math.floor(c / 6) % 6], v[c % 6]];
+    const hi = Math.max(r, g, b), d = hi - Math.min(r, g, b);
+    if (!d) return null;
+    const h = hi === r ? ((g - b) / d) % 6 : hi === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+  };
+  for (const t of Object.values(TASKS)) for (const c of [t.title, t.edge]) {
+    const h = hue(n(c));
+    if (h != null) expect(h >= 250 && h <= 330).toBe(false), expect(h >= 15 && h < 40).toBe(false);
+  }
 });
 
 test('the box: its title and row in the top edge, your answer and the newest failure inside, its steps when open, every row the box’s width', () => {
