@@ -168,6 +168,25 @@ export function remoteOfMain(settings, data) {
   const saved = sameServer(serverOf(r), p.server) ? r : Object.values(settings.remotes ?? {}).find((x) => sameServer(serverOf(x), p.server));
   return saved ? { ...saved, model: p.model, use: true } : null;
 }
+// /remote's "Just this window" (9 Oct 2026, the owner's picks): the profiles as one window sees them while it
+// runs on a service of its own, the file left as it is, so the other windows stay where Main is. own: { server,
+// model }. Every job follows the window: the conversation's profile is that model; a profile on that server
+// keeps its model; one on another server (the Claude API) is that model too. A backup on another server is
+// none here (the window never reaches outside its service): a busy server means a wait.
+export function windowView(data, own) {
+  if (!own?.server || !own.model) return data;
+  const main = profileFor({}, data).name;
+  const here = (p) => Boolean(p) && sameServer(p.server, own.server);
+  const profiles = {};
+  for (const [name, p] of Object.entries(data.profiles)) {
+    const keep = here(p) && name !== main;
+    const b = p.backup ? data.profiles[p.backup] : null;
+    const { level, limits, ...rest } = p;
+    profiles[name] = { ...(keep ? p : rest), server: keep ? p.server : own.server, model: keep ? p.model : own.model, backup: here(b) && p.backup !== main ? p.backup : null };
+  }
+  if (!main) profiles[MAIN_PROFILE] = { server: own.server, model: own.model, backup: null, spillAfter: 30 };
+  return { profiles, uses: { ...data.uses, 'ai:main': main ?? MAIN_PROFILE } };
+}
 // The AIs whose profile is on another server than the conversation's: what Connect says stays where it
 // is (the owner's pick: the helpers keep their own profiles). [{ label, model, where }], one per profile.
 export function helpersAway(data) {

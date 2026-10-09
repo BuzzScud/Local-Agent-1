@@ -170,6 +170,7 @@ export function profilesPart(self) {
   // after that line.
   const mainToRemote = (r, model) => {
     self.agent.pinned = null;
+    router.setOwn(null);
     if (!profilesSaved()) return { away: [], note: null };
     const d = data();
     const moved = withMain(d, { ...r, model });
@@ -184,13 +185,42 @@ export function profilesPart(self) {
     self.agent.routeName = moved?.name ?? router.mainName();
     return { away: helpersAway(now), note };
   };
+  // Whether connecting to r would move Main (withMain, on the file as it is): /remote then asks "just this
+  // window, or every window?" first (app-remote.mjs). A set-up with no model named yet counts as a move.
+  const mainMoves = (r) => {
+    if (!profilesSaved()) return false;
+    router.data();
+    return Boolean(withMain(router.cache, { ...r, model: r.model || '(the service\'s model)' }));
+  };
+  // Main as the file has it, for the questions that name it: its label, and the /remote set-up that reaches
+  // it (remoteOfMain; null when the saved set-up already is Main, or no saved service is on its server).
+  const mainNow = () => {
+    if (!profilesSaved()) return null;
+    router.data();
+    const d = router.cache;
+    const own = d.uses['ai:main'];
+    const p = d.profiles[own && d.profiles[own] ? own : MAIN_PROFILE];
+    if (!p?.server || !p.model) return null;
+    return { label: `${p.model} · ${serverWord(p.server)}`, r: remoteOfMain(self.settings, d) };
+  };
+  // /remote's "Just this window": this window runs on r's model, every job of it too (windowView), and
+  // profiles.json is left as it is, so the other windows stay where Main is. It ends when the window closes.
+  const windowToRemote = (r, model) => {
+    self.agent.pinned = null;
+    router.setOwn({ server: serverOf(r), model });
+    if (!profilesSaved()) return { away: [], note: null };
+    self.agent.routeName = router.mainName();
+    const note = { type: 'note', tone: 'dim', text: `This window → ${model} · ${serverWord(serverOf(r))}, with all its jobs. Other windows stay on Main; this one goes back to Main when it closes or connects for every window.` };
+    return { away: helpersAway(router.data()), note };
+  };
 
   // ---- following the file -------------------------------------------------------------------------
 
   // The profiles as they are now, put to work: the code search's embedder (its profile's model, on its
   // profile's server), and, while the window is idle, the conversation's model (the footer shows it).
   const applyProfiles = () => {
-    if (!router.active()) return;
+    // While a new window asks where to start (app-run.mjs), it goes nowhere until you pick.
+    if (!router.active() || self.remoteRef.current.pendingStart) return;
     const u = self.agent.profileUse('search');
     const model = u?.model ?? null;
     const want = model && self.catalog?.models?.find((m) => m.id === model)?.embedding !== false ? `${u.url}|${model}` : null;
@@ -214,7 +244,7 @@ export function profilesPart(self) {
     const m = ev.model;
     // Moved to Main (changed in /profiles, the hub or another window): /remote's set-up names it too, so the
     // next start begins there and does not put Main back (mainToRemote).
-    if (ev.name === router.mainName()) { const r = remoteOfMain(self.settings, router.data()); if (r) self.settings.remote = saveSettings({ remote: r }).remote; }
+    if (ev.name === router.mainName() && !router.own) { const r = remoteOfMain(self.settings, router.data()); if (r) self.settings.remote = saveSettings({ remote: r }).remote; }
     if (ev.conn) self.remoteRef.current.conn = ev.conn;
     self.setModel(m);
     self.relimit(m);
@@ -230,5 +260,5 @@ export function profilesPart(self) {
   const lendConn = (r, conn) => router.lend(serverOf(r), conn);
   const closeProfiles = () => { router.stop(); flushMeters(); };
 
-  return { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles, mainToRemote };
+  return { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles, mainToRemote, windowToRemote, mainMoves, mainNow };
 }

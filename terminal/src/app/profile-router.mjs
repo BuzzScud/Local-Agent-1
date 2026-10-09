@@ -11,7 +11,7 @@
 // Every server is connected once (the window's own is lent to it) and kept until the window closes.
 import { statSync } from 'node:fs';
 import { connectRemote, ollamaCatalog, endpointOf } from '../../../models/index.mjs';
-import { readProfiles, profilesSaved, profileFor, PROFILES_FILE, MAIN_PROFILE } from './profiles.mjs';
+import { readProfiles, profilesSaved, profileFor, windowView, PROFILES_FILE, MAIN_PROFILE } from './profiles.mjs';
 import { HELPER_CTX, HELPER_KEEP } from '../agent/helper-models.mjs';
 
 // After a spill the profile's requests go straight to its backup for COOL_MS, then it is tried again.
@@ -32,17 +32,25 @@ export class ProfileRouter {
     this.mtime = -1;
     this.cache = null;
     this.waiting = new Map(); // server key → a connect under way
+    this.own = null; // this window's own service (setOwn)
+    this.view = null;
   }
 
   // Whether profiles decide anything here: a remote in use and a profiles.json saved.
   active() { return Boolean(this.settings()?.remote?.use) && profilesSaved(); }
-  // The profiles as the file has them now (read again only when it changed).
+  // The profiles as the file has them now (read again only when it changed), as this window sees them:
+  // on a service of its own (/remote's "Just this window", setOwn), every job follows it (windowView).
   data() {
     let m = 0;
     try { m = statSync(PROFILES_FILE()).mtimeMs; } catch { m = 0; }
-    if (m !== this.mtime || !this.cache) { this.mtime = m; this.cache = readProfiles(this.settings(), this.jobs()); }
-    return this.cache;
+    if (m !== this.mtime || !this.cache) { this.mtime = m; this.cache = readProfiles(this.settings(), this.jobs()); this.view = null; }
+    if (!this.own) return this.cache;
+    this.view ??= windowView(this.cache, this.own);
+    return this.view;
   }
+  // own: { server, model } while this window runs on a service of its own, null when it follows Main. Kept
+  // only in the window: it ends when the window closes, and the file never hears of it.
+  setOwn(own) { this.own = own?.server && own.model ? { server: own.server, model: own.model } : null; this.view = null; }
   // The file's time: the window looks at it to follow a change made elsewhere while it is idle.
   stamp() { try { return statSync(PROFILES_FILE()).mtimeMs; } catch { return 0; } }
 

@@ -23,8 +23,12 @@ import { IDLE, remoteConfOf } from './app-common.mjs';
 import { remoteNote } from './start-notes.jsx';
 
 export function remotePart(self) {
-  const useRemote = async (r, { atStart = false } = {}) => {
+  // scope: 'all' makes the model Main (every window follows), 'window' runs only this window there
+  // (app-profiles.mjs windowToRemote). Left out, a connect that would move Main asks first ('remote-scope').
+  const useRemote = async (r, { atStart = false, scope = null } = {}) => {
     if (!atStart && (self.S.current.live !== IDLE || self.agent.busy)) { self.push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return false; }
+    if (!scope && !atStart && self.mainMoves(r)) { self.remoteRef.current.pendingScope = r; self.openChoice('remote-scope'); return false; }
+    self.remoteRef.current.pendingScope = null;
     const before = { model: self.model, server: self.serverRef.current };
     if (!self.model.remote) self.localModelRef.current = self.model;
     const was = self.remoteRef.current.conn;
@@ -84,7 +88,7 @@ export function remotePart(self) {
     try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: self.agent.messages[0].content, tools: self.agent.tools(), thinking: self.agent.thinking, effort: self.agent.effort, slot: self.agent.slots?.main, onPhase: self.setStartPhase }); } catch {}
     self.setStarting(false);
     // The conversation's profile follows (app-profiles.mjs): else the router moved it back at the next step.
-    const main = self.mainToRemote(r, m.remote?.model ?? r.model);
+    const main = (scope === 'window' ? self.windowToRemote : self.mainToRemote)(r, m.remote?.model ?? r.model);
     // Where it runs now, and the helpers that stay where they are (start-notes.jsx): the start page's rows
     // while it is up, else one note (the owner's pick, 9 Oct 2026; before, two notes of a paragraph each).
     const label = m.remote?.label ?? '';
