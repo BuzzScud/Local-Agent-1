@@ -73,12 +73,13 @@ export const TOOL_DEFS = [
   },
   {
     name: 'Ask',
-    description: 'Ask the user when the request is unclear and your tools cannot settle it: what a vague request wants, which behaviour they mean, a choice that is theirs. Not for what List, Search or Read can find. Write for someone who does not read code: everyday words, no file paths, commands or code names. Give 2 to 4 choices, each a few words with an about line saying what it means for them and one example. Put the choice you recommend first, with recommended: true. Set several: true when they may pick more than one. Up to 3 more questions go in more; they are asked one after another. Use this instead of writing questions in your reply. Returns their answers.',
+    description: 'Ask the user when the request is unclear and your tools cannot settle it: what a vague request wants, which behaviour they mean, a choice that is theirs. Not for what List, Search or Read can find. Write for someone who does not read code: everyday words, no file paths, commands or code names. Give 2 to 4 choices, each a few words with an about line saying what it means for them and one example. Put the choice you recommend first, with recommended: true. Give each question a header: a tab name of one or two words. Set several: true when they may pick more than one. Up to 4 more questions go in more; they are shown together, a tab each, and the user may also type their own answer. Use this instead of writing questions in your reply. Returns their answers.',
     parameters: { type: 'object', properties: {
       question: str('One plain question'),
+      header: str('Its tab name, one or two words, up to 12 letters, such as "Layout"'),
       options: { type: 'array', items: choiceDef, description: '2 to 4 choices' },
       several: { type: 'boolean', description: 'true: they may tick more than one choice' },
-      more: { type: 'array', items: { type: 'object', properties: { question: str('One plain question'), options: { type: 'array', items: choiceDef }, several: { type: 'boolean' } }, required: ['question'] }, description: 'Optional: up to 4 more questions' },
+      more: { type: 'array', items: { type: 'object', properties: { question: str('One plain question'), header: str('Its tab name, one or two words'), options: { type: 'array', items: choiceDef }, several: { type: 'boolean' } }, required: ['question'] }, description: 'Optional: up to 4 more questions' },
     }, required: ['question'] },
   },
 ];

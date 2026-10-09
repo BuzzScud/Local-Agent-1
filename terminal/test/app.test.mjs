@@ -31,7 +31,7 @@ test('classic: the whole task, answering each question by key', async () => {
   expect(existsSync(join(base, 'home', 'sessions'))).toBe(true);
 }, T);
 
-test('Agentic Coder asks: answer by number, or type an answer on the prompt line', async () => {
+test('Agentic Coder asks: tick by number then enter, or type the answer right in the box', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([
     { tool: { name: 'Ask', args: { question: 'Which file should change?', options: ['export.mjs', 'trades.json'] } } },
@@ -41,47 +41,52 @@ test('Agentic Coder asks: answer by number, or type an answer on the prompt line
   ]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: 'do the thing' }, { key: 'enter' },
-    { wait: 'Which file should change?' }, { sleep: 200 }, { snapshot: 'asking' }, { type: '1' },
+    { wait: 'Which file should change?' }, { sleep: 200 }, { snapshot: 'asking' }, { type: '1' }, { wait: '[✔] export.mjs' }, { key: 'enter' },
     { wait: 'OK, export.mjs it is.' }, { type: 'add the flag' }, { key: 'enter' },
-    { wait: 'What should the flag be called?' }, { sleep: 200 }, { key: 'enter' },
-    { wait: 'Type your answer to Agentic Coder' }, { type: '--json' }, { key: 'enter' },
+    // A question with no choices is the row you type into, ready: no ticks, keys type there.
+    { wait: 'What should the flag be called?' }, { sleep: 200 }, { type: '--json' }, { wait: 'Type something: --json' }, { snapshot: 'typing' }, { key: 'enter' },
     { wait: 'Named it --json.' }, ...quit,
   ] });
   await fake.close();
   expect(r.snapshots.asking).toContain('Agentic Coder asks');
-  expect(r.snapshots.asking).toMatch(/1\. export\.mjs[\s│]+2\. trades\.json[\s│]+3\. Type your own answer…/);
-  expect(r.snapshots.asking).toContain('Enter pick · ↑/↓ move · Esc stop'); // esc stops: no row for it
+  expect(r.snapshots.asking).toMatch(/❯ 1\. \[ \] export\.mjs[\s│]+2\. \[ \] trades\.json[\s│]+3\. \[ \] Type something…/);
+  expect(r.snapshots.asking).toContain('Space tick · Enter done · ↑/↓ move · Esc stop'); // esc stops: no row for it
+  expect(r.snapshots.typing).toMatch(/❯ 1\. Type something: --json/);
+  expect(r.snapshots.typing).toContain('Type your answer · Enter done');
   for (const s of ['› Ask  Which file should change?', 'You: export.mjs', 'You: --json', 'Named it --json.']) expect(r.text).toContain(s);
   expect(r.text).not.toContain('› You: --json'); // the Ask step shows a typed answer; it is not echoed as a step of its own
 }, T);
 
-test('the compact question box: what the choice you are on means, the one recommended, "1 of 2", and ticking several with space', async () => {
+test('the question box, the Claude Code way: tabs, what each choice means under it, ticks with typing, back and forth, Submit', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([
     { tool: { name: 'Ask', args: {
-      question: 'What should the footer show?',
+      question: 'What should the footer show?', header: 'Footer',
       options: [{ label: 'Time left this hour', about: 'A small clock. Example: "42 min left"', recommended: true }, { label: 'Messages used today', about: 'A count. Example: "18 of 50 used"' }],
-      more: [{ question: 'Which pages should get it?', options: ['Home', 'Settings', 'Reports'], several: true }],
+      more: [{ question: 'Which pages should get it?', header: 'Pages', options: ['Home', 'Settings', 'Reports'] }],
     } } },
     { text: 'Footer planned.' },
   ]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: 'add usage to the footer' }, { key: 'enter' },
     { wait: 'What should the footer show?' }, { sleep: 200 }, { snapshot: 'first' },
-    { key: 'down' }, { wait: '18 of 50 used' }, { snapshot: 'moved' }, { key: 'up' }, { sleep: 100 }, { key: 'enter' },
-    { wait: 'Which pages should get it?' }, { sleep: 200 }, { key: ' ' }, { sleep: 100 }, { key: 'down' }, { sleep: 100 }, { key: 'down' }, { sleep: 100 }, { key: ' ' }, { sleep: 200 }, { snapshot: 'ticked' }, { key: 'enter' },
+    { key: 'enter' }, { wait: 'Which pages should get it?' }, { sleep: 100 },
+    { key: ' ' }, { sleep: 100 }, { type: '3' }, { sleep: 100 }, { key: 'down' }, { sleep: 100 }, { type: 'and Help' }, { wait: 'Type something: and Help' }, { snapshot: 'ticked' },
+    { key: 'enter' }, { wait: 'Review your answers' }, { sleep: 100 },
+    // Back to the first question (shift+tab twice from Submit), changed: on to Submit again, both answered.
+    { key: 'shiftTab' }, { sleep: 100 }, { key: 'shiftTab' }, { wait: '❯ 1. [ ] Time left this hour' }, { sleep: 100 }, { key: 'down' }, { sleep: 100 }, { key: 'enter' },
+    { wait: '→ Messages used today' }, { sleep: 200 }, { snapshot: 'review' }, { key: 'enter' },
     { wait: 'Footer planned.' }, ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.first).toMatch(/What should the footer show\?\s+\(1 of 2\)/);
-  expect(r.snapshots.first).toMatch(/❯ 1\. Time left this hour\s+\(recommended\)/);
-  expect(r.snapshots.first).toContain('ⓘ A small clock. Example: "42 min left"');
-  expect(r.snapshots.moved).toContain('ⓘ A count. Example: "18 of 50 used"');
-  expect(r.snapshots.moved).not.toContain('A small clock');
-  expect(r.snapshots.ticked).toMatch(/1\. \[✔\] Home[\s│]+2\. \[ \] Settings[\s│]+❯ 3\. \[✔\] Reports[\s│]+4\. Type your own answer…/);
-  expect(r.snapshots.ticked).toContain('Space tick · Enter done');
-  for (const s of ['You: Time left this hour', 'You: Home, Reports']) expect(r.text).toContain(s);
-  expect(fake.requests[1].messages.find((m) => m.role === 'tool').content).toBe('The user answered:\n1. What should the footer show? → Time left this hour\n2. Which pages should get it? → Home, Reports');
+  expect(r.snapshots.first).toMatch(/← +☐ Footer +☐ Pages +✔ Submit +→/);
+  expect(r.snapshots.first).toMatch(/❯ 1\. \[ \] Time left this hour\s+\(recommended\)[\s│]+A small clock\. Example: "42 min left"[\s│]+2\. \[ \] Messages used today[\s│]+A count\. Example: "18 of 50 used"[\s│]+3\. \[ \] Type something…/);
+  expect(r.snapshots.first).toContain('Space tick · Enter next · ←/→ question · Esc stop');
+  expect(r.snapshots.ticked).toMatch(/← +✔ Footer +☐ Pages/);
+  expect(r.snapshots.ticked).toMatch(/1\. \[✔\] Home[\s│]+2\. \[ \] Settings[\s│]+3\. \[✔\] Reports[\s│]+❯ 4\. \[✔\] Type something: and Help/);
+  expect(r.snapshots.review).toMatch(/● What should the footer show\?[\s│]+→ Messages used today[\s│]+● Which pages should get it\?[\s│]+→ Home, Reports, and Help[\s│]+❯ Submit answers/);
+  for (const s of ['You: Messages used today', 'You: Home, Reports, and Help']) expect(r.text).toContain(s);
+  expect(fake.requests[1].messages.find((m) => m.role === 'tool').content).toBe('The user answered:\n1. What should the footer show? → Messages used today\n2. Which pages should get it? → Home, Reports, and Help');
 }, T);
 
 test('working: the live thinking line above the spinner, which shows time, tokens and what it is doing; esc interrupts', async () => {

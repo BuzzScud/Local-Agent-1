@@ -67,6 +67,8 @@ export const KEYS = [
     ['↑ ↓ · 1–9', 'choose · pick a numbered option at once'],
     ['enter', 'select'],
     ['esc', 'go back without changing anything'],
+    ['space · type', 'in Agentic Coder’s question: tick a choice (several may be ticked) · write your own answer in its last row'],
+    ['← → · tab', 'in Agentic Coder’s questions: the next or the last question; the answers are kept until Submit'],
     ['shift+tab', 'in an edit question: yes, and don’t ask again for edits'],
   ] },
   { group: 'Everywhere', rows: [

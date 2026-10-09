@@ -27,7 +27,7 @@ test('a saved page asks "is it right?" before any check; Looks good ends the tur
   if (process.env.AGENTIC_SNAPSHOTS) (await import('node:fs')).writeFileSync(process.env.AGENTIC_SNAPSHOTS, JSON.stringify(r.snapshots, null, 1));
   expect(existsSync(join(cwd, 'invoice.html'))).toBe(true);
   expect(r.snapshots.asking).toContain('invoice.html is saved. Have a look: is it right?');
-  expect(r.snapshots.asking).toMatch(/1\. Looks good[\s│]+2\. Type your own answer…/);
+  expect(r.snapshots.asking).toMatch(/1\. Looks good[\s│]+2\. Type something…/);
   expect(r.snapshots.done).toContain('Saved invoice.html. You looked at it and said it looks good, so nothing more was checked.');
   expect(fake.requests.length).toBe(1);
 }, T);

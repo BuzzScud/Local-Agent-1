@@ -7,6 +7,7 @@
 import React, { useRef, useLayoutEffect, useState } from 'react';
 import { Box, Text, Static, renderToString, measureElement, useCursor } from 'ink';
 import { cursorCell, rowText, selection, promptTextWidth } from './edit-input.mjs';
+import { askOptions, askState, typeLabel } from './app-ask.mjs';
 import { C, MARK, spinFrame, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { money } from '../agent/spend.mjs';
 import { wrap, Row, Result, ToolHead, Diff, diffParts, Todos, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
@@ -561,15 +562,9 @@ const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash comman
 export function permissionOptions(req, prefix, saveRule = null) {
   const yes = { label: 'Yes', choice: 'yes' };
   const no = { label: 'No, and tell Agentic Coder what to do differently (esc)', choice: 'no' };
-  // A question (the compact box, 3 Oct 2026): its choices, each with what it means (about), then
-  // your own answer; esc stops (the hint line says so).
-  if (req.name === 'Ask') {
-    const a = req.args ?? {};
-    return [
-      ...(a.options ?? []).map((o, i) => ({ label: String(o), choice: 'answer', text: String(o), about: a.about?.[i] ?? '', recommended: i === a.recommended })),
-      { label: a.typeLabel ?? 'Type your own answer…', choice: 'type', about: a.typeAbout ?? 'Write it in the box below, then press enter.' },
-    ];
-  }
+  // A question: its choices, each with what it means (about), then the row you type into (app-ask.mjs);
+  // esc stops (the hint line says so). The model's questions after the first are the box's tabs.
+  if (req.name === 'Ask') return askOptions(req.args);
   // A git commit asks every time (permissions.mjs), so it has no "don't ask again".
   if (req.name === 'Bash') return req.once || !prefix ? [yes, no] : [yes, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, ...(saveRule ? [{ label: `Yes, and always allow ${saveRule} in this folder`, choice: 'save' }] : []), no];
   if (req.name === 'Test') return [{ label: 'Yes, use this test', choice: 'yes' }, { label: 'No, and tell Agentic Coder what the test should check (esc)', choice: 'no' }];
@@ -652,9 +647,7 @@ function PermissionPrompt({ app }) {
           <Text color={C.dim} wrap="truncate-end">A hook is a command: it runs as you, with no sandbox, at the moment it names.</Text>
         </Box>
       ) : req.name === 'Ask' ? (
-        <Box paddingX={1} marginY={1}>
-          <Text bold>{req.args.question}{req.args.step ? <Text bold={false} color={C.dim}>   ({req.args.step.at} of {req.args.step.of})</Text> : null}</Text>
-        </Box>
+        <AskBox app={app} />
       ) : req.name === 'Bash' ? (
         <Box flexDirection="column" paddingX={2} marginY={1}>
           <Text>{cmdLines.length > room - 3 ? `${cmdLines.slice(0, room - 4).join('\n')}\n… +${cmdLines.length - (room - 4)} lines` : req.args.command}</Text>
@@ -688,7 +681,7 @@ function PermissionPrompt({ app }) {
         </Box>
       )
   );
-  const choices = req.name === 'Ask' ? <AskChoices perm={perm} width={width} /> : perm.options.map((o, i) => (
+  const choices = req.name === 'Ask' ? null : perm.options.map((o, i) => (
     <Text key={i} color={i === perm.selected ? C.ask : undefined}>{i === perm.selected ? '❯' : ' '} {i + 1}. {o.label ?? o}</Text>
   ));
   const notes = (
@@ -729,32 +722,115 @@ function PermissionPrompt({ app }) {
   );
 }
 
-// The choices of a question, the compact way: one line each, "(recommended)" beside the one
-// recommended, [ ] boxes when several may be ticked, and under the list what the choice you are
-// on means. That line keeps the height of the longest, so the box does not move as you go.
-function AskChoices({ perm, width }) {
-  const several = Boolean(perm.req.args?.several);
-  const ticked = perm.ticked ?? [];
-  const room = Math.max(20, width - 10);
-  const tall = Math.max(1, ...perm.options.map((o) => Math.ceil(((o.about ?? '').length + 2) / room)));
-  const about = perm.options[perm.selected]?.about ?? '';
+// The question box (9 Oct 2026, the owner's pick "2 · Claude Code box"; its keys: app-ask.mjs).
+// The model's questions as tabs (← ☐ Git guide ☐ Who gets it ✔ Submit →), the question, then each
+// choice with what it means under it, "(recommended)" beside one, [ ] boxes where several may be
+// ticked, and the row you type into, on one line that scrolls with the cursor. Every page is as tall
+// as the tallest, so the box never moves as you go; a window too short for every about line gets the
+// compact look (3 Oct 2026): one line a choice and the one you are on said under the list.
+function AskBox({ app }) {
+  const { perm, width } = app;
+  const box = perm.ask ?? askState(perm.req);
+  const n = box.tabs.length;
+  const multi = n > 1;
+  const inner = Math.max(20, width - 4);
+  const step = !multi && perm.req.args?.step;
+  const qLines = (t) => wrap(`${t.q.question ?? ''}${step ? `   (${step.at} of ${step.of})` : ''}`, inner);
+  const lead = (t) => 5 + (t.ticks ? 4 : 0); // "❯ 1. " and "[ ] "
+  const abouts = (t, o) => (o.about ? wrap(o.about, Math.max(10, inner - lead(t))) : []);
+  const pageFull = (t) => qLines(t).length + 1 + t.options.reduce((sum, o) => sum + 1 + abouts(t, o).length, 0);
+  const aboutTall = (t) => Math.max(1, ...t.options.map((o) => (o.about ? wrap(`ⓘ ${o.about}`, inner - 2).length : 0)));
+  const pageCompact = (t) => qLines(t).length + 1 + t.options.length + 1 + aboutTall(t);
+  const said = (t) => (t.answer == null ? [] : wrap(`→ ${t.answer}`, inner - 2).slice(0, 2));
+  const pageSubmit = 2 + box.tabs.reduce((sum, t) => sum + 1 + Math.max(1, said(t).length), 0) + 2 + (box.tabs.some((t) => t.answer == null) ? 1 : 0);
+  const tallest = (page) => Math.max(...box.tabs.map(page), multi ? pageSubmit : 0);
+  // The title, the tabs, a blank row, the page, a blank row, the hint and the border.
+  const compact = 2 + 1 + (multi ? 1 : 0) + 1 + tallest(pageFull) + 2 > app.rows - 4;
+  const height = tallest(compact ? pageCompact : pageFull);
+  const t = box.tabs[box.at];
+  const onType = t && t.options[t.selected]?.choice === 'type';
+  const hint = !t ? 'Enter send · ← back to the questions · Esc stop'
+    : onType ? `Type your answer · Enter ${multi ? 'next' : 'done'} · ↑/↓ move · ${multi ? 'Tab question · ' : ''}Esc stop`
+    : t.ticks ? `Space tick · Enter ${multi ? 'next' : 'done'} · ${multi ? '←/→ question' : '↑/↓ move'} · Esc stop`
+    : 'Enter pick · ↑/↓ move · Esc stop';
+  const lines = [];
+  if (!t) {
+    lines.push(<Text key="r" bold>Review your answers</Text>, <Text key="r0"> </Text>);
+    box.tabs.forEach((x, i) => {
+      lines.push(<Text key={`q${i}`} color={C.dim} wrap="truncate-end">● {x.q.question}</Text>);
+      if (x.answer == null) lines.push(<Text key={`a${i}`} color={C.warn} wrap="truncate-end">  → not answered yet</Text>);
+      else said(x).forEach((l, k) => lines.push(<Text key={`a${i}-${k}`} wrap="truncate-end">  {l}</Text>));
+    });
+    lines.push(<Text key="s0"> </Text>, <Text key="s" color={C.ask}>❯ Submit answers</Text>);
+    const left = box.tabs.filter((x) => x.answer == null).length;
+    if (left) lines.push(<Text key="w" color={C.dim} wrap="truncate-end">{left} not answered: {left === 1 ? 'it goes' : 'they go'} as skipped</Text>);
+  } else {
+    qLines(t).forEach((l, k) => lines.push(<Text key={`q${k}`} bold wrap="truncate-end">{l}</Text>));
+    lines.push(<Text key="q-"> </Text>);
+    t.options.forEach((o, i) => {
+      const on = i === t.selected;
+      const typed = t.typed.value;
+      const tick = t.ticks ? ((o.choice === 'type' ? typed.trim() : t.ticked.includes(i)) ? '[✔] ' : '[ ] ') : '';
+      const head = `${on ? '❯' : ' '} ${i + 1}. ${tick}`;
+      if (o.choice === 'type' && (on || typed)) {
+        const label = `${typeLabel(o)}: `;
+        const f = fieldView(typed, t.typed.cursor, Math.max(4, inner - head.length - label.length));
+        lines.push(<Text key={`o${i}`} color={on ? C.ask : undefined} wrap="truncate-end">{head}{label}<Text color={on ? undefined : C.dim}>{f.before}</Text>{on ? <Text inverse>{f.at}</Text> : <Text color={C.dim}>{f.at}</Text>}<Text color={on ? undefined : C.dim}>{f.after}</Text></Text>);
+      } else {
+        lines.push(<Text key={`o${i}`} color={on ? C.ask : undefined} wrap="truncate-end">{head}{o.label}{o.recommended ? <Text color={C.dim}>  (recommended)</Text> : null}</Text>);
+      }
+      if (!compact) abouts(t, o).forEach((l, k) => lines.push(<Text key={`o${i}-${k}`} color={C.dim} wrap="truncate-end">{' '.repeat(lead(t))}{l}</Text>));
+    });
+    if (compact) {
+      const about = t.options[t.selected]?.about;
+      lines.push(<Text key="i-"> </Text>);
+      const info = about ? wrap(`ⓘ ${about}`, inner - 2) : [];
+      for (let k = 0; k < aboutTall(t); k++) lines.push(<Text key={`i${k}`} color={C.dim} wrap="truncate-end">  {info[k] ?? ''}</Text>);
+    }
+  }
+  while (lines.length < height) lines.push(<Text key={`pad${lines.length}`}> </Text>);
   return (
-    <>
-      {perm.options.map((o, i) => {
-        const on = i === perm.selected;
-        const box = several && o.choice === 'answer' ? (ticked.includes(i) ? '[✔] ' : '[ ] ') : '';
-        return (
-          <Text key={i} color={on ? C.ask : undefined}>{on ? '❯' : ' '} {i + 1}. {box}{o.label}{o.recommended ? <Text color={C.dim}>  (recommended)</Text> : null}</Text>
-        );
-      })}
-      <Box height={tall} marginTop={1} paddingX={2}>
-        <Text color={C.dim}>{about ? `ⓘ ${about}` : ''}</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text color={C.dim}>{several ? 'Space tick · Enter done' : 'Enter pick'} · ↑/↓ move · Esc stop</Text>
-      </Box>
-    </>
+    <Box flexDirection="column" marginTop={multi ? 0 : 1}>
+      {multi ? <AskTabs box={box} inner={inner} /> : null}
+      {multi ? <Text> </Text> : null}
+      {lines}
+      <Text> </Text>
+      <Text color={C.dim} wrap="truncate-end">{hint}</Text>
+    </Box>
   );
+}
+
+// The tabs: ☐ a question not answered, ✔ one answered, the one you are on lit; too wide for the
+// window, "← Question 2 of 4 · 1 answered →".
+function AskTabs({ box, inner }) {
+  const n = box.tabs.length;
+  const done = box.tabs.filter((t) => t.answer != null).length;
+  const wide = 4 + box.tabs.reduce((sum, t) => sum + t.header.length + 4, 0) + 10;
+  if (wide > inner) {
+    return <Text wrap="truncate-end"><Text color={C.dim}>← </Text><Text bold>{box.at === n ? 'Submit' : `Question ${box.at + 1} of ${n}`}</Text><Text color={C.dim}> · {done} answered →</Text></Text>;
+  }
+  return (
+    <Text wrap="truncate-end">
+      <Text color={C.dim}>← </Text>
+      {box.tabs.map((t, i) => (
+        <Text key={i} inverse={i === box.at}> {t.answer != null ? <Text color={i === box.at ? undefined : C.ok}>✔</Text> : '☐'} {t.header} </Text>
+      ))}
+      <Text inverse={box.at === n}> ✔ Submit </Text>
+      <Text color={C.dim}> →</Text>
+    </Text>
+  );
+}
+
+// What the row you type into shows of your answer: all of it, or as much as fits around the cursor
+// (an … where some is cut off), and the letter under the cursor.
+function fieldView(value, cursor, room) {
+  const s = `${value} `;
+  const start = s.length <= room ? 0 : Math.min(Math.max(0, cursor - room + 2), s.length - room);
+  let shown = s.slice(start, start + room);
+  if (start > 0) shown = `…${shown.slice(1)}`;
+  if (start + room < s.length && cursor - start < room - 1) shown = `${shown.slice(0, -1)}…`;
+  const at = cursor - start;
+  return { before: shown.slice(0, at), at: shown[at] ?? ' ', after: shown.slice(at + 1) };
 }
 
 // A thin rule with a name in it: ── Commands · 22 · type to filter ──────

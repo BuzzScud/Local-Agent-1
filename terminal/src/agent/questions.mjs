@@ -36,8 +36,11 @@ function questionOf(q) {
     choices.push(c);
     if (choices.length === MAX_CHOICES) break;
   }
+  // Its tab in the window's box (9 Oct 2026): a word or two, as Claude Code's header.
+  const header = clip(q?.header ?? q?.tab ?? q?.short ?? '', 12);
   return {
     question: String(q?.question ?? '').trim(),
+    ...(header ? { header } : {}),
     options: choices.map((c) => c.label),
     about: choices.map((c) => c.about),
     recommended: choices.findIndex((c) => c.recommended),

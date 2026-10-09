@@ -24,7 +24,7 @@ test('a question with answers to pick, the line that says where the request went
   await fake.close();
   if (process.env.AGENTIC_SNAPSHOTS) (await import('node:fs')).writeFileSync(process.env.AGENTIC_SNAPSHOTS, JSON.stringify(r.snapshots, null, 1));
   expect(r.snapshots.asking).toContain('Agentic Coder asks');
-  expect(r.snapshots.asking).toMatch(/1\. Explain how the API works[\s│]+2\. Fix a broken API endpoint[\s│]+3\. Add a new API endpoint[\s│]+4\. Type your own answer…/);
+  expect(r.snapshots.asking).toMatch(/1\. Explain how the API works[\s│]+2\. Fix a broken API endpoint[\s│]+3\. Add a new API endpoint[\s│]+4\. Type something…/);
   // The pick is shown as your answer, then sorted: explaining is a question.
   expect(r.text).toContain('You: Explain how the API works');
   expect(r.snapshots.sorted).toMatch(/┊ question, step by step/);

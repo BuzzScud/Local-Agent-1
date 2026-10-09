@@ -47,19 +47,19 @@ test('more questions are asked after the first, five at most; one with no words 
 
 test('the Ask tool asks for about lines, a recommended choice, several and more', () => {
   const ask = TOOL_DEFS.find((d) => d.name === 'Ask');
-  expect(Object.keys(ask.parameters.properties)).toEqual(['question', 'options', 'several', 'more']);
+  expect(Object.keys(ask.parameters.properties)).toEqual(['question', 'header', 'options', 'several', 'more']);
   expect(ask.parameters.properties.options.items.properties.about).toBeTruthy();
   expect(ask.description).toContain('everyday words, no file paths, commands or code names');
   // Every model is told to talk this way (the remote set has the same line in HARNESS.md).
   expect(WORK_HABITS).toContain('Talk to the user in everyday words');
 });
 
-test('on screen: each choice keeps its about line and mark; then your own answer; esc stops (no row for it)', () => {
+test('on screen: each choice keeps its about line and mark; then the row you type into; esc stops (no row for it)', () => {
   const [q] = askedQuestions({ question: 'Which?', options: [{ label: 'A', about: 'the first', recommended: true }, 'B'] });
   expect(permissionOptions({ name: 'Ask', args: q }, '')).toEqual([
     { label: 'A', choice: 'answer', text: 'A', about: 'the first', recommended: true },
     { label: 'B', choice: 'answer', text: 'B', about: '', recommended: false },
-    { label: 'Type your own answer…', choice: 'type', about: 'Write it in the box below, then press enter.' },
+    { label: 'Type something…', choice: 'type', about: '' },
   ]);
   // The app's own questions name their own "type" row.
   expect(permissionOptions({ name: 'Ask', args: checkInQuestion(['a.mjs'], 30) }, '').map((o) => o.label)).toEqual(['Keep going', 'Tell me where to look…']);
