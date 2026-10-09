@@ -4,10 +4,8 @@
 import { homedir } from 'node:os';
 import { dirname } from 'node:path';
 import { existsSync } from 'node:fs';
-import { recentOf } from './start.jsx';
-import { HOME_LOOKS, lookOf, nextLook } from './home-looks.jsx';
-import { botAllowed } from './bot-layer.jsx';
-import { STEPS } from './rail.jsx';
+import { recentOf, HOME_LOOKS, lookOf, nextLook } from './home-nav.mjs';
+import { botAllowed, STEPS } from './screen-switches.mjs';
 import { helpersEnv, helperRows, changeHelpers } from './helpers.mjs';
 import { changeHooks, leanEnv } from '../agent/way.mjs';
 import { modeOf } from '../agent/permissions.mjs';

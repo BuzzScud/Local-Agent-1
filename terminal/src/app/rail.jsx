@@ -233,9 +233,8 @@ function idOf(it, seen) {
   seen.set(base, n + 1);
   return n ? `${base}.${n}` : base;
 }
-// /steps: grouped (the default), open (every step, as before), words (no boxes, only what the model says).
-export const STEPS = ['grouped', 'open', 'words'];
-export const stepsOf = (v) => (STEPS.includes(v) ? v : 'grouped');
+// /steps' three ways (STEPS, stepsOf): screen-switches.mjs (plain, so the app's logic needs no screen); named here too, as before.
+export { STEPS, stepsOf } from './screen-switches.mjs';
 // open: the ids of the groups you opened. working: the stretch at the end is still under way, so it is
 // held for the live area (screen.jsx LiveGroup) and printed once it ends.
 export function groupWork(printed, { working = false, open = null } = {}) {
