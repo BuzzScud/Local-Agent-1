@@ -465,11 +465,13 @@ export class ChecksPart {
 
   // The model's Ask tool: the question goes through the same prompt as a
   // permission (or the answers hook when there is no screen).
-  // Several questions (more) are asked one after another, each with its place ("1 of 2").
+  // Several questions (more) are asked one after another, each with its place ("1 of 2"); the
+  // window asks them all together instead, a tab each (askTogether).
   async askUser(id, args, shown, signal) {
     this.userHooks?.fire('Notification', { message: `Agentic Coder asks: ${String(args.question ?? '').slice(0, 200)}`, notification_type: 'question' });
     const questions = askedQuestions(args);
     if (!questions.length) questions.push({ question: String(args.question ?? ''), options: [], about: [], recommended: -1, several: false });
+    if (this.ask?.together) return this.askTogether(id, questions, shown, signal);
     const got = [];
     for (const [i, q] of questions.entries()) {
       const qid = i ? `${id}_${i}` : id;
@@ -490,5 +492,34 @@ export class ChecksPart {
     const hint = this.rememberHint('answers');
     if (got.length === 1) return { text: `The user answered: ${got[0].text}${hint ? `\n${hint}` : ''}` };
     return { text: `The user answered:\n${got.map((g, i) => `${i + 1}. ${g.question} → ${g.text}`).join('\n')}${hint ? `\n${hint}` : ''}` };
+  }
+
+  // The window asks them all in one box (9 Oct 2026, app-ask.mjs): a tab each, back and forth, then
+  // every answer at once ({ choice: 'answers', answers }, null for one not answered). Esc after some
+  // answers sends those (stopped): the model gets them and waits for your next message.
+  async askTogether(id, questions, shown, signal) {
+    const ids = questions.map((_, i) => (i ? `${id}_${i}` : id));
+    const shownOf = (i) => (i ? { label: 'Ask', arg: questions[i].question } : shown);
+    this.emit('tool-ask', { id, name: 'Ask', ...shown });
+    const answer = await this.ask({ id, name: 'Ask', args: { ...questions[0], questions }, prepared: {}, ...shown });
+    if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
+    const answers = answer.choice === 'answers' ? answer.answers ?? [] : [];
+    const said = questions.map((q, i) => {
+      const text = String(answers[i] ?? '').trim();
+      if (i) this.emit('tool-ask', { id: ids[i], name: 'Ask', ...shownOf(i) });
+      if (!text) { this.emit('tool', { id: ids[i], name: 'Ask', ...shownOf(i), view: { kind: 'declined', feedback: answer.feedback }, error: true }); return null; }
+      this.turn?.asked?.push(q.question);
+      this.emit('tool', { id: ids[i], name: 'Ask', ...shownOf(i), view: { kind: 'answer', question: q.question, text } });
+      return text;
+    });
+    const n = said.filter(Boolean).length;
+    if (!n) return { text: `The user did not answer${answer.feedback ? ` and wrote: ${answer.feedback}` : '. Wait for their next message.'}`, error: true, stop: answer.feedback ? null : 'declined' };
+    const list = questions.map((q, i) => `${i + 1}. ${q.question} → ${said[i] ?? (answer.stopped ? '(not answered)' : '(skipped)')}`).join('\n');
+    // The window's end line says your answers went (app-run.mjs), not "you said no".
+    if (answer.stopped && this.happened) this.happened.answersSent = n;
+    if (answer.stopped) return { text: `The user answered ${n} of ${questions.length} questions, then stopped:\n${list}\nWait for their next message.`, error: true, stop: 'declined' };
+    const hint = this.rememberHint('answers');
+    if (questions.length === 1) return { text: `The user answered: ${said[0]}${hint ? `\n${hint}` : ''}` };
+    return { text: `The user answered:\n${list}${hint ? `\n${hint}` : ''}` };
   }
 }

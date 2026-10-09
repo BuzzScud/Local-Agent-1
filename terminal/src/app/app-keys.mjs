@@ -26,6 +26,7 @@ import { sendToMain } from '../agent/btw.mjs';
 import { shownLimits, moveLimit, defaultLevelId, defaultLimits } from './limits.mjs';
 import { isQuit } from '../flows/words.mjs';
 import { pick, PLACEHOLDERS, IDLE } from './app-common.mjs';
+import { askKey, askPaste, askState } from './app-ask.mjs';
 
 export function keysPart(self) {
   const submitFn = (raw) => {
@@ -121,6 +122,9 @@ export function keysPart(self) {
       else if (row?.type === 'text' || row?.type === 'secret') self.setPicker({ ...startEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
       return;
     }
+    // Agentic Coder's question: a paste goes into the row you type into.
+    const pp = self.S.current.perm;
+    if (pp?.req.name === 'Ask') { self.setPerm({ ...pp, ask: askPaste(pp.ask ?? askState(pp.req), text) }); return; }
     if (self.S.current.perm || self.S.current.picker || (self.S.current.btw && !self.S.current.answerWait)) return;
     // Text copied off this screen (your message, the prompt box) comes back as it was written:
     // without the screen's line breaks, indents, padding and │ edges. ctrl+z gives the paste as copied.
@@ -317,25 +321,25 @@ export function keysPart(self) {
     // Permission prompt
     if (cur.perm) {
       const p = cur.perm;
+      // Agentic Coder's question: the box's own keys (app-ask.mjs): tabs, ticks, the row you type into.
+      if (p.req.name === 'Ask') {
+        if (key.ctrl && ch === 'c') { self.interrupt(); return; }
+        const box = p.ask ?? askState(p.req);
+        const r = askKey(p.req, box, ch, key);
+        if (r.flash) self.flash(r.flash, 2500);
+        if (r.done) {
+          self.setPerm(null);
+          p.resolve(r.done);
+          if (r.done.choice === 'no' || r.done.stopped) self.setPlaceholder('Tell Agentic Coder what to do instead');
+        } else if (r.box !== box) self.setPerm({ ...p, ask: r.box });
+        return;
+      }
       const n = p.options.length;
-      // A question where several may be ticked: the ticked choices, in the list's order.
-      const several = p.req.name === 'Ask' && Boolean(p.req.args?.several);
-      const tickedText = () => (p.ticked ?? []).slice().sort((a, b) => a - b).map((i) => p.options[i].text);
-      const tick = (i) => { if (p.options[i]?.choice !== 'answer') return; const t = p.ticked ?? []; self.setPerm({ ...p, selected: i, ticked: t.includes(i) ? t.filter((x) => x !== i) : [...t, i] }); };
       const choose = (i) => {
         const o = p.options[i];
-        // A question has no "no" row: esc stops it.
-        if (!o) { self.setPerm(null); p.resolve({ choice: 'no' }); self.setPlaceholder('Tell Agentic Coder what to do instead'); return; }
-        const choice = o.choice;
         self.setPerm(null);
-        // Agentic Coder's question: a listed choice answers it; "type" takes the next line you enter
-        // (with the ones ticked before it, on a question where several may be ticked).
-        if (choice === 'type') {
-          const before = several ? tickedText() : [];
-          self.answerRef.current = before.length ? (a) => p.resolve(a.choice === 'answer' ? { ...a, text: [...before, a.text].join(', ') } : a) : p.resolve;
-          self.setAnswerWait(true); self.setPlaceholder('Type your answer to Agentic Coder, then enter'); return;
-        }
-        if (choice === 'answer') { const t = several ? tickedText() : []; p.resolve({ choice, text: t.length ? t.join(', ') : o.text }); return; }
+        if (!o) { p.resolve({ choice: 'no' }); return; }
+        const choice = o.choice;
         // "Always allow": saved for this folder, and it runs now. If it cannot be saved it still holds for this session.
         if (choice === 'save') {
           const r = addRule(self.agentRef.current.cwd, 'allow', p.offer.rule);
@@ -352,11 +356,10 @@ export function keysPart(self) {
       const no = p.options.findIndex((o) => o.choice === 'no');
       if (key.upArrow) self.setPerm({ ...p, selected: (p.selected + n - 1) % n });
       else if (key.downArrow) self.setPerm({ ...p, selected: (p.selected + 1) % n });
-      else if (several && ch === ' ') tick(p.selected);
       else if (key.return) choose(p.selected);
       else if (key.escape) choose(no);
       else if (key.tab && key.shift && always >= 0 && p.req.name !== 'Bash') choose(always);
-      else if (/^[1-9]$/.test(ch) && Number(ch) <= n) { if (several && p.options[Number(ch) - 1].choice === 'answer') tick(Number(ch) - 1); else choose(Number(ch) - 1); }
+      else if (/^[1-9]$/.test(ch) && Number(ch) <= n) choose(Number(ch) - 1);
       else if (key.ctrl && ch === 'c') self.interrupt();
       return;
     }

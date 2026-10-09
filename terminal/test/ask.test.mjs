@@ -62,6 +62,46 @@ test('the Ask tool: closing the question ends the turn', async () => {
   expect(events.find((e) => e.type === 'tool' && e.label === 'Ask').view.kind).toBe('declined');
 });
 
+// The window's box (9 Oct 2026, app/app-ask.mjs): an asker marked together gets every question
+// in one request, a tab each, and gives every answer back at once.
+async function runTogether(replies, answer) {
+  const fake = await startFakeServer(replies);
+  const asks = [];
+  const events = [];
+  const cwd = project();
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false,
+    ask: Object.assign(async (req) => { asks.push(req); return answer; }, { together: true }) });
+  agent.on('tool', (e) => events.push(e));
+  const reason = await agent.send('add usage to the footer');
+  await fake.close();
+  return { reason, asks, events, agent };
+}
+const QUESTIONS = { question: 'What should the footer show?', header: 'Footer', options: ['Time left', 'Messages used'], more: [{ question: 'Which pages?', options: ['Home', 'Settings'], several: true }] };
+
+test('the Ask tool on the window: every question at once with its tab name, every answer back at once', async () => {
+  const { reason, asks, events, agent } = await runTogether([{ tool: { name: 'Ask', args: QUESTIONS } }, { text: 'Planned.' }], { choice: 'answers', answers: ['Time left', 'Home, also Help'] });
+  expect(reason).toBe('done');
+  expect(asks.length).toBe(1);
+  expect(asks[0].args.questions.map((q) => [q.question, q.header ?? ''])).toEqual([['What should the footer show?', 'Footer'], ['Which pages?', '']]);
+  expect(events.filter((e) => e.label === 'Ask').map((e) => e.view)).toEqual([
+    { kind: 'answer', question: 'What should the footer show?', text: 'Time left' },
+    { kind: 'answer', question: 'Which pages?', text: 'Home, also Help' },
+  ]);
+  expect(agent.messages.find((m) => m.role === 'tool').content).toBe('The user answered:\n1. What should the footer show? → Time left\n2. Which pages? → Home, also Help');
+});
+
+test('the Ask tool on the window: a question sent unanswered goes as skipped; esc after one answer sends it and ends the turn', async () => {
+  let r = await runTogether([{ tool: { name: 'Ask', args: QUESTIONS } }, { text: 'Planned.' }], { choice: 'answers', answers: [null, 'Home'] });
+  expect(r.reason).toBe('done');
+  expect(r.agent.messages.find((m) => m.role === 'tool').content).toBe('The user answered:\n1. What should the footer show? → (skipped)\n2. Which pages? → Home');
+  r = await runTogether([{ tool: { name: 'Ask', args: QUESTIONS } }, { text: 'never sent' }], { choice: 'answers', answers: ['Time left', null], stopped: true });
+  expect(r.reason).toBe('declined');
+  expect(r.agent.messages.find((m) => m.role === 'tool').content).toBe('The user answered 1 of 2 questions, then stopped:\n1. What should the footer show? → Time left\n2. Which pages? → (not answered)\nWait for their next message.');
+  expect(r.events.filter((e) => e.label === 'Ask').map((e) => e.view.kind)).toEqual(['answer', 'declined']);
+  r = await runTogether([{ tool: { name: 'Ask', args: QUESTIONS } }, { text: 'never sent' }], { choice: 'no' });
+  expect(r.reason).toBe('declined');
+});
+
 test('"fix the bug" in a plain folder asks what is wrong first; the answer joins the conversation', async () => {
   const { reason, events, agent, fake } = await run('fix the bug', [{ text: 'I looked at the notes; nothing is broken.' }], { flows: true, cwd: plainFolder(), answer: { choice: 'answer', text: 'the shopping list has a typo' } });
   expect(reason).toBe('done');

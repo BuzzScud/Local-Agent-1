@@ -177,6 +177,8 @@ export function runPart(self) {
         const usd = spent > 0 ? spent : undefined;
         if (reason === 'interrupted') { self.push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd, session }); self.setPlaceholder('Tell Agentic Coder what to do instead'); }
         else if (reason === 'done') self.push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left, usd, session });
+        // Esc in the question box after some answers: they went to the model, which waits for you.
+        else if (reason === 'declined' && self.agentRef.current?.happened?.answersSent) self.push({ type: 'done', reason, text: 'Stopped after your answers · it waits for your next message', secs, at, left, usd, session });
         else self.push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd, session });
         self.railOn.current = false;
         self.pre.current = null;

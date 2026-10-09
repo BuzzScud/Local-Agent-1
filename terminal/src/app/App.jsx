@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { existsSync, statSync, writeSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, heldRows, MENU_ROWS, menuHeight, shortcutRows, footerParts } from './screen.jsx';
+import { askState } from './app-ask.mjs';
 import { startTip, START_MIN, START_BIG } from './start.jsx';
 import { lookOf } from './home-looks.jsx';
 import { loadTimes, startLeft, typicalStart } from './start-times.mjs';
@@ -464,13 +465,14 @@ export function App({ opts, win, onRestart }) {
       thinking, effort, ctx, mode, flows: opts.flows !== false,
       // What you saved with /permissions, read for the folder it works in at every command.
       permissions: (dir) => rulesFor(dir),
-      ask: (req) => new Promise((resolve) => {
+      // together: the model's questions come all at once, as the box's tabs (app-ask.mjs).
+      ask: Object.assign((req) => new Promise((resolve) => {
         // "Don't ask again" and "always allow" remember the first part of the command nothing covers yet.
         const a = agentRef.current;
         const saved = a?.savedRules();
         const offer = req.name === 'Bash' && !req.once ? offerFor(req.args.command, { saved: saved?.allow, session: a?.allowedPrefixes, protect: saved?.protect }) : req.rule ? { rule: req.rule } : null;
-        setPerm({ req, selected: 0, options: permissionOptions(req, offer?.rule ?? null, saved?.broken ? null : offer?.rule ?? null), resolve, offer });
-      }),
+        setPerm({ req, selected: 0, options: permissionOptions(req, offer?.rule ?? null, saved?.broken ? null : offer?.rule ?? null), resolve, offer, ...(req.name === 'Ask' ? { ask: askState(req) } : {}) });
+      }), { together: true }),
       // A remote that stopped answering is connected again (a new tunnel, say); if it cannot be, the reply stops and you are asked.
       waitForServer: async () => { if (remoteRef.current.on) await remoteFnRef.current.reconnect(); else if (restartRef.current) await restartRef.current; else if (serverRef.current) await serverRef.current.restart(); },
       // A conversation that starts over from its notes: the instructions come
