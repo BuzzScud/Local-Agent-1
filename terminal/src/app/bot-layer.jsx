@@ -21,7 +21,8 @@ export const KEEP_ROWS = 3;
 // The fewest window rows that keep KEEP_ROWS for it in a conversation; a shorter window draws it over
 // the rows above the box instead.
 export const KEEP_FROM = 30;
-export const botAllowed = (env = process.env) => !/^(off|0|false|no)$/i.test(env.AGENTIC_BOT ?? '');
+// AGENTIC_BOT=off: screen-switches.mjs (plain, so the app's logic needs no screen); named here too, as before.
+export { botAllowed } from './screen-switches.mjs';
 
 // Rows from the live part's top to a node's: its top and its parents', up to the live part (Ink's layout).
 function topIn(node, root) {
