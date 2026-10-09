@@ -269,9 +269,9 @@ export function App({ opts, win, onRestart }) {
   const [leaving, setLeaving] = useState(false);
   const [ramGb, setRamGb] = useState(null);
   const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
-  // /steps (rail.jsx groupWork): grouped, each stretch of steps between the model's words one box (the default),
-  // open (every step) or words; settings.json "steps", AGENTIC_STEPS for one window (the app tests: open).
-  // openGroups: the boxes opened in this conversation (a click or ctrl+o), kept with it for /resume.
+  // /steps (task-rows.jsx): grouped, the model's lines and their steps as task rows (the default), open
+  // (every step) or words; settings.json "steps", AGENTIC_STEPS for one window (the app tests: open).
+  // openGroups: the task rows and rows opened in this conversation (a click or ctrl+o), kept for /resume.
   // liveBoxRef: the live part's box, whose height places a click on the conversation (app-keys.mjs).
   const [steps, setSteps] = useState(() => stepsOf(process.env.AGENTIC_STEPS || settings.steps));
   const [openGroups, setOpenGroups] = useState(() => new Set());

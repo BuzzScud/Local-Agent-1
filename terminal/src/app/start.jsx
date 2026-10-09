@@ -18,6 +18,11 @@ import { C, HUE } from '../ui/theme.mjs';
 import { wrap } from '../ui/parts.jsx';
 import { RAIL } from './rail.jsx';
 import { VERSION } from './help.mjs';
+import { titleOf, recentOf } from './home-nav.mjs';
+
+// A conversation's title and the newest ones (titleOf, recentOf) are plain values in home-nav.mjs, so the
+// app's logic needs no screen; named here too, as before.
+export { titleOf, recentOf };
 
 const WHITE = 'ansi256(255)';
 const PATH = 'ansi256(250)';
@@ -28,12 +33,6 @@ export function ago(iso, now = Date.now()) {
   if (m < 60) return `${Math.max(1, m)}m ago`;
   const h = Math.round(m / 60);
   return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
-}
-// A saved title is the first 80 characters of the prompt: one line, without separator runs, and
-// with … where it was cut when saved.
-export function titleOf(s) {
-  const t = String(s.title ?? '').replace(/[-=_─*#]{3,}/g, ' ').replace(/\s+/g, ' ').trim() || '(untitled)';
-  return String(s.title ?? '').length >= 80 ? `${t}…` : t;
 }
 // What a conversation is about, for Recent activity. A saved title is the start of its first
 // prompt, and prompts often open the same way ("Create a self-contained HTML file for a …"), which
@@ -53,11 +52,6 @@ export function nameOf(s) {
   // a capital for a word, never for a file or code name (notes.html stays as it is)
   const first = /^[a-z][a-z-]*(\s|$)/.test(rest) ? `${rest[0].toUpperCase()}${rest.slice(1)}` : rest;
   return `${first}${!whole && title.endsWith('…') ? '…' : ''}`;
-}
-// The newest conversations, the same prompt run again shown once.
-export function recentOf(list, n = 3) {
-  const seen = new Set();
-  return list.filter((s) => { const k = titleOf(s); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, n);
 }
 // gitSummary (prompt.mjs) in the page's words.
 export function gitWords(git) {

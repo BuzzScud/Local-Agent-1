@@ -15,18 +15,11 @@ import { Box, Text } from 'ink';
 import { HUE } from '../ui/theme.mjs';
 import { StartPage, recentRows, ago, recentOf, subjectOf, tidySubject, gitWords, notesWords } from './start.jsx';
 import { helpersWords } from './start-notes.jsx';
+import { lookOf } from './home-nav.mjs';
 
-export const HOME_LOOKS = [
-  { id: 'menu', name: 'Menu', note: 'one list: the conversations, then what you can do, each with its key' },
-  { id: 'launcher', name: 'Launcher', note: 'the bot, the name in block letters, one column to pick up or start' },
-];
-// A look by its id, name or number (1 is the Menu); anything else is the Menu.
-export function lookOf(v) {
-  const w = String(v ?? '').trim().toLowerCase();
-  if (/^\d+$/.test(w)) return HOME_LOOKS[Number(w) - 1]?.id ?? 'menu';
-  return HOME_LOOKS.find((l) => l.id === w || l.name.toLowerCase() === w)?.id ?? 'menu';
-}
-export const nextLook = (v) => HOME_LOOKS[(HOME_LOOKS.findIndex((l) => l.id === lookOf(v)) + 1) % HOME_LOOKS.length].id;
+// The looks (HOME_LOOKS, lookOf, nextLook) and moving between the page's items (itemAt, homeNav) are plain
+// values in home-nav.mjs, so the app's logic needs no screen; named here too, as before.
+export { HOME_LOOKS, lookOf, nextLook, itemAt, homeNav } from './home-nav.mjs';
 
 // Colours by xterm-256 number. SEL: the row or button picked (the prompt's own selection blue).
 const WHITE = 255, LIGHT = 252, PATH = 250, DIM = 245, FAINT = 240, EDGE = 238, SEL = 24;
@@ -183,37 +176,6 @@ export function homeItems(start, width) {
   if (look === 'launcher') return recentRows(start, width).map((r) => ({ key: `conv:${r.id}`, kind: 'conv', id: r.id, rects: [{ row: r.row, from: r.from, to: r.to }] }));
   const { items, pad } = layoutOf(look, { start, width });
   return items.map((it) => ({ ...it, rects: it.rects.map((r) => ({ row: r.row, from: pad + r.from, to: Math.min(width, pad + r.to) })) }));
-}
-// The item a click lands on (row from the page's first, col from 1), or null.
-export const itemAt = (items, row, col) => items.find((it) => it.rects.some((r) => r.row === row && col >= r.from && col <= r.to)) ?? null;
-// The next item from `key` in a direction (up, down, left, right), by where they sit: the nearest
-// one that way, one in the same column or row first; tab and shift+tab (next, back) go in order.
-export function homeNav(items, key, dir) {
-  if (!items.length) return null;
-  const at = items.findIndex((x) => x.key === key);
-  if (at < 0) return items[0].key;
-  if (dir === 'next' || dir === 'back') return items[(at + (dir === 'next' ? 1 : items.length - 1)) % items.length].key;
-  const mid = (it) => ({ y: it.rects.reduce((n, r) => n + r.row, 0) / it.rects.length, x: (it.rects[0].from + it.rects[0].to) / 2, from: it.rects[0].from, to: it.rects[0].to });
-  const c = mid(items[at]);
-  let best = null, score = Infinity;
-  for (const it of items) {
-    if (it.key === key) continue;
-    const p = mid(it);
-    const overlap = p.from <= c.to && p.to >= c.from; // the same column
-    let along, across;
-    if (dir === 'up' || dir === 'down') {
-      along = dir === 'up' ? c.y - p.y : p.y - c.y;
-      across = overlap ? 0 : Math.abs(p.x - c.x) / 4;
-    } else {
-      along = (dir === 'left' ? c.x - p.x : p.x - c.x) / 4;
-      across = Math.abs(p.y - c.y);
-      if (overlap) continue;
-    }
-    if (along <= 0.4) continue;
-    const sc = along + across * 3;
-    if (sc < score) { score = sc; best = it; }
-  }
-  return best?.key ?? key;
 }
 
 // ── Menu ────────────────────────────────────────────────────────────────────────────────────────
