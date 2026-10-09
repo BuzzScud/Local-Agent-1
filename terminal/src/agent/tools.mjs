@@ -18,7 +18,7 @@ import { designPathFor, designDir, inDesignDir } from './design.mjs';
 import { studioPathFor, studioDir, inStudioDir, hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
 import { scriptsPathFor, inScripts, saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint, nodeHint } from './scripts.mjs';
-import { permissionsTable, runsGitPush } from './permissions.mjs';
+import { permissionsTable, runsGitPush, splitCommand } from './permissions.mjs';
 
 const str = (description) => ({ type: 'string', description });
 // One choice of an Ask (agent/questions.mjs reads a bare string too).
@@ -1236,6 +1236,8 @@ export async function execute(name, args, prepared, env) {
       const body = r.lines.join('\n');
       const took = timeoutMs >= 90_000 && timeoutMs % 60_000 === 0 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
       const longer = r.timedOut && timeoutMs < MAX_TIMEOUT_SECS * 1000 ? `; for longer, send timeout (up to ${MAX_TIMEOUT_SECS} seconds), or background: true for one that need not be waited for` : '';
+      const none = noMatch(args.command, r);
+      if (none) return { text: '(no lines matched: the search found nothing, exit code 1)', view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: false, noMatch: true } };
       const status = r.timedOut ? `\n(stopped after ${took}${longer})` : r.code === 0 ? '' : `\n(exit code ${r.code})`;
       // Where a failed script stopped, with its lines (a traceback's "line 279 of <stdin>"), and the saved file.
       const where = r.code !== 0 && !r.timedOut ? failingLine(body, { body: heredocScript(args.command)?.body ?? null, saved: saved?.name ?? null, cwd: env.cwd }) : '';
@@ -1266,6 +1268,22 @@ export async function execute(name, args, prepared, env) {
     default:
       return { text: `Unknown tool ${name}.`, error: true, view: { kind: 'error', message: 'Unknown tool' } };
   }
+}
+
+// A search that found nothing: grep (rg, ag, ack) ends with exit code 1 and prints nothing when no
+// line matches, which is an answer, not a failure. In the saved conversations of 7-9 Oct 2026 it was
+// the most common red "error" of all ("sleep 115; grep -E '…' run.log" before a run had written its
+// summary). Only when the search is the last part, after ; | or a new line, or after a cd with &&: a
+// silent failure before it (test -f x && grep …) still counts as one.
+const SEARCHERS = /^(?:grep|egrep|fgrep|rg|ag|ack|git\s+grep)\b/;
+export function noMatch(command, r) {
+  if (r.code !== 1 || r.timedOut || r.lines.some((l) => l.trim())) return false;
+  const s = splitCommand(command);
+  if (s.nested || s.background || s.open) return false;
+  const parts = s.parts.map((p) => p.trim());
+  while (parts.length && !parts.at(-1)) parts.pop();
+  if (!parts.length || !SEARCHERS.test(parts.at(-1))) return false;
+  return s.seps.slice(0, parts.length - 1).every((sep, i) => sep !== '||' && (sep !== '&&' || /^(?:cd|pushd)\b/.test(parts[i])));
 }
 
 // ---- background commands (tools/jobs.mjs) ---------------------------------------------------------

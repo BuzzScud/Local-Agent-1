@@ -1,7 +1,7 @@
 // /effort (one panel): the effort and the limits that move up and down
 // (src/app/limits.mjs), and that the agent and its tools really follow them.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync } from 'node:fs';
+import { cpSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId, TEST_CTX, testDefaults, testSettings, testLimits, panelData, OWN_ROWS, ownOf, shownLimits } from '../src/app/limits.mjs';
@@ -263,6 +263,20 @@ test('Bash shows the output lines and stops at the timeout /effort set', async (
   expect(whole.view.lines).toHaveLength(100);
   const slow = await execute('Bash', { command: 'sleep 5' }, {}, { cwd, bash: { maxLines: 80, timeoutMs: 500 } });
   expect(slow.text).toContain('(stopped after 1 s; for longer, send timeout (up to 600 seconds)');
+}, 15_000);
+
+test('a grep that finds nothing is an answer, not an error; a grep of a missing file, or a silent failure before it, still is', async () => {
+  const cwd = project();
+  writeFileSync(join(cwd, 'run.log'), 'still running\n');
+  const env = { cwd, bash: { maxLines: 80, timeoutMs: 120_000 } };
+  for (const command of ["grep -E ' pass$' run.log", "sleep 0; grep -c x run.log | grep zzz", "cd . && grep zzz run.log", 'echo hi > /dev/null; grep zzz run.log']) {
+    const r = await execute('Bash', { command }, {}, env);
+    expect([command, r.error, r.view.noMatch, r.text]).toEqual([command, undefined, true, '(no lines matched: the search found nothing, exit code 1)']);
+  }
+  for (const command of ['grep zzz no-such-file.log', 'test -f nope && grep zzz run.log', 'false || grep zzz run.log', 'grep zzz run.log; false']) {
+    const r = await execute('Bash', { command }, {}, env);
+    expect([command, r.error, r.view.noMatch]).toEqual([command, true, undefined]);
+  }
 }, 15_000);
 
 test('Search rows: named choices move along their list, junk is left out, and only a change is saved', () => {

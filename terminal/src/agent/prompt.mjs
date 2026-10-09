@@ -204,6 +204,10 @@ export const NOTES_RANK = "These are the user's and this project's own rules. Wh
 // The user's calendar day, not UTC's: after 8 pm in New York the UTC date is already tomorrow.
 export const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+// Git in a shared folder (9 Oct 2026, the owner's pick: local and remote models alike). Other
+// sessions and the owner keep unfinished work here; the remote HARNESS.md carries the same line.
+export const GIT_RULE = '- Git: others may have unfinished work in this folder. Never run git stash, git checkout -- <file>, git restore or git clean. Commit or push only when the user asks, and commit only your own files, by path: git commit -m "…" -- <path>.';
+
 const STAY_OLD = '- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; a vague request such as "fix the bug" means this folder only.';
 // The first rule, with where the Desktop is from here. From the home folder
 // it used to say the Desktop was blocked while the note at the end said it
@@ -277,7 +281,7 @@ ${tooling}
 ${list ? `${list}\n\n` : ''}${now ? `${WORK_HABITS}\n\n` : ''}${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\n\n` : ''}Rules
 ${now ? stayRule(cwd) : STAY_OLD}
 - These commands are blocked: rm -rf, sudo, git push --force, git reset --hard, kill, pkill, killall. A git commit or git push asks the user first, every time.
-- If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.
+${now ? `${GIT_RULE}\n` : ''}- If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.
 
 ${math ? `${math}\n\n` : ''}${sessionPart({ cwd, notes, git, today, tests, now })}`;
 }
