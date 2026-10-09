@@ -325,6 +325,89 @@ test.skipIf(needs('python3'))('the real app asks GitHub on its own: a push from 
   } finally { await t.close(); await fake.close(); }
 }, 60_000);
 
+// ── coding pulls GitHub's main when it starts (the launcher's pull) ──────────
+
+// The real launcher on a clone of a stand-in GitHub, with a stand-in app (a script that says it ran)
+// already built for this Bun, so only the pull is under test. Answers what it printed and the repo.
+const BUN_VERSION = execFileSync(process.execPath, ['--version'], { encoding: 'utf8' }).trim();
+const LAUNCHER = readFileSync(join(import.meta.dir, '..', 'app', 'agentic-coder-launcher.sh'), 'utf8');
+function launcherOn(local) {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-pull-')));
+  const app = join(base, 'user', '.agentic-coder', 'app', 'agentic-coder');
+  mkdirSync(dirname(app), { recursive: true });
+  writeFileSync(app, '#!/bin/sh\necho "APP RAN $*"\n');
+  chmodSync(app, 0o755);
+  writeFileSync(`${app}.bun`, BUN_VERSION);
+  const future = new Date(Date.now() + 3600_000); // newer than every file in the repo: no rebuild
+  utimesSync(app, future, future);
+  const launcher = join(base, 'coding');
+  writeFileSync(launcher, LAUNCHER.replace('__REPO__', local));
+  chmodSync(launcher, 0o755);
+  const run = (env = {}) => {
+    const r = Bun.spawnSync(['/bin/sh', launcher, 'x'], { env: { ...process.env, HOME: join(base, 'user'), AGENTIC_REPO: '', AGENTIC_PULL_WAIT: '8', ...env } });
+    return { code: r.exitCode, out: `${r.stdout}${r.stderr}` };
+  };
+  return { launcher, run };
+}
+
+test('coding pulls a push from another Mac before it starts, and says so', () => {
+  const { local, other } = github();
+  const pushed = commit(other, { 'docs/note.html': '<p>new</p>' }, 'pushed elsewhere');
+  git(other, 'push', '-q', 'origin', 'main');
+  const r = launcherOn(local).run();
+  expect(r.out).toContain('Pulled 1 update from GitHub');
+  expect(r.out).toContain('APP RAN x');
+  expect(r.code).toBe(0);
+  expect(git(local, 'rev-parse', 'main')).toBe(pushed);
+  // Up to date: nothing said, it just starts.
+  const again = launcherOn(local).run();
+  expect(again.out.trim()).toBe('APP RAN x');
+});
+
+test('coding never pulls over a file you changed, a branch, or with AGENTIC_NO_PULL; the app still starts', () => {
+  const { local, other } = github();
+  const before = git(local, 'rev-parse', 'main');
+  commit(other, { 'terminal/src/app/a.mjs': 'export const a = 9;\n' }, 'pushed elsewhere');
+  git(other, 'push', '-q', 'origin', 'main');
+  const { run } = launcherOn(local);
+  expect(run({ AGENTIC_NO_PULL: '1' }).out.trim()).toBe('APP RAN x');
+  put(local, 'terminal/src/app/a.mjs', 'export const a = "mine";\n');
+  const blocked = run({ AGENTIC_NO_UPDATE: '0' });
+  expect(blocked.out).toContain('files changed here are in its way');
+  expect(blocked.out).toContain('APP RAN x');
+  expect(git(local, 'rev-parse', 'main')).toBe(before);
+  expect(readFileSync(join(local, 'terminal/src/app/a.mjs'), 'utf8')).toBe('export const a = "mine";\n');
+  git(local, 'checkout', '-q', '-b', 'mine');
+  expect(run().out.trim()).toBe('APP RAN x');
+  expect(git(local, 'rev-parse', 'main')).toBe(before);
+});
+
+test('coding with GitHub out of reach, or a plain http:// origin, starts the version already here', () => {
+  const { local } = github();
+  const before = git(local, 'rev-parse', 'main');
+  const { run } = launcherOn(local);
+  git(local, 'remote', 'set-url', 'origin', join(tmpdir(), 'no-such-hub.git'));
+  const off = run();
+  expect(off.out).toContain('Could not reach GitHub');
+  expect(off.out).toContain('APP RAN x');
+  git(local, 'remote', 'set-url', 'origin', 'http://127.0.0.1:9/hub.git');
+  expect(run().out.trim()).toBe('APP RAN x'); // not asked at all
+  expect(git(local, 'rev-parse', 'main')).toBe(before);
+});
+
+test('a pull that changes the launcher installs the new launcher, used from the next start', () => {
+  const { local, other } = github();
+  commit(other, { 'terminal/app/agentic-coder-launcher.sh': `${LAUNCHER}# a newer launcher\n` }, 'new launcher');
+  git(other, 'push', '-q', 'origin', 'main');
+  const { launcher, run } = launcherOn(local);
+  expect(run().out).toContain('APP RAN x');
+  const now = readFileSync(launcher, 'utf8');
+  expect(now).toContain('# a newer launcher');
+  expect(now).toContain(`REPO="\${AGENTIC_REPO:-${local}}"`);
+  expect(now).not.toContain('__REPO__');
+  expect(statSync(launcher).mode & 0o111).toBeTruthy();
+});
+
 // 9 Oct 2026: a window moved by "Work in …? → Yes" saves its conversation under that folder; its restart came back
 // where coding was typed, and --resume found nothing ("Could not open that conversation: ENOENT").
 test('a restart starts in the folder the window works in now; a folder given at the start comes along only when it did not move', () => {
