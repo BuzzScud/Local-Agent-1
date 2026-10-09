@@ -1,6 +1,7 @@
 // Slash commands shown in the menu when you type "/".
 export const COMMANDS = [
   { name: 'help', desc: 'Open the Help page in the browser: every command, key and setting' },
+  { name: 'calc', desc: 'The calculator link: one connection to your calculator that reconnects, signs in again and files sign-in problems; alone: open it in the hub · on|off runs it as its own background service', arg: '[on|off|reconnect|status]' },
   { name: 'clear', desc: 'Start a new conversation: clears the screen and what the model remembers of this one, back in the folder you started in' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
   { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation: on a remote, the lowest model there answers when it is ready', arg: '[question]' },
@@ -103,8 +104,10 @@ const CLAUDE_MENU = new Set(['usage']);
 // /loop and /loops (3 Oct 2026) follow it the same way, and /mcp after them (the owner's pick: typed in
 // full, like /jumptomac; the hub's Help page lists it), in this order: a window with one free row
 // shows /jumptomac, with four all of them.
-// /jobs (3 Oct 2026) last: the background commands, listed and stopped.
-export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'loops', 'mcp', 'jobs']);
+// /jobs (3 Oct 2026): the background commands, listed and stopped.
+// /calc (8 Oct 2026, the owner: "add it to the agentic coder commands, under the hub (/help) command") last:
+// in a window with room it is the row under /help, and typing /c finds it anywhere.
+export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'calc']);
 const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On

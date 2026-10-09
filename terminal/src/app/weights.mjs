@@ -23,6 +23,8 @@
 //                     the same file (profiles-hub.mjs)
 //   /remote, /remote.json, /remote/…   the Remote tab: the models on the services saved with /remote, a card each,
 //                     one model in full, and Try it · Load · Unload (remote-hub.mjs)
+//   /calc, /calc.json, /calc/…   the Calculator tab: the calculator link live, where it runs (inside the web or its
+//                     own background service), its login, and the reports it filed (calc-hub.mjs)
 //   /favicon.ico      the tab icon every page asks for: the Visor bot (favicon.mjs)
 // The DOCS folder is the repo's docs/ (the main folder's, from a worktree),
 // with the owner's own things in docs/private/: see docs-dir.mjs.
@@ -37,11 +39,13 @@ import instructionsHtml from './instructions.html' with { type: 'text' };
 import builderHtml from './builder.html' with { type: 'text' };
 import remoteHtml from './remote.html' with { type: 'text' };
 import profilesHtml from './profiles.html' with { type: 'text' };
+import calcHtml from './calc.html' with { type: 'text' };
 import { builderRoute } from './builder-hub.mjs';
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { remoteHub } from './remote-hub.mjs';
 import { profilesHub } from './profiles-hub.mjs';
+import { calcHub } from './calc-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
 import { flowRoute } from './flow-hub.mjs';
 import { helpData, VERSION, setupModels } from './help.mjs';
@@ -113,6 +117,7 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
   const noStore = { 'cache-control': 'no-store' };
   const remote = remoteHub({ cwd });
   const profiles = profilesHub({ cwd });
+  const calc = calcHub();
   // The models as the Weights tab shows them, read each time: the tags are the Harness
   // tab's (the model /model saved last is the one in use), and a file can arrive or go.
   const modelsData = () => {
@@ -190,6 +195,8 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
       if (url.pathname === '/profiles') return page(profilesHtml);
       if (url.pathname === '/profiles.json' || url.pathname.startsWith('/profiles/')) { const r = await profiles.route(req, url); if (r) return r; }
       if (url.pathname === '/remote') return page(remoteHtml);
+      if (url.pathname === '/calc') return page(calcHtml);
+      if (url.pathname === '/calc.json' || url.pathname.startsWith('/calc/')) { const r = await calc.route(req, url); if (r) return r; }
       if (url.pathname.startsWith('/remote')) { const r = await remote.route(req, url); if (r) return r; }
       if (url.pathname === '/instructions') return page(instructionsHtml);
       if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome, { onDesign });

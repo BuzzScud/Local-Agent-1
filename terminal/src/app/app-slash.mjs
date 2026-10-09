@@ -662,6 +662,29 @@ export function slashPart(self) {
         self.push({ type: 'note', text: runs.length ? `The test record opened in the browser at ${hub.url} · ${runs.length} run${runs.length === 1 ? '' : 's'} recorded, the latest: ${runs[0].name} (${runs[0].total != null ? `${runs[0].passed} of ${runs[0].total}` : runs[0].result}) · it stays up while this window is open` : `The test record opened in the browser at ${hub.url} · no test has been recorded yet`, tone: 'dim' });
         break;
       }
+      case 'calc': {
+        // The calculator link (web/calc-link.mjs): alone, the hub's Calculator tab and a line on what it is
+        // doing; on | off its own background service (off: inside Agentic Coder Web); reconnect; status.
+        const { askLink } = await import('../web/calc-link.mjs');
+        const { setWhere, statusLines } = await import('../web/calc-cmd.mjs');
+        const word = arg.toLowerCase();
+        if (word === 'on' || word === 'off') {
+          const r = setWhere(word === 'on' ? 'service' : 'web');
+          self.push({ type: 'note', text: r.ok ? (word === 'on' ? 'The calculator link runs as its own background service now: it starts with this Mac, web or no web.' : 'The background service is off: the calculator link runs inside Agentic Coder Web again (within 5 s while the web runs).') : r.error, tone: r.ok ? 'dim' : 'warn' });
+          break;
+        }
+        if (word === 'reconnect') {
+          const st = await askLink('/reconnect', { method: 'POST' });
+          self.push({ type: 'note', text: st ? 'Calculator link: reconnecting now' : "The calculator link is not running: save a login in the hub's Calculator tab (/calc), then run it inside the web or with /calc on.", tone: st ? 'dim' : 'warn' });
+          break;
+        }
+        if (word && word !== 'status') { self.push({ type: 'note', text: "/calc takes on, off, reconnect or status; alone it opens the hub's Calculator tab", tone: 'warn' }); break; }
+        const lines = statusLines(await askLink('/status'));
+        if (word === 'status') { self.push({ type: 'note', text: lines.join('\n'), tone: 'dim' }); break; }
+        const hub = self.openHub('calc'); if (!hub) break;
+        self.push({ type: 'note', text: `The calculator link opened in the browser at ${hub.url} · ${lines[0]}`, tone: 'dim' });
+        break;
+      }
       case 'instructions': {
         const hub = self.openHub('instructions'); if (!hub) break;
         self.push({ type: 'note', text: `Instructions opened at ${hub.url} · saved changes apply to the next task`, tone: 'dim' });
