@@ -229,6 +229,8 @@ test('a command is one row with what it came to at its end: a test run\'s counts
   expect(outcome('bun test ./terminal/test/rail.test.mjs', { code: 0, lines: ['bun test v1.4.2', '', ' 13 pass', ' 0 fail', ' 75 expect() calls'] })).toEqual({ end: '13 pass · 0 fail', color: C.ok });
   expect(outcome('node --test', { code: 1, lines: ['ℹ tests 4', 'ℹ pass 3', 'ℹ fail 1'] })).toEqual({ end: '3 pass · 1 fail · exit 1', color: C.bad });
   expect(outcome('grep -c x a.txt', { code: 1, lines: [] }).end).toBe('exit 1');
+  // A search that found nothing (tools.mjs noMatch) is no failure: dim, not red.
+  expect(outcome('grep x a.txt', { code: 1, lines: [], noMatch: true })).toEqual({ end: 'no lines matched', color: C.dim });
   expect(outcome('ls', { code: 0, lines: ['a', 'b', '… 120 lines cut …', 'y', 'z'] }).end).toBe('124 lines');
   expect(outcome('ls', { code: 0, lines: [] }).end).toBe('no output');
   // Words that look like counts in what a command that is no test printed are just its lines.

@@ -353,3 +353,14 @@ test('the agent hands Read its mode and rules: a remote model opening PERMISSION
     expect(result).toContain('never: "npm publish"');
   } finally { await fake.close(); }
 });
+
+test('local and remote models both get the git rule: no stash, own files by path, commit or push only when asked', async () => {
+  const { GIT_RULE } = await import('../src/agent/prompt.mjs');
+  expect(GIT_RULE).toContain('Never run git stash, git checkout -- <file>, git restore or git clean.');
+  expect(GIT_RULE).toContain('Commit or push only when the user asks');
+  const localSys = systemPrompt({ cwd: proj, git: 'g', set: 'local' });
+  const remoteSys = systemPrompt({ cwd: proj, git: 'g', set: 'remote' });
+  for (const s of [localSys, remoteSys]) expect(s.slice(s.indexOf('\nRules'), s.indexOf(SESSION_MARK))).toContain(GIT_RULE);
+  // the remote one also lists the longer git guide
+  expect(remoteSys).toContain('RULES/GIT.md: before any git command that changes something');
+});

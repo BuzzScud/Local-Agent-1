@@ -123,7 +123,10 @@ export class ChecksPart {
     if (!t.casesAsked && calls.some((c) => CHANGES.has(c.name))) {
       t.casesAsked = true;
       t.toDoSent = true;
-      const listed = await this.listCases(signal);
+      // A big model (big-model mode, model.harness) skips the call of its own and writes the cases in its
+      // plan (the owner's pick, 9 Oct 2026: "fewer checks on big models"). On the shared service the
+      // checks' calls were 12% of a hard task's time, 80% of it waiting in line behind other work.
+      const listed = this.model?.harness ? [] : await this.listCases(signal);
       if (signal?.aborted) return '';
       for (const c of listed) addCase(t, c);
       if (listed.length) {
