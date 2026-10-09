@@ -167,6 +167,22 @@ export function announcesNextStep(text) {
   return /\b(I will|I'll|I am going to|I'm going to|Let me|Let's|I need to|I should|First,? I|Next,? I|Now,? I)\b/i.test(last);
 }
 
+// A reply that says it will run a command and ends with that command in a shell block, with no
+// call: the command never ran (qwen3-coder-next on the service, 9 Oct 2026: "First, let me locate
+// the existing memory file." then ```bash find …``` for "update memory", twice, each message over
+// in 2 s with nothing run and nothing saved). Answers the command, or '' when the reply does not
+// end that way. Commands offered to the user ("Run something like:", several blocks) are not this.
+export function commandInText(text) {
+  const t = String(text ?? '').trimEnd();
+  const m = /```(?:bash|sh|shell|zsh|console)?[ \t]*\n([\s\S]*?)\n?```$/i.exec(t);
+  if (!m) return '';
+  const before = t.slice(0, m.index);
+  if (before.includes('```')) return '';
+  const cmd = m[1].split('\n').map((l) => l.replace(/^\s*\$\s+/, '')).join('\n').trim();
+  if (!cmd || cmd.split('\n').length > 10) return '';
+  return announcesNextStep(before.replace(/[‘’]/g, "'")) ? cmd : '';
+}
+
 // An answer saying the work was already there ("The --json flag is already in
 // place"), which is false when this turn created the file.
 export function claimsAlreadyThere(text) {

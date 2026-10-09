@@ -65,7 +65,7 @@ export const wayEnv = (env = process.env) => env.AGENTIC_WAY;
 // with no look of its own or naming files that are not there. The rest run only when you switch them on.
 export const HOOKS = [
   { id: 'empty', label: 'Empty reply', what: 'an empty answer is sent back once: "Reply to the user now"' },
-  { id: 'next-step', label: 'Do it now', what: 'a reply that says what it will do and stops is sent back (twice at most), and a named cause gets "make the change now"' },
+  { id: 'next-step', label: 'Do it now', what: 'a reply that says what it will do and stops is sent back (twice at most), a command written out and never run goes back once to be run, and a named cause gets "make the change now"' },
   { id: 'already', label: 'Already there', what: 'a reply that calls a file it just made "already there" is corrected' },
   { id: 'tests', label: 'Tests after a change', what: "the project's tests run when it says it is done after a change; a failure goes back" },
   { id: 'lost', label: 'Removed function', what: 'a function the request never named, gone after the change, goes back' },
