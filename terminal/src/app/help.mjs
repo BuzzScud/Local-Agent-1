@@ -43,6 +43,7 @@ export const KEYS = [
     ['shift + ← →', 'select, a character at a time (with option: a word at a time)'],
     ['shift + ↑ ↓', 'select a line up or down; past the first or last line it reaches the start or end, so from the end shift+↑ selects everything'],
     ['click · drag · double click', 'put the cursor there · highlight · take the word (hold fn for Terminal’s own highlight; /mouse off gives the mouse back to Terminal); a click on the model’s label in the footer starts or stops it'],
+    ['drag over the conversation', 'Terminal’s own highlight, as in Claude Code: the pointer resting on the text, a click on it or a scroll gives Terminal the mouse; ⌘C copies; any key or paste gives it back to the box'],
     ['ctrl+t', 'start or stop the model on this Mac: the footer’s label says which, and how much memory it holds; on a remote model, open the model list'],
     ['(selecting)', 'selected text is copied to the clipboard at once: “copied N chars to clipboard” (not the whole prompt selected with option + a)'],
     ['delete · typing · paste', 'with text selected: remove it · replace it · replace it'],

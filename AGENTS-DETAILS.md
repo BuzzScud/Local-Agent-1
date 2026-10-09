@@ -1059,6 +1059,24 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the box's rows at 135 and 80 columns, a click's row to its box, ctrl+o's list, and the real window: a reply's
   steps in a box, a click opens it, ctrl+o closes it, /steps open, kept in settings.json).
 
+## The conversation's text is Terminal's (9 Oct 2026)
+
+- **What and why.** The owner, on a screenshot of a chat: "can you allow me to click and drag on text and the text
+  field box? so i can copy it and paste it?", then "just like claude code". Since 7 Oct the mouse was the app's
+  whenever the box was on screen (/mouse on by default), so Terminal's own highlight never started and a drag on the
+  conversation did nothing. Their Claude Code runs the normal renderer, which never takes the mouse; their pick,
+  "Normal, keep the clicks": the text is Terminal's, the box, the boxes of steps and the bot keep their clicks.
+- **How** (app-keys.mjs `onConversation`, `handBack`; App.jsx `handedBack`): with /mouse on the app asks for every
+  move of the pointer (`MOTION_ON`, bot or not). Resting `REST_MS` (250 ms) on the printed conversation above the live
+  part (not a box of steps a click opens: `printedAt`, as for the click), a press on it, or a scroll anywhere gives the
+  mouse back to Terminal until a key or a paste (the useInput wrapper, `onPaste`; ⌥-click's arrows count). A pass over
+  the text never rests, so a box of steps is still reached. The start page keeps the mouse. The scroll's old 1.5 s
+  hand-back (`WHEEL_PAUSE_MS`) is gone: a view scrolled up is Terminal's to the end. Said once a window. Not tried by
+  hand in Terminal.app, whose motion reports are taken on trust from its code (as for the bot's eyes).
+- **Tests**: `app-mouse.test.mjs` (resting on the text, passing over it, resting on the box, a key, a press, a paste,
+  a click in the box, a scroll), `folders.test.mjs` (resting on a box of steps keeps the mouse, on the reply's words
+  gives it) and `app-keeper.test.mjs` (a scroll and a key through the keeper).
+
 ## Agentic Coder Web: the page, the backend and the tools server (8 Oct 2026)
 
 - **What and why.** The owner asked for "a web interface … a backend and tools server with API access … multi user
