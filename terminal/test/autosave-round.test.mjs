@@ -85,6 +85,21 @@ test('on a service a round that ended "done" and "known" is still read; a llama.
   expect(o.calls).toEqual([1, 0]);
 });
 
+test('llama side slot, a known round: skipped as before, the model is never called', () => {
+  const o = inChild(`
+    const fake = await startFakeServer([], { route: () => ({ text: '{"add":[{"kind":"project","text":"Never saved: a known round.","turn":1}],"drop":[]}' }) });
+    setEndpoint(fake.url, { remote: true, kind: 'llama', model: 'm' });
+    const save = new AutoSave({ agent: agentOn(fake.url, { lessons: [{ ...lesson(), known: true }], slots: { main: 0, side: 1 } }) });
+    out.run = [save.onService, save.canRunNow, save.worth, await save.now()];
+    out.calls = fake.requests.length;
+    out.facts = readFacts(dirs.project).length;
+    await fake.close();
+  `);
+  expect(o.run).toEqual([false, true, false, null]);
+  expect(o.calls).toBe(0);
+  expect(o.facts).toBe(0);
+});
+
 test('a llama.cpp server without a side slot still waits for the window to close; with saving off nothing runs', () => {
   const o = inChild(`
     const fake = await startFakeServer([], { route: () => ({ text: '{"add":[],"drop":[]}' }) });
