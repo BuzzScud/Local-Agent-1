@@ -4,8 +4,8 @@
 // self, which App makes at each render, so a function sees the values of the render that made it.
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { heldRows, holdRoom, btwLayout, stepGroups, printedAt } from './screen.jsx';
-import { groupLine } from './rail.jsx';
+import { heldRows, holdRoom, btwLayout, stepRuns, printedAt, pieceAt } from './screen.jsx';
+import { runWords, rowWords } from './task-rows.jsx';
 import { homeItems, homeNav, itemAt, lookOf } from './home-looks.jsx';
 import { hookFormRows, startHookEdit } from './hooks-form.mjs';
 import { nextMode } from '../agent/permissions.mjs';
@@ -218,18 +218,20 @@ export function keysPart(self) {
     self.setInput((p) => withUndo(p, { value: p.value, cursor: to, anchor: ev.shift ? (p.anchor ?? p.cursor) : to }));
   };
   // What the pointer is on, above the live part (the prompt box, the footer, the tray, the bot and the reply
-  // under way, which stay the app's): { kind: 'group', id } on a box of steps a click opens or closes, else
+  // under way, which stay the app's): { kind: 'group', id } on a task row, or a row of an open one, that a
+  // click opens or closes (screen.jsx pieceAt), else
   // { kind: 'text' }, the printed conversation, Terminal's to highlight. null on the live part, or while the
   // start page is up (its rows take clicks, printed or not). The row is counted up from the live part, which
   // ends on the row over the cursor's (screen.jsx printedAt).
   const onConversation = (ev) => {
     if (self.holdRef.current || self.startClicks) return null;
     const h = self.liveBoxRef.current?.yogaNode?.getComputedHeight?.();
-    const top = h ? (self.rows ?? 40) - h : null;
-    if (top == null || ev.row >= top) return null;
+    const top = h ? (self.rows ?? 40) - h : null; // the last row printed above it (rows count from 1)
+    if (top == null || ev.row > top) return null;
     if (self.stepsView.steps !== 'grouped') return { kind: 'text' };
-    const hit = printedAt(self.itemsRef.current, self.measure.current, self.S.current.live?.phase === 'working', top - ev.row);
-    return hit?.it.type === 'group' && (!hit.it.open || hit.row === 0) ? { kind: 'group', id: hit.it.id } : { kind: 'text' };
+    const hit = printedAt(self.itemsRef.current, self.measure.current, self.S.current.live?.phase === 'working', top - ev.row + 1);
+    const id = hit ? pieceAt(hit.it, hit.row, self.measure.current) : null;
+    return id ? { kind: 'group', id } : { kind: 'text' };
   };
   // The mouse back to Terminal until a key or a paste (App.jsx handedBack): its own highlight, double and
   // triple click and scrolling, as in Claude Code. Said once a window.
@@ -632,7 +634,7 @@ export function keysPart(self) {
       else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
       return;
     }
-    // ctrl+o's list of boxes: ↑↓ one, enter opens or closes it, esc goes back
+    // ctrl+o's list of task rows: ↑↓ one, enter opens or closes it, esc goes back
     if (cur.picker?.kind === 'groups') {
       const pk = cur.picker;
       if (key.upArrow) self.setPicker({ ...pk, index: Math.max(0, pk.index - 1) });
@@ -701,10 +703,15 @@ export function keysPart(self) {
     if (key.ctrl && ch === 'p') { self.runSlash('/compact'); return; }
     if (key.ctrl && ch === 'r') { secondOpinionNow(); return; }
     if (key.ctrl && ch === 'o') {
-      // grouped (/steps): the boxes printed, newest first; enter opens or closes the one picked
-      if (self.stepsView.steps !== 'open') {
-        const groups = stepGroups(self.itemsRef.current, self.stepsView).reverse();
-        if (groups.length) { self.setPicker({ kind: 'groups', title: 'Open or close a group of steps', items: groups.map((g) => ({ key: g.id, label: groupLine(g.list), desc: g.open ? '· open: enter closes it' : '' })), index: 0 }); return; }
+      // grouped (/steps): the task rows printed, newest first, an open one's rows under it; enter opens or
+      // closes the one picked
+      if (self.stepsView.steps === 'grouped') {
+        const runs = stepRuns(self.itemsRef.current, self.stepsView).reverse();
+        const items = runs.flatMap((t) => [
+          { key: t.id, label: runWords(t.run), desc: t.open ? '· open: enter closes it' : '' },
+          ...(t.open ? t.run.rows.map((r) => ({ key: r.id, label: rowWords(r), desc: t.openRows.has(r.id) ? '· open' : '' })) : []),
+        ]);
+        if (items.length) { self.setPicker({ kind: 'groups', title: 'Open or close a task row', items, index: 0 }); return; }
       }
       const s = self.folds.current;
       if (!s.list.length) { self.flash('Nothing to expand yet'); return; }
