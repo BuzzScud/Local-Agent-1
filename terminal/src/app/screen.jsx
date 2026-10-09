@@ -31,7 +31,8 @@ import { hookListRows, hookLine, projectLine as hooksProjectLine, checkOn, rowWi
 import { HOOKS as APP_CHECKS } from '../agent/way.mjs';
 import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
-import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, LooksNode, RunningNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords, foldSteps, groupFacts, GroupHead, GroupBox, groupWork } from './rail.jsx';
+import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, LooksNode, RunningNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords, foldSteps, groupWork } from './rail.jsx';
+import { taskRows, TaskRun, TaskEnd, LiveRun, RowView } from './task-rows.jsx';
 import { HomePage, lookOf } from './home-looks.jsx';
 import { StartLine } from './start-notes.jsx';
 import { useBot, BotLayer, KEEP_ROWS, KEEP_FROM } from './bot-layer.jsx';
@@ -294,8 +295,9 @@ export function Item({ it, width, model, cwd, loaded, start }) {
     case 'tool': return it.rail ? <ToolNode it={it} cwd={cwd} /> : <ToolView it={it} width={width} />;
     // Reads, lists and searches in a row, as one row (rail.jsx foldSteps).
     case 'looks': return <LooksNode list={it.list} cwd={cwd} />;
-    // A stretch of steps between two things the model says, closed or open (rail.jsx groupWork).
-    case 'group': return <GroupView it={it} width={width} model={model} cwd={cwd} loaded={loaded} start={start} />;
+    // A task row of the model's lines and their steps, and the end of their box (task-rows.jsx).
+    case 'taskrun': return <TaskRun it={it} width={width} drawSteps={(list, w) => stepsDrawn(list, w, { model, cwd, loaded, start })} />;
+    case 'taskend': return <TaskEnd it={it} width={width} cwd={cwd} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
     case 'made': return <MadeNode files={it.files} />;
     case 'note': {
@@ -531,8 +533,11 @@ function LiveRail({ app, maxLines, held }) {
   const { live, width } = app;
   const blocks = [];
   if (live.pre) blocks.push(<MachineLine key="pre" it={live.pre} />);
-  // grouped (/steps): the stretch under way, its row counting and its last two steps (rail.jsx groupWork)
-  if (Array.isArray(held)) blocks.push(<LiveGroup key="held" list={held} width={width} model={app.modelName} cwd={app.cwdShort} loaded={app.loaded} start={app.start} />);
+  // grouped (/steps): the task row under way and the last two steps of its row (task-rows.jsx LiveRun);
+  // words: the last two steps under way
+  const ctx = { model: app.modelName, cwd: app.cwdShort, loaded: app.loaded, start: app.start };
+  if (held?.type === 'tasklive') blocks.push(<LiveRun key="held" live={held} width={width} drawSteps={(list, w) => stepsDrawn(list, w, ctx)} />);
+  else if (Array.isArray(held)) blocks.push(<Box key="held" flexDirection="column">{stepsDrawn(held.slice(-2), width, ctx)}</Box>);
   else if (held) blocks.push(held.type === 'looks' ? <LooksNode key="held" list={held.list} cwd={app.cwdShort} /> : <ToolNode key="held" it={held} cwd={app.cwdShort} />);
   if (live.thinking && !live.text && !live.writing) blocks.push(<ThinkingLive key="think" thinking={live.thinking} now={app.now} width={width} cap={live.thinkCap} />);
   if (live.text) {
@@ -2155,21 +2160,8 @@ const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `
 // Grouped (rail.jsx groupWork): the model's sentences have none (tight).
 export const gapOver = (it) => (it.tight ? 0 : (it.rail && it.type === 'text') || (!it.rail && it.type === 'user') ? 1 : 0);
 export const gapUnder = (it) => (it.tight ? 0 : it.rail ? (it.type === 'done' || it.type === 'text' ? 1 : 0) : it.type === 'looks' ? 0 : 1);
-// A group (rail.jsx groupWork): its box, closed (what stays in sight) or open (its steps inside, narrower by
-// the box's borders and padding).
-function GroupView({ it, width, model, cwd, loaded, start }) {
-  const steps = it.open ? it.list.map((x) => <ItemFrame key={x.key} it={x} width={width - 8} model={model} cwd={cwd} loaded={loaded} start={start} />) : null;
-  return <GroupBox facts={groupFacts(it.list)} open={it.open} width={width} cwd={cwd}>{steps}</GroupBox>;
-}
-// The stretch still under way, in the live area: its row counting as it goes, and its last two steps.
-function LiveGroup({ list, width, model, cwd, loaded, start }) {
-  return (
-    <Box flexDirection="column">
-      <GroupHead facts={groupFacts(list)} live />
-      {list.slice(-2).map((x) => <ItemFrame key={x.key} it={x} width={width} model={model} cwd={cwd} loaded={loaded} start={start} />)}
-    </Box>
-  );
-}
+// Steps drawn as the conversation draws them, at a width: inside an open task row, and in the live area.
+const stepsDrawn = (list, width, { model, cwd, loaded, start }) => list.map((x) => <ItemFrame key={x.key} it={x} width={width} model={model} cwd={cwd} loaded={loaded} start={start} />);
 // The start's notes take no rows under the Menu, which shows them in its own (start-notes.jsx).
 const inPage = (it, start) => it.type === 'startnotes' && lookOf(start?.look) !== 'launcher';
 export function ItemFrame({ it, width, model, cwd, loaded, start }) {
@@ -2182,16 +2174,16 @@ export function ItemFrame({ it, width, model, cwd, loaded, start }) {
 }
 // What the conversation prints: its items with each run of reads folded into one (rail.jsx
 // foldSteps); while a turn works, a run still open at the end is held for the live area. view (/steps,
-// App.jsx): grouped, each stretch of steps between the model's words one box (rail.jsx groupWork; open:
-// the ones you opened; the stretch under way held whole); words, the same without the boxes; open (or
-// none), every step as before.
+// App.jsx): grouped, the model's lines and their steps as task rows (task-rows.jsx; open: the ones you
+// opened; the task row under way held); words, only what the model says; open (or none), every step as before.
 function printedOf(items, working = false, view = null) {
   if (!view || view.steps === 'open') return foldSteps(items, working);
-  const g = groupWork(foldSteps(items).printed, { working, open: view.open });
-  return view.steps === 'words' ? { printed: g.printed.filter((it) => it.type !== 'group'), held: g.held } : g;
+  const g = groupWork(foldSteps(items).printed, { working });
+  if (view.steps === 'words') return { printed: g.printed.filter((it) => it.type !== 'group'), held: g.held };
+  return taskRows(g.printed, { held: g.held, working, open: view.open });
 }
-// The groups printed, in order (ctrl+o's list, app-keys.mjs).
-export const stepGroups = (items, view) => printedOf(items, false, view).printed.filter((it) => it.type === 'group');
+// The task rows printed, in order (ctrl+o's list, app-keys.mjs).
+export const stepRuns = (items, view) => printedOf(items, false, view).printed.filter((it) => it.type === 'taskrun');
 // The printed item on a row of the window: up, rows over the live part (1: the one right over it); the
 // row it is counted from the item's top. null when it is not measured or not there (a click, app-keys.mjs).
 export function printedAt(items, ctx, working, up) {
@@ -2202,6 +2194,29 @@ export function printedAt(items, ctx, working, up) {
     if (h == null) return null;
     if (up <= n + h) return { it: printed[i], row: h - (up - n) };
     n += h;
+  }
+  return null;
+}
+// What a click on a row of a task row opens or closes: the task row (its top edge or its own row), one of
+// its rows (that row's own line, when it is open), else nothing (your answers, a row's steps: text).
+const partRows = new Map();
+export function pieceAt(it, row, ctx) {
+  if (it?.type !== 'taskrun') return null;
+  let r = row - (it.first ? 1 : 0);
+  if (r <= 0) return it.id;
+  if (!it.open) return null;
+  r -= 1;
+  for (const p of it.run.rows) {
+    const on = it.openRows.has(p.id);
+    const k = `${p.id}\0${on}\0${ctx.width}`;
+    if (!partRows.has(k)) {
+      if (partRows.size > 2000) partRows.clear();
+      const out = renderToString(<RowView r={p} open={on} width={ctx.width} drawSteps={(list, w) => stepsDrawn(list, w, { model: ctx.modelName, cwd: ctx.cwdShort, loaded: ctx.loaded, start: ctx.start })} />, { columns: ctx.width });
+      partRows.set(k, out ? out.split('\n').length : 1);
+    }
+    if (r === 0) return p.id;
+    if (r < partRows.get(k)) return null;
+    r -= partRows.get(k);
   }
   return null;
 }
