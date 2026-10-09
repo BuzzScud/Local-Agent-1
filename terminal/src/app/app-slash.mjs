@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { recentOf } from './start.jsx';
+import { HOME_LOOKS, lookOf, nextLook } from './home-looks.jsx';
 import { helpersEnv, helperRows, changeHelpers } from './helpers.mjs';
 import { changeHooks, leanEnv } from '../agent/way.mjs';
 import { modeOf } from '../agent/permissions.mjs';
@@ -685,6 +686,19 @@ export function slashPart(self) {
       case 'meters': {
         if (!arg.trim()) { self.openChoice('meters'); break; }
         self.applyChoice('meters', /^(on|show|yes)$/i.test(arg) ? 'on' : 'off');
+        break;
+      }
+      case 'home': {
+        // The start page, the Menu or the Launcher (home-looks.jsx): typed alone the other one, else the one
+        // named; kept in settings.json. The page is live until your first message, so it changes in front of you.
+        const asked = arg.trim().toLowerCase();
+        if (asked && !HOME_LOOKS.some((l, i) => asked === l.id || asked === l.name.toLowerCase() || asked === String(i + 1))) { self.flash(`No look called ${arg.trim()}: ${HOME_LOOKS.map((l) => l.id).join(' or ')}`); break; }
+        const look = asked ? lookOf(asked) : nextLook(self.S.current.homeLook); // S: this render's, not the one runSlash was made in
+        self.setHomeLook(look);
+        self.setHomeFocus(null);
+        try { saveSettings({ homeLook: look }); } catch {}
+        const { name, note } = HOME_LOOKS.find((l) => l.id === look);
+        self.flash(self.holdRef.current ? `${name}: ${note} · /home again for the other` : `${name} it is: /clear shows it now, and every new window starts with it`, 6000);
         break;
       }
       case 'mouse': {

@@ -34,6 +34,7 @@ export const COMMANDS = [
   { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'mcp', desc: 'Your MCP servers: tools from programs on this Mac and services on the internet (GitHub, a database, your own scripts); add one, Test it, switch its tools on or off and mark the ones that only read; each tool asks before its first use' },
   { name: 'jobs', desc: 'The commands the model runs in the background (a dev server, a long test run): each one, how long it has run, its last lines; /jobs stop <id|all> stops them', arg: '[stop <id|all>]' },
+  { name: 'home', desc: 'The start page as the Menu (one list of conversations and actions) or the Launcher (the bot); alone: the other one', arg: '[menu|launcher]' },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'autostart', desc: 'Load the model as soon as a window opens (on), or only when you type /start (off, the default)', arg: '[on|off]', picker: true },
@@ -88,7 +89,8 @@ const SERVICE_ONLY = new Set([]);
 // Typed only (2 Oct 2026): /agents took /morning's row in the / menu, which holds 18 at 80 × 24, and
 // /settings is as full; /morning still runs typed in full, and /help lists it.
 // /subagents too (8 Oct 2026): /profiles took its row; typed, it opens /profiles on its AIs group.
-export const TYPED_ONLY = new Set(['morning', 'subagents']);
+// /home too (8 Oct 2026): the Menu or the Launcher as the start page.
+export const TYPED_ONLY = new Set(['morning', 'subagents', 'home']);
 // On a remote only (8 Oct 2026): profiles are servers and models on /remote, so on this Mac's own model
 // /profiles is not in the menu (typed in full it says so).
 const REMOTE_MENU = new Set(['profiles']);

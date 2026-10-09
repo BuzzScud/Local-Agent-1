@@ -45,8 +45,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'profiles', 'remote', 'jumptomac', 'test', 'settings', 'exit']); // 18: /jumptomac fits there
   expect(COMMANDS.some((c) => c.name === 'subagents')).toBe(true);
   // /agents took /morning's row (2 Oct 2026): /morning is typed only, and still a command on /help
-  // /subagents too (8 Oct 2026): typed, it opens /profiles on its AIs group
-  expect([...TYPED_ONLY]).toEqual(['morning', 'subagents']);
+  // /subagents too (8 Oct 2026): typed, it opens /profiles on its AIs group; and /home (8 Oct 2026), the start page's look
+  expect([...TYPED_ONLY]).toEqual(['morning', 'subagents', 'home']);
   // /jumptomac (3 Oct 2026): in the whole menu where a 19th row fits (a window taller than 80 × 24),
   // and in any window once its name is typed; typed only, nobody saw it.
   // /loop and /loops (3 Oct 2026) follow it, in that order, then /mcp and /jobs: one free row shows /jumptomac, five all of them.
