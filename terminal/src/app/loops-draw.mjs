@@ -120,6 +120,8 @@ function runLines(l, run, lines, cols, now, { tail = null, full = false } = {}) 
       continue;
     }
     if (x.kind === 'note') { out.push(fit([p('   · ', 'faint'), p(cut(x.text, w - 6), 'dim')], w)); continue; }
+    // The loop's page check (loops.mjs pageWords): checking, what it found.
+    if (x.kind === 'page') { out.push(fit([p(' ◉ ', 'accent'), p(cut(x.text, w - 4), 'white')], w)); continue; }
     if (x.kind === 'ask') { if (live && l.current.needs && x === lines.at(-1)) continue; out.push(fit([p(' ? ', 'warn b'), p(cut(x.text, w - 4), 'warn')], w)); continue; }
     if (x.kind === 'answer') { out.push(fit([p('   ⎿ ', 'faint'), p(cut(`you: ${x.text}`, w - 6), 'dim')], w)); continue; }
     if (x.kind === 'text') {
@@ -144,8 +146,9 @@ function nowWords(l, lines, now) {
   if (l.current) {
     const took = dur(now - l.current.startedAt);
     const steps = lines.filter((x) => x.kind === 'tool' || x.kind === 'fail');
-    const x = [...lines].reverse().find((y) => y.kind === 'tool' || y.kind === 'fail' || y.kind === 'text');
+    const x = [...lines].reverse().find((y) => y.kind === 'tool' || y.kind === 'fail' || y.kind === 'text' || y.kind === 'page');
     if (!x) return [`${spin(now)} starting · ${took}`, 'accent'];
+    if (x.kind === 'page') return [`${spin(now)} ${x.text} · ${took}`, 'accent'];
     if (x.kind === 'text') return [`${spin(now)} writing its answer · ${took}`, 'accent'];
     const m = /^([^(]+)\((.*)\)$/s.exec(x.text);
     const what = m ? `${m[1]} ${m[2].replace(/\s+/g, ' ')}` : x.text;

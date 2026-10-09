@@ -507,7 +507,7 @@ export class Loops {
     // The page check (cli.jsx): before the run, and for a loop that fixes until done, again after it.
     else if (ev.t === 'page') {
       run.page = { ...(run.page ?? {}), [ev.when === 'after' ? 'left' : 'found']: ev.skipped ? null : ev.count };
-      this.line(l, run, 'note', pageWords(ev));
+      this.line(l, run, 'page', pageWords(ev));
     }
     else if (ev.t === 'ask') {
       run.needs = { id: ev.id, kind: ev.kind, name: ev.name, text: ev.text, options: ev.options ?? [], always: ev.always ?? null, sig: ev.sig ?? null, since: this.now() };
