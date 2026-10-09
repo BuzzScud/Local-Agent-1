@@ -18,12 +18,13 @@ test('on the Claude API: the bar under the footer with the footer’s ends, /usa
   const claude = await startFakeAnthropic([{ text: 'Hello from Claude.' }], { limits: { requests: [1000, 999], input: [2_000_000, 1_996_000], output: [400_000, 399_000] } });
   const r0 = { source: 'claude', address: claude.url, port: null, connect: 'http', kind: 'claude', model: 'claude-opus-5-5', context: 0, key: true, keyEnd: '6789', keyId: 'claude' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { claude: r0 } }));
-  // Yesterday's spend on the Claude API, from another window (the cost meter's own file).
+  // Yesterday's spend on the Claude API, from another window (the cost meter's own file). bun test runs in UTC and the
+  // window in this Mac's zone, so from 8 pm in New York the test's yesterday was the window's today: the window gets UTC too.
   const y = new Date(Date.now() - 86_400_000);
   const day = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
   mkdirSync(join(base, 'home', 'spend', day), { recursive: true });
   writeFileSync(join(base, 'home', 'spend', day, '1.json'), JSON.stringify({ usd: 9.85, service: 'api.anthropic.com', byService: { 'api.anthropic.com': 9.85 }, byKind: { claude: 9.85 } }));
-  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], cols: 152, rows: 44, timeoutMs: 90_000, steps: [
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, TZ: 'UTC' }, args: ['--no-flows'], cols: 152, rows: 44, timeoutMs: 90_000, steps: [
     { wait: 'On the remote:', ms: 25_000 }, { sleep: 600 }, { snapshot: 'start' },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.', ms: 20_000 }, { sleep: 800 }, { snapshot: 'after', has: ['left of $500'] },
     { type: '/us' }, { sleep: 400 }, { snapshot: 'menu' },
