@@ -50,7 +50,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   // /jumptomac (3 Oct 2026): in the whole menu where a 19th row fits (a window taller than 80 × 24),
   // and in any window once its name is typed; typed only, nobody saw it.
   // /loop and /loops (3 Oct 2026) follow it, in that order, then /mcp and /jobs: one free row shows /jumptomac, five all of them.
-  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'loops', 'mcp', 'jobs']);
+  // /calc (8 Oct 2026) last of them: where it shows, it is the row under /help.
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'calc']);
   expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'test', 'settings', 'exit']);
   expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('loops');
   expect(matchCommands('/', { room: 21 }).map((c) => c.name)).toContain('mcp'); // a fourth free row is /mcp's
@@ -58,7 +59,9 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect(matchCommands('/mc').map((c) => c.name)).toEqual(['mcp']);
   expect(menu).not.toContain('jumptomac');
   const tall = matchCommands('/', { room: 49, side: true }).map((c) => c.name);
-  expect(tall).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'test', 'settings', 'exit']);
+  expect(tall).toEqual(['help', 'calc', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'test', 'settings', 'exit']);
+  expect(matchCommands('/', { room: 22 }).map((c) => c.name)).not.toContain('calc'); // the sixth free row is /calc's
+  expect(matchCommands('/ca').map((c) => c.name)).toEqual(['calc']); // typed, it shows in any window
   expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac', 'jobs']);
   expect(matchCommands('/jo').map((c) => c.name)).toEqual(['jobs']);
   expect(matchCommands('/jump').map((c) => c.name)).toEqual(['jumptomac']);
@@ -169,9 +172,10 @@ test('coding hub [tab]: --help lists it once instead of six words; each tab open
   expect(await hubLine(['hub', 'Battle'], env)).toBe('arena'); // and so is the Battle tab
   expect(await hubLine(['tests'], env)).toBe('arena'); // the old word
   expect(await hubLine(['memory'], env)).toBe('memory');
+  expect(await hubLine(['hub', 'calc'], env)).toBe('calc'); // the calculator link (8 Oct 2026)
   const bad = spawnSync('bun', [CLI, 'hub', 'notes'], { encoding: 'utf8', env: { ...process.env, ...env } });
   expect(bad.status).toBe(1);
-  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, profiles, memory, instructions, help.');
+  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, profiles, memory, instructions, calc, help.');
   const noModel = spawnSync('bun', [CLI, 'hub'], { encoding: 'utf8', env: { ...process.env, ...env } }); // weights is the default, and this home has no model file
   expect(noModel.status).toBe(1);
   expect(noModel.stderr).toContain('open another tab (coding hub docs)');

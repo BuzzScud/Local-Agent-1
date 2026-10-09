@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Coder Calculator link</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --tint: rgba(42,120,214,.08);
+  --up: #1d7a46; --down: #b3261e; --warn: #8a5a00;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color-scheme: light dark; display: flex; flex-direction: column; overflow: hidden; }
+/* One container that fits the window: the connection and its login on the left, the reports and what happened on the right; each list scrolls inside its own box. */
+header { padding: 14px 18px 10px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px; }
+header div { flex: 1; min-width: 0; }
+h1 { font-size: 17px; margin: 0 0 2px; }
+.sub { color: var(--ink2); margin: 0; }
+.big { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink3); flex: none; }
+.dot.ok { background: var(--up); } .dot.bad { background: var(--down); } .dot.warn { background: var(--warn); }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 14px 18px; }
+.col { min-height: 0; display: flex; flex-direction: column; gap: 16px; }
+section { min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+section.grow { flex: 1; }
+section h2 { font-size: 14px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; }
+section h2 small { color: var(--ink3); font-weight: 400; }
+.pad { padding: 10px 14px 12px; }
+.scroll { overflow: auto; min-height: 0; padding: 4px 14px 10px; }
+dl { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 7px 12px; margin: 0; }
+dt { color: var(--ink3); }
+dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; border: 0; background: var(--panel); color: var(--ink2); padding: 4px 10px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--accent); color: #fff; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.btn { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:hover { border-color: var(--ink3); }
+.form { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.form input { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 100%; }
+.hint { color: var(--ink3); font-size: 12.5px; margin: 8px 0 0; }
+.rep { padding: 9px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; }
+.rep:last-child, .ev:last-child { border-bottom: 0; }
+.chip { font-size: 11.5px; border-radius: 5px; padding: 1px 6px; background: var(--panel); color: var(--ink2); text-align: center; }
+.chip.issue { background: rgba(179,38,30,.1); color: var(--down); }
+.rep .st { font-size: 12.5px; color: var(--ink3); white-space: nowrap; }
+.rep .st.filed { color: var(--up); } .rep .st.failed { color: var(--down); }
+.rep .more { grid-column: 2 / -1; color: var(--ink3); font-size: 12.5px; }
+.ev { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.ev time { color: var(--ink3); font-family: var(--mono); font-size: 12px; padding-top: 1px; white-space: nowrap; }
+.ev.drop span, .ev.silent span, .ev.wrong-login span { color: var(--down); } .ev.live span { color: var(--up); } .ev.report span { color: var(--accent); }
+.empty { color: var(--ink3); padding: 14px 0; }
+.flash { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 6px 12px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+.flash.show { opacity: .92; }
+@media (max-width: 860px) { body { overflow: auto; height: auto; } main { grid-template-columns: 1fr; } section.grow { max-height: 60vh; } header { flex-wrap: wrap; } }
+@media (max-width: 520px) { main { padding: 12px 16px; } header { padding: 12px 16px 10px; } dl, .form { grid-template-columns: 1fr; gap: 2px 0; } dd { margin-bottom: 6px; } .rep { grid-template-columns: 56px minmax(0, 1fr); } .rep .st { grid-column: 2; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Calculator link</h1>
+    <p class="sub">One always-on connection to your calculator: it notices a drop and reconnects, signs in again when the session runs out, and files sign-in problems with the calculator, once each.</p>
+  </div>
+  <span class="big" id="big"><i class="dot"></i>Asking…</span>
+</header>
+<main>
+  <div class="col">
+    <section>
+      <h2>Connection <small id="pid"></small></h2>
+      <div class="pad">
+        <dl id="kv"></dl>
+        <div class="btns"><button class="btn" id="reconnect" type="button">Reconnect now</button><button class="btn" id="signin" type="button">Sign in again</button></div>
+      </div>
+    </section>
+    <section>
+      <h2>Sign-in <small>your calculator account</small></h2>
+      <div class="pad">
+        <form class="form" id="login" autocomplete="off">
+          <label for="f-url">Address</label><input id="f-url" spellcheck="false" placeholder="http://host:port">
+          <label for="f-user">Username</label><input id="f-user" spellcheck="false" autocomplete="off">
+          <label for="f-pass">Password</label><input id="f-pass" type="password" autocomplete="new-password">
+        </form>
+        <div class="btns"><button class="btn primary" id="save" type="button">Save and connect</button></div>
+        <p class="hint">Kept on this Mac only (the web settings, readable by you alone), never shown on a page. A wrong password is tried once, then the link waits for a new one.</p>
+      </div>
+    </section>
+  </div>
+  <div class="col">
+    <section class="grow">
+      <h2>Reports to the calculator <small id="rcount"></small></h2>
+      <div class="scroll" id="reports"></div>
+    </section>
+    <section class="grow">
+      <h2>What happened <small>newest first</small></h2>
+      <div class="scroll" id="events"></div>
+    </section>
+  </div>
+</main>
+<div class="flash" id="flash"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clock = (t) => (t ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—');
+const many = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const age = (ms) => (ms < 90000 ? `${Math.round(ms / 1000)} s` : ms < 5400000 ? `${Math.round(ms / 60000)} min` : `${(ms / 3600000).toFixed(1)} h`);
+let D = null, typed = false, busy = false;
+function flash(t) { const f = $('#flash'); f.textContent = t; f.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => f.classList.remove('show'), 2600); }
+async function post(path, body = {}) {
+  busy = true;
+  try {
+    const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || `answered ${r.status}`);
+    D = j; draw(); return true;
+  } catch (e) { flash(e.message); return false; } finally { busy = false; }
+}
+const tone = (st) => (st === 'live' ? 'ok' : ['login-wrong', 'no-login', 'no-address', 'stopped'].includes(st) ? 'bad' : 'warn');
+function draw() {
+  const l = D.link, s = l ?? D.saved ?? {};
+  const words = l ? l.words : D.where === 'service' ? 'Not running: its background service is off' : 'Not running: no web copy is running it';
+  $('#big').innerHTML = `<i class="dot ${l ? tone(l.state) : 'bad'}"></i>${esc(words)}`;
+  $('#pid').textContent = l ? `${l.where === 'service' ? 'background service' : 'inside the web'} · pid ${l.pid}` : '';
+  const c = (l ? l.counts : s.counts) ?? {};
+  const drop = s.lastDrop ? `${clock(s.lastDrop.at)} · ${s.lastDrop.code === 1008 ? 'the session ran out' : s.lastDrop.code === 4000 ? 'went quiet (no heartbeat answer)' : `the network (close ${s.lastDrop.code}${s.lastDrop.reason ? ` "${esc(s.lastDrop.reason)}"` : ''})`}` : 'none yet';
+  const rows = [
+    ['Where it runs', `<span class="seg"><button type="button" data-w="web" class="${D.where === 'web' ? 'on' : ''}">Inside the web</button><button type="button" data-w="service" class="${D.where === 'service' ? 'on' : ''}">Own background service</button></span>`],
+    ['State', l ? `${esc(l.words)} · since ${clock(l.since)}${l.lastError && l.state !== 'live' ? `<br><span style="color:var(--down)">${esc(l.lastError)}</span>` : ''}` : esc(words)],
+    ['Signed in as', l?.user ? `${esc(l.user)} at ${esc(l.url)}` : D.login.user ? `${esc(D.login.user)} (not signed in now)` : 'no login saved'],
+    ['Session', l?.session ? `${age(l.session.ageMs)} old${l.session.refreshAt ? ` · signs in again at ${clock(l.session.refreshAt)}` : ' · signs in again when it runs out'}` : '—'],
+    ['Heartbeat', l ? (l.state === 'live' ? `every ${Math.round(l.heartbeatMs / 1000)} s · ${l.pings ? 'pings answered' : 'checked through /health'}` : `every ${Math.round(l.heartbeatMs / 1000)} s, once live`) : '—'],
+    ['Today', `${many(c.drops ?? 0, 'drop')} · ${many(c.reconnects ?? 0, 'reconnect')} · ${many(c.signIns ?? 0, 'sign-in')}`],
+    ['Last drop', drop],
+    ['Session lengths seen', s.lifetimes?.length ? s.lifetimes.map(age).join(', ') : 'none ran out yet'],
+    ['Background service', D.service.mac ? (D.service.loaded ? 'on: starts with this Mac' : 'off') : 'not on this computer (a Mac only)'],
+  ];
+  $('#kv').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  document.querySelectorAll('[data-w]').forEach((b) => { b.onclick = async () => { if (b.dataset.w === D.where) return; if (await post('/calc/where', { where: b.dataset.w })) flash(b.dataset.w === 'service' ? 'Its own background service now: it starts with this Mac.' : 'Inside the web now: the web picks it up within 5 s.'); }; });
+  const reps = (l ? l.reports : s.reports) ?? [];
+  $('#rcount').textContent = reps.length ? `${reps.filter((r) => r.status === 'filed').length} of ${reps.length} filed` : '';
+  $('#reports').innerHTML = reps.length ? reps.map((r) => `<div class="rep"><span class="chip ${r.kind}">${r.kind === 'feature' ? 'Feature' : 'Issue'}</span><b>${esc(r.title)}</b><span class="st ${r.status}">${r.status === 'filed' ? `Filed${r.id != null ? ` #${esc(r.id)}` : ''} · ${clock(r.filedAt)}` : r.status === 'failed' ? 'Not filed yet' : 'Waiting for a session'}</span>${r.error || r.note || r.seen > 1 ? `<span class="more">${[r.note, r.error ? `last try: ${esc(r.error)}` : '', r.seen > 1 ? `seen ${r.seen} times` : ''].filter(Boolean).join(' · ')}</span>` : ''}</div>`).join('') : '<p class="empty">None yet. The seven sign-in design requests go out with the first session, and a problem the link runs into is filed the first time it is seen.</p>';
+  const evs = (l ? l.events : s.events) ?? [];
+  $('#events').innerHTML = evs.length ? evs.map((e) => `<div class="ev ${e.kind}"><time>${clock(e.at)}</time><span>${esc(e.text)}</span></div>`).join('') : '<p class="empty">Nothing yet.</p>';
+  if (!typed) { $('#f-url').value = D.login.url ?? ''; $('#f-user').value = D.login.user ?? ''; $('#f-pass').placeholder = D.login.hasPass ? 'saved: type to replace' : 'password'; }
+}
+async function load() { if (busy) return; try { D = await (await fetch('/calc.json')).json(); draw(); } catch { /* the hub closed */ } }
+['#f-url', '#f-user', '#f-pass'].forEach((s) => $(s).addEventListener('input', () => { typed = true; }));
+$('#save').onclick = async () => {
+  const body = { url: $('#f-url').value.trim(), user: $('#f-user').value.trim(), ...($('#f-pass').value ? { pass: $('#f-pass').value } : {}) };
+  if (await post('/calc/login', body)) { typed = false; $('#f-pass').value = ''; flash(D.link ? 'Saved: the link signs in with it now.' : 'Saved. The link signs in once it runs (inside the web, or its own service).'); setTimeout(load, 1500); }
+};
+$('#reconnect').onclick = async () => { if (await post('/calc/reconnect')) flash('Reconnecting now.'); };
+$('#signin').onclick = async () => { if (await post('/calc/signin')) flash('Signing in again now.'); };
+load();
+setInterval(load, 2000);
+</script>
+</body>
+</html>

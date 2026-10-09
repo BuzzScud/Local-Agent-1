@@ -82,6 +82,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="memory">Memory</button>
   <button data-tab="instructions">Instructions</button>
   <button data-tab="docs">All docs</button>
+  <button data-tab="calc">Calculator</button>
   <button data-tab="help">Help</button>
   <span class="spacer"></span>
   <span class="now" id="now"></span>
@@ -224,6 +225,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'remote' && !page) return show('/remote', 'the models on the services you connect to with /remote');
     if (tab === 'profiles' && !page) return show('/profiles', 'which server and model each AI, task type and skill uses');
     if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
+    if (tab === 'calc' && !page) return show('/calc', 'the calculator link: connected, signed in, problems filed');
     if (tab === 'docs' && !page) return showList();
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
     const p = page ? docs.pages.find((x) => x.file === page) : docs.pinned[tab];
@@ -252,7 +254,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   const q = new URL(location.href); const tab = ALIAS[q.searchParams.get('tab')] ?? (q.searchParams.get('tab') || 'weights'); const page = q.searchParams.get('page');
   const view = q.searchParams.get('view');
   // Flow, in the Structure tab, opens before the DOCS folder is read, like the tabs built into the app.
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || (t === 'structure' && view === 'flow') || t === 'arena' || t === 'remote' || t === 'profiles' || t === 'memory' || t === 'instructions';
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || (t === 'structure' && view === 'flow') || t === 'arena' || t === 'remote' || t === 'profiles' || t === 'memory' || t === 'instructions' || t === 'calc';
   if (builtIn(tab) && !page) { open(tab, null, view); if (builderAsk) openBuilder(builderAsk); builderAsk = null; } else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();
