@@ -192,6 +192,25 @@ export async function closest(facts, text, { embedder = null, n = 15, signal } =
   return facts.map((f, i) => ({ f, i, s: score(f) })).sort((a, b) => b.s - a.s || a.i - b.i).slice(0, n).map((x) => x.f);
 }
 
+// The saved facts about the same thing as a new one, closest first, for Remember to show the
+// model so it can retire one the new fact makes out of date. Only those past the recall's own
+// cut (by meaning, or by words without the small model): a fact that is merely nearby is not one.
+export async function nearFacts(facts, text, { embedder = null, n = 3, signal } = {}) {
+  if (!facts.length || !String(text).trim()) return [];
+  const key = (f) => `${f.dir}\0${f.id}`;
+  if (embedder) {
+    try {
+      const vec = await factVectors(facts, embedder, signal);
+      const [q] = await embedder.embed([String(text).slice(0, 2000)], { signal });
+      return facts.filter((f) => vec.has(key(f))).map((f) => ({ f, s: dot(q, vec.get(key(f))) }))
+        .filter((x) => x.s >= embedder.model.cut).sort((a, b) => b.s - a.s).slice(0, n).map((x) => x.f);
+    } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; }
+  }
+  const w = byWords(text, facts);
+  const cut = Math.log(1 + facts.length) + 0.01;
+  return facts.map((f) => ({ f, s: w.get(key(f)) ?? 0 })).filter((x) => x.s >= cut).sort((a, b) => b.s - a.s).slice(0, n).map((x) => x.f);
+}
+
 const LABEL = { you: 'about you', project: 'this project', worked: 'this worked', failed: 'this failed before: do not try it again', mistake: 'a mistake to avoid', recipe: 'steps that worked before' };
 // What goes with the request. The model is told these are memories, not
 // what the files say now.

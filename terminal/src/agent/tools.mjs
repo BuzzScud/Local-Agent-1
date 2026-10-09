@@ -121,7 +121,7 @@ export const MODEL_TOOL_DEFS = [
   {
     name: 'Remember',
     description: 'Save one fact to the memory for later conversations: a preference of the user, or how this project works or is run. Only what will still matter next time and what the code or git does not already show. One short sentence.',
-    parameters: { type: 'object', properties: { fact: str('The fact, in one short sentence'), about: { type: 'string', enum: ['you', 'project'], description: 'you: the user, in every project; project: this project only' } }, required: ['fact'] },
+    parameters: { type: 'object', properties: { fact: str('The fact, in one short sentence'), about: { type: 'string', enum: ['you', 'project'], description: 'you: the user, in every project; project: this project only' }, replaces: str("Optional: the id of a saved fact this one makes out of date (Remember's answer lists the ids); the old one is retired") }, required: ['fact'] },
   },
 ];
 // The web (/web): WebSearch when a search service is set, WebFetch when reading pages is on.
