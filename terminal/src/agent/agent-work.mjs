@@ -32,7 +32,7 @@ import { alwaysRules } from './facts.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { describePictures, describedNote } from './helper-models.mjs';
 import { MCP_TOOL, callHint, isMcpCall, mcpCallInText, requestHits, requestNote } from './mcp.mjs';
-import { BYPASS_OPEN, CALL_MARK, CORRECTS, EXPLAIN, LAYOUT_ROUNDS, LOOK_TOOLS, LOST_CALL, MAX_CALLS, MCP_BACKS, MENTIONS_WALL, READ_TIP, SAME_STEP, SELF_OPEN, aboutTheCode, announcesNextStep, asksForWork, asksTheUser, asksTheUserDirectly, auto, bareCallInText, beforeCall, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, cutCallNote, emptyCutNote, kTok, keptPart, keptWriteNote, keyLines, lostCall, safeArgs, searchWords, tokensOf, toolCallInText, webAddresses, writesCodeInstead } from './agent-said.mjs';
+import { BYPASS_OPEN, CALL_MARK, CORRECTS, EXPLAIN, LAYOUT_ROUNDS, LOOK_TOOLS, LOST_CALL, MAX_CALLS, MCP_BACKS, MENTIONS_WALL, READ_TIP, SAME_STEP, SELF_OPEN, aboutTheCode, announcesNextStep, asksForWork, commandInText, asksTheUser, asksTheUserDirectly, auto, bareCallInText, beforeCall, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, cutCallNote, emptyCutNote, kTok, keptPart, keptWriteNote, keyLines, lostCall, safeArgs, searchWords, tokensOf, toolCallInText, webAddresses, writesCodeInstead } from './agent-said.mjs';
 
 export class WorkPart {
   async work(text, { signal, images, wake = false } = {}) {
@@ -76,12 +76,14 @@ export class WorkPart {
     if (images?.length) this.ctxUsed += images.length * IMAGE_TOKENS;
     if (this.happened) this.happened.message = this.messages.at(-1);
     this.emit('turn-start', { started });
-    // The model decides (way.mjs): no word rules pick a path for it, not even for a greeting or
-    // "update memory" (it answers, or saves with Remember). Only the loop below runs.
+    // The model decides (way.mjs): no word rules pick a path for it, not even for a greeting.
+    // Only the loop below runs.
     const decides = this.way === 'model' || wake;
     if (!decides && isSmallTalk(text)) { this.happened.small = true; return this.chat(text, started, signal); }
-    // "update memory" / "remember that …": saved straight to the memory file, never a question about where.
-    if (!decides && isMemoryRequest(text)) { this.happened.small = true; return this.updateMemory(text, started, signal); }
+    // "update memory" / "remember that …": saved straight to the memory file, never a question about where,
+    // whoever decides (9 Oct 2026, the owner's pick: qwen3-coder-next deciding answered "update memory"
+    // twice with a find command written out and never run, and nothing was saved).
+    if (!wake && isMemoryRequest(text)) { this.happened.small = true; return this.updateMemory(text, started, signal); }
     this.lastRoute = null;
     this.lastHelpers = []; // what the helpers bring to this request (/helpers shows it)
     this.sortShown = this.mode === 'plan' || decides; // a plan is never sorted, nor a request the model decides: no line
@@ -538,6 +540,15 @@ export class WorkPart {
             this.turn.lostCall = true;
             this.emit('note', { text: `It wrote about ${kTok(turn.tokens)} tokens and its call never arrived (the server dropped it); asked it to take the step again, smaller.`, tone: 'warn' });
             this.messages.push({ role: 'user', content: auto(LOST_CALL) });
+            continue;
+          }
+          // "Let me find it." and the command written out in a shell block, never called: back once to run
+          // it, at the first step too (commandInText; qwen3-coder-next, 9 Oct 2026).
+          const written = !this.turn.commandBack && this.hook('next-step') ? commandInText(text) : '';
+          if (written) {
+            this.turn.commandBack = true;
+            this.emit('note', { text: 'It wrote a command out without running it; asked it to run it.', tone: 'warn' });
+            this.messages.push({ role: 'user', content: auto('You wrote a command in your reply but did not run it, so nothing happened. If you meant to run it, run it now with the Bash tool; if it was only for the user to run, say so in one line and stop.') });
             continue;
           }
           // Small models often announce the next step mid-task ("Now I will
