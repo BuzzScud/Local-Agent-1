@@ -10,7 +10,7 @@ import { test, expect } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { fakeOllama } from './fake-ollama.mjs';
 import { startFakeAnthropic } from './fake-anthropic.mjs';
 
@@ -48,8 +48,9 @@ test('their case: started on the Claude API it stays there; /remote service and 
   const mains = [];
   const r = await runInPty({ cwd, env: { ...env, ...ENV }, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 120_000, steps: [
     // past the window's 2 s look at the file, which is when the old code moved it back
-    { wait: 'On the remote:', ms: 25_000 }, { sleep: 4500 }, { snapshot: 'start' }, { fn: () => mains.push(mainOf(base).model) },
-    { type: '/remote service' }, { key: 'enter' }, { wait: 'On the remote: coder:30b', ms: 20_000 }, { sleep: 3000 }, { snapshot: 'service' }, { fn: () => mains.push(mainOf(base).model) },
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 4500 }, { snapshot: 'start' }, { fn: () => mains.push(mainOf(base).model) },
+    // before your first message the start page's line says where it runs now (start-notes.jsx)
+    { type: '/remote service' }, { key: 'enter' }, { wait: /coder:30b on \S+, \d+ ms/, ms: 20_000 }, { sleep: 3000 }, { snapshot: 'service' }, { fn: () => mains.push(mainOf(base).model) },
     { type: '/remote claude' }, { key: 'enter' }, { wait: 'Main → claude-opus-5-5 · Claude API (was coder:30b', ms: 20_000 }, { sleep: 3000 }, { fn: () => mains.push(mainOf(base).model) },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Answered by the Claude API.', ms: 30_000 }, { sleep: 800 }, { snapshot: 'hello' },
     ...quit,
@@ -60,7 +61,9 @@ test('their case: started on the Claude API it stays there; /remote service and 
   await svc.close(); await claude.close();
   // started on the Claude API and still there after the window looked at the file: Main moved with it, said once
   expect(flat(s.start)).toContain('Main → claude-opus-5-5 · Claude API (was coder:30b · service): your conversation, and every other window on this Mac from its next step.');
-  expect(flat(s.start)).toContain('The helpers keep their own profiles: /btw and Side jobs → tiny:3b · Pictures → llava:latest · Code search → embed:latest · Second opinion and UI design · checks → thinker:35b (on the service). /profiles moves them.');
+  // the helpers left on the service: counted in the start page's one line (start-notes.jsx), no paragraph
+  expect(flat(s.start)).toContain('4 helper models on the service');
+  expect(flat(s.start)).not.toContain('The helpers keep their own profiles');
   expect(s.start).not.toMatch(/Main: claude-opus-5-5 → coder:30b/);
   expect(footerOf(s.start)).toContain('● Main · claude-opus-5-5');
   // each Connect moved Main, in the file every window reads
@@ -81,7 +84,7 @@ test('/model\'s "Just this window" holds: the window stays on the model picked o
   const claude = await startFakeAnthropic([], { key: KEY });
   theirHome(base, { svcUrl: svc.url, claudeUrl: claude.url, on: 'service' });
   const r = await runInPty({ cwd, env: { ...env, ...ENV }, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 120_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { sleep: 3000 },
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 3000 },
     { type: '/model' }, { key: 'enter' }, { wait: '1 of 3' }, { type: 'thinker' }, { sleep: 500 }, { key: 'enter' },
     // step 2: ↑ from Main goes round to Just this window
     { wait: '2 of 3' }, { sleep: 300 }, { key: 'up' }, { sleep: 400 }, { snapshot: 'step2' }, { key: 'enter' },
@@ -122,7 +125,7 @@ test('a restart after "Work in …? → Yes": the conversation saved under that 
   const said = 'hello , how do we add a git to the agentic coder? can you check?';
   writeFileSync(join(dir, `${id}.json`), JSON.stringify({ title: said, messages: [{ role: 'system', content: 'x' }, { role: 'user', content: said }, { role: 'assistant', content: 'It has one already.' }], items: [{ type: 'user', text: said }], mode: 'bypass', cwd: other, id, updated: new Date().toISOString() }));
   const r = await runInPty({ cwd, env: { ...env, ...ENV }, args: ['--no-flows', '--mode', 'bypass', '--resume', id], timeoutMs: 60_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { sleep: 1500 }, { snapshot: 'start' },
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 1500 }, { snapshot: 'start' },
     { type: '!pwd' }, { key: 'enter' }, { sleep: 1500 }, { snapshot: 'pwd' },
     ...quit,
   ] });

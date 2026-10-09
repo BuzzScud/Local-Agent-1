@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
 const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: 'test-anthropic-key-0123456789', ANTHROPIC_API_KEY: '' };
@@ -25,7 +25,7 @@ test('on the Claude API: the bar under the footer with the footer’s ends, /usa
   mkdirSync(join(base, 'home', 'spend', day), { recursive: true });
   writeFileSync(join(base, 'home', 'spend', day, '1.json'), JSON.stringify({ usd: 9.85, service: 'api.anthropic.com', byService: { 'api.anthropic.com': 9.85 }, byKind: { claude: 9.85 } }));
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, TZ: 'UTC' }, args: ['--no-flows'], cols: 152, rows: 44, timeoutMs: 90_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { sleep: 600 }, { snapshot: 'start' },
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 600 }, { snapshot: 'start' },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.', ms: 20_000 }, { sleep: 800 }, { snapshot: 'after', has: ['left of $500'] },
     { type: '/us' }, { sleep: 400 }, { snapshot: 'menu' },
     { key: 'enter' }, { wait: 'THIS MONTH' }, { sleep: 300 }, { snapshot: 'card' },

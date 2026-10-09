@@ -21,6 +21,9 @@ export function seedTrust(base, cwd) {
   mkdirSync(join(base, 'home'), { recursive: true });
   writeFileSync(join(base, 'home', 'trust.json'), JSON.stringify({ [cwd]: new Date().toISOString() }));
 }
+// The window is on its remote: the start page's line ("coder:30b on 127.0.0.1:8080, 4 ms", start-notes.jsx), or
+// the note a /remote leaves once the page has gone ("On the remote: … answered in 4 ms").
+export const ON_REMOTE = /(on the Claude API|on \S+), \d+ ms|answered in \d+ ms/;
 export const quit = [{ sleep: 300 }, { key: 'ctrlC' }, { sleep: 200 }, { key: 'ctrlC' }];
 // With text left in the prompt the first ctrl+c only clears it: one more, or
 // the app never quits and the run waits 8 s to be stopped.

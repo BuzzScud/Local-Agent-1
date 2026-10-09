@@ -10,7 +10,7 @@ import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runInPty, emulate } from './pty.mjs';
-import { T, setup, quit, quitTyped } from './app-setup.mjs';
+import { T, setup, quit, quitTyped, ON_REMOTE } from './app-setup.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { MOUSE_ON, MOUSE_OFF, ASK_CURSOR } from '../src/app/mouse.mjs';
 
@@ -210,7 +210,7 @@ test.skipIf(!S.canHost())('through the keeper: /remote, → to a saved service, 
       { type: '/remote' }, { key: '\r' }, { wait: 'Remote model' }, { sleep: 200 },
       { key: '\x1b[C' }, { sleep: 100 }, { key: '\x1b[C' }, { sleep: 100 }, { key: '\x1b[C' }, { sleep: 200 },
       { key: '\x1b[A' }, { sleep: 250 }, { snapshot: 'up' },
-      { key: '\r' }, { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' }, ...quit,
+      { key: '\r' }, { wait: ON_REMOTE, ms: 20_000 }, { sleep: 300 }, { snapshot: 'on' }, ...quit,
     ] });
     expect(r.snapshots.up).toMatch(/❯\s+Connect\s+Save only/);
     expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain('On the remote: coder:30b');

@@ -8,7 +8,7 @@ import { needs } from './needs.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { fakeOllama } from './fake-ollama.mjs';
 
 const { textImage, mediaTool } = await import('../src/tools/media.mjs');
@@ -25,7 +25,7 @@ test.skipIf(needs('pictures', mediaTool))('on an Ollama service: the try-out on 
   writeFileSync(join(cwd, 'notes.txt'), 'Shopping list\nHello wrold, buy milk\n');
   textImage(join(cwd, 'shot.png'), 'SAVE');
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_UNLOAD: 'on', AGENTIC_TRYOUT: 'on' }, args: ['--no-flows'], timeoutMs: 90_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { wait: 'It works with the agent', ms: 15_000 }, { sleep: 300 }, { snapshot: 'tried' },
+    { wait: ON_REMOTE, ms: 25_000 }, { wait: 'It works with the agent', ms: 15_000 }, { sleep: 300 }, { snapshot: 'tried' },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'model' }, { key: 'esc' }, { sleep: 150 },
     // /subagents opens /profiles on its AIs group (8 Oct 2026): the jobs are its first profiles; UI design · checks
     // moved to none of its own is the conversation's model, which skips the check, as "off" did.

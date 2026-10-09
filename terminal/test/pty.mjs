@@ -80,7 +80,8 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   };
   const waitFor = async (text, ms = 15_000) => {
     const t0 = Date.now();
-    while (Date.now() - t0 < ms) { if ((await screenNow()).includes(text)) return true; await new Promise((r) => setTimeout(r, 100)); }
+    const hit = (s) => (typeof text === 'string' ? s.includes(text) : text.test(s)); // a text, or a pattern
+    while (Date.now() - t0 < ms) { if (hit(await screenNow())) return true; await new Promise((r) => setTimeout(r, 100)); }
     // What was on the screen instead, so a failure in a busy run explains itself.
     throw new Error(`timed out waiting for "${text}"; the screen ended with:\n${screenEnd(await screenNow())}`);
   };

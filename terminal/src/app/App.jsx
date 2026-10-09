@@ -105,7 +105,7 @@ export function App({ opts, win, onRestart }) {
     saveEffortLimits: () => saveEffortLimits, saveNow: () => saveNow, saveOnlyForm: () => saveOnlyForm,
     saveOwnLevel: () => saveOwnLevel, saveOwnSettings: () => saveOwnSettings, keepOwnSettings: () => keepOwnSettings,
     saveWeb: () => saveWeb, savedAskRef: () => savedAskRef, sayEffort: () => sayEffort,
-    seeingModels: () => seeingModels, sendPrompt: () => sendPrompt, seq: () => seq, serverRef: () => serverRef,
+    seeingModels: () => seeingModels, sendPrompt: () => sendPrompt, seq: () => seq, sayStart: () => sayStart, serverRef: () => serverRef,
     serviceCtx: () => serviceCtx, serviceOf: () => serviceOf, sessionRef: () => sessionRef,
     sessionTokens: () => sessionTokens, setAgentsState: () => setAgentsState, setAgentsView: () => setAgentsView,
     setAnswerWait: () => setAnswerWait, setBattle: () => setBattle, setBtw: () => setBtw, setCatalog: () => setCatalog,
@@ -530,9 +530,23 @@ export function App({ opts, win, onRestart }) {
     keptMode.current = mode;
     try { saveSettings({ lastMode: mode }); } catch { /* kept for this window only */ }
   }, [mode]);
+  // What the start says (start-notes.jsx; 9 Oct 2026, the owner's pick "2 · In the page"): the mode the last
+  // window left, where the model runs, where the helpers run. While the start page is up they are one item,
+  // made again as each part comes; the Menu shows it in its rows, the Launcher as one line under it. Once the
+  // page has gone (your first message, a panel opened, or --url), a part comes as the note it is given.
+  const startSaid = useRef({});
+  function sayStart(part, note) {
+    if (!holdRef.current) { if (note) push(note); return; }
+    startSaid.current = { ...startSaid.current, [part.kind]: part };
+    const one = { key: `i${++seq}`, type: 'startnotes', rail: false, said: startSaid.current };
+    queueMicrotask(() => {
+      try { primeRows([one], measure.current); } catch {}
+      setItems((xs) => { const i = xs.findIndex((x) => x.type === 'startnotes'); return i < 0 ? [...xs, one] : xs.map((x, j) => (j === i ? one : x)); });
+    });
+  }
   // Started in the mode the last window was left in: said once, so Bypass is never a surprise.
   useEffect(() => {
-    if (startedIn.from === 'last' && startedIn.mode !== 'ask') push({ type: 'note', text: `Started in ${modeWord(startedIn.mode)}, as the last window left it · shift+tab changes it`, tone: startedIn.mode === 'bypass' ? 'warn' : 'dim' });
+    if (startedIn.from === 'last' && startedIn.mode !== 'ask') sayStart({ kind: 'mode', mode: startedIn.mode, word: modeWord(startedIn.mode) }, { type: 'note', text: `Started in ${modeWord(startedIn.mode)}, as the last window left it · shift+tab changes it`, tone: startedIn.mode === 'bypass' ? 'warn' : 'dim' });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { useRemote, useLocal, reconnect, openRemoteForm, busyNow, loopsBadgeOf, loopsOf, tickLoops, connectForm, remoteWord, saveOnlyForm, jumpTo, openJumpBox, jumpBoxKey, remoteTo, refreshCatalog, serviceCtx, onService, setServiceCtx, usedHere, noteModels, preloadRemote, switchService, openModelPicker } = remotePart(self);
 
@@ -747,6 +761,7 @@ export function App({ opts, win, onRestart }) {
     const seen = new Set();
     return items.map(({ key, ...rest }) => rest).filter((x) => {
       if (x.type === 'divider' && /^resumed: /.test(x.text ?? '')) return false;
+      if (x.type === 'startnotes') return false;
       if (x.type !== 'note') return true;
       if (/^Started in .*, as the last window left it|^On the remote: /.test(x.text ?? '')) return false;
       if (seen.has(x.text)) return false;
@@ -930,11 +945,11 @@ export function App({ opts, win, onRestart }) {
   if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRoom >= START_MIN)) holdRef.current = false;
   if (holdRef.current) pageRoomRef.current = { room: heldRoom, rows: rows ?? 40 };
   const kept = pageRoomRef.current;
-  const comingNotes = (startedIn.from === 'last' && startedIn.mode !== 'ask' ? 2 : 0) + (remoteAtStart ? 6 : 0);
+  const comingNotes = (startedIn.from === 'last' && startedIn.mode !== 'ask' ? 2 : 0) + (remoteAtStart ? 2 : 0);
   const pageRoom = holdRef.current ? heldRoom : kept?.rows === (rows ?? 40) ? kept.room : Math.max(START_MIN, (rows ?? 40) - 7 - footRows - comingNotes);
   // What primeRows needs to measure items as they are printed. The tip (startTip) is on the page while
   // it has room for its Try rows, else on the footer.
-  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running };
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running, said: items.find((x) => x.type === 'startnotes')?.said ?? null, modeId: mode };
   const tipOnPage = homeLook === 'launcher' && Boolean(tip) && pageRoom - 2 >= START_BIG; // the Menu leaves it on the footer
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, foot: footRows, view: stepsView };
   itemsRef.current = items;

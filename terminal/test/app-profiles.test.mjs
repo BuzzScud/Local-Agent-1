@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, ON_REMOTE } from './app-setup.mjs';
 import { fakeOllama } from './fake-ollama.mjs';
 
 const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' };
@@ -23,7 +23,7 @@ test('/profiles is in the / menu on a service, /subagents opens it; a profile ch
   writeFileSync(join(cwd, 'notes.txt'), 'Shopping list\nHello wrold, buy milk\n');
   let release;
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 120_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { sleep: 500 },
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 500 },
     { type: '/' }, { sleep: 400 }, { snapshot: 'menu' }, { key: 'backspace' }, { sleep: 150 },
     { type: '/subagents' }, { key: 'enter' }, { wait: 'Profiles' }, { sleep: 300 }, { snapshot: 'subagents' }, { key: 'esc' }, { sleep: 200 },
     // the task: its first reply held on the service while /model's steps are picked
@@ -78,7 +78,7 @@ test('on the Claude API (this Mac\'s set-up): ←→ on Main in /profiles picks 
   const r0 = { source: 'claude', address: claude.url, port: null, connect: 'http', kind: 'claude', model: 'claude-opus-5-5', context: 0, key: true, keyEnd: '6789', keyId: 'claude' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { claude: r0 } }));
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_REMOTE_KEY: 'test-anthropic-key-0123456789' }, args: ['--no-flows'], timeoutMs: 90_000, steps: [
-    { wait: 'On the remote:', ms: 25_000 }, { sleep: 500 },
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 500 },
     // greetings: answered in a sentence with no tools (no look-first), the conversation's profile all the same
     { type: 'hello' }, { key: 'enter' }, { wait: 'From the first model.', ms: 20_000 }, { sleep: 300 },
     { type: '/profiles' }, { key: 'enter' }, { wait: 'Profiles' }, { sleep: 300 }, { snapshot: 'panel' },

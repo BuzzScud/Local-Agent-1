@@ -31,7 +31,8 @@ import { HOOKS as APP_CHECKS } from '../agent/way.mjs';
 import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, LooksNode, RunningNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords, foldSteps, groupFacts, GroupHead, GroupBox, groupWork } from './rail.jsx';
-import { HomePage } from './home-looks.jsx';
+import { HomePage, lookOf } from './home-looks.jsx';
+import { StartLine } from './start-notes.jsx';
 import { useBot, BotLayer, KEEP_ROWS, KEEP_FROM } from './bot-layer.jsx';
 import { AttachTray } from './tray.jsx';
 import { ProfileStep, ProfilesPanel } from './profiles-view.jsx';
@@ -278,6 +279,8 @@ export function doneCounts(it) {
 export function Item({ it, width, model, cwd, loaded, start }) {
   switch (it.type) {
     case 'welcome': return <HomePage start={start} width={width} />;
+    // What the start said (start-notes.jsx): the Launcher's one line; the Menu has it in its rows (ItemFrame).
+    case 'startnotes': return <StartLine said={it.said} width={width} />;
     // Your message on its grey strip; an answer you typed to its question mid-turn is a step of the turn.
     case 'user': return it.rail
       ? <Node g="›" c={C.accent}><Text><Text color={C.dim}>You: </Text>{it.text}</Text></Node>
@@ -2177,7 +2180,7 @@ const itemHeights = new Map();
 // The start page's height follows its room (start.jsx StartPage, start.room) and what it lists: the
 // conversations (more after /clear), the tip (gone at your first message), the sessions in the background.
 const pageKey = (s) => [s?.room, s?.recent?.length, s?.tip ? 1 : 0, s?.running?.length, s?.look].join(':');
-const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `\0${pageKey(ctx.start)}` : ''}`;
+const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `\0${pageKey(ctx.start)}` : it.type === 'startnotes' ? `\0${lookOf(ctx.start?.look)}` : ''}`;
 // An item as printed (Tight rail, 8 Oct 2026): a turn's steps sit on consecutive rows; a reply has
 // an empty row above and under it; your message has one above and under it (a turn cut off has no
 // end line to leave one); the end line and everything outside a turn have one under them.
@@ -2199,7 +2202,10 @@ function LiveGroup({ list, width, model, cwd, loaded, start }) {
     </Box>
   );
 }
+// The start's notes take no rows under the Menu, which shows them in its own (start-notes.jsx).
+const inPage = (it, start) => it.type === 'startnotes' && lookOf(start?.look) !== 'launcher';
 export function ItemFrame({ it, width, model, cwd, loaded, start }) {
+  if (inPage(it, start)) return null;
   return (
     <Box flexDirection="column" marginTop={gapOver(it)} marginBottom={gapUnder(it)} width={width}>
       <Item it={it} width={width} model={model} cwd={cwd} loaded={loaded} start={start} />
@@ -2238,7 +2244,7 @@ export function primeRows(items, ctx) {
     if (itemHeights.has(k)) continue;
     if (itemHeights.size > 5000) itemHeights.clear();
     const out = renderToString(<ItemFrame it={it} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} loaded={ctx.loaded} start={ctx.start} />, { columns: ctx.width });
-    itemHeights.set(k, out.split('\n').length); // the margin under it (gapUnder) is its last line
+    itemHeights.set(k, out ? out.split('\n').length : 0); // the margin under it (gapUnder) is its last line; nothing drawn, no rows
     added = true;
   }
   return added;
