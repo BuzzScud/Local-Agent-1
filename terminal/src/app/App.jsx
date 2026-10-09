@@ -8,6 +8,7 @@ import { existsSync, statSync, writeSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, heldRows, MENU_ROWS, menuHeight, shortcutRows, footerParts } from './screen.jsx';
 import { startTip, START_MIN, START_BIG } from './start.jsx';
+import { lookOf } from './home-looks.jsx';
 import { loadTimes, startLeft, typicalStart } from './start-times.mjs';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
@@ -70,7 +71,7 @@ export function App({ opts, win, onRestart }) {
     draftRef: () => draftRef, effort: () => effort, escArmed: () => escArmed, exit: () => exit,
     exitArmed: () => exitArmed, fillSuggested: () => fillSuggested, flash: () => flash, fold: () => fold,
     folds: () => folds, footerRef: () => footerRef, heldNotes: () => heldNotes, histIdx: () => histIdx,
-    historyRef: () => historyRef, holdRef: () => holdRef, hooksKeys: () => hooksKeys, hooksList: () => hooksList,
+    historyRef: () => historyRef, holdRef: () => holdRef, setHomeLook: () => setHomeLook, homeFocusRef: () => homeFocusRef, setHomeFocus: () => setHomeFocus, hooksKeys: () => hooksKeys, hooksList: () => hooksList,
     input: () => input, interrupt: () => interrupt, items: () => items, itemsRef: () => itemsRef,
     jobWakeRef: () => jobWakeRef, jumpBoxKey: () => jumpBoxKey, jumpTo: () => jumpTo, lastCheck: () => lastCheck,
     limitsRef: () => limitsRef, loadFnRef: () => loadFnRef, loadRef: () => loadRef,
@@ -264,6 +265,13 @@ export function App({ opts, win, onRestart }) {
   const [leaving, setLeaving] = useState(false);
   const [ramGb, setRamGb] = useState(null);
   const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
+  // /home: the start page, the Menu or the Launcher (home-looks.jsx), settings.json "homeLook"; AGENTIC_HOME_LOOK for one window.
+  const [homeLook, setHomeLook] = useState(() => lookOf(process.env.AGENTIC_HOME_LOOK || settings.homeLook));
+  // The item picked on that page from the keyboard (tab from an empty prompt, then the arrows: app-keys.mjs
+  // homeKey), or null while the keys are the prompt's. The ref is read by keys that arrive together.
+  const [homeFocus, setHomeFocusState] = useState(null);
+  const homeFocusRef = useRef(null);
+  const setHomeFocus = useCallback((k) => { homeFocusRef.current = k; setHomeFocusState(k); }, []);
   const [mouse, setMouse] = useState(settings.mouse !== false); // /mouse: drag to highlight in the prompt box, on unless turned off (off: the mouse stays Terminal's)
   const [wheelPause, setWheelPause] = useState(false); // a scroll just came in: the mouse is Terminal's for a moment
   // /btw: a side question and its answer, in a panel in the prompt box's place
@@ -473,7 +481,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog, homeLook };
   const flash = useCallback(flashFn, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
   // selection settles, like Claude Code's copy on select. Not the whole of it
@@ -801,7 +809,7 @@ export function App({ opts, win, onRestart }) {
   // is up with any, the mouse is the app's even with /mouse off; it goes back to Terminal with the page.
   const pageRef = useRef(null);
   const startShown = holdRef.current || (items[0]?.type === 'welcome' && !items.some((it) => it.type === 'user'));
-  const startClicks = Boolean(startShown && recentRef.current?.length);
+  const startClicks = Boolean(startShown && (recentRef.current?.length || homeLook !== 'launcher')); // the Menu's actions take clicks too
   // The bot on the start page walks like Pac-Man (7 Oct 2026, the owner's ask) while the page is up
   // and waiting: the model ready, nothing typed and nothing open. Four steps a second; it stops where
   // it is the moment you type or open a menu. AGENTIC_BOT_WALK=off keeps it standing (the tests).
@@ -885,8 +893,8 @@ export function App({ opts, win, onRestart }) {
   const pageRoom = holdRef.current ? heldRoom : kept?.rows === (rows ?? 40) ? kept.room : Math.max(START_MIN, (rows ?? 40) - 7 - footRows - comingNotes);
   // What primeRows needs to measure items as they are printed. The tip (startTip) is on the page while
   // it has room for its Try rows, else on the footer.
-  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running };
-  const tipOnPage = Boolean(tip) && pageRoom - 2 >= START_BIG;
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running };
+  const tipOnPage = homeLook === 'launcher' && Boolean(tip) && pageRoom - 2 >= START_BIG; // the Menu leaves it on the footer
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, foot: footRows };
   itemsRef.current = items;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
@@ -945,7 +953,7 @@ export function App({ opts, win, onRestart }) {
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     loopsFrame, loopsLine: loopsShown ? null : loopsSegs,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
-    items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, walk: holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff ? walkStep : null, tip: tipOnPage ? null : tip,
+    items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, homeFocus: holdRef.current ? homeFocus : null, walk: holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff ? walkStep : null, tip: tipOnPage ? null : tip,
     // The Claude API's usage (usage-bar.mjs): the bar under the footer, and /usage; the shine runs while a reply does.
     usage: claudeModel ? usage : null, usageLive: live.phase === 'working',
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,

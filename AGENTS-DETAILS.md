@@ -949,6 +949,31 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Tests**: `terminal/test/theme.test.mjs` (the numbers, and no green anywhere the app draws by number: the theme,
   every pose of the bot, the loop board, the spinners, the usage line), and start.test.mjs's bot reads `HUE`.
 
+## The start page: the Menu (8 Oct 2026)
+
+- **What and why.** The owner asked to redesign the home screen entirely ("design freely and make it totally
+  different"), then for a second round "more simple" with "the ui … interactive fully", and picked "2 · Menu":
+  "build design 2". The two rounds (Cockpit, Zen, Timeline; Cockpit improved, Menu, Cards) are pages in
+  `docs/design rounds/` (round 2) and `docs/older versions/` (round 1); the code of round 2's three looks is kept
+  on the Mac in `docs/private/design rounds/`.
+- **The page** (`terminal/src/app/home-looks.jsx` `HomePage`, drawn by screen.jsx in the Launcher's place): the
+  model and its state and the folder in two lines, then one box: the conversations to pick up (numbered as
+  `/resume <n>` takes them), then the actions (`actionsOf`): New conversation, Start/Stop the model (only with a
+  model on this Mac, `start.local`; it says Starting with a bar while it loads), Switch model, Mode, All
+  conversations, Write AGENTS.md (no AGENTS.md yet), Settings, The Launcher. Each row has its key on the right.
+  The last row says how to get in, or what enter does with the row picked. As tall as its room; the blank rows
+  and section names go first, then conversations; in a short window (the / menu open under it) no box, as many
+  rows as fit. The items keep their places in every state of the model (`homeItems`, tested).
+- **Interactive** (app-keys.mjs `homeKey`, `doHomeItem`): tab from an empty prompt picks the first item (App's
+  `homeFocus`, with a ref for keys that arrive together); the arrows move by where items sit (`homeNav`), tab
+  goes to the next, enter does it, esc or any other key gives the keys back to the prompt (a letter is typed,
+  shift+tab still switches the mode). A click on any row does it (`itemAt`); the mouse is the app's while the page
+  is up. ↑ on the prompt is still its history.
+- **The Launcher stays**: `/home` (typed only, so the / menu is as it was) switches between the two
+  (settings.json `homeLook`, `AGENTIC_HOME_LOOK` for one window); the tip is on the page only with the Launcher.
+  The app tests run with the Launcher (`pty.mjs`, `term.mjs` and the keeper tests set `AGENTIC_HOME_LOOK`), since
+  they were written against it; `terminal/test/home-looks.test.mjs` drives the Menu, in a real window too.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

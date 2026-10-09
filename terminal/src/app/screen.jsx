@@ -30,7 +30,7 @@ import { HOOKS as APP_CHECKS } from '../agent/way.mjs';
 import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, LooksNode, RunningNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords, foldSteps } from './rail.jsx';
-import { StartPage } from './start.jsx';
+import { HomePage } from './home-looks.jsx';
 import { AttachTray } from './tray.jsx';
 import { ProfileStep, ProfilesPanel } from './profiles-view.jsx';
 import { spillWord } from './profiles.mjs';
@@ -275,7 +275,7 @@ export function doneCounts(it) {
 
 export function Item({ it, width, model, cwd, loaded, start }) {
   switch (it.type) {
-    case 'welcome': return <StartPage start={start} width={width} />;
+    case 'welcome': return <HomePage start={start} width={width} />;
     // Your message on its grey strip; an answer you typed to its question mid-turn is a step of the turn.
     case 'user': return it.rail
       ? <Node g="›" c={C.accent}><Text><Text color={C.dim}>You: </Text>{it.text}</Text></Node>
@@ -2083,7 +2083,7 @@ function TooSmall({ app }) {
 const itemHeights = new Map();
 // The start page's height follows its room (start.jsx StartPage, start.room) and what it lists: the
 // conversations (more after /clear), the tip (gone at your first message), the sessions in the background.
-const pageKey = (s) => [s?.room, s?.recent?.length, s?.tip ? 1 : 0, s?.running?.length].join(':');
+const pageKey = (s) => [s?.room, s?.recent?.length, s?.tip ? 1 : 0, s?.running?.length, s?.look].join(':');
 const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `\0${pageKey(ctx.start)}` : ''}`;
 // An item as printed (Tight rail, 8 Oct 2026): a turn's steps sit on consecutive rows; a reply has
 // an empty row above and under it; your message has one above and under it (a turn cut off has no
@@ -2182,7 +2182,7 @@ export function Screen({ app }) {
       <Box flexDirection="column" flexShrink={0}>
       {app.hold ? (
         <Box flexDirection="column">
-          <Box ref={app.pageRef} marginBottom={1}><StartPage start={app.start} width={width} loading={app.starting || app.battle || app.waiting ? { phase: app.battle || app.waiting ? 'waiting' : app.startPhase, secs: Math.max(0, (app.now - app.startedAt) / 1000), left: app.startLeft } : null} typing={app.input?.value && !app.menu ? (4 + (app.input.cursor % promptTextWidth(width))) / width : null} walk={app.walk} /></Box>
+          <Box ref={app.pageRef} marginBottom={1}><HomePage start={app.start} width={width} loading={app.starting || app.battle || app.waiting ? { phase: app.battle || app.waiting ? 'waiting' : app.startPhase, secs: Math.max(0, (app.now - app.startedAt) / 1000), left: app.startLeft } : null} typing={app.input?.value && !app.menu ? (4 + (app.input.cursor % promptTextWidth(width))) / width : null} walk={app.walk} focus={app.homeFocus} /></Box>
           {items.slice(1).map((it) => <ItemFrame key={it.key} it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} start={app.start} />)}
           {app.battle ? <Box marginBottom={1}><Text color={C.warn}>⏸ Waiting for {/^a test/.test(app.battle) ? 'a test run' : 'a battle'}: {app.battle}. Only one model fits, so {modelName} loads by itself when it is over; a message you send now waits for it.</Text></Box> : null}
           {app.waiting ? <Box marginBottom={1}><Text color={C.warn}>{app.waiting} has {modelName} loaded, and two copies do not fit. It starts by itself when that is done · <Text bold>esc</Text> starts anyway</Text></Box> : null}

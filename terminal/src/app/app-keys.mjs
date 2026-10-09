@@ -5,7 +5,7 @@
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { heldRows, holdRoom, btwLayout } from './screen.jsx';
-import { recentRows } from './start.jsx';
+import { homeItems, homeNav, itemAt, lookOf } from './home-looks.jsx';
 import { hookFormRows, startHookEdit } from './hooks-form.mjs';
 import { nextMode } from '../agent/permissions.mjs';
 import { modelPath, serverBinOf, engineOf, HOME } from '../../../models/index.mjs';
@@ -143,6 +143,38 @@ export function keysPart(self) {
     if (self.items[0]?.type === 'welcome' && !self.items.some((it) => it.type === 'user') && heldRows(self.items, self.measure.current) <= holdRoom(self.items, self.measure.current, self.rows ?? 40)) return 0;
     return null;
   };
+  // An item of the start page done (home-looks.jsx: a click on it, or enter while it is picked): a
+  // conversation opens as /resume would; an action does what its row says.
+  const doHomeItem = (it) => {
+    self.setHomeFocus(null);
+    if (it.kind === 'conv') { self.holdRef.current = false; self.resumeSession(it.id); return; }
+    if (it.id === 'new') { self.flash('Type what you want in the box below, then press enter', 2500); return; }
+    if (it.id === 'start') { self.toggleFnRef.current('home'); return; }
+    if (it.id === 'mode') { self.setMode(nextMode(self.S.current.mode)); return; }
+    const slash = { model: '/model', resume: '/resume', init: '/init', settings: '/settings', look: '/home' }[it.id];
+    if (slash) self.runSlash(slash);
+  };
+  // The start page's items from the keyboard, while it is up in a look that has them: tab from an empty
+  // prompt picks the first; then the arrows move by where items sit, tab goes to the next, enter does
+  // it, esc goes back to the prompt, and any other key goes back to the prompt and does what it does
+  // there (a letter is typed, shift+tab switches the mode). true: the key was the page's.
+  const homeKey = (ch, key) => {
+    const cur = self.S.current;
+    const focus = self.homeFocusRef.current;
+    if (!self.holdRef.current || lookOf(cur.homeLook) === 'launcher' || self.menu) { if (focus) self.setHomeFocus(null); return false; }
+    const items = () => homeItems(self.start, self.width);
+    if (!focus) {
+      if (!key.tab || key.shift || cur.input.value) return false;
+      const first = items()[0];
+      if (first) self.setHomeFocus(first.key);
+      return Boolean(first);
+    }
+    const dir = key.upArrow ? 'up' : key.downArrow ? 'down' : key.leftArrow ? 'left' : key.rightArrow ? 'right' : key.tab && !key.shift ? 'next' : null;
+    if (dir) { self.setHomeFocus(homeNav(items(), focus, dir)); return true; }
+    if (key.return) { const it = items().find((x) => x.key === focus); if (it) doHomeItem(it); else self.setHomeFocus(null); return true; }
+    self.setHomeFocus(null);
+    return Boolean(key.escape);
+  };
   // One press, drag or release, with the box's place on screen known (origin:
   // the screen row and cell of the first row's first letter).
   const onMouse = (ev) => {
@@ -199,8 +231,8 @@ export function keysPart(self) {
     // the window's first row, where the app starts drawing (cli.jsx).
     const top = ev.kind === 'press' && self.startClicks ? startPageTop() : null;
     if (top != null) {
-      const hit = recentRows(self.start, self.width).find((r) => r.row === ev.row - 1 - top && ev.col >= r.from && ev.col <= r.to);
-      if (hit) { self.holdRef.current = false; self.resumeSession(hit.id); return; }
+      const hit = itemAt(homeItems(self.start, self.width), ev.row - 1 - top, ev.col);
+      if (hit) { doHomeItem(hit); return; }
     }
     if (!self.mouse) return; // armed only for the start page's rows
     if (ev.kind === 'wheel') {
@@ -224,7 +256,8 @@ export function keysPart(self) {
     const keys = self.arrowsRef.current;
     if (!keys.length) return;
     self.arrowsRef.current = [];
-    if (keys.length === 1) { onKey('', keys[0]); return; }
+    // one at a time while an item of the start page is picked: each moves the pick (homeKey)
+    if (keys.length === 1 || self.homeFocusRef.current) { keys.forEach((k) => onKey('', k)); return; }
     const n = (k) => keys.filter((x) => x[k]).length;
     self.setPopup(null);
     self.setInput((s) => withUndo(s, moveBy(s, n('downArrow') - n('upArrow'), n('rightArrow') - n('leftArrow'), rowsOf(s))));
@@ -592,6 +625,7 @@ export function keysPart(self) {
       return;
     }
     if (key.ctrl && ch === 'd' && !cur.input.value) { self.quit(); return; }
+    if (homeKey(ch, key)) return;
     if (key.escape) {
       // An open menu or shortcut list closes first; the next esc stops Agentic Coder.
       if (self.menu) { self.setMenuClosedFor(cur.input.value); return; }
