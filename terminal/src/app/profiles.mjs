@@ -141,6 +141,49 @@ export function writeProfiles(data) {
 }
 export const profilesSaved = () => existsSync(PROFILES_FILE());
 
+// ---- /remote and the conversation's profile ------------------------------------------------------
+
+// /remote's Connect, and a window's start on the remote (9 Oct 2026, the owner's pick: "Connect makes the
+// new model Main", every window following from its next step). Before, Connect moved the window and the
+// router moved it back to Main at the next step. r: the /remote set-up connected, its model the one in use.
+// { name, was, data } with the conversation's profile on that server and model, or null when it is already.
+export function withMain(data, r) {
+  const own = data.uses['ai:main'];
+  const name = own && data.profiles[own] ? own : MAIN_PROFILE;
+  const p = data.profiles[name];
+  const server = serverOf(r);
+  if (!r?.model || (p && sameServer(p.server, server) && p.model === r.model)) return null;
+  // A backup that is now the same server and model as Main is no backup.
+  const b = p?.backup ? data.profiles[p.backup] : null;
+  const backup = b && sameServer(b.server, server) && b.model === r.model ? null : p?.backup ?? null;
+  return { name, was: p ?? null, data: { profiles: { ...data.profiles, [name]: { ...(p ?? { spillAfter: 30 }), server, model: r.model, backup } }, uses: { ...data.uses, 'ai:main': name } } };
+}
+// The other way (9 Oct 2026): Main changed in /profiles, the hub or a window's route, so /remote's saved
+// set-up (where a window starts) names it too; else the next start put Main back. The set-up to save, from
+// the server's own saved one in /remote (its key's name, its address), or null when it already is.
+export function remoteOfMain(settings, data) {
+  const p = data.profiles[profileFor({}, data).name];
+  const r = settings?.remote;
+  if (!p?.server || !p.model || !r?.use || (sameServer(serverOf(r), p.server) && r.model === p.model)) return null;
+  const saved = sameServer(serverOf(r), p.server) ? r : Object.values(settings.remotes ?? {}).find((x) => sameServer(serverOf(x), p.server));
+  return saved ? { ...saved, model: p.model, use: true } : null;
+}
+// The AIs whose profile is on another server than the conversation's: what Connect says stays where it
+// is (the owner's pick: the helpers keep their own profiles). [{ label, model, where }], one per profile.
+export function helpersAway(data) {
+  const main = data.profiles[profileFor({}, data).name];
+  const by = new Map();
+  for (const row of GROUPS[0].rows) {
+    if (row.id === 'main') continue;
+    const { name } = profileFor({ ai: row.id }, data);
+    const p = name ? data.profiles[name] : null;
+    if (!p || !main || sameServer(p.server, main.server)) continue;
+    if (!by.has(name)) by.set(name, { labels: [], model: p.model, where: serverWord(p.server) });
+    by.get(name).labels.push(row.label);
+  }
+  return [...by.values()].map((x) => ({ label: x.labels.join(' and '), model: x.model, where: x.where }));
+}
+
 // ---- /model's step 2: which profile uses the model picked --------------------------------------
 
 // The rows: each profile, then + New profile…, then Just this window (today's switch, no profile).

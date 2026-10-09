@@ -91,7 +91,7 @@ export function App({ opts, win, onRestart }) {
     openHub: () => openHub, openJumpBox: () => openJumpBox, openLoops: () => openLoops,
     openMcpPicker: () => openMcpPicker, openModelPicker: () => openModelPicker, openOwnSettings: () => openOwnSettings,
     openPermissions: () => openPermissions, openRemoteForm: () => openRemoteForm, openRewind: () => openRewind,
-    openSettings: () => openSettings, askUsage: () => askUsage, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, followProfiles: () => followProfiles, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
+    openSettings: () => openSettings, askUsage: () => askUsage, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, followProfiles: () => followProfiles, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, mainToRemote: () => mainToRemote, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
     pendingContext: () => pendingContext, pendingSaveRef: () => pendingSaveRef, pickHere: () => pickHere,
     pickLevel: () => pickLevel, pickLevels: () => pickLevels, pre: () => pre, preloadRemote: () => preloadRemote,
@@ -559,7 +559,7 @@ export function App({ opts, win, onRestart }) {
     try { spawnSync('curl', ['-s', '-Z', '--connect-timeout', '1', '-m', '2', '-K', '-'], { input: names.map(one).join('\nnext\n'), timeout: 2500, stdio: ['pipe', 'ignore', 'ignore'] }); } catch { /* the service lets them go by itself later */ }
   };
   const { applyHelpers, serviceOf, serviceProps, pickHere, openWebPicker, runWebTest, saveWeb, offerList, openMcpPicker, mcpKeys, hooksList, hooksKeys, mcpNews, seeingModels, needVision, openSettings, openRewind, chooseRewind, applyRewind, openPermissions, memoryForRestart, openEffortLimits, openOwnSettings, fillSuggested, sharedValues, saveOwnSettings, keepOwnSettings, applyChoice, sayEffort, saveEffortLimits, setThinkingFn, readMacMemory, readServicePs, saveNowFn } = panelsPart(self);
-  const { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles } = profilesPart(self);
+  const { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles, mainToRemote } = profilesPart(self);
   followProfilesRef.current = followProfiles;
   useEffect(() => { applyHelpers(catalog); }, [catalog, model]);
   remoteFnRef.current = { ...remoteFnRef.current, useRemote, useLocal, reconnect, openForm: openRemoteForm, to: remoteTo };
@@ -952,7 +952,9 @@ export function App({ opts, win, onRestart }) {
   const ownStats = model.remote && stats.speedsOf === model.remote.model && (stats.tps || stats.speeds?.length);
   const server = psRef.current;
   const gauges = ownStats ? { tps: writingNow ?? stats.tps, live: Boolean(writingNow), speeds: stats.speeds ?? [], ttft: stats.ttft ?? null, ctxUsed: stats.ctxUsed ?? agent.ctxUsed, ctx, gpuPct: server?.loaded ? server.gpuPct : null } : null;
-  const modelState = opts.url ? null : model.remote ? { remote: true, state: remoteState ?? 'connecting', name: remoteName, where: model.remote.label, gb: remoteGb } : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
+  // Which profile the conversation is on, once profiles route it (9 Oct 2026, the owner's pick): a switch back is seen.
+  const profileTag = model.remote && agent.router?.active() ? (agent.pinned && agent.pinned.model === agent.modelName() ? 'this window' : agent.routeName ?? null) : null;
+  const modelState = opts.url ? null : model.remote ? { remote: true, state: remoteState ?? 'connecting', name: remoteName, where: model.remote.label, gb: remoteGb, profile: profileTag } : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
   // What the running start has left (start-times.mjs), from how long each part has run so far.
   const tm = timing.current;
   const startLeftNow = starting && tm ? startLeft(timesRef.current[tm.id], { phase: startPhase, cold: tm.cold, sinceLoad: (now - tm.loadAt) / 1000, sinceWarm: tm.warmAt ? (now - tm.warmAt) / 1000 : 0 }) : null;

@@ -893,6 +893,18 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   footer follows (`onRoute`). /subagents is typed only and opens /profiles on its AIs group; its panel is gone.
 - **The hub's Profiles tab** (`profiles-hub.mjs`, `profiles.html`, `coding hub profiles`): the same file, a model
   picked from the Remote tab's list for that server, backups, who uses which, today's meters.
+- **/remote and Main are one pick** (9 Oct 2026; the owner's screenshots: /remote → Claude API connected, then the
+  next step said "Main: claude-opus-5-5 → Qwen3.6:35B-A3B" and the service answered). Their picks: Connect makes the
+  new model Main, every window following from its next step; the helpers keep their own profiles. `useRemote` calls
+  `mainToRemote` (app-profiles.mjs; `withMain` in profiles.mjs), which moves the conversation's profile and says so,
+  with one line naming the helpers on another server (`helpersAway`). The other way, Main changed in /profiles, the
+  hub (`keep`) or a window's route (`onRoute`) is saved as /remote's set-up (`remoteOfMain`), so the next start does
+  not put the old Main back. /model's "Just this window" holds (`agent.pinned`, followProfile) until a profile is
+  picked, Main changes in /profiles or /remote connects; the footer names the profile ("● Main · …", "● this
+  window · …", App.jsx `profileTag`). A restart starts in the folder the window works in now (update.mjs
+  `folderArgs`, `withStartFolder`), and a conversation not saved under this folder is opened from the one it was
+  (store.mjs `findSession`, App.jsx resumeSession). Tests: `app-remote-keeps.test.mjs` (the three cases of the
+  preview, `docs/design rounds/agentic-coder-remote-keeps-your-pick-2026-10-09.html`), profiles.test, update.test.
 - **Tests**: `terminal/test/profiles.test.mjs` (which profile, the first profiles, the file, the meters, the router,
   a busy and a silent server spilling, the conversation moving to another server between two steps, a spill with its
   cool-down) and `app-profiles.test.mjs` (the real window: the / menu, /subagents, /model's steps while a task works,

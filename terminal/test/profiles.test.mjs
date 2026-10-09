@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.AGENTIC_MEMORY_SAVE = 'off';
-const { profileFor, inheritedOf, seedProfiles, readProfiles, writeProfiles, profilesSaved, PROFILES_FILE, rowsOf, groupsNow, GROUPS, stepUse, openProfiles, listRows, cannotDo, usersOf } = await import('../src/app/profiles.mjs');
+const { profileFor, inheritedOf, seedProfiles, readProfiles, writeProfiles, profilesSaved, PROFILES_FILE, rowsOf, groupsNow, GROUPS, stepUse, openProfiles, listRows, cannotDo, usersOf, withMain, helpersAway, remoteOfMain } = await import('../src/app/profiles.mjs');
 const { ProfileRouter, serverKey } = await import('../src/app/profile-router.mjs');
 const { noteServed, noteSpill, readMeters, flushMeters, meterWords } = await import('../src/agent/profile-meters.mjs');
 const { streamChat, routeCalls } = await import('../src/agent/client.mjs');
@@ -374,5 +374,75 @@ test('the hub\'s Profiles tab: nothing to change until a window saved profiles; 
   expect((await at('/profiles/use', { key: 'type:fix', profile: null }, 'http://evil.example')).status).toBe(403);
   await at('/profiles/use', { key: 'type:fix', profile: null });
   expect(readProfiles({}).uses['type:fix']).toBeUndefined();
+  fresh();
+});
+
+// ---- /remote and Main (9 Oct 2026) -------------------------------------------------------------
+// The owner's case: /remote → Claude API connected, and the router moved the conversation back to Main (Qwen3.6 on
+// the service) at the next step. Now Connect moves Main; the helpers keep their own profiles; Main changed in
+// /profiles or the hub is what /remote saves, so the next start does not put the old Main back.
+
+test('/remote and Main are one pick: Connect moves the conversation\'s profile, the helpers keep theirs and are named, and another window follows', async () => {
+  fresh();
+  const d = { profiles: { Main: P(SVC, 'qwen3.6', { spillAfter: 30, backup: 'Claude' }), Fast: P(SVC, 'llama3.2:3b'), Vision: P(SVC, 'llava:latest'), Claude: P(CLAUDE, 'claude-opus-5-5') },
+    uses: { 'ai:main': 'Main', 'ai:btw': 'Fast', 'ai:side': 'Fast', 'ai:pictures': 'Vision' } };
+  // Connect to the Claude API: Main is that server and model; its wait stays, a backup that is now Main itself goes
+  const m = withMain(d, { ...CLAUDE, model: 'claude-opus-5-5' });
+  expect(m.name).toBe('Main');
+  expect(m.was.model).toBe('qwen3.6');
+  expect(m.data.profiles.Main).toMatchObject({ server: { kind: 'claude' }, model: 'claude-opus-5-5', spillAfter: 30, backup: null });
+  expect(m.data.profiles.Fast).toEqual(d.profiles.Fast);
+  expect(m.data.uses).toEqual(d.uses);
+  // already so: nothing to write; the conversation on a profile of another name: that one moves
+  expect(withMain(m.data, { ...CLAUDE, model: 'claude-opus-5-5' })).toBeNull();
+  expect(withMain({ ...d, uses: { ...d.uses, 'ai:main': 'Claude' } }, { ...SVC, model: 'qwen3.6' }).name).toBe('Claude');
+  // no profiles of its own yet: Main is made
+  expect(withMain({ profiles: {}, uses: {} }, { ...SVC, model: 'qwen3.6' }).data).toMatchObject({ profiles: { Main: { model: 'qwen3.6', spillAfter: 30 } }, uses: { 'ai:main': 'Main' } });
+  // the helpers on another server than Main, one line a profile; none when they share Main's
+  expect(helpersAway(m.data)).toEqual([{ label: '/btw and Side jobs', model: 'llama3.2:3b', where: 'service' }, { label: 'Pictures', model: 'llava:latest', where: 'service' }]);
+  expect(helpersAway(d)).toEqual([]);
+  // another window, its conversation on the service: Main written by the first one's Connect moves it at its next step
+  const calls = [];
+  const r = new ProfileRouter({ settings: () => ({ remote: { ...SVC, model: 'qwen3.6', use: true }, remotes: { claude: { ...CLAUDE, model: 'claude-opus-5-5' } } }), connect: fakeConnect(calls) });
+  writeProfiles(d);
+  r.lend(SVC, { url: SVC.address });
+  setEndpoint(SVC.address, { remote: true, kind: 'openai', model: 'qwen3.6', label: SVC.address });
+  expect(await r.route({ ai: 'main' }, { url: SVC.address, model: 'qwen3.6' })).toEqual({ name: 'Main', same: true });
+  await Bun.sleep(5);
+  writeProfiles(m.data);
+  const to = await r.route({ ai: 'main' }, { url: SVC.address, model: 'qwen3.6' });
+  expect(to).toMatchObject({ name: 'Main', same: false, server: { kind: 'claude' } });
+  expect(to.model.remote.model).toBe('claude-opus-5-5');
+  r.stop();
+  dropEndpoint(SVC.address);
+  fresh();
+});
+
+test('Main changed in /profiles, the hub or by a route: /remote\'s saved set-up names it, from that server\'s own saved one', async () => {
+  fresh();
+  const settings = { remote: { ...SVC, model: 'qwen3.6', key: false, use: true }, remotes: { openai: { ...SVC, model: 'qwen3.6' }, claude: { ...CLAUDE, model: 'claude-sonnet-5-5', key: true, keyEnd: '6789' } } };
+  const d = { profiles: { Main: P(SVC, 'qwen3.6'), Claude: P(CLAUDE, 'claude-opus-5-5') }, uses: { 'ai:main': 'Main' } };
+  expect(remoteOfMain(settings, d)).toBeNull();
+  expect(remoteOfMain(settings, { ...d, profiles: { ...d.profiles, Main: P(SVC, 'laguna-xs-2.1:q8_0') } })).toMatchObject({ kind: 'openai', address: SVC.address, model: 'laguna-xs-2.1:q8_0', use: true });
+  expect(remoteOfMain(settings, { ...d, uses: { 'ai:main': 'Claude' } })).toMatchObject({ kind: 'claude', model: 'claude-opus-5-5', key: true, keyEnd: '6789', use: true });
+  // this Mac's own model in use (no remote): profiles decide nothing, nothing to save
+  expect(remoteOfMain({ ...settings, remote: { ...settings.remote, use: false } }, { ...d, uses: { 'ai:main': 'Claude' } })).toBeNull();
+  // a server /remote has never saved: nothing to start from
+  expect(remoteOfMain(settings, { ...d, profiles: { ...d.profiles, Main: P(srv('http://other.test:1'), 'x') } })).toBeNull();
+  // the hub: a new model for Main is saved to /remote too, so a window starts where Main is
+  const { saveSettings, loadSettings } = await import('../src/app/store.mjs');
+  const { profilesHub } = await import('../src/app/profiles-hub.mjs');
+  saveSettings({ remote: settings.remote, remotes: settings.remotes });
+  writeProfiles(d);
+  const hub = profilesHub({ cwd: tmpdir() });
+  const at = (path, body) => { const url = new URL(`http://127.0.0.1:1${path}`); return hub.route(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:1' }, body: JSON.stringify(body) }), url); };
+  await at('/profiles/set', { name: 'Main', model: 'laguna-xs-2.1:q8_0' });
+  expect(loadSettings().remote).toMatchObject({ kind: 'openai', model: 'laguna-xs-2.1:q8_0', use: true });
+  await at('/profiles/use', { key: 'ai:main', profile: 'Claude' });
+  expect(loadSettings().remote).toMatchObject({ kind: 'claude', model: 'claude-opus-5-5', key: true, use: true });
+  // a helper's row changes nothing of /remote
+  await at('/profiles/use', { key: 'ai:btw', profile: 'Main' });
+  expect(loadSettings().remote.model).toBe('claude-opus-5-5');
+  saveSettings({ remote: null, remotes: {} });
   fresh();
 });
