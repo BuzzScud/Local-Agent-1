@@ -8,6 +8,8 @@
 // seen: every request's path, its key, beta and version headers, and its body.
 // limits: { requests, input, output: [limit, remaining] }, sent as Anthropic's rate-limit headers with each
 // message (claude-usage.mjs); an error's details (the spend cap's error_code) go in its body.
+// bill: { adminKey, cents: ['1234.5', …] }: the Admin API's cost_report (one daily bucket each, oldest first), answered
+// only to that key, in pages of two buckets so a reader must follow next_page.
 import { createServer } from 'node:http';
 
 export const FAKE_MODELS = [
@@ -15,7 +17,7 @@ export const FAKE_MODELS = [
   { type: 'model', id: 'claude-haiku-4-5', display_name: 'Claude Haiku 4.5', created_at: '2025-10-01T00:00:00Z', max_input_tokens: 200_000, max_tokens: 64_000 },
 ];
 
-export function startFakeAnthropic(replies, { key = 'test-anthropic-key-0123456789', limits = null } = {}) {
+export function startFakeAnthropic(replies, { key = 'test-anthropic-key-0123456789', limits = null, bill = null } = {}) {
   const queue = [...replies];
   const seen = [];
   let n = 0;
@@ -30,6 +32,15 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
     const rate = limits && req.url.startsWith('/v1/messages') ? Object.fromEntries(Object.entries({ requests: 'requests', input: 'input-tokens', output: 'output-tokens' }).filter(([k]) => limits[k]).flatMap(([k, h]) => [[`anthropic-ratelimit-${h}-limit`, String(limits[k][0])], [`anthropic-ratelimit-${h}-remaining`, String(limits[k][1])], [`anthropic-ratelimit-${h}-reset`, reset]])) : {};
     const json = (status, obj) => { res.writeHead(status, { 'content-type': 'application/json', ...rate }); res.end(JSON.stringify(obj)); };
     const error = (status, type, message, details) => json(status, { type: 'error', error: { type, message, ...(details ? { details } : {}) } });
+    if (req.method === 'GET' && req.url.startsWith('/v1/organizations/cost_report')) {
+      if (!bill || req.headers['x-api-key'] !== bill.adminKey) return error(401, 'authentication_error', 'The Admin API requires an Admin API key');
+      const q = new URL(req.url, 'http://x').searchParams;
+      const from = Number(q.get('page') ?? 0);
+      const start = Date.parse(q.get('starting_at'));
+      const data = bill.cents.slice(from, from + 2).map((c, i) => ({ starting_at: new Date(start + (from + i) * 86400e3).toISOString(), ending_at: new Date(start + (from + i + 1) * 86400e3).toISOString(), results: c == null ? [] : [{ amount: String(c), currency: 'USD' }] }));
+      const more = from + 2 < bill.cents.length;
+      return json(200, { data, has_more: more, next_page: more ? String(from + 2) : null });
+    }
     if (req.headers['x-api-key'] !== key) return error(401, 'authentication_error', 'invalid x-api-key');
     if (req.method === 'GET' && req.url.startsWith('/v1/models')) return json(200, { data: FAKE_MODELS, has_more: false, first_id: FAKE_MODELS[0].id, last_id: FAKE_MODELS.at(-1).id });
     if (req.method !== 'POST' || !req.url.startsWith('/v1/messages')) return error(404, 'not_found_error', `no ${req.url}`);

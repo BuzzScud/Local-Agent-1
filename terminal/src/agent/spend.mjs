@@ -6,19 +6,20 @@
 // of your own (Ollama, llama.cpp, an address on your network) is free and counts nothing; one
 // whose price is not known counts the tokens sent and back instead.
 import { EventEmitter } from 'node:events';
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { HOME, CLAUDE_HOST } from '../../../models/index.mjs';
 
 export const spendEvents = new EventEmitter();
-const spendDir = () => join(process.env.AGENTIC_HOME ?? HOME, 'spend');
+export const spendDir = () => join(process.env.AGENTIC_HOME ?? HOME, 'spend');
 // Today as YYYY-MM-DD, in this Mac's own time.
 export const dayOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 // Dollars for one answer: null when its price is not known.
-// usage: { prompt_tokens, completion_tokens, cached_tokens?, cache_write_tokens?, cost? }; price: { in, out } $ a million.
-// Read from the prompt cache costs a tenth; written to it (the Claude API's cache_creation_input_tokens) a
-// quarter more than plain input. Until 7 Oct 2026 a write was counted as plain input, so the meter read low.
+// usage: { prompt_tokens, completion_tokens, cached_tokens?, cache_write_tokens?, cost? }; price: { in, out, hit? } $ a million.
+// Read from the prompt cache costs the price's hit (a tenth of input when it names none); written to it (the
+// Claude API's cache_creation_input_tokens) a quarter more than plain input. Until 7 Oct 2026 a write was counted
+// as plain input, so the meter read low; until 9 Oct a hit on Opus 5.5 was a tenth, not its 5%, so it read high.
 export function costOf(usage, price) {
   if (!usage) return null;
   if (Number.isFinite(usage.cost)) return usage.cost;
@@ -26,7 +27,7 @@ export function costOf(usage, price) {
   const all = usage.prompt_tokens ?? 0;
   const cached = Math.min(usage.cached_tokens ?? 0, all);
   const written = Math.min(usage.cache_write_tokens ?? 0, all - cached);
-  return ((all - cached - written) * price.in + cached * price.in * 0.1 + written * price.in * 1.25 + (usage.completion_tokens ?? 0) * price.out) / 1e6;
+  return ((all - cached - written) * price.in + cached * (price.hit ?? price.in * 0.1) + written * price.in * 1.25 + (usage.completion_tokens ?? 0) * price.out) / 1e6;
 }
 
 // This window since it opened: dollars, and the tokens of answers whose price is not known.
@@ -64,6 +65,10 @@ export function recordSpend(ep, usage, { dir = spendDir(), pid = process.env.AGE
     };
     writeFileSync(`${file}.tmp`, JSON.stringify(next));
     renameSync(`${file}.tmp`, file);
+    // The Claude API's answers one by one, with their moment ("<ms> <usd>" a line, <pid>.claude), so what
+    // was spent after Anthropic's bill was read (or the month's total typed in) can be added to it
+    // (claudeSince, claude-usage.mjs).
+    if (ep.kind === 'claude' && usd) appendFileSync(join(day, `${pid}.claude`), `${now.getTime()} ${usd}\n`);
   } catch { /* the meter only shows less */ }
   spendEvents.emit('change', { usd });
   return usd;
@@ -100,6 +105,27 @@ export function daySpend(day, { kind = null, service = kind === 'claude' ? CLAUD
     } catch {}
   }
   return { usd, windows };
+}
+
+// The Claude API's dollars of this Mac's windows answered after `ms` (to now): their lines in each day's
+// <pid>.claude since that day (recordSpend). Before 9 Oct 2026 there were none: nothing is counted then.
+export function claudeSince(ms, { dir = spendDir(), now = new Date() } = {}) {
+  let usd = 0;
+  const from = new Date(ms);
+  for (let d = new Date(from.getFullYear(), from.getMonth(), from.getDate()); d <= now; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    const day = join(dir, dayOf(d));
+    let files = [];
+    try { files = readdirSync(day).filter((f) => f.endsWith('.claude')); } catch {}
+    for (const f of files) {
+      let text = '';
+      try { text = readFileSync(join(day, f), 'utf8'); } catch {}
+      for (const line of text.split('\n')) {
+        const [t, v] = line.split(' ').map(Number);
+        if (t > ms && Number.isFinite(v)) usd += v;
+      }
+    }
+  }
+  return usd;
 }
 
 // Dollars as the footer shows them: cents, or to a tenth of a cent below a cent.

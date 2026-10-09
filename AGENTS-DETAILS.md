@@ -983,17 +983,11 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   plainly with the day it answers again (00:00 UTC on the 1st) and marks it `busy: false`, so busy.mjs does not
   wait and ask again (the SDK's own two retries still happen); `noteCapped` makes the bar say paused until a
   reply comes.
-- **The drawing** (`terminal/src/app/usage-bar.mjs`, pure): the usage line (`usageRow`) is one row under the
-  footer, inside the prompt box since 8 Oct ("Panel"), with the footer's ends. Since 9 Oct ("1 · Tidy", see
-  below): "◆ $433.44 left of $500", then the line of what is left (a gradient brightening to its head, today's
-  part amber, the rest faint), then "today $56.71 · out by Oct 22" ending where the footer's words do; the
-  daily pace is /usage's, and "limits" shows only under half. The words shorten as the window narrows and the
-  line keeps a fifth of the row (`MIN_LINE` at least). The /usage card (`usagePanel`) has the prompt box's ends: the whole width, round
+- **The drawing** (`terminal/src/app/usage-bar.mjs`, pure): since 9 Oct ("3 · One row", below) the footer's
+  right side says what is left (`usageChip`). The /usage card (`usagePanel`) has the prompt box's ends: the whole width, round
   corners, the title in the top border, text one cell in, one label column (`LABEL_W`), the numbers ending at one
   edge, the three meters ending together, one blank row between sections. While a reply runs a shine sweeps the
-  line; at rest it holds still (a redraw at rest breaks copying text off the screen). App.jsx counts the bar's
-  row wherever the footer's are counted (`footRows`: the / menu's room, the start page's room, `holdRoom`), and
-  reads the numbers again after each answer, every window's, and each minute.
+  line; at rest it holds still (a redraw at rest breaks copying text off the screen).
 - **/usage** is in the / menu on the Claude API only (`CLAUDE_MENU`, the `claude` flag of `matchCommands`);
   typed elsewhere it says where it works. The card is a picker (`kind: 'usage'`): r asks Anthropic once
   (`askLimits`: one tiny request, its cost on the meter), esc, enter or q closes it; the clock ticks once a second
@@ -1002,6 +996,36 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   kind, the month, paused and cleared, the bar's ends at seven widths, the card's ends, the stand-in Claude API
   with limits and at the cap, the / menu) and `app-usage.test.mjs` (the real window: the bar before and after a
   reply, /usage from the menu, r, esc; and none of it off the Claude API). `fake-anthropic.mjs` takes `limits`.
+
+## "$ left" in the footer, your limit and a true month (9 Oct 2026)
+
+- **What and why.** The owner, on a screenshot of the usage line: "can we make the claude api metrics, simpler? its
+  too busy" (three designs drawn by the real app, private: `docs/private/design rounds/
+  agentic-coder-usage-simpler-3-designs-2026-10-09.html`); their pick "3 · One row", with "ensure that the api $ left
+  is updated in real time and is true. my limit is $200". Their answers: both ways to the true month, other Macs use
+  the key too, amber early and red when low; the build shown first (`…-usage-left-built-preview-2026-10-09.html`).
+- **The footer** (screen.jsx `remoteParts`, `FooterRows`; `usageChip`): no row of its own: "● claude-opus-5-5 ·
+  $61.68 left · ⏵⏵ bypass", in cents; amber when the month runs out before the 1st at its pace, red under a tenth of
+  the cap, "paused" at the cap, "$138.32 this month" with no cap known. App.jsx counts no extra row any more.
+- **Your limit** (claude-usage.mjs `readOwn`/`setOwn`, `<home>/usage/claude-own.json`, every window): `/usage limit
+  200` or l in the card; no API tells a Console organization's limit (the Spend Limits API is Claude Enterprise's).
+  The card says the tier would allow more.
+- **The month's spend, the best there is** (`usageNow` `source`): Anthropic's bill (`fetchBill`: the Admin API's
+  cost_report from 00:00 UTC on the 1st, every page; an Admin key `sk-ant-admin…` in the Keychain as `claude-admin`,
+  k in the card, never typed in the prompt; read at most once a minute over every window, `claude-bill.json`; a bill
+  counts while a key reads it, or 15 minutes after) or the Console's figure typed once (`/usage spent 112.40`, s),
+  whichever is newer, plus this Mac's answers after it (spend.mjs writes each Claude answer as "<ms> <usd>" to
+  `<day>/<pid>.claude`; `claudeSince`); else the cost meter. The card's last rows say which, and a refused key.
+  `AGENTIC_REMOTE_KEY` never stands in for the Admin key (remote.mjs `envKey`); `AGENTIC_ADMIN_URL` points the bill
+  at a stand-in (fake-anthropic.mjs `bill`).
+- **Prices**: a cache hit is the model's own (`price.hit` in models/runtime/claude.mjs, from Anthropic's pricing page
+  on 9 Oct: Opus 5.5 and Sonnet 5.5 5% of input, Fable 5.1 2.5%, Haiku 4.5 10%); before, every hit was a tenth, so on
+  Opus 5.5 the meter read high. Days before 9 Oct cannot be priced again (their tokens were not kept).
+- **Live**: this window's answers at once (spendEvents); other windows' and the bill within about a second (App.jsx
+  watches the spend and usage folders); a look every 15 s; a redraw only when what shows changed.
+- **Tests**: `usage.test.mjs` (the footer's words and colours, the hit price, the answers by moment, your limit, the
+  typed figure, the bill over three pages, once a minute, a refused key, dollars typed) and `app-usage.test.mjs` (the
+  real window: the footer before and after a reply, the card's keys, `/usage limit 200`).
 
 ## The bottom of the window: Tidy and flush (9 Oct 2026)
 

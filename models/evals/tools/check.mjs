@@ -76,7 +76,9 @@ export function riskyName(path) {
 // www.apple.com: the first lines every scheduler file on a Mac carries (the
 // night review's, terminal/src/app/review.mjs). A name in a header: nothing connects to it.
 // api.search.brave.com and api.tavily.com: the web search services /web offers, used only with your key (30 Sep 2026).
-const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'codeload.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'www.apple.com', 'host', 'api.search.brave.com', 'api.tavily.com'];
+// api.anthropic.com: the Claude API's own address, named in full for its Admin API's cost report (/usage, 9 Oct
+// 2026), read only with an Admin key you add.
+const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'codeload.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'www.apple.com', 'host', 'api.search.brave.com', 'api.tavily.com', 'api.anthropic.com'];
 export const hostsIn = (text) => [...new Set([...text.matchAll(/\bhttps?:\/\/([A-Za-z0-9][A-Za-z0-9.-]*)/g)].map((m) => m[1].toLowerCase().replace(/\.$/, '')))];
 export const newHosts = (text, known = KNOWN_HOSTS) => hostsIn(text).filter((h) => !known.includes(h));
 // A server open to the network instead of this Mac only.
