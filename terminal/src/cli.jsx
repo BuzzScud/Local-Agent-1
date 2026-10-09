@@ -11,7 +11,8 @@ import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
 import { pickOnTerminal } from './app/pick.mjs';
-import { TrustPage, TRUST_OPTIONS, FolderPage } from './app/start.jsx';
+import { TrustPage, TRUST_OPTIONS } from './app/start.jsx';
+import { FolderPage } from './app/folder-page.jsx';
 import { startFolders, folderOption, folderFacts } from './app/start-folder.mjs';
 
 // coding -p: a question from Agentic Coder is printed and answered on the same
@@ -72,12 +73,16 @@ async function ensureTrusted(cwd) {
 // on its top line, not under the "Last login" and prompt lines a new Terminal window opens with.
 async function pickStartFolder(folders) {
   const width = Math.max(MIN_COLS, process.stdout.columns || 100);
-  const model = (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name;
   const options = folders.map(folderOption);
   const cards = folders.map((f) => folderFacts(f));
-  const page = (i) => `${renderToString(<FolderPage width={width} folders={cards} model={model} selected={i} />, { columns: width })}\n\n`;
+  // In the middle of the window, less the two lines under it: a page as tall as the window would scroll, and
+  // each redraw (pick.mjs: up its own rows, then again) would leave a copy above.
+  const rows = Math.max(12, (process.stderr.rows || process.stdout.rows || 24) - 2);
+  const page = (i) => `${renderToString(<FolderPage width={width} rows={rows} folders={cards} selected={i} />, { columns: width })}\n\n`;
   if (process.stderr.isTTY) process.stderr.write(CLEAR);
   const pick = await pickOnTerminal(options, { page });
+  // The safety check, when one follows, starts on a clear window too.
+  if (pick !== null && process.stderr.isTTY) process.stderr.write(CLEAR);
   return pick === null ? null : folders[pick].path;
 }
 

@@ -37,8 +37,9 @@ export function pickOnTerminal(options, { input = process.stdin, output = proces
       resolve(v);
     };
     const onKey = (k) => {
-      if (k === 'up' || k === 'k') redraw(i = (i + n - 1) % n);
-      else if (k === 'down' || k === 'j' || k === '\t') redraw(i = (i + 1) % n);
+      // ←→ too: the folder page sets its choices side by side (folder-page.jsx).
+      if (k === 'up' || k === 'left' || k === 'k') redraw(i = (i + n - 1) % n);
+      else if (k === 'down' || k === 'right' || k === 'j' || k === '\t') redraw(i = (i + 1) % n);
       else if (k === '\r' || k === '\n') done(i);
       else if (k === 'esc' || k === '\x03') done(null);
       else if (/^[1-9]$/.test(k) && Number(k) <= n) { redraw(i = Number(k) - 1); done(i); }
@@ -55,8 +56,8 @@ export function pickOnTerminal(options, { input = process.stdin, output = proces
   });
 }
 
-// The keys in a chunk of terminal input: arrows (ESC [ A or ESC O A) as 'up' / 'down', a lone
-// ESC as 'esc', any other escape sequence skipped, and every other character as itself.
+// The keys in a chunk of terminal input: arrows (ESC [ A or ESC O A) as 'up' / 'down' / 'right' / 'left',
+// a lone ESC as 'esc', any other escape sequence skipped, and every other character as itself.
 export function keysOf(s) {
   const keys = [];
   for (let j = 0; j < s.length; j++) {
@@ -66,6 +67,8 @@ export function keysOf(s) {
     const last = m[0].at(-1);
     if (last === 'A') keys.push('up');
     else if (last === 'B') keys.push('down');
+    else if (m[0] === '\x1b[C' || m[0] === '\x1bOC') keys.push('right'); // a plain arrow only: shift+→ is skipped
+    else if (m[0] === '\x1b[D' || m[0] === '\x1bOD') keys.push('left');
     j += m[0].length - 1;
   }
   return keys;

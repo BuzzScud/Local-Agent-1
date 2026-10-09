@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 const h = React.createElement;
-import { StartPage, TrustPage, FolderPage, folderCard, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP, subjectOf, headline, recentRows, tidySubject, walkCells, blockWord, launcherPad } from '../src/app/start.jsx';
+import { StartPage, TrustPage, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP, subjectOf, headline, recentRows, tidySubject, walkCells, blockWord, launcherPad } from '../src/app/start.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { setup, T, quit, quitTyped as quitTypedSteps } from './app-setup.mjs';
@@ -15,7 +15,7 @@ import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startFolders, folderOption, folderFacts } from '../src/app/start-folder.mjs';
-import { C } from '../src/ui/theme.mjs';
+import { FolderPage } from '../src/app/folder-page.jsx';
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 const draw = (el, cols) => strip(renderToString(el, { columns: cols })).split('\n');
@@ -226,35 +226,55 @@ test('the safety check in the same columns: nothing read, the question, the answ
   }
 });
 
+const conv = (title, hrs) => ({ id: title, title, updated: at(hrs) });
 const FOLDERS = [
-  { shown: '~', what: 'your home folder', good: 'general questions, Desktop files', convs: 8, last: at(1), trusted: true },
-  { shown: '~/agentic-coder', what: 'Agentic Coder', good: 'its code, tests and docs', convs: 0, last: null, trusted: false },
+  { shown: '~', what: 'your home folder', good: 'general questions, Desktop files', convs: 8, last: at(1), trusted: true,
+    recent: [conv('Billing or invoice snapshot', 1), conv('Billing or invoice snapshot', 2), conv('(Agentic Coder restarted on the code you changed)', 3), conv('Launch or event countdown card', 30)] },
+  { shown: '~/agentic-coder', what: 'Agentic Coder', good: 'its code, tests and docs', convs: 0, last: null, trusted: false, recent: [] },
 ];
-test('where to start in the same columns: each folder a card, the one picked lit, both columns ending together, nothing past the edge', () => {
-  for (const w of [80, 107]) {
-    const lines = draw(h(FolderPage, { width: w, folders: FOLDERS, model: 'Qwen3.5 9B', selected: 0, now: NOW }), w);
+// "2 · Doors" (9 Oct 2026, the owner's pick of three): the folders side by side under the bot, each with its last
+// conversations, in the middle of the window's height.
+test('where to start: the two folders side by side, each with what it is and its last conversations; the one picked marked; never wider or taller than its room', () => {
+  for (const [w, rows] of [[132, 77], [132, 38], [107, 30], [100, 28], [80, 22]]) {
+    const lines = draw(h(FolderPage, { width: w, rows, folders: FOLDERS, selected: 0, now: NOW }), w);
     const text = lines.join('\n');
-    for (const s of ['Where should it work?', 'so it asks which one first', 'general questions, Desktop files', 'its code, tests and docs', '8 conversations', '✓ trusted', 'no conversations yet', 'safety check next', 'wakes up where you pick', '↑↓ choose   enter start here   esc exit']) expect(text).toContain(s);
-    expect(text).toMatch(/│ ❯ 1  ~ +your home folder │/);
-    expect(text).toMatch(/│   2  ~\/agentic-coder +Agentic Coder │/);
-    expect(text).not.toContain('started ~'); // the old line that repeated the first folder
-    for (const l of lines) expect(l.length).toBeLessThanOrEqual(w);
-    // the right column ends on the bot side's last row: the model's state line, or the row under it
-    const keys = lines.findIndex((l) => l.includes('↑↓ choose')), state = lines.findIndex((l) => l.includes('wakes up where you pick'));
-    expect(keys - state).toBeGreaterThanOrEqual(0);
-    expect(keys - state).toBeLessThanOrEqual(1);
+    expect(lines.length).toBeLessThanOrEqual(rows);
+    for (const l of lines) expect([...l].length).toBeLessThanOrEqual(w);
+    for (const s of ['Where should it work?', '~/agentic-coder', 'your home folder', 'Agentic Coder', '8 conversations', 'no conversations yet', '✓ trusted', '! safety check next', '↵ starts in ~', 'esc exit']) expect(text).toContain(s);
+    expect(text).toMatch(/❯ 1/);
+    expect(text).not.toMatch(/❯ 2/);
   }
-  expect(draw(h(FolderPage, { width: 107, folders: FOLDERS, model: 'Qwen3.5 9B', now: NOW }), 107).join('\n')).toContain('8 conversations · last 1h ago'); // when it fits
-  // the card picked has its border in the choice colour (C.ask), the other a dark one
-  expect(folderCard(FOLDERS[0], 0, true, 60, NOW)[0].props.color).toBe(C.ask);
-  expect(folderCard(FOLDERS[1], 1, false, 60, NOW)[0].props.color).not.toBe(C.ask);
+  // a window as tall as theirs (132 × 79): the bot, the lead, both doors side by side with their last three
+  // conversations (a prompt run again shown once, the app's restart note left out), in the window's middle
+  const tall = draw(h(FolderPage, { width: 132, rows: 77, folders: FOLDERS, selected: 1, now: NOW }), 132);
+  const text = tall.join('\n');
+  expect(text).toContain('so it asks which one first');
+  expect(text).toContain('▄'); // the bot
+  expect(text.match(/Billing or invoice snapshot/g)).toHaveLength(1);
+  expect(text).not.toContain('Agentic Coder restarted');
+  expect(text).toContain('Launch or event countdown card');
+  expect(text).toMatch(/❯ 2/);
+  expect(text).toContain('↵ starts in ~/agentic-coder');
+  expect(text).toContain('←→ move');
+  const doors = tall.findIndex((l) => /❯ 2/.test(l));
+  expect(tall[doors]).toMatch(/ 1 .*❯ 2/); // both on one row: side by side
+  const used = tall.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0);
+  expect(Math.abs((77 - 1 - used.at(-1)) - used[0])).toBeLessThanOrEqual(2); // as much room over it as under it
+  // a short window keeps the doors and the keys: the bot goes first, then the lead, then the conversations
+  const short = draw(h(FolderPage, { width: 132, rows: 22, folders: FOLDERS, now: NOW }), 132).join('\n');
+  expect(short).not.toContain('▄');
+  expect(short).toContain('8 conversations');
+  // under 90 columns the doors stand one above the other, and ↑↓ moves
+  const narrow = draw(h(FolderPage, { width: 80, rows: 40, folders: FOLDERS, now: NOW }), 80);
+  expect(narrow.findIndex((l) => l.includes('~/agentic-coder'))).toBeGreaterThan(narrow.findIndex((l) => l.includes('your home folder')));
+  expect(narrow.join('\n')).toContain('↑↓ move');
 });
 
-test('a folder\'s card says what the app already knows: its conversations, the last one\'s time, and whether a yes covers it', () => {
+test('a folder\'s door says what the app already knows: its conversations, the last one\'s time, the newest ones, and whether a yes covers it', () => {
   const sessions = (p) => (p === '/h' ? [{ updated: at(1) }, { updated: at(30) }] : []);
   const trusted = (p) => p === '/h';
-  expect(folderFacts({ path: '/h', shown: '~' }, { sessions, trusted })).toEqual({ path: '/h', shown: '~', convs: 2, last: at(1), trusted: true });
-  expect(folderFacts({ path: '/h/x', shown: '~/x' }, { sessions, trusted })).toEqual({ path: '/h/x', shown: '~/x', convs: 0, last: null, trusted: false });
+  expect(folderFacts({ path: '/h', shown: '~' }, { sessions, trusted })).toEqual({ path: '/h', shown: '~', convs: 2, last: at(1), recent: [{ updated: at(1) }, { updated: at(30) }], trusted: true });
+  expect(folderFacts({ path: '/h/x', shown: '~/x' }, { sessions, trusted })).toEqual({ path: '/h/x', shown: '~/x', convs: 0, last: null, recent: [], trusted: false });
 });
 
 test('where to start is asked only in the home folder, with Agentic Coder\'s folder found; not elsewhere, and not when continuing', () => {
