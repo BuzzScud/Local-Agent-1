@@ -8,7 +8,7 @@ import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart } from '../src/app/update.mjs';
+import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart, folderArgs, withStartFolder } from '../src/app/update.mjs';
 import { runCommand } from '../src/tools/run.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { openTerm } from './term.mjs';
@@ -324,3 +324,17 @@ test.skipIf(needs('python3'))('the real app asks GitHub on its own: a push from 
     expect(git(local, 'rev-parse', 'main')).toBe(pushed);
   } finally { await t.close(); await fake.close(); }
 }, 60_000);
+
+// 9 Oct 2026: a window moved by "Work in …? → Yes" saves its conversation under that folder; its restart came back
+// where coding was typed, and --resume found nothing ("Could not open that conversation: ENOENT").
+test('a restart starts in the folder the window works in now; a folder given at the start comes along only when it did not move', () => {
+  expect(folderArgs('/a/project', '/home')).toEqual(['--folder', '/a/project']);
+  expect(folderArgs('/home', '/home')).toEqual([]);
+  // moved: its own folder, once (the start's is not put in front of it)
+  expect(withStartFolder(['--resume', 'x', ...folderArgs('/b', '/a')], { folder: true, cwd: '/a' })).toEqual(['--resume', 'x', '--folder', '/b']);
+  // not moved, started with --folder or a picked folder: that one
+  expect(withStartFolder(['--resume', 'x'], { folder: true, cwd: '/a' })).toEqual(['--folder', '/a', '--resume', 'x']);
+  expect(withStartFolder(['--resume', 'x'], { picked: true, cwd: '/p' })).toEqual(['--folder', '/p', '--resume', 'x']);
+  // started where coding was typed and not moved: the launcher's own folder
+  expect(withStartFolder(['--resume', 'x'], { cwd: '/home' })).toEqual(['--resume', 'x']);
+});

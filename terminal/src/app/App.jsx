@@ -33,7 +33,7 @@ import { openMemory } from '../agent/facts.mjs';
 import { claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, sinceLastTime, saveModeOf } from './autosave.mjs';
-import { loadSettings, saveSettings, loadSession, newSessionId, loadHistory, firstMode, keepsLastMode } from './store.mjs';
+import { loadSettings, saveSettings, loadSession, findSession, newSessionId, loadHistory, firstMode, keepsLastMode } from './store.mjs';
 import { readRecord as sessionRecord } from './sessions.mjs';
 import { runReader } from './loops-board.mjs';
 import { drawBoard as drawLoops } from './loops-draw.mjs';
@@ -756,7 +756,16 @@ export function App({ opts, win, onRestart }) {
   }
   function resumeSession(id) {
     try {
-      const s = loadSession(cwd, id);
+      let s;
+      try { s = loadSession(cwd, id); } catch (e) {
+        // Saved under another folder (the window had moved there): opened from there, and the window works there again.
+        s = e.code === 'ENOENT' ? findSession(id) : null;
+        if (!s) throw e;
+        if (s.cwd && s.cwd !== cwd && existsSync(s.cwd)) {
+          agent.moveTo(s.cwd);
+          push({ type: 'note', text: `Opened from ${short(s.cwd)}, where it was saved: this window works there again.`, tone: 'dim' });
+        }
+      }
       agent.messages = s.messages;
       agent.messages[0] = { role: 'system', content: agent.messages[0].content };
       sessionRef.current = { id: s.id, title: s.title, items: s.items ?? [], open: s.open ?? [] };

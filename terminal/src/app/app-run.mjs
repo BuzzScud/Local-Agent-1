@@ -19,7 +19,7 @@ import { mcpLogFile } from './mcp-store.mjs';
 import { pictureFor } from '../tools/mcp.mjs';
 import { resourceMentions, resourceParts } from '../agent/mcp.mjs';
 import { countTries } from './live.mjs';
-import { canRestart, bringIn } from './update.mjs';
+import { canRestart, bringIn, folderArgs } from './update.mjs';
 import { askAside } from '../agent/btw.mjs';
 import { modelWithLimits, searchModels } from './limits.mjs';
 import { AgentsRun } from '../agent/agents-run.mjs';
@@ -492,6 +492,7 @@ export function runPart(self) {
     const level = thinkingLevel(self.model, self.thinking, self.effort).id;
     self.onRestart?.([
       ...(s.title ? ['--resume', s.id] : []),
+      ...folderArgs(self.cwd, self.opts.cwd),
       ...(self.opts.url ? ['--url', self.opts.url] : []),
       ...(self.opts.flows === false ? ['--no-flows'] : []),
       ...(self.opts.way ? ['--way', self.opts.way] : []),

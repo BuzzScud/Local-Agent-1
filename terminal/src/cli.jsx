@@ -644,9 +644,9 @@ if (opts.print) {
   await instance.waitUntilExit();
   if (restartArgs) {
     // The launcher waiting on this app starts the new version (see update.mjs).
-    const { leaveRestart, RESTART_CODE } = await import('./app/update.mjs');
-    // The launcher starts it where coding was typed: a folder picked or given comes along.
-    leaveRestart(opts.picked || opts.folder ? ['--folder', opts.cwd, ...restartArgs] : restartArgs);
+    const { leaveRestart, withStartFolder, RESTART_CODE } = await import('./app/update.mjs');
+    // The launcher starts it where coding was typed: a folder picked or given comes along (a moved window's own wins).
+    leaveRestart(withStartFolder(restartArgs, opts));
     process.stdout.write('\x1b[2m  ↻ Restarting on the update…\x1b[0m\n');
     process.exit(RESTART_CODE);
   }

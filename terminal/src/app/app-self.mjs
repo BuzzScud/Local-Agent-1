@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { thinkingLevel } from '../../../models/index.mjs';
 import { saveSettings, SETTINGS_FILE } from './store.mjs';
-import { canRestart } from './update.mjs';
+import { canRestart, folderArgs } from './update.mjs';
 
 // What a resumed conversation is told after the restart (its first message, from the app).
 export const RESTARTED_PROMPT = '(Agentic Coder restarted on the code you changed, and this conversation picked up where it was. Say in one or two lines what you changed and that it works; if the start showed a problem, fix it.)';
@@ -49,6 +49,7 @@ export function appBridge(self) {
       const level = thinkingLevel(self.model, self.thinking, self.effort).id;
       const args = [
         '--resume', s.id,
+        ...folderArgs(self.cwd, self.opts.cwd),
         ...(self.opts.url ? ['--url', self.opts.url] : []),
         ...(self.opts.flows === false ? ['--no-flows'] : []),
         ...(self.opts.way ? ['--way', self.opts.way] : []),
