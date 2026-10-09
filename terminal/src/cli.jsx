@@ -320,7 +320,7 @@ if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
   const hello = process.env.AGENTIC_DOOR_WINDOW === '1' ? { mirror: true } : {};
   process.exit(await viewJumping({ connect: localConnect(target), name: target.name, hello }, { pick }));
 }
-// coding loops [pid]: the loop board of a coding window, from another terminal (/loop makes the loops, /loops shows this board in that window).
+// coding loops [pid]: the loop board of a coding window, from another terminal (/loop makes the loops and shows this board in that window).
 if (process.argv[2] === 'loops') {
   const { runBoard } = await import('./app/loops-board.mjs');
   const pid = Number(process.argv[3]);

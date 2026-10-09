@@ -1,10 +1,9 @@
-// The slash commands of the conversation: /help, /clear, /btw, /agents, /jobs, /loops, /jumptomac, /morning, /compact (app-slash.mjs sends each its own).
+// The slash commands of the conversation: /help, /clear, /btw, /agents, /jobs, /loop, /jumptomac, /morning, /compact (app-slash.mjs sends each its own).
 // Moved word for word out of runSlashFn's switch: the same cases, in the same order.
 import { capLines } from '../tools/jobs.mjs';
 import { newSessionId, listSessions } from './store.mjs';
 import { MAC_NAME } from './jump-box.mjs';
-import { isLoopCommand, unclearOf, parseLoop, describe as describeLoop, LOOP_HELP } from './loops.mjs';
-import { modeWord } from './perms.mjs';
+import { isLoopCommand } from './loops.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { STAGES as AGENT_STAGES } from '../agent/agents-run.mjs';
@@ -111,22 +110,20 @@ export function slashSession(self) {
       }
       case 'loop':
       case 'loops': {
-        // /loop [debug|test|web] [10m] [message]: a message sent again by itself (loops.mjs). /loops: its
-        // board, as this window's screen; with no loop yet, the setup that makes one a step at a time.
+        // One command for loops (9 Oct 2026, the owner: "can we make 1 command for it all?"): /loop alone opens
+        // the board as this window's screen (the cards, or the Library with no loop yet); /loop <a sentence>
+        // ("run the tests every 10 min until 6pm") opens the wizard's last step filled in from it, and /loop <a kept
+        // loop's name> loads that loop there, to look at and start (loops-board.mjs openFromChat). /loops typed
+        // does the same. What follows is done here without opening anything.
         const m = self.loopsOf();
         const a = arg.trim();
-        if (cmd === 'loops' || /^(board|open)$/i.test(a) || (!a && !m.loops.length)) { self.openLoops(); break; }
-        if (!a || /^list$/i.test(a)) {
-          self.push({ type: 'note', text: m.loops.length ? ['Loops of this window (they end when it closes) · /loops opens the board:', ...m.loops.map((l) => `  ${l.id}. ${l.name} · ${describeLoop(l)}`), `Change one: ${LOOP_HELP}`].join('\n') : '/loop 10m <message> sends a message again every 10 minutes. /loop test 5m runs the tests, /loop debug fixes failing tests until they pass, /loop web 30m <what to read> reads pages. /loops opens the board, where ^N makes a loop a step at a time; /loop stop ends them.', tone: 'dim' });
-          break;
-        }
         const sub = /^(stop|pause|run)\s*(all|\d+)?$/i.exec(a);
         if (sub) {
           const what = sub[1].toLowerCase();
           const which = !sub[2] || sub[2].toLowerCase() === 'all' ? m.open : [m.loop(Number(sub[2]))].filter(Boolean);
           const did = which.filter((l) => (what === 'stop' ? m.stop(l.id) : what === 'pause' ? m.pause(l.id) : m.runNow(l.id)));
           self.setLoopsBadge(self.loopsBadgeOf(m));
-          self.push({ type: 'note', text: did.length ? `${{ stop: 'Stopped', pause: 'Paused, or going again', run: 'Running now' }[what]}: ${did.map((l) => l.name).join(', ')}.` : 'No such loop here. /loop lists them.', tone: did.length ? 'dim' : 'warn' });
+          self.push({ type: 'note', text: did.length ? `${{ stop: 'Stopped', pause: 'Paused, or going again', run: 'Running now' }[what]}: ${did.map((l) => l.name).join(', ')}.` : 'No such loop here. /loop shows them.', tone: did.length ? 'dim' : 'warn' });
           break;
         }
         // /loop <n> <rule>: one loop's rules, or one thing done to it (loops.mjs loopCommand). Undo takes a moment.
@@ -136,14 +133,7 @@ export function slashSession(self) {
           if (r?.then) r.then(said); else said(r);
           break;
         }
-        // A task the rules cannot read well ("test5m", a single word) is asked about first, in the board's setup.
-        const unclear = unclearOf(a);
-        if (unclear) { self.openLoops({ setup: { text: a, unclear } }); break; }
-        const p = parseLoop(a);
-        if (p.error) { self.push({ type: 'note', text: p.error, tone: 'warn' }); break; }
-        const l = m.add(p, { folder: self.agent.cwd, mode: self.agent.mode });
-        self.setLoopsBadge(self.loopsBadgeOf(m));
-        self.push({ type: 'note', text: `↻ Loop ${l.id} started: ${l.name} · ${describeLoop(l)}${p.note}. Its runs work in this folder, in ${modeWord(self.agent.mode)}, and it ends when this window closes. /loops shows it.`, tone: 'dim' });
+        self.openLoops({ arg: a });
         break;
       }
       case 'jumptomac': {

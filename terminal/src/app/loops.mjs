@@ -15,6 +15,7 @@ import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { HOME } from '../../../models/index.mjs';
 import { selfCommand } from './sessions.mjs';
+import { libraryOf, saveLoop, removeLoop, trustLoop } from './loop-files.mjs';
 
 export const KINDS = ['debug', 'test', 'web', 'task'];
 const UNIT = { s: 1, m: 60, h: 3600, d: 86_400 };
@@ -29,7 +30,7 @@ export const PRESET = {
   test: 'Run the tests. Say which fail and why. This is only a question: change no file.',
 };
 export const guessKind = (message) => (/\b(fix|debug|bug|bugs|broken)\b/i.test(message) ? 'debug'
-  : /https?:\/\/|\b(web|page|pages|site|sites|url|release|releases|browse|news)\b/i.test(message) ? 'web'
+  : /https?:\/\/|\b(web|page|pages|site|sites|url|release|releases|browse|news|blog)\b|\b[a-z0-9-]+\.(com|org|net|io|sh|dev|ai|app|co)\b/i.test(message) ? 'web'
   : /\b(test|tests|check|lint|build)\b/i.test(message) ? 'test' : 'task');
 const PRESET_NAME = { debug: 'Fix the failing tests', test: 'Run the tests' };
 const nameOf = (message) => { const t = String(message).replace(/\s+/g, ' ').trim().split(/[.:!?](?:\s|$)/)[0]; return t.length > 28 ? `${t.slice(0, 27)}…` : t; };
@@ -91,6 +92,46 @@ export function unclearOf(text) {
   ] };
 }
 
+// /loop <a sentence> (9 Oct 2026, the owner: "can we make 1 command for it all? … easier to set up"):
+// the words as people say them, read for how often and when it stops, the rest being what each run
+// does. "run the tests every 10 min until 6pm", "check bun.sh/blog every hour, stop after 5 runs",
+// "fix the failing tests until they pass". A phrase of time or count is taken out of the message; a
+// goal ("until they pass") stays in it, and makes a fixing loop run until done. No model is asked.
+// Answers { fields, found } (the setup's fields, rulesOf reads them; found: the phrases it took), or
+// { error } when nothing is left to do.
+const STOP_COUNT = String.raw`(?:(?:and\s+)?(?:stop|end)\s+)?after\s+(\d+)\s+(?:runs?|times|tries)|(\d+)\s+times`;
+const STOP_TIME = String.raw`(?:(?:and\s+)?(?:stop|end)\s+(?:at\s+)?|until\s+|till\s+|(?:and\s+)?stop\s+at\s+)(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2})`;
+const STOP_FOR = String.raw`for\s+(?:the\s+next\s+)?(\d+(?:\.\d+)?)\s*(minutes?|mins?|m|hours?|hrs?|h)\b|for\s+(?:an?\s+)(hour|minute)\b`;
+const EVERY_ANY = new RegExp(String.raw`(?:^|[\s,])(?:every\s+(?:(\d+(?:\.\d+)?)\s*${UNIT_WORD}|(?:an?\s+)?(second|minute|hour|day))|(hourly|daily))\b`, 'i');
+const UNTIL_DONE = /\buntil\s+(?:(?:they|it|all|every\s+test|the\s+tests?)\s+)*(?:all\s+)?(?:pass(?:es)?|is\s+(?:fixed|green|done)|are\s+(?:fixed|green)|(?:it'?s|its)\s+(?:fixed|done)|done|green|fixed)\b/i;
+export function readSentence(text, { now = Date.now() } = {}) {
+  let rest = String(text ?? '').trim().replace(/^\/loops?\b\s*/i, '');
+  const found = [];
+  const fields = { every: null, runs: 'no limit', stopAt: 'none' };
+  const take = (re, fn) => { const m = new RegExp(re.source ?? re, 'i').exec(rest); if (!m) return; found.push(m[0].trim().replace(/^,\s*/, '')); fn(m); rest = `${rest.slice(0, m.index)} ${rest.slice(m.index + m[0].length)}`; };
+  // A kind and a time first, as /loop always read them ("test 5m", "debug", "web 30m …").
+  const lead = /^(debug|tests?|web)\b\s*/i.exec(rest);
+  let kind = null;
+  if (lead) { kind = lead[1].toLowerCase().replace(/^tests$/, 'test'); rest = rest.slice(lead[0].length); }
+  const lt = LEAD_TIME.exec(rest);
+  if (lt) { found.push(lt[0].trim()); fields.every = everyWord(secsOf(lt)); rest = rest.slice(lt[0].length); }
+  if (!fields.every) take(EVERY_ANY, (m) => { fields.every = m[4] ? (m[4].toLowerCase() === 'daily' ? '1d' : '1h') : everyWord(secsOf([m[0], m[1], m[2], m[3]])); });
+  take(new RegExp(STOP_COUNT, 'i'), (m) => { fields.runs = m[1] ?? m[2]; });
+  take(new RegExp(STOP_TIME, 'i'), (m) => { fields.stopAt = m[1].replace(/\s+/g, ''); });
+  take(new RegExp(STOP_FOR, 'i'), (m) => { fields.stopAt = m[1] ? `${m[1]}${m[2][0].toLowerCase()}` : m[3].toLowerCase() === 'hour' ? '1h' : '1m'; });
+  // What is left is what each run does, tidied of the commas and "and"s the phrases leave.
+  let message = rest.replace(/\s+/g, ' ').replace(/\s+([,.!?])/g, '$1').replace(/(^|[,.]\s*)(and|then)\s*$/i, '').replace(/[\s,;:-]+$/, '').replace(/^[\s,;:-]+/, '').trim();
+  if (!message && kind && PRESET[kind]) message = PRESET[kind];
+  if (!message) return { error: kind === 'web' ? 'Say what to read: /loop read the Bun release page every hour' : 'Say what each run should do: /loop run the tests every 10 min' };
+  kind ??= guessKind(message);
+  const until = kind === 'debug' && (!fields.every || UNTIL_DONE.test(message));
+  // A stop time that cannot be read is left to the setup, which says so.
+  if (fields.stopAt !== 'none' && readStopAt(fields.stopAt, now).error) fields.stopAt = 'none';
+  return { fields: { message, kind, every: until ? 'until done' : fields.every ?? 'own pace', runs: fields.runs, stopAt: fields.stopAt }, found };
+}
+
+// A gap as said aloud: 10 min, 90 s, hour, 2 hours, day.
+export const spokenEvery = (secs) => (secs % 86_400 === 0 ? (secs === 86_400 ? 'day' : `${secs / 86_400} days`) : secs % 3600 === 0 ? (secs === 3600 ? 'hour' : `${secs / 3600} hours`) : secs % 60 === 0 ? `${secs / 60} min` : `${secs} s`);
 // ---- a loop's own rules (4 Oct 2026, the owner's ask: "i want to be able to control it more") ----
 // Set in the board's setup and form (^N makes a loop, ^O changes one) or with /loop <n> <rule>. Their picks: a
 // loop can stop after a number of runs or at a time, have a spending cap of its own, and wait for
@@ -157,8 +198,9 @@ export function rulesOf(f, { now = Date.now(), min = minSecs() } = {}) {
   if (bad) return { error: bad[1].error, field: bad[0] };
   const mode = LOOP_MODES.includes(f.mode) || f.mode === 'bypass' ? f.mode : 'ask';
   const [every, runs, stopAt, cap, st] = steps.map(([, r]) => r);
-  const name = PRESET[kind] === message ? PRESET_NAME[kind] : nameOf(message);
-  return { rules: { message, kind, name, every: every.every, until: every.until, maxRuns: runs.maxRuns, stopAt: stopAt.stopAt, usdCap: cap.usdCap, steps: st.steps, mode, askFirst: Boolean(f.askFirst) }, note: every.note };
+  // A loop loaded or saved by name keeps it (loop-files.mjs); else a name from its words.
+  const name = String(f.name ?? '').trim().slice(0, 60) || (PRESET[kind] === message ? PRESET_NAME[kind] : nameOf(message));
+  return { rules: { message, kind, name, every: every.every, until: every.until, maxRuns: runs.maxRuns, stopAt: stopAt.stopAt, usdCap: cap.usdCap, steps: st.steps, mode, askFirst: Boolean(f.askFirst), picture: f.picture ?? null }, note: every.note };
 }
 // A loop's rules as the form shows them, to change them.
 export function fieldsOf(l) {
@@ -315,14 +357,26 @@ export function startRun(spec, { self = selfCommand(), env = process.env } = {})
   };
 }
 
+// Whether a folder has tests to run, from its top level only (the setup says so beside each folder):
+// a package.json with a test script, a test folder, a *.test.* or *_test.* file, or pytest's files.
+export function hasTests(folder) {
+  let names = [];
+  try { names = readdirSync(folder); } catch { return false; }
+  if (names.some((n) => /^(tests?|__tests__|spec)$/.test(n) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(n) || /^test_.*\.py$|_test\.(py|go)$/.test(n) || /^(pytest\.ini|conftest\.py)$/.test(n))) return true;
+  if (!names.includes('package.json')) return false;
+  try { return Boolean(JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')).scripts?.test); } catch { return false; }
+}
+
 // ---- the window's side ---------------------------------------------------------------------------
 // status() → { on, why, name, where, limit, mode, url, slots, local }: whether a run can start now
 // (the model loaded, the window not answering), how many may run at once, and how a run reaches
 // the model. spend() → what this window has spent on a paid service, in dollars.
 export class Loops {
   // rewind(session) → the copies of one loop's runs (rewind.mjs), for undo.
-  constructor({ home = HOME, pid = process.pid, folder = process.cwd(), name = basename(process.cwd()), status = () => ({ on: true, limit: 1 }), spend = () => 0, start = startRun, now = () => Date.now(), onChange = () => {}, maxHours = MAX_HOURS, maxUsd = MAX_USD, rewind = null } = {}) {
-    Object.assign(this, { home, pid, folder, name, status, spend, start, now, onChange, maxHours, maxUsd });
+  // places() → the folders a new loop may work in besides this window's (your recent projects); wake() turns the
+  // model on, for a loop started while it is off (9 Oct 2026, the owner's pick: Start turns it on).
+  constructor({ home = HOME, pid = process.pid, folder = process.cwd(), name = basename(process.cwd()), status = () => ({ on: true, limit: 1 }), spend = () => 0, start = startRun, now = () => Date.now(), onChange = () => {}, maxHours = MAX_HOURS, maxUsd = MAX_USD, rewind = null, places = () => [], wake = null } = {}) {
+    Object.assign(this, { home, pid, folder, name, status, spend, start, now, onChange, maxHours, maxUsd, places, wake });
     this.rewind = rewind ?? (async (session) => { const { Rewind } = await import('./rewind.mjs'); return new Rewind({ home, session }); });
     this.loops = [];
     this.log = [];
@@ -351,7 +405,7 @@ export class Loops {
   add(parsed, { folder = this.folder, mode = 'ask' } = {}) {
     const t = this.now();
     const l = { id: this.nextId++, kind: parsed.kind, name: parsed.name, message: parsed.message, every: parsed.every, until: parsed.until, folder, mode: parsed.mode ?? mode, state: 'waiting', nextAt: t + 1000, endsAt: t + this.maxHours * 3_600_000, created: t, runs: [], current: null, note: null, queued: false, pauseAfter: false, allowed: [], doneWhy: null, gap: null, stuck: null,
-      maxRuns: parsed.maxRuns ?? null, stopAt: parsed.stopAt ?? null, usdCap: parsed.usdCap ?? null, steps: parsed.steps ?? null, askFirst: Boolean(parsed.askFirst), counted: 0, spent: 0, ready: null, go: false, lastNote: null };
+      maxRuns: parsed.maxRuns ?? null, stopAt: parsed.stopAt ?? null, usdCap: parsed.usdCap ?? null, steps: parsed.steps ?? null, askFirst: Boolean(parsed.askFirst), counted: 0, spent: 0, ready: null, go: false, lastNote: null, picture: parsed.picture ?? null };
     this.loops.push(l);
     this.say(l, 'new', parsed.message);
     this.changed();
@@ -738,10 +792,25 @@ export class Loops {
     if (c.op === 'add' || c.op === 'edit') {
       const read = rulesOf(c.fields ?? {}, { now: this.now() });
       if (read.error) return { text: read.error, warn: true };
-      if (c.op === 'add') { const l = this.add(read.rules, { mode: read.rules.mode }); return { made: l.id, text: `Loop ${l.id} started: ${describe(l, this.now())}${read.note}` }; }
+      if (c.op === 'add') {
+        // Its folder: this window's or one of the places offered (a path from the board is never taken as it is).
+        const folder = c.fields?.folder ? this.placesNow().find((x) => x.path === c.fields.folder)?.path : this.folder;
+        if (!folder) return { text: 'That folder is not one of the places offered here', warn: true };
+        // Save and start: kept first, so a name already taken stops it before anything runs.
+        const kept = c.save ? this.keep(c.save) : null;
+        if (kept?.warn) return kept;
+        // A project's loop you did not save: Start was your yes to that very file.
+        if (c.trust) { const e = this.libraryNow().find((x) => x.file === c.trust && x.from === 'project'); if (e) { try { trustLoop(this.home, e.file, readFileSync(e.file, 'utf8')); this.libraryKept = null; } catch {} } }
+        const l = this.add(read.rules, { mode: read.rules.mode, folder });
+        const woke = c.wake && !this.status()?.on ? this.wakeUp() : null;
+        return { made: l.id, text: `Loop ${l.id} started: ${describe(l, this.now())}${read.note}${kept ? ` · ${kept.text}` : ''}${woke ? ` · ${woke}` : ''}` };
+      }
       const e = this.edit(c.id, read.rules, { again: Boolean(c.again) });
       return e.error ? { text: e.error, warn: true } : `${e.text}${read.note}`;
     }
+    if (c.op === 'save') return this.keep(c.save ?? {});
+    if (c.op === 'remove') { const r = removeLoop(String(c.file ?? ''), { home: this.home, folders: this.placesNow() }); this.libraryKept = null; return r.error ? { text: r.error, warn: true } : { text: `Removed “${c.name ?? 'that loop'}”` }; }
+    if (c.op === 'wake') return this.wakeUp() ?? { text: 'The model cannot be turned on from here: /start in the coding window', warn: true };
     if (c.op === 'undo') return this.undo(c.id, c.n ?? null).then((u) => ({ text: u.error ?? u.text, warn: Boolean(u.error) }));
     if (c.op === 'redo') { const d = this.redo(c.id, c.text, { putBack: c.putBack !== false }); return d.error ? { text: d.error, warn: true } : d.text; }
     if (c.op === 'go') this.go(c.id);
@@ -753,6 +822,43 @@ export class Loops {
     else if (c.op === 'stop') this.stop(c.id);
     else if (c.op === 'every') this.setEvery(c.id, c.secs);
     return null;
+  }
+  // The folders a loop may work in: this window's first, then the places offered, each once.
+  // Read again at most every 30 s: the window's list reads its saved conversations.
+  placesNow() {
+    const t = this.now();
+    if (this.placesKept && t - this.placesKept.at < 30_000) return this.placesKept.list;
+    const out = [{ path: this.folder, shown: tilde(this.folder), tests: hasTests(this.folder) }];
+    let more = [];
+    try { more = this.places() ?? []; } catch {}
+    for (const f of more) if (f && !out.some((x) => x.path === f)) out.push({ path: f, shown: tilde(f), tests: hasTests(f) });
+    this.placesKept = { at: t, list: out };
+    return out;
+  }
+  // The loops that can be loaded (loop-files.mjs): the ready-made ones, yours, and the places' own.
+  // Read again at most every 5 s, and at once after a save.
+  libraryNow() {
+    const t = this.now();
+    if (this.libraryKept && t - this.libraryKept.at < 5000) return this.libraryKept.list;
+    let list = [];
+    try { list = libraryOf({ home: this.home, folders: this.placesNow() }); } catch {}
+    this.libraryKept = { at: t, list };
+    return list;
+  }
+  // Keeps a loop to load again: s = { name, about, message (with its {fill-ins}), fills, picture, fields, where, folder, replace }.
+  keep(s) {
+    const folder = s.where === 'project' ? this.placesNow().find((x) => x.path === s.folder)?.path : null;
+    if (s.where === 'project' && !folder) return { text: 'That project is not one of the places offered here', warn: true };
+    const { folder: _, ...fields } = s.fields ?? {};
+    const r = saveLoop({ name: s.name, about: s.about, message: s.message, fills: s.fills, picture: s.picture, fields }, { home: this.home, where: s.where, folder, replace: s.replace ?? null });
+    this.libraryKept = null;
+    if (r.error) return { text: r.error, warn: true };
+    return { text: `kept as “${String(s.name).trim()}” ${s.where === 'project' ? `in ${tilde(folder).split('/').pop()}` : 'for you'}: /loop loads it`, kept: r.file };
+  }
+  // The model on, for a loop (the window's own /start); a line to say, or null where it cannot.
+  wakeUp() {
+    if (!this.wake) return null;
+    try { return this.wake() || 'turning the model on: the first run starts once it is loaded'; } catch { return null; }
   }
   readCommands() {
     let files = [];
@@ -773,8 +879,8 @@ export class Loops {
   snapshot() {
     const st = this.last = this.status() ?? this.last;
     return {
-      v: 1, pid: this.pid, name: this.name, folder: tilde(this.folder), started: this.started, updated: this.now(),
-      model: { name: st.name ?? 'the model', on: Boolean(st.on), why: st.why ?? '', where: st.where ?? 'this Mac', limit: Math.max(1, st.limit ?? 1) }, mode: st.mode ?? 'ask',
+      v: 1, pid: this.pid, name: this.name, folder: tilde(this.folder), started: this.started, updated: this.now(), places: this.placesNow(), library: this.libraryNow(),
+      model: { name: st.name ?? 'the model', on: Boolean(st.on), why: st.why ?? '', where: st.where ?? 'this Mac', limit: Math.max(1, st.limit ?? 1), wake: Boolean(this.wake) && !st.on && !/answering|loading/.test(st.why ?? '') }, mode: st.mode ?? 'ask',
       maxHours: this.maxHours, reply: this.reply ?? null,
       loops: this.loops.map((l) => ({ ...l, folder: tilde(l.folder), runs: l.runs.slice(-30), current: l.current ? { n: l.current.n, startedAt: l.current.startedAt, needs: l.current.needs, lines: l.current.lines, tests: l.current.tests ?? null } : null })),
       log: this.log.slice(-120),

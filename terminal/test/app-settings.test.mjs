@@ -49,18 +49,20 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect([...TYPED_ONLY]).toEqual(['morning', 'subagents', 'home']);
   // /jumptomac (3 Oct 2026): in the whole menu where a 19th row fits (a window taller than 80 × 24),
   // and in any window once its name is typed; typed only, nobody saw it.
-  // /loop and /loops (3 Oct 2026) follow it, in that order, then /mcp and /jobs: one free row shows /jumptomac, five all of them.
+  // /loop (3 Oct 2026; /loops had a row after it until 9 Oct 2026, when /loop became the one command) follows it, then /mcp
+  // and /jobs: one free row shows /jumptomac, four all of them.
   // /calc (8 Oct 2026) after them: where it shows, it is the row under /help. /bot, then /steps (9 Oct 2026).
-  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'calc', 'bot', 'steps']);
-  expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'test', 'settings', 'exit']);
-  expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('loops');
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'mcp', 'jobs', 'calc', 'bot', 'steps']);
+  expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'test', 'settings', 'exit']);
+  expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('mcp');
   expect(matchCommands('/', { room: 21 }).map((c) => c.name)).toContain('mcp'); // a fourth free row is /mcp's
-  expect(matchCommands('/loop').map((c) => c.name)).toEqual(['loop', 'loops']);
+  expect(matchCommands('/loop').map((c) => c.name)).toEqual(['loop']); // /loops typed in full still opens the board
   expect(matchCommands('/mc').map((c) => c.name)).toEqual(['mcp']);
   expect(menu).not.toContain('jumptomac');
   const tall = matchCommands('/', { room: 49, side: true }).map((c) => c.name);
-  expect(tall).toEqual(['help', 'calc', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'steps', 'bot', 'test', 'settings', 'exit']);
-  expect(matchCommands('/', { room: 22 }).map((c) => c.name)).not.toContain('calc'); // the sixth free row is /calc's
+  expect(tall).toEqual(['help', 'calc', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'jobs', 'steps', 'bot', 'test', 'settings', 'exit']);
+  expect(matchCommands('/', { room: 21 }).map((c) => c.name)).not.toContain('calc'); // the fifth free row is /calc's
+  expect(matchCommands('/', { room: 22 }).map((c) => c.name)).toContain('calc');
   expect(matchCommands('/ca').map((c) => c.name)).toEqual(['calc']); // typed, it shows in any window
   expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac', 'jobs']);
   expect(matchCommands('/jo').map((c) => c.name)).toEqual(['jobs']);

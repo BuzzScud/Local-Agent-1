@@ -1,5 +1,5 @@
 // The window's work (App.jsx): sending a message, loading and stopping the model, resuming, quitting,
-// updating, a side question, a shell line, the doctor, /agents and /loops.
+// updating, a side question, a shell line, the doctor, /agents and /loop's board.
 // The functions are the App's own, moved here word for word: the App's names (and App.jsx's) are read through
 // self, which App makes at each render, so a function sees the values of the render that made it.
 import { existsSync, statfsSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { updateWindow } from './copies.mjs';
 import { kindWord } from './remote-form.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { listSessions } from './store.mjs';
-import { newUi as newLoopsUi, openSetup as openLoopsSetup, showReply as loopsReply, handleKey as loopsHandleKey } from './loops-board.mjs';
+import { newUi as newLoopsUi, openFromChat as openLoopsFrom, showReply as loopsReply, handleKey as loopsHandleKey } from './loops-board.mjs';
 import { saveTrust } from './trust.mjs';
 import { reloadMcp } from './mcp-start.mjs';
 import { mcpLogFile } from './mcp-store.mjs';
@@ -616,13 +616,13 @@ export function runPart(self) {
     try { process.stdout.write(resizeSeq(was.columns, was.rows)); } catch { /* it stays big */ }
   };
   const openAgentsTree = () => { self.setAgentsView('tree'); agentsGrow(); };
-  // /loops: the board takes this window, grown to fit three cards where the terminal follows that
-  // (as /agents does), and esc gives the window back. setup: an unclear /loop line to ask about.
-  const openLoops = ({ setup = null } = {}) => {
+  // /loop: the board takes this window, grown to fit three cards where the terminal follows that
+  // (as /agents does), and esc gives the window back. arg: the words after /loop (loops-board.mjs
+  // openFromChat): none, the cards or the Library; a sentence or a kept loop's name, the wizard's last step.
+  const openLoops = ({ arg = '' } = {}) => {
     const m = self.loopsOf();
     if (!self.loopsUi.current) self.loopsUi.current = newLoopsUi({ inApp: true });
-    const ui = self.loopsUi.current;
-    if (setup || (!m.loops.length && ui.view !== 'setup' && ui.view !== 'form')) openLoopsSetup(ui, { mode: self.agent.mode, ...(setup ?? {}) });
+    openLoopsFrom(self.loopsUi.current, arg, m.snapshot());
     if (canResize() && !self.loopsSize.current) {
       const cur = { columns: process.stdout.columns, rows: process.stdout.rows };
       const to = growTo(cur, [120, 36]);
@@ -636,7 +636,7 @@ export function runPart(self) {
     self.loopsSize.current = null;
     if (was && canResize()) { try { process.stdout.write(resizeSeq(was.columns, was.rows)); } catch { /* it stays big */ } }
   };
-  // A key while /loops has the window, as the board's own key names (loops-board.mjs keysOf).
+  // A key while /loop's board has the window, as the board's own key names (loops-board.mjs keysOf).
   const loopsKey = (ch, key) => {
     const m = self.loopsRef.current, ui = self.loopsUi.current;
     if (!m || !ui) { closeLoops(); return; }

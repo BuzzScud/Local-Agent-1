@@ -2,7 +2,7 @@
 // their settings, the loops' badge, the jump box.
 // The functions are the App's own, moved here word for word: the App's names (and App.jsx's) are read through
 // self, which App makes at each render, so a function sees the values of the render that made it.
-import { hostname } from 'node:os';
+import { hostname, homedir } from 'node:os';
 import { existsSync } from 'node:fs';
 import { SESSION_MARK } from '../agent/prompt.mjs';
 import { remoteModel, remoteRisk, connectRemote, remoteLabel, warmUp, modelById, MODELS, DEFAULT_MODEL, DEFAULT_REMOTE, saveKey, removeKey, sourceOf, ollamaCatalog, unloadOllama, authHeaders, OPEN_KEEP, isOutOfMemory, setEndpoint, endpointOf, preloadOllama, ollamaModel, floorCtx, modelPath, thinkingLevel, editedModels } from '../../../models/index.mjs';
@@ -13,7 +13,7 @@ import { ctxWord, suggestModel, openService } from './remote-models.mjs';
 import { MAIN } from './subagents.mjs';
 import { tryOut } from '../agent/tryout.mjs';
 import { readTryouts, saveTryout } from './tryouts.mjs';
-import { saveSettings, loadSettings } from './store.mjs';
+import { saveSettings, loadSettings, recentFolders } from './store.mjs';
 import { askJump, DETACH_LABEL } from './sessions.mjs';
 import { openJumpBox as jumpBox, jumpKey } from './jump-box.mjs';
 import { Loops } from './loops.mjs';
@@ -177,6 +177,10 @@ export function remotePart(self) {
         return { on: true, name, where: 'this Mac', limit: 1, mode, url, slots: self.opts.slots, local: !url, flows: self.opts.flows };
       },
       spend: () => windowSpend().usd,
+      // The setup wizard's Where (9 Oct 2026): this window's folder, then your recent projects (not your home folder).
+      places: () => recentFolders().map((r) => r.folder).filter((f) => f !== homedir()),
+      // Start turns the model on (the owner's pick, 9 Oct 2026): this Mac's copy, as /start; --url has nothing to load.
+      wake: self.opts.url ? null : () => { self.startFnRef.current?.(); },
     });
     return self.loopsRef.current;
   };
@@ -196,21 +200,21 @@ export function remotePart(self) {
         const key = `${l.id}-${l.current.n}-${l.current.needs.id}`;
         if (seen.asked.has(key)) continue;
         seen.asked.add(key);
-        self.push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.current.needs.text} /loops to answer it.`, tone: 'warn' });
+        self.push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.current.needs.text} /loop to answer it.`, tone: 'warn' });
       }
       // A debugging loop that stopped getting closer waits for a hint (loops.mjs stuckWhy).
       for (const l of m.stuck) {
         const key = `${l.id}-${l.runs.at(-1)?.n}-stuck`;
         if (seen.asked.has(key)) continue;
         seen.asked.add(key);
-        self.push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.stuck}. In /loops, type a hint to send it on with; ^R tries again as it is, ^S stops it.`, tone: 'warn' });
+        self.push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.stuck}. In /loop, type a hint to send it on with, or press Try again or Stop.`, tone: 'warn' });
       }
       // Ask first: a run that waits for your go says so once.
       for (const l of m.ready) {
         const key = `${l.id}-${l.ready.n}-ready`;
         if (seen.asked.has(key)) continue;
         seen.asked.add(key);
-        self.push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}): run ${l.ready.n} is ready and waits for your go. In /loops, type y; or /loop ${l.id} go · /loop ${l.id} skip.`, tone: 'warn' });
+        self.push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}): run ${l.ready.n} is ready and waits for your go. In /loop, press Go or Skip; or /loop ${l.id} go · /loop ${l.id} skip.`, tone: 'warn' });
       }
       for (const l of m.loops) {
         if (l.state !== 'done' || seen.ended.has(l.id)) continue;

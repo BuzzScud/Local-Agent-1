@@ -404,13 +404,16 @@ test('the cards at every size: each row exactly the window, a card per loop in p
     expect(t).toMatch(cols >= 110 ? /! {2}FIX {2}Fix the failing tests asks: May it change export\.mjs\?\s+type y yes · a yes, always \(every edit\) · n no/ : /! {2}FIX {2}Fix the failing tests asks: May it change export\.mjs\?\s+type y yes · a always · n no/);
     expect(t).toMatch(/Fix the failing tests asks: y, a, n, or a note/);
     expect(t).toMatch(/type y, a or n and enter \(anything else goes to it as a note\)/);
-    // The keys are ctrl keys, said in shorter words in a narrow window, so esc is never cut.
-    expect(t).toMatch(/\^N new.* \^R run.* \^P pause.* \^S stop.* \^O rules.* \^X (start over|redo).* \^B undo.* \^G whole.* ↑↓ pick.* esc close/);
-    if (cols >= 124) expect(t).toMatch(/\^N new loop · \^R run now · \^P pause · \^S stop · \^O rules · \^X start over · \^B undo · \^G whole run · ↑↓ pick · esc close/);
+    // Each card's buttons by what it is doing; the keys say how to press them, in shorter words in a narrow window, so esc is never cut.
+    expect(t).toMatch(/Yes {3}Always {3}No {3}Open/);
+    expect(t).toMatch(/Pause {3}Stop {3}Start over {3}Open/);
+    expect(t).toMatch(/Running 3 {3}Library 10 {4}tab switches/);
+    expect(t).toMatch(/←→ a button.* enter press.* ↑↓ (another )?loop.* tab (the )?library.* \^N new.* esc close/);
+    if (cols >= 124) expect(t).toMatch(/←→ a button · enter presses it · ↑↓ another loop · tab the library · \^N new loop · type talk to it · esc close/);
     if (rows >= 38) expect(t).toMatch(/What happened {3}newest first\s+\S+ {2}FIX {3}Fix the failing tes… asks: May it change export\.mjs\?/);
   }
   // In the coding window, esc goes back to the chat.
-  expect(text(D.drawBoard(state, B.newUi({ inApp: true }), { cols: 124, rows: 38, now: b.m.now(), linesOf: b.linesOf }))).toMatch(/^ esc {2}chat › ↻ Loops[\s\S]*↑↓ pick · esc chat/);
+  expect(text(D.drawBoard(state, B.newUi({ inApp: true }), { cols: 124, rows: 38, now: b.m.now(), linesOf: b.linesOf }))).toMatch(/^ esc {2}chat › ↻ Loops[\s\S]*type talk to it · esc chat/);
   // A window too small says so, and how big it must be.
   const small = D.drawBoard(state, B.newUi(), { cols: 80, rows: 24, now: b.m.now(), linesOf: b.linesOf });
   expect(small).toHaveLength(24);
@@ -424,9 +427,9 @@ test('more loops than fit move sideways with the picked one; no loop yet shows h
   m.save();
   const none = text(D.drawBoard(empty(), B.newUi(), { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));
   expect(none).toMatch(/No loop yet in this window\./);
-  expect(none).toMatch(/\^N makes one a step at a time: what each run does, how often/);
-  expect(none).toMatch(/\/loop test 5m\s+runs the tests every 5 minutes/);
-  expect(none).toMatch(/type \/loop 5m <message> and enter, or \^N for a new loop a step at a time/);
+  expect(none).toMatch(/tab opens the Library: a ready-made loop, one you kept, or a new one\./);
+  expect(none).toMatch(/\/loop run the tests every 10 min until 6pm/);
+  expect(none).toMatch(/type \/loop and what it should do, or tab for the Library/);
   for (let i = 1; i <= 6; i++) m.add(L.parseLoop(`${i}h tidy folder number ${i}`));
   pass(1000);
   const s = L.readState(dir, process.pid);
@@ -467,7 +470,7 @@ test('the board\'s keys: typing always goes in the box, the commands are ctrl ke
   press('down');
   expect(bd.ui.sel).toBe(1);
   press('^P'); expect(sent.pop()).toEqual({ op: 'pause', id: 2 });
-  press('^O'); expect(bd.ui.view).toBe('form'); expect(bd.ui.form).toMatchObject({ id: 2, fields: { message: L.PRESET.test, every: '5m', runs: 'no limit' } });
+  press('^O'); expect(bd.ui.view).toBe('setup'); expect(bd.ui.setup).toMatchObject({ id: 2, text: L.PRESET.test, f: { every: '5m', runs: 'no limit' } }); expect(D.stepOf(bd.ui.setup)).toBe('start');
   press('esc'); expect(bd.ui.view).toBe('main'); expect(sent).toEqual([]);
   // ^S asks first; enter does nothing there; n keeps it, y stops it.
   press('^S'); expect(bd.ui.view).toBe('confirm');
@@ -605,8 +608,10 @@ test('a loop\'s rules as typed in the form or after /loop <n>: how often, runs, 
   expect(L.readSteps('3').error).toMatch(/5 to 200/);
   // The whole form: the first wrong row is named, so the form can go to it.
   const ok = L.rulesOf({ message: 'Run the tests and say what fails', every: '5m', runs: '5', stopAt: '18:30', cap: '$1', steps: '20', mode: 'edits', askFirst: true }, { now: at('10:00:00') });
-  expect(ok.rules).toEqual({ message: 'Run the tests and say what fails', kind: 'test', name: 'Run the tests and say what …', every: 300, until: false, maxRuns: 5, stopAt: at('18:30:00'), usdCap: 1, steps: 20, mode: 'edits', askFirst: true });
+  expect(ok.rules).toEqual({ message: 'Run the tests and say what fails', kind: 'test', name: 'Run the tests and say what …', every: 300, until: false, maxRuns: 5, stopAt: at('18:30:00'), usdCap: 1, steps: 20, mode: 'edits', askFirst: true, picture: null });
   expect(L.rulesOf({ message: L.PRESET.debug, kind: 'debug', every: 'until done' }).rules).toMatchObject({ name: 'Fix the failing tests', until: true });
+  // A loop loaded or kept by name keeps it, and its own three steps.
+  expect(L.rulesOf({ message: 'Read the log', name: 'Log watcher', picture: [['READ', 'the log'], ['FIND', 'errors'], ['TELL', 'you']] }).rules).toMatchObject({ name: 'Log watcher', picture: [['READ', 'the log'], ['FIND', 'errors'], ['TELL', 'you']] });
   expect(L.rulesOf({ message: '' })).toMatchObject({ field: 'message' });
   expect(L.rulesOf({ message: 'x', every: '5m', runs: 'lots' })).toMatchObject({ field: 'runs', error: expect.stringMatching(/Stop after/) });
   // A loop's rules back into the form's words.
@@ -829,39 +834,20 @@ test('undo puts back what one run changed, from the app\'s own rewind store; a f
   m.close();
 });
 
-test('the board\'s other keys: ^N then ^O every rule in the form, ^X starts over (again keeps the changes), ^B undoes after a y, a number answers a question', () => {
+test('the board\'s other keys: ^N and tab open the Library, ^X starts over (again keeps the changes), ^B undoes after a y, a number answers a question', () => {
   const b = board();
   const sent = [];
   const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
   const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
-  // ^N opens the setup; ^O there is every rule at once. The kind is guessed from the message; ←→ step through a row's choices; a typed row takes keys.
-  press('^N');
-  expect(bd.ui.view).toBe('setup');
-  press('^O');
-  expect(bd.ui.view).toBe('form');
-  press(...'Run the tests every morning');
-  press('down', 'right'); // kind: guessed test → web
-  expect(bd.ui.form.fields.kind).toBe('web');
-  press('left');
-  press('down', ...'30m', 'down', ...'5', 'down', 'right', 'down', 'right', 'right');
-  expect(bd.ui.form.fields).toMatchObject({ message: 'Run the tests every morning', kind: 'test', every: '30m', runs: '5', cap: '$0.50' });
-  expect(bd.ui.form.fields.stopAt).toMatch(/^\d\d:\d\d$/);
-  let frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
-  expect(frame).toMatch(/New loop · every rule/);
-  expect(frame).toMatch(/Kind\s+Run the tests/);
-  expect(frame).toMatch(/How often\s+every 30m/);
-  expect(frame).toMatch(/Spending cap\s+‹ \$0\.50/);
-  expect(frame).toMatch(/enter {2}Start the loop/);
-  for (const [cols, rows] of [[96, 30], [124, 38], [200, 60]]) for (const r of D.drawBoard(bd.state, bd.ui, { cols, rows, now: b.m.now(), linesOf: () => [] })) expect(D.rowWidth(r)).toBe(cols);
-  // A wrong row: the form says why, goes to it, and sends nothing.
-  press('up', 'up', 'up', '^U', ...'soon', 'enter');
+  let frame;
+  // ^N and tab: the Library beside the cards; esc (or tab) is the cards again, since there are loops.
+  press('^N'); expect(bd.ui.view).toBe('shelf');
+  press('esc'); expect(bd.ui.view).toBe('main');
+  press('tab'); expect(bd.ui.view).toBe('shelf');
+  press('tab'); expect(bd.ui.view).toBe('main');
   expect(sent).toEqual([]);
-  expect(bd.ui.form).toMatchObject({ field: 'every', error: expect.stringMatching(/How often/) });
-  press('^U', ...'1h', 'enter');
-  expect(sent.pop()).toMatchObject({ op: 'add', id: null, fields: { message: 'Run the tests every morning', kind: 'test', every: '1h', runs: '5', cap: '$0.50' } });
-  expect(bd.ui.view).toBe('main');
   // ^X: the box starts the picked loop over with your words; ^X again keeps its changes.
-  press('right', '^X', ...'only the quoting test');
+  press('down', '^X', ...'only the quoting test');
   expect(bd.ui.chat).toMatchObject({ as: 'redo', text: 'only the quoting test' });
   frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
   expect(frame).toMatch(/start Run the tests over with this · its changes go back first/);
@@ -880,7 +866,7 @@ test('the board\'s other keys: ^N then ^O every rule in the form, ^X starts over
   expect(sent.pop()).toMatchObject({ op: 'undo', id: 2, n: 1 });
   // A question's choices: a number typed and sent picks one.
   bd.state = { ...bd.state, loops: bd.state.loops.map((l) => (l.id === 1 ? { ...l, current: { ...l.current, needs: { id: 5, kind: 'question', text: 'Which header style?', options: ['snake_case', 'Title Case', 'Keep them'], since: 1 } } } : l)) };
-  press('left');
+  press('up');
   frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
   expect(frame).toMatch(/Fix the failing tests asks: Which header style\?/);
   expect(frame).toMatch(/1 snake_case {3}2 Title Case {3}3 Keep them {3}or type your own answer/);
@@ -908,59 +894,74 @@ test('an unclear task is asked about before the loop starts: a kind and a time t
   for (const ok of ['test 5m', 'test', 'debug', '10m run the tests and say what fails', 'web 30m https://bun.sh/blog', 'web 30m read the Bun releases page', '1 every 7m', '2 stop']) expect(L.unclearOf(ok)).toBe(null);
 });
 
-test('the setup: a new loop a step at a time, test5m caught, a read-back, then the form\'s add; the window makes it', () => {
+test('the wizard: a step at a time with the picture beside it, test5m caught, a sentence filled in at the last step, the window makes it', () => {
   const b = board();
   const sent = [];
   const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
   const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
   const frame = (cols = 124, rows = 38) => { const f = D.drawBoard(bd.state, bd.ui, { cols, rows, now: b.m.now(), linesOf: () => [] }); for (const r of f) expect(D.rowWidth(r)).toBe(cols); return text(f); };
-  // An unclear /loop line typed in the box goes to the setup's question; nothing is sent.
+  // An unclear /loop line typed in the box: the wizard's first step asks about it; nothing is sent.
   press(...'/loop test5m', 'enter');
   expect(sent).toEqual([]);
-  expect(bd.ui.setup).toMatchObject({ step: 'unclear', text: 'test5m' });
-  expect(frame()).toMatch(/! "test5m" looks like two things typed together: "test" and "5m"\./);
+  expect(bd.ui.view).toBe('setup');
+  expect(bd.ui.setup).toMatchObject({ step: 0, text: 'test5m' });
+  expect(frame()).toMatch(/! "test5m" looks like two things typed together:[\s\S]{0,140}"test" and "5m"\./); // wrapped in its box
   expect(frame(96, 30)).toMatch(/▸ 1 {2}Run the tests, every 5m/);
   press('1');
-  expect(bd.ui.setup).toMatchObject({ step: 'often', name: 'Run the tests', fields: { message: L.PRESET.test, kind: 'test' } });
-  expect(frame()).toMatch(/● What it does {2}── {2}◉ How often/);
+  expect(D.stepOf(bd.ui.setup)).toBe('where');
+  expect(bd.ui.setup).toMatchObject({ text: L.PRESET.test, f: { kind: 'test', every: '5m' } });
+  let f = frame();
+  expect(f).toMatch(/✓ 1 What {2}── {2}◉ 2 Where {2}── {2}○ 3 How often/);
+  expect(f).toMatch(/Where should it work\?/);
+  expect(f).toMatch(/Your loop[\s\S]*“Run the tests\. Say which fail and why/);
+  expect(f).toMatch(/1 RUN[\s\S]*2 READ[\s\S]*3 TELL/);
+  press('enter');
   expect(frame()).toMatch(/How often should it run\?/);
   expect(frame()).toMatch(/▸ every 5 minutes/);
   press('enter');
   expect(frame()).toMatch(/When should it stop\?/);
-  press('down', 'down', 'enter'); // after 10 runs
-  const ready = frame();
-  expect(ready).toMatch(/Ready to start/);
-  expect(ready).toMatch(/Each run {4}Run the tests\. Say which fail and why\./);
-  expect(ready).toMatch(/How often {3}every 5 minutes · the first run starts now/);
-  expect(ready).toMatch(/Stops {7}after 10 runs, or when this window closes/);
-  expect(ready).toMatch(/Run the tests {2}· {2}every 5 minutes {2}· {2}after 10 runs/);
+  press('down', 'down', 'enter'); // after 5 runs
+  f = frame();
+  expect(f).toMatch(/Ready to start/);
+  expect(f).toMatch(/ends after run 5/);
+  expect(f).toMatch(/Save as {6}optional: keep it to load again/);
+  expect(f).toMatch(/Start the loop/);
   press('enter');
   const add = sent.pop();
-  expect(add).toMatchObject({ op: 'add', fields: { message: L.PRESET.test, kind: 'test', every: '5m', runs: '10', stopAt: 'none', mode: 'ask' } });
+  expect(add).toMatchObject({ op: 'add', save: null, fields: { message: L.PRESET.test, kind: 'test', every: '5m', runs: '5', stopAt: 'none', mode: 'ask', folder: '/tmp/demo' } });
   expect(bd.ui.view).toBe('main');
-  // The window makes it as the form's add: a test loop every 5 minutes that stops after 10 runs.
+  // The window makes it: a test loop every 5 minutes that stops after 5 runs.
   const r = b.m.apply(add);
-  expect(r).toMatchObject({ made: 4, text: expect.stringMatching(/^Loop 4 started: test · every 5m · 0 of 10 runs/) });
-  expect(b.m.loop(4)).toMatchObject({ kind: 'test', every: 300, maxRuns: 10, name: 'Run the tests' });
-  // Words of your own: a time at their end is offered as the pace; a stop time typed is taken as one.
-  press('^N', ...'tidy the notes folder every 7m', 'enter');
-  expect(bd.ui.setup).toMatchObject({ step: 'often', custom: '7m', fields: { message: 'tidy the notes folder' } });
-  press('enter', ...'18:30', 'enter');
-  expect(frame()).toMatch(/Stops {7}at 18:30, or when this window closes/);
+  expect(r).toMatchObject({ made: 4, text: expect.stringMatching(/^Loop 4 started: test · every 5m · 0 of 5 runs/) });
+  expect(b.m.loop(4)).toMatchObject({ kind: 'test', every: 300, maxRuns: 5, name: 'Run the tests' });
+  // A sentence: the last step, filled in from what was read; ← goes back a step, where a wrong answer stays.
+  press(...'/loop tidy the notes folder every 7m until 18:30', 'enter');
+  expect(D.stepOf(bd.ui.setup)).toBe('start');
+  expect(bd.ui.setup).toMatchObject({ text: 'tidy the notes folder', f: { every: '7m', stopAt: '18:30' } });
+  f = frame();
+  expect(f).toMatch(/You typed {2}\/loop tidy the notes folder every 7m…/); // cut to its box
+  expect(f).toMatch(/Read {6}every 7m {2}· {2}until 18:30/);
   press('left');
-  expect(bd.ui.setup.step).toBe('stop');
+  expect(D.stepOf(bd.ui.setup)).toBe('stop');
   press(...'soon', 'enter');
-  expect(frame()).toMatch(/! Stop at: a time like 18:30 or 6pm, or a while like 2h/);
-  press('^U', 'down', 'down', 'down', 'down', 'enter'); // the fifth choice: in 2 hours
-  expect(frame()).toMatch(/Stops {7}in 2 hours \(\d\d:\d\d\), or when this window closes/);
+  expect(frame()).toMatch(/! Stop at: a time like 18:30 or 6pm, or a while[\s\S]{0,140}like 2h/); // wrapped in its box
+  expect(D.stepOf(bd.ui.setup)).toBe('stop');
+  press('^U', ...'2h', 'enter');
+  expect(D.stepOf(bd.ui.setup)).toBe('start');
   press('enter');
   expect(sent.pop()).toMatchObject({ op: 'add', fields: { message: 'tidy the notes folder', kind: 'task', every: '7m', runs: 'no limit', stopAt: '2h' } });
-  // One word is asked about; keeping it goes on; esc leaves the setup and sends nothing.
-  press('^N', ...'check', 'enter');
-  expect(bd.ui.setup.step).toBe('unclear');
-  expect(frame()).toMatch(/"check" is one word/);
+  // Typing over an example starts your own words (it had been added to the example's).
+  B.openSetup(bd.ui, { mode: 'ask' });
+  expect(bd.ui.setup.text).toBe(D.TEMPLATES[0].text);
+  press(...'check the logs');
+  expect(bd.ui.setup.text).toBe('check the logs');
+  // One word is asked about; keeping it goes on; esc leaves the wizard and sends nothing.
+  press('esc');
+  press(...'/loop check', 'enter');
+  expect(bd.ui.setup.unclear.why).toMatch(/"check" is one word/);
   press('2');
-  expect(bd.ui.setup).toMatchObject({ step: 'often', fields: { message: 'check', kind: 'test' } });
+  expect(D.stepOf(bd.ui.setup)).toBe('where');
+  expect(bd.ui.setup.text).toBe('check');
   press('esc');
   expect(bd.ui.view).toBe('main');
   expect(sent).toEqual([]);

@@ -1,19 +1,24 @@
-// The loop board: the loops of one coding window, drawn as the Cards (loops-draw.mjs). /loops shows
+// The loop board: the loops of one coding window, drawn as the Cards (loops-draw.mjs). /loop shows
 // it in the coding window itself (App.jsx, loops-view.jsx); `coding loops` shows it in another
 // terminal, where it reads what that window wrote (loops.mjs: <home>/loops/<pid>/) five times a second
 // and sends its keys back as small files, so closing it changes nothing: the loops belong to their
-// window and go on. The keys are the same in both (handleKey): typing always goes in the box, and
-// the commands are ctrl keys (4 Oct 2026, the owner's pick after letters ate what they typed).
+// window and go on. The keys are the same in both (handleKey): typing always goes in the box (4 Oct
+// 2026, the owner's pick after letters ate what they typed); ←→ picks a card's button and enter
+// presses it (9 Oct 2026); the ctrl keys of 4 Oct still work.
 import { statSync } from 'node:fs';
 import { HOME } from '../../../models/index.mjs';
-import { listBoards, readState, readRun, sendCommand, runFile, rulesOf, fieldsOf, guessKind, unclearOf, isLoopCommand, KINDS, LOOP_MODES, STEPS_WORD, PRESET, hm, readEvery, readRuns, readStopAt } from './loops.mjs';
-import { drawBoard, ansiRow, setupChoices, SETUP_EXAMPLES } from './loops-draw.mjs';
+import { listBoards, readState, readRun, sendCommand, runFile, rulesOf, fieldsOf, unclearOf, isLoopCommand, STEPS_WORD, PRESET, readSentence, readEvery, readRuns, readStopAt } from './loops.mjs';
+import { drawBoard, ansiRow, setupChoices, setupPick, setupFields, kindOfSetup, wizardSteps, stepOf, templateOf, TEMPLATES, MORE_ROWS, buttonsOf, watchButtonsOf } from './loops-draw.mjs';
 import { canResize, resizeSeq } from './agents-window.mjs';
+import { loadInto, setFill, startRows, shelfKey, editorKey, openEditor, openShelf } from './loops-library.mjs';
+import { findByName } from './loop-files.mjs';
 import { pickOnTerminal } from './pick.mjs';
 
 const BOARD_SIZE = [124, 38];
 // inApp: the board is the coding window's own screen (esc goes back to the chat).
-export const newUi = ({ inApp = false } = {}) => ({ sel: 0, view: 'main', watch: null, chat: { text: '', as: 'note' }, toast: null, confirm: null, stamp: null, form: null, setup: null, inApp });
+// back: where the wizard goes on esc (the Library, or the cards); shelf: the Library's pick and what was typed
+// to find; editor: the one-page form of a loop you kept (loops-library.mjs).
+export const newUi = ({ inApp = false } = {}) => ({ sel: 0, btn: 0, view: 'main', watch: null, chat: { text: '', as: 'note' }, toast: null, confirm: null, stamp: null, setup: null, inApp, back: null, shelf: null, editor: null });
 export const say = (ui, text, style = 'accent') => { ui.toast = { text, style, until: Date.now() + 3200 }; };
 const over = (l) => l.state === 'done' || l.state === 'stopped';
 const stampOf = () => `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
@@ -47,174 +52,248 @@ export function showReply(ui, loops, r) {
   say(ui, text, (typeof r === 'object' && r.warn) || /^(Only|A loop needs|A web loop)/.test(text) ? 'warn' : 'accent');
 }
 
-// ---- the form: every rule of a new loop or of one loop (^O) ----
-// Its rows, in order: what each run does, then its rules. A row with choices steps through them
-// with ←→; one you can type in takes letters and digits too (the first key replaces a word).
-const FORM_ROWS = ['message', 'kind', 'every', 'runs', 'stopAt', 'cap', 'mode', 'steps', 'askFirst'];
-const TYPED = new Set(['message', 'every', 'runs', 'stopAt', 'cap', 'steps']);
-// The choices of a row, given what the form says now.
-function choicesOf(row, f, now = Date.now()) {
-  if (row === 'kind') return KINDS;
-  if (row === 'every') return (f.kind ?? guessKind(f.message ?? '')) === 'debug' ? ['until done', 'own pace', '1m', '5m', '10m', '30m', '1h'] : ['own pace', '1m', '2m', '5m', '10m', '30m', '1h', '2h', '1d'];
-  if (row === 'runs') return ['no limit', '1', '2', '3', '5', '10', '20', '50'];
-  if (row === 'stopAt') {
-    // The next half hour at least 15 minutes away, then 1, 2, 4 and 8 hours after it.
-    const t = new Date(now + 15 * 60_000);
-    t.setSeconds(0, 0);
-    t.setMinutes(t.getMinutes() <= 30 ? 30 : 60);
-    return ['none', ...[0, 1, 2, 4, 8].map((h) => hm(t.getTime() + h * 3_600_000))];
+// ---- the setup wizard (9 Oct 2026): a new loop, or one loop's rules, a step at a time ----
+// /loop alone with no loop yet, or ^N: step 1, the first example picked. /loop <a sentence>: the last
+// step, filled in from what was read. Rules (a card's button, ^O): that loop's own, at the last step.
+// An unclear task (loops.mjs unclearOf) is asked about at step 1 before it goes on.
+export function openSetup(ui, { mode = 'ask', text = null, unclear = null, sentence = null, loop = null, state = null } = {}) {
+  const f = { every: '10m', runs: 'no limit', stopAt: 'none', cap: 'none', steps: STEPS_WORD, mode, askFirst: false, kind: null, folder: null };
+  const su = { step: 0, id: null, again: false, name: '', text: text ?? TEMPLATES[0].text, tpl: 0, f, custom: { often: '', stop: '' }, touched: {}, unclear, pick: 0, error: null, typed: '', found: [], keep: false, rule: -1,
+    loaded: null, fills: [], picture: null, save: { name: '', where: 'yours', replace: null } };
+  ui.back = ui.view === 'shelf' ? 'shelf' : null;
+  if (loop) {
+    const lf = fieldsOf(loop);
+    Object.assign(f, { every: lf.every, runs: lf.runs, stopAt: lf.stopAt, cap: lf.cap, steps: lf.steps, mode: lf.mode, askFirst: lf.askFirst, kind: lf.kind, folder: state?.places?.find((x) => x.shown === loop.folder)?.path ?? null });
+    Object.assign(su, { id: loop.id, again: over(loop), name: loop.name, text: loop.message, keep: true, picture: loop.picture ?? null });
+    su.touched.often = true;
+    su.step = wizardSteps(su).length - 1;
+  } else if (sentence != null) {
+    const r = readSentence(sentence);
+    if (r.error) { su.error = r.error; su.text = ''; su.tpl = TEMPLATES.length - 1; }
+    else {
+      Object.assign(f, { every: r.fields.every, runs: r.fields.runs, stopAt: r.fields.stopAt, kind: r.fields.kind });
+      Object.assign(su, { text: r.fields.message, typed: sentence.trim(), found: r.found });
+      su.touched.often = true;
+      su.step = wizardSteps(su).length - 1;
+    }
   }
-  if (row === 'cap') return ['none', '$0.25', '$0.50', '$1.00', '$2.00', '$5.00'];
-  if (row === 'mode') return f.mode === 'bypass' ? [...LOOP_MODES, 'bypass'] : LOOP_MODES;
-  if (row === 'steps') return [STEPS_WORD, '10', '20', '40', '80', '120'];
-  if (row === 'askFirst') return [false, true];
-  return null;
-}
-// l: a loop's rules to change; fields: a new loop's rules so far (the setup's ^O).
-export function openForm(ui, l = null, { mode = 'ask', fields = null } = {}) {
-  const f = l ? fieldsOf(l) : { message: '', kind: null, every: 'own pace', runs: 'no limit', stopAt: 'none', cap: 'none', steps: STEPS_WORD, mode, askFirst: false, ...(fields ?? {}) };
-  ui.form = { id: l?.id ?? null, again: Boolean(l && (l.state === 'done' || l.state === 'stopped')), name: l?.name ?? null, fields: f, row: 0, fresh: !l && !fields?.message, error: null, field: null, kindSet: Boolean(l || fields?.kind) };
-  ui.view = 'form';
-}
-function formKey(b, k) {
-  const { ui } = b;
-  const f = ui.form;
-  const row = FORM_ROWS[f.row];
-  const v = f.fields;
-  const kindNow = () => v.kind ?? guessKind(v.message);
-  // A kind that cannot run until done leaves that pace; a fixing loop with its own pace runs until done.
-  const tidy = () => { if (kindNow() !== 'debug' && v.every === 'until done') v.every = 'own pace'; };
-  if (k === 'esc') { ui.form = null; ui.view = 'main'; return; }
-  if (k === 'up' || k === 'shiftTab') { f.row = (f.row + FORM_ROWS.length - 1) % FORM_ROWS.length; f.fresh = true; return; }
-  if (k === 'down' || k === 'tab') { f.row = (f.row + 1) % FORM_ROWS.length; f.fresh = true; return; }
-  if (k === 'enter') {
-    const read = rulesOf({ ...v, kind: kindNow() });
-    if (read.error) { f.error = read.error; f.field = read.field; const i = FORM_ROWS.indexOf(read.field); if (i >= 0) { f.row = i; f.fresh = true; } return; }
-    ui.stamp = stampOf();
-    b.send({ op: f.id ? 'edit' : 'add', id: f.id, again: f.again, fields: { ...v, kind: kindNow() }, stamp: ui.stamp });
-    say(ui, f.id ? (f.again ? 'Starting it again…' : 'Saving…') : 'Making the loop…', 'dim');
-    ui.form = null;
-    ui.view = 'main';
-    return;
-  }
-  const choices = choicesOf(row, { ...v, kind: kindNow() });
-  if ((k === 'left' || k === 'right' || (k === ' ' && !TYPED.has(row))) && choices) {
-    const cur = row === 'kind' ? kindNow() : v[row];
-    const at = choices.findIndex((c) => String(c).toLowerCase() === String(cur).toLowerCase());
-    const next = choices[at < 0 ? 0 : (at + (k === 'left' ? choices.length - 1 : 1)) % choices.length];
-    v[row] = next;
-    if (row === 'kind') { f.kindSet = true; if (next === 'debug' && v.every === 'own pace') v.every = 'until done'; tidy(); }
-    f.fresh = true; // typing next replaces the choice
-    f.error = null;
-    return;
-  }
-  if (!TYPED.has(row)) return;
-  if (k === 'backspace') { v[row] = [...String(v[row])].slice(0, -1).join(''); f.fresh = false; }
-  else if (k === '^U') { v[row] = ''; f.fresh = false; }
-  else if (k.length === 1 && k >= ' ') {
-    // The first key on a row that holds a word (none, own pace) replaces it; on the message it adds.
-    v[row] = f.fresh && row !== 'message' && !/^\d/.test(String(v[row])) ? k : `${v[row]}${k}`;
-    f.fresh = false;
-  } else return;
-  f.error = null;
-  if (row === 'message' && !f.kindSet) { v.kind = null; tidy(); }
-}
-
-// ---- the setup: a new loop a step at a time (^N, /loops with no loop yet, an unclear /loop line) ----
-// What each run does → how often → when it stops → a read-back; enter there sends the form's `add`.
-// text and unclear: a /loop line the rules could not read well (loops.mjs unclearOf), asked about first.
-export function openSetup(ui, { mode = 'ask', text = '', unclear = null } = {}) {
-  ui.setup = { step: unclear ? 'unclear' : 'task', text, ex: -1, unclear, pick: 0, custom: '', error: null, name: '', words: {}, fields: { message: '', kind: null, every: 'own pace', runs: 'no limit', stopAt: 'none', cap: 'none', steps: STEPS_WORD, mode, askFirst: false } };
+  if (!su.touched.often) oftenFor(su);
+  ui.setup = su;
   ui.view = 'setup';
 }
-// every: a time the words gave ("… every 7m"), offered first.
-function toOften(su, message, kind, every = null) {
-  su.fields.message = message;
-  su.fields.kind = kind;
-  su.name = rulesOf({ message, kind, every: 'own pace' }).rules?.name ?? message; // the name the loop will have
-  su.step = 'often'; su.custom = ''; su.error = null; su.unclear = null;
-  const i = every ? setupChoices('often', kind).findIndex((c) => c.every === every) : -1;
-  su.pick = Math.max(0, i);
-  if (every && i < 0) su.custom = every;
+// How often, until you choose: a fixing loop until its tests pass, any other every 10 minutes.
+const oftenFor = (su) => { if (!su.touched.often && !su.custom.often) su.f.every = kindOfSetup(su) === 'debug' ? 'until done' : '10m'; };
+function setValue(su, row, v) {
+  if (row === 'often') { su.f.every = v; su.touched.often = true; }
+  else if (row === 'stop') { su.f.runs = v.runs; su.f.stopAt = v.stopAt; }
+  else if (row === 'where') su.f.folder = v;
+  else if (row === 'ask') su.f.askFirst = v;
+  else su.f[row] = v;
+}
+const toStep = (su, name) => { const i = wizardSteps(su).indexOf(name); su.step = i < 0 ? 0 : i; };
+// The step's answer read before going on: an error stays on the step.
+function stepError(su, step) {
+  if (step === 'what' && !(su.text ?? '').trim()) return 'Type what each run should do first';
+  if (step === 'often' && su.custom.often) return readEvery(su.custom.often, { kind: kindOfSetup(su) }).error ?? null;
+  if (step === 'stop' && su.custom.stop) { const t = su.custom.stop.trim().replace(/^(at|in)\s+/i, ''); return /^\d+(\s*runs?)?$/i.test(t) ? readRuns(t).error ?? null : readStopAt(t).error ?? null; }
+  return null;
+}
+// Enter on the last step: the loop made (or its rules saved), when its words and rules read well.
+function startSetup(b) {
+  const { ui, state } = b;
+  const su = ui.setup;
+  const fields = setupFields(su, state);
+  if (!fields.message) { su.error = 'Type what each run should do first'; return toStep(su, 'what'); }
+  if (!su.keep) { const u = unclearOf(fields.message); if (u) { su.unclear = u; su.pick = 0; return toStep(su, 'what'); } }
+  const read = rulesOf(fields);
+  if (read.error) { su.error = read.error; const row = { message: 'what', every: 'often', runs: 'stop', stopAt: 'stop' }[read.field]; if (row) toStep(su, row); else su.rule = startRows(su).indexOf(read.field === 'cap' ? 'cap' : 'steps'); return; }
+  // A blank left empty ({page}): asked for before it starts.
+  const blank = (su.fills ?? []).findIndex((x) => !x.value.trim());
+  if (blank >= 0) { su.error = `Type the ${su.fills[blank].key} this loop asks for`; su.rule = blank; return; }
+  const save = keptOf(su, state);
+  // Said before it is sent: in the coding window the answer comes back at once and takes this line's place.
+  say(ui, su.id ? (su.again ? 'Starting it again…' : 'Saving…') : state.model?.wake ? 'Making the loop and turning the model on…' : save ? 'Keeping it and making the loop…' : 'Making the loop…', 'dim');
+  ui.setup = null;
+  ui.view = 'main';
+  ui.stamp = stampOf();
+  if (su.id) { b.send({ op: 'edit', id: su.id, again: su.again, fields, stamp: ui.stamp }); if (save) b.send({ op: 'save', save }); }
+  else b.send({ op: 'add', fields, save, trust: su.loaded?.from === 'project' && !su.loaded.trusted ? su.loaded.file : null, wake: Boolean(state.model?.wake), stamp: ui.stamp });
+}
+// What Save as keeps (loop-files.mjs), or null with no name typed: a loaded loop keeps its own words and blanks.
+function keptOf(su, state) {
+  const name = (su.save?.name ?? '').trim();
+  if (!name) return null;
+  const f = setupFields(su, state);
+  const message = su.loaded?.template ?? f.message;
+  return { name, about: su.loaded?.about ?? '', message, fills: su.loaded ? su.fills.map((x) => ({ ...x })) : [], picture: su.picture ?? null,
+    fields: { kind: f.kind, every: f.every, runs: f.runs, stopAt: f.stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst }, where: su.save.where, folder: f.folder, replace: su.save.replace ?? null };
+}
+// ^S on the last step: kept, not started.
+function saveOnly(b) {
+  const { ui, state } = b;
+  const su = ui.setup;
+  const save = keptOf(su, state);
+  if (!save) { su.error = 'Type a name at Save as first'; su.rule = startRows(su).indexOf('saveName'); return; }
+  say(ui, `Keeping “${save.name}”…`, 'dim');
+  ui.setup = null;
+  ui.view = ui.back ?? 'main';
+  if (ui.view === 'main' && !state.loops.length) openShelf(ui);
+  ui.stamp = stampOf();
+  b.send({ op: 'save', save, stamp: ui.stamp });
 }
 function setupKey(b, k) {
-  const { ui } = b;
+  const { ui, state } = b;
   const su = ui.setup;
-  const back = () => { ui.setup = null; ui.view = 'main'; };
-  if (k === 'esc') return back();
-  if (k === '^O') { openForm(ui, null, { mode: su.fields.mode, fields: { ...su.fields, message: su.fields.message || su.text } }); ui.setup = null; return; }
-  if (su.step === 'task') {
-    if (k === 'enter') {
-      const t = su.text.trim();
-      if (!t) { su.error = 'Type what each run should do first.'; return; }
-      const u = unclearOf(t);
-      if (u) { su.unclear = u; su.pick = 0; su.step = 'unclear'; su.error = null; return; }
-      // A time in the words ("… every 10 minutes") is taken out and offered as the pace.
-      const m = /[\s,]+every\s+(\d+(?:\.\d+)?)\s*(s|sec|secs|seconds?|m|mins?|minutes?|h|hrs?|hours?)\s*[.!]?$/i.exec(t);
-      const every = m ? `${m[1]}${m[2][0].toLowerCase()}` : null;
-      return toOften(su, m ? t.slice(0, m.index).trim() : t, guessKind(t), every);
-    }
-    if (k === 'tab') { su.ex = (su.ex + 1) % SETUP_EXAMPLES.length; su.text = SETUP_EXAMPLES[su.ex]; }
-    else if (k === 'backspace') su.text = [...su.text].slice(0, -1).join('');
-    else if (k === '^U') su.text = '';
-    else if (k.length === 1 && k >= ' ') su.text += k;
-    else return;
-    su.error = null;
-    return;
-  }
-  if (su.step === 'unclear') {
+  const steps = wizardSteps(su);
+  const step = stepOf(su);
+  const back = () => { if (su.step > 0) { su.step--; su.error = null; su.rule = -1; } };
+  const next = () => { const e = stepError(su, step); if (e) { su.error = e; return; } su.error = null; if (su.step < steps.length - 1) su.step++; };
+  // esc: back to where it came from (the Library, the cards), or out of the board when there is nothing to show.
+  if (k === 'esc') { ui.setup = null; ui.view = ui.back ?? 'main'; if (ui.view === 'main' && !state.loops.length) b.quit(); return; }
+  if (su.unclear) {
     const n = su.unclear.options.length;
     const pick = () => {
       const o = su.unclear.options[su.pick];
-      if (o.act === 'again') { su.step = 'task'; su.text = ''; su.unclear = null; return; }
-      if (o.act === 'use') return toOften(su, PRESET[o.kind] ?? su.text.trim(), o.kind, o.every);
-      return toOften(su, su.text.trim(), guessKind(su.text));
+      su.unclear = null;
+      su.error = null;
+      if (o.act === 'again') { su.text = ''; su.tpl = TEMPLATES.length - 1; return; }
+      if (o.act === 'use') { su.text = PRESET[o.kind] ?? su.text; su.f.kind = o.kind; if (o.every) { su.f.every = o.every; su.touched.often = true; } else oftenFor(su); }
+      su.keep = true;
+      next();
     };
     if (k === 'up') su.pick = (su.pick + n - 1) % n;
     else if (k === 'down') su.pick = (su.pick + 1) % n;
     else if (/^[1-9]$/.test(k) && Number(k) <= n) { su.pick = Number(k) - 1; pick(); }
     else if (k === 'enter') pick();
-    else if (k === 'left' || k === 'backspace') { su.step = 'task'; su.unclear = null; }
+    else if (k === 'left' || k === 'backspace') su.unclear = null;
     return;
   }
-  if (su.step === 'often' || su.step === 'stop') {
-    const often = su.step === 'often';
-    const cs = setupChoices(su.step, su.fields.kind);
-    if (k === 'up') { su.pick = (su.pick + cs.length - 1) % cs.length; return; }
-    if (k === 'down') { su.pick = (su.pick + 1) % cs.length; return; }
-    if (k === 'left' || (k === 'backspace' && !su.custom)) { if (often) { su.step = 'task'; su.text = su.fields.message; } else { su.step = 'often'; su.pick = 0; } su.custom = ''; su.error = null; return; }
-    if (k === 'backspace') { su.custom = [...su.custom].slice(0, -1).join(''); return; }
-    if (k === '^U') { su.custom = ''; su.error = null; return; }
-    if (k === 'enter') {
-      if (often) {
-        if (su.custom) {
-          const r = readEvery(su.custom, { kind: su.fields.kind });
-          if (r.error) { su.error = r.error; return; }
-          su.fields.every = su.custom.trim();
-          su.words.every = r.until ? 'until the tests pass' : r.every ? `every ${su.custom.trim().replace(/^every\s+/i, '')}` : 'at its own pace';
-        } else { const c = cs[su.pick]; su.fields.every = c.every; su.words.every = c.w; }
-        su.step = 'stop'; su.pick = 0; su.custom = ''; su.error = null;
-        return;
-      }
-      if (su.custom) {
-        const t = su.custom.trim();
-        if (/^\d+$/.test(t)) { const r = readRuns(t); if (r.error) { su.error = r.error; return; } su.fields.runs = t; su.fields.stopAt = 'none'; su.words.stop = `after ${t} run${t === '1' ? '' : 's'}`; }
-        else { const r = readStopAt(t); if (r.error) { su.error = r.error; return; } su.fields.runs = 'no limit'; su.fields.stopAt = t; su.words.stop = /^\d+(\.\d+)?\s*[hm]/i.test(t) ? `in ${t}` : `at ${t}`; }
-      } else { const c = cs[su.pick]; su.fields.runs = c.runs; su.fields.stopAt = c.stopAt; su.words.stop = c.w === 'in 2 hours' ? `in 2 hours (${c.note.replace(/^at /, '')})` : c.w; }
-      su.step = 'ready'; su.custom = ''; su.error = null;
+  if (step === 'what') {
+    if (k === 'up' || k === 'down' || k === 'tab' || k === 'shiftTab') {
+      const n = TEMPLATES.length;
+      su.tpl = (templateOf(su) + (k === 'up' || k === 'shiftTab' ? n - 1 : 1)) % n;
+      su.text = TEMPLATES[su.tpl].text;
+    } else if (k === 'enter') {
+      if (!(su.text ?? '').trim()) { su.error = 'Type what each run should do first'; return; }
+      if (!su.keep) { const u = unclearOf(su.text); if (u) { su.unclear = u; su.pick = 0; return; } }
+      return next();
+    } else if (k === 'backspace') su.text = [...su.text].slice(0, -1).join('');
+    else if (k === '^U') su.text = '';
+    // Typing over an example, as it was picked, starts your own words.
+    else if (k.length === 1 && k >= ' ') su.text = (TEMPLATES.some((t) => t.text && t.text === (su.text ?? '').trim()) ? '' : su.text) + k;
+    else return;
+    // New words: the kind is read off them again, and so is how often, until you choose it; a loaded loop is yours now.
+    su.f.kind = null;
+    su.keep = false;
+    if (su.loaded) { su.loaded = null; su.fills = []; su.picture = null; }
+    su.error = null;
+    oftenFor(su);
+    return;
+  }
+  if (step === 'start') {
+    const rows = startRows(su);
+    const at = rows[su.rule];
+    if (k === 'enter') return startSetup(b);
+    if (k === '^S') return saveOnly(b);
+    if (k === '^E' && su.loaded && su.loaded.from !== 'ready') { const e = state.library?.find((x) => x.id === su.loaded.id); if (e) openEditor(ui, e, state); return; }
+    if (k === 'up' || k === 'shiftTab') { su.rule = su.rule < 0 ? rows.length - 1 : su.rule - 1; return; }
+    if (k === 'down' || k === 'tab') { su.rule = su.rule >= rows.length - 1 ? -1 : su.rule + 1; return; }
+    // A blank or the name: typing goes in it.
+    if (String(at).startsWith('fill:') || at === 'saveName') {
+      const get = () => (at === 'saveName' ? su.save.name : su.fills[Number(at.slice(5))].value);
+      const set = (v) => { if (at === 'saveName') su.save.name = v; else setFill(su, Number(at.slice(5)), v); su.error = null; };
+      if (k === 'backspace') { set([...get()].slice(0, -1).join('')); return; }
+      if (k === '^U') { set(''); return; }
+      if (k.length === 1 && k >= ' ') { set(get() + k); return; }
+      if (k === 'left') back();
       return;
     }
-    if (k.length === 1 && k >= ' ') { su.custom += k; su.error = null; }
+    if (at === 'saveWhere' && (k === 'left' || k === 'right' || k === ' ')) { su.save.where = su.save.where === 'project' ? 'yours' : 'project'; su.error = null; return; }
+    if (MORE_ROWS.includes(at) && (k === 'left' || k === 'right' || k === ' ')) {
+      const cs = setupChoices(at, su, state);
+      const pick = setupPick(at, su, state);
+      setValue(su, at, cs[pick < 0 ? 0 : (pick + (k === 'left' ? cs.length - 1 : 1)) % cs.length][0]);
+      su.error = null;
+      return;
+    }
+    if (k === 'left' || k === 'backspace') back();
     return;
   }
-  if (su.step === 'ready') {
-    if (k === 'enter') {
-      ui.stamp = stampOf();
-      b.send({ op: 'add', fields: { ...su.fields }, stamp: ui.stamp });
-      say(ui, 'Making the loop…', 'dim');
-      back();
-    } else if (k === 'left' || k === 'backspace') { su.step = 'stop'; su.pick = 0; }
+  // Where, how often, until: ↑↓ picks, and the last two take what you type (7m · 20, 18:30, 2h).
+  const typed = step === 'often' || step === 'stop';
+  if (k === 'enter') return next();
+  if (k === 'up' || k === 'down' || k === 'tab' || k === 'shiftTab') {
+    const cs = setupChoices(step, su, state);
+    if (!cs.length) return;
+    if (typed) su.custom[step] = '';
+    const at = setupPick(step, su, state);
+    setValue(su, step, cs[at < 0 ? 0 : (at + (k === 'up' || k === 'shiftTab' ? cs.length - 1 : 1)) % cs.length][0]);
+    su.error = null;
+    return;
   }
+  if (k === 'left') return back();
+  if (k === 'backspace') { if (typed && su.custom[step]) { su.custom[step] = [...su.custom[step]].slice(0, -1).join(''); su.error = null; } else back(); return; }
+  if (typed && k === '^U') { su.custom[step] = ''; return; }
+  if (typed && k.length === 1 && k >= ' ') { su.custom[step] += k; if (step === 'often') su.touched.often = true; su.error = null; }
+}
+
+// /loop <words> in the coding window (and /loops, typed): what the board opens with. Alone, the
+// cards, or the setup wizard when there is no loop yet; a sentence, the wizard's last step filled in
+// to confirm it; an unclear task, the wizard's first step asking about it. Answers false for words
+// that are a loop's command ("/loop stop", "/loop 2 every 7m"): the window does those itself.
+export function openFromChat(ui, arg, state) {
+  const a = String(arg ?? '').trim();
+  const mode = state?.mode ?? 'ask';
+  if (/^(stop|pause|run)\s*(all|\d+)?$/i.test(a) || (a && isLoopCommand(a))) return false;
+  ui.chat = { text: '', as: 'note' };
+  ui.btn = 0;
+  if (!a || /^(board|open|list)$/i.test(a)) {
+    if (state?.loops?.length) { ui.setup = null; if (['setup', 'editor'].includes(ui.view)) ui.view = 'main'; }
+    else if (ui.view !== 'setup' && ui.view !== 'editor') openShelf(ui);
+    return true;
+  }
+  if (/^(library|kept|saved|new)$/i.test(a)) { openShelf(ui); return true; }
+  // A loop you kept, or a ready-made one, by its name: loaded at the last step to check.
+  const kept = findByName(state?.library ?? [], a);
+  if (kept) { loadInto(ui, kept, state); return true; }
+  const u = unclearOf(a);
+  openSetup(ui, u ? { mode, text: a, unclear: u } : { mode, sentence: a });
+  return true;
+}
+
+// ---- the buttons: what pressing one does (loops-draw.mjs buttonsOf) ----
+function press(b, l, id) {
+  const { ui, state } = b;
+  if (!id) return;
+  if (id === 'back') { ui.view = 'main'; ui.watch = null; ui.btn = 0; return; }
+  if (!l) return;
+  const q = l.current?.needs;
+  if (/^pick\d$/.test(id)) {
+    const opt = q?.options?.[Number(id.slice(4)) - 1];
+    if (opt) { b.send({ op: 'answer', id: l.id, choice: 'yes', text: opt }); say(ui, `${l.name}: you picked “${opt}”`); }
+    return;
+  }
+  if (id === 'yes' || id === 'always' || id === 'no') {
+    b.send({ op: 'answer', id: l.id, choice: id });
+    say(ui, id === 'no' ? `${l.name}: you said no` : id === 'always' ? `${l.name}: yes, and it will not ask this again` : `${l.name}: yes`);
+    return;
+  }
+  if (id === 'go' || id === 'skip') { b.send({ op: id, id: l.id }); say(ui, id === 'go' ? `${l.name}: run ${l.ready?.n ?? ''} starts` : `${l.name}: that run is left out`); return; }
+  if (id === 'rules') { openSetup(ui, { loop: l, state, mode: state.mode ?? 'ask' }); return; }
+  // Save: its rules page, the name box picked (Save as keeps a copy to load again).
+  if (id === 'save') { openSetup(ui, { loop: l, state, mode: state.mode ?? 'ask' }); ui.setup.rule = startRows(ui.setup).indexOf('saveName'); ui.setup.save.name = l.name; ui.watch = null; return; }
+  if (id === 'again') { ui.stamp = stampOf(); b.send({ op: 'typed', text: `/loop ${l.id} again`, id: l.id, stamp: ui.stamp }); say(ui, `${l.name}: starting again…`, 'dim'); return; }
+  if (id === 'wake') { ui.stamp = stampOf(); b.send({ op: 'wake', stamp: ui.stamp }); say(ui, 'Turning the model on…', 'dim'); return; }
+  if (id === 'older' || id === 'newer') {
+    const runs = [...l.runs, ...(l.current ? [l.current] : [])].map((r) => r.n);
+    const at = ui.watch?.n ? runs.indexOf(ui.watch.n) : runs.length - 1;
+    if (id === 'older' && at > 0) { ui.watch.n = runs[at - 1]; ui.watch.scroll = 0; }
+    else if (id === 'newer' && at >= 0 && at < runs.length - 1) { ui.watch.n = at + 1 >= runs.length - 1 ? null : runs[at + 1]; ui.watch.scroll = 0; }
+    else say(ui, id === 'older' ? 'This is its first run' : 'This is its newest run', 'dim');
+    return;
+  }
+  const key = { run: '^R', pause: '^P', stop: '^S', undo: '^B', open: '^G', redo: '^X' }[id];
+  if (key) { if (id === 'open') ui.btn = 0; handleKey(b, key); }
 }
 
 // ---- the box: what enter does with the words typed ----
@@ -225,18 +304,15 @@ function send(b, l) {
   if (!text) { if (as !== 'note' && l && !over(l)) say(ui, 'Type what it should do differently first, then enter', 'dim'); return; }
   ui.chat.text = '';
   ui.chat.as = 'note';
-  // A /loop line: an unclear one is asked about in the setup; the rest goes to the window as typed.
+  // A /loop line: a sentence opens the wizard's last step to confirm, an unclear one its first; "/loop 2 every 7m" goes to the window.
   if (/^\/loops?\b/i.test(text)) {
     const rest = text.replace(/^\/loops?\s*/i, '');
     if (!rest) { openSetup(ui, { mode: state.mode ?? 'ask' }); return; }
-    const u = !isLoopCommand(rest) && unclearOf(rest);
-    if (u) { openSetup(ui, { mode: state.mode ?? 'ask', text: rest, unclear: u }); return; }
-    ui.stamp = stampOf();
-    b.send({ op: 'typed', text, id: l?.id ?? null, stamp: ui.stamp });
-    say(ui, isLoopCommand(rest) ? 'Sent' : 'Making the loop…', 'dim');
+    if (isLoopCommand(rest)) { ui.stamp = stampOf(); b.send({ op: 'typed', text, id: l?.id ?? null, stamp: ui.stamp }); say(ui, 'Sent', 'dim'); return; }
+    openFromChat(ui, rest, state);
     return;
   }
-  if (!l) { ui.chat.text = text; say(ui, 'No loop yet: ^N makes one, or type /loop 5m <message>', 'warn'); return; }
+  if (!l) { ui.chat.text = text; say(ui, 'No loop yet: ^N makes one, or type /loop and what it should do', 'warn'); return; }
   const q = l.current?.needs;
   if (q) {
     // A question: a number picks one of its choices, other words are the answer.
@@ -278,8 +354,9 @@ function send(b, l) {
 // the commands are ctrl keys, and a question that needs a yes is answered by typing it.
 export function handleKey(b, k) {
   const { state, ui } = b;
-  if (ui.view === 'form') return formKey(b, k);
   if (ui.view === 'setup') return setupKey(b, k);
+  if (ui.view === 'shelf') return shelfKey(b, k);
+  if (ui.view === 'editor' && ui.editor) return editorKey(b, k);
   if (ui.view === 'confirm') {
     // Only y does it: enter does nothing here (4 Oct 2026: a stop came from an s typed and an enter).
     const c = ui.confirm;
@@ -295,26 +372,29 @@ export function handleKey(b, k) {
     if (watching) { ui.view = 'main'; ui.watch = null; return; }
     return b.quit();
   }
-  if (k === 'enter') return send(b, l);
+  // Enter: what you typed goes to the loop; with nothing typed, the lit button is pressed.
+  const btns = watching ? watchButtonsOf(l, state.model) : buttonsOf(l, state.model);
+  const lit = Math.max(0, Math.min(ui.btn ?? 0, btns.length - 1));
+  if (k === 'enter') { if (ui.chat.text.trim() || ui.chat.as !== 'note') return send(b, l); if (!l) { openShelf(ui); return; } return press(b, l, btns[lit]?.[0]); }
   if (k === 'backspace') { ui.chat.text = [...ui.chat.text].slice(0, -1).join(''); return; }
   if (k === '^U') { ui.chat.text = ''; return; }
-  if (k === '^N') { openSetup(ui, { mode: state.mode ?? 'ask' }); return; }
-  if (watching && ['up', 'down', 'left', 'right'].includes(k)) {
-    const runs = [...l.runs, ...(l.current ? [l.current] : [])].map((r) => r.n);
-    const at = ui.watch.n ? runs.indexOf(ui.watch.n) : runs.length - 1;
+  // ^N, and tab with nothing typed: the Library (its first card makes a new loop from scratch).
+  if (k === '^N' || (!watching && (k === 'tab' || k === 'shiftTab') && !ui.chat.text)) { openShelf(ui); return; }
+  if ((k === 'left' || k === 'right') && !ui.chat.text) { if (btns.length) ui.btn = (lit + (k === 'left' ? btns.length - 1 : 1)) % btns.length; return; }
+  if (watching && (k === 'up' || k === 'down')) {
     if (k === 'up') ui.watch.scroll = (ui.watch.scroll ?? 0) + 3;
-    else if (k === 'down') ui.watch.scroll = Math.max(0, (ui.watch.scroll ?? 0) - 3);
-    else if (k === 'left' && at > 0) { ui.watch.n = runs[at - 1]; ui.watch.scroll = 0; }
-    else if (k === 'right' && at >= 0) { ui.watch.n = at + 1 >= runs.length - 1 ? null : runs[at + 1]; ui.watch.scroll = 0; }
+    else ui.watch.scroll = Math.max(0, (ui.watch.scroll ?? 0) - 3);
     return;
   }
-  if (['up', 'down', 'left', 'right', 'tab', 'shiftTab'].includes(k)) {
+  if (['up', 'down', 'tab', 'shiftTab'].includes(k)) {
     const n = state.loops.length;
-    if (!n || k === 'tab' || k === 'shiftTab') return;
-    ui.sel = (ui.sel + (k === 'up' || k === 'left' ? n - 1 : 1)) % n;
+    if (!n) return;
+    ui.sel = (ui.sel + (k === 'up' || k === 'shiftTab' ? n - 1 : 1)) % n;
+    ui.btn = 0;
     ui.chat.as = 'note';
     return;
   }
+  if (k === 'left' || k === 'right') return;
   if (k.length === 1 && k >= ' ') { ui.chat.text += k; return; }
   if (!l) { if (/^\^[A-Z]$/.test(k)) say(ui, 'No loop yet: ^N makes one', 'dim'); return; }
   if (k === '^R') { if (l.current) say(ui, `${l.name} is already running`, 'dim'); else if (over(l)) say(ui, `${l.name} has ended: type a note and enter starts it again`, 'dim'); else if (!state.model.on) say(ui, `${state.model.why || 'The model is off'}: /start in the coding window first`, 'warn'); else { b.send({ op: 'run', id: l.id }); say(ui, `${l.name}: running now`); } return; }
@@ -325,8 +405,8 @@ export function handleKey(b, k) {
     ui.view = 'confirm';
     return;
   }
-  // ^O: the loop's rules in the form (one that ended can start again from there).
-  if (k === '^O') { openForm(ui, l); return; }
+  // ^O: the loop's rules on the setup page (one that ended can start again from there).
+  if (k === '^O') { openSetup(ui, { loop: l, state, mode: state.mode ?? 'ask' }); return; }
   // ^X: the box starts the run over with your words; again keeps its changes, again a plain note.
   if (k === '^X') {
     if (over(l)) { say(ui, `${l.name} has ended: type a note and enter starts it again`, 'dim'); return; }
@@ -351,6 +431,7 @@ export function handleKey(b, k) {
   }
   // ^G: one run full size, the one under way or the last; it stays on the screen when the next starts.
   if (k === '^G') {
+    ui.btn = 0;
     if (watching) { ui.view = 'main'; ui.watch = null; return; }
     ui.watch = { id: l.id, n: l.current?.n ?? l.runs.at(-1)?.n ?? null, scroll: 0 };
     ui.view = 'watch';
@@ -381,7 +462,7 @@ export async function runBoard({ home = HOME, pid = null, input = process.stdin,
   if (!input.isTTY || !out.isTTY) { output.write('coding loops needs a terminal.\n'); return 2; }
   if (!pid) {
     const boards = listBoards(home);
-    if (!boards.length) { output.write('No coding window has a loop now. In a coding window, type: /loop 10m <message>   (or /loop test 5m, /loop debug, /loop web 30m <what to read>; /loops shows them there)\n'); return 0; }
+    if (!boards.length) { output.write('No coding window has a loop now. In a coding window, type /loop to load a ready-made loop or make one, or say it in a sentence: /loop run the tests every 10 min until 6pm\n'); return 0; }
     if (boards.length === 1) pid = boards[0].pid;
     else {
       output.write('Which window\'s loops?\n\n');
@@ -417,7 +498,7 @@ export async function runBoard({ home = HOME, pid = null, input = process.stdin,
       if (last) out.write(`${last}\n`);
       resolve(code);
     };
-    const b = { get state() { return state; }, ui, send: (cmd) => sendCommand(home, pid, cmd), quit: () => leave(0, 'The loop board is closed. The loops go on in their window; /loops there shows them.') };
+    const b = { get state() { return state; }, ui, send: (cmd) => sendCommand(home, pid, cmd), quit: () => leave(0, 'The loop board is closed. The loops go on in their window; /loop there shows them.') };
     const onReadable = () => {
       let c;
       while (!done && (c = input.read()) !== null) {
