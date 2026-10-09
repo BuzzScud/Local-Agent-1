@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Server Install</title>
+<style>
+:root {
+  --page: #f4f4f1; --surface: #fcfcfb; --panel: #efefeb; --line: #e1e0d9; --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f;
+  --accent: #2a78d6; --accent-ink: #fff; --good: #1f8a4c; --warn: #b26b00; --term: #16171a; --term-ink: #e8e8e3; --term-dim: #8b8d93;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --good: #4cc27c; --warn: #e3a33b; --term: #0a0a0b; } }
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --good: #4cc27c; --warn: #e3a33b; --term: #0a0a0b; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: grid; place-items: center; padding: 14px; overflow: hidden; }
+.win { width: min(1080px, 100%); height: min(calc(100vh - 28px), 820px); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.14); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; overflow: hidden; }
+.bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.bar i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; } .bar i:nth-child(1) { background: #ff5f57; } .bar i:nth-child(2) { background: #febc2e; } .bar i:nth-child(3) { background: #28c840; }
+.bar b { margin-left: 8px; font-size: 13px; }
+.chips { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { border: 1px solid var(--line); background: var(--surface); color: var(--ink2); border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer; }
+.chips button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chips button.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.stage { overflow: auto; padding: 18px 22px; min-height: 0; }
+.kick { display: flex; gap: 10px; align-items: center; color: var(--ink3); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.pill { text-transform: none; letter-spacing: 0; background: var(--panel); border-radius: 999px; padding: 1px 9px; color: var(--ink2); }
+h2 { margin: 6px 0 4px; font-size: 21px; }
+.why { color: var(--ink2); margin: 0 0 14px; max-width: 760px; }
+.box { border-radius: 12px; margin: 0 0 12px; overflow: hidden; border: 1px solid var(--line); }
+.box h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink3); padding: 8px 12px; background: var(--panel); display: flex; align-items: center; gap: 8px; }
+.term { background: var(--term); color: var(--term-ink); font: 13px/1.6 var(--mono); padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; position: relative; }
+.term .p { color: var(--term-dim); user-select: none; }
+.term .dim { color: var(--term-dim); }
+.term .y { color: #f5c542; }
+.copy { margin-left: auto; border: none; background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 5px 14px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.under { font-size: 12px; color: var(--ink3); padding: 6px 12px; background: var(--panel); }
+.help { display: none; grid-template-columns: 1fr 1fr; gap: 10px; }
+.helpopen .help { display: grid; } .helpopen .expect { display: none; }
+.help div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.help b { display: block; margin-bottom: 3px; }
+.help code, .why code, li code { font: 12.5px var(--mono); background: var(--panel); border-radius: 4px; padding: 0 4px; }
+.fields { display: grid; grid-template-columns: 1.4fr 1fr .7fr; gap: 10px 14px; max-width: 860px; margin: 0 0 12px; }
+.fields label { display: block; font-size: 12px; color: var(--ink2); }
+.fields input { display: block; margin-top: 3px; font: 13px var(--mono); padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--page); color: var(--ink); width: 100%; }
+ul.plain { margin: 0 0 12px; padding-left: 18px; color: var(--ink2); max-width: 780px; } ul.plain li { margin: 3px 0; }
+.foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.foot .sp { flex: 1; }
+.foot button { font: inherit; border-radius: 10px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.foot { flex-wrap: nowrap; }
+.foot #go { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.foot #alt { visibility: visible; } .foot #alt.hide { visibility: hidden; }
+.note { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); border-radius: 10px; padding: 9px 12px; font-size: 13px; margin: 0 0 12px; max-width: 780px; }
+@media (max-width: 700px) { body { padding: 0; } .win { height: 100vh; border-radius: 0; } .fields { grid-template-columns: minmax(0, 1fr); } .help { grid-template-columns: minmax(0, 1fr); } .stage { padding: 14px; } .foot { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px; } .foot .sp { display: none; } .foot #go { grid-column: 1 / -1; grid-row: 2; } .foot button { padding: 9px 10px; font-size: 13px; } }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="bar"><i></i><i></i><i></i><b>Agentic Coder Web · the AI-server copy, step by step</b></div>
+  <div class="chips" id="chips"></div>
+  <div class="stage" id="stage"></div>
+  <div class="foot"><button id="back" type="button">Back</button><button id="alt" type="button">Something's different</button><span class="sp"></span><button id="go" type="button">Next →</button></div>
+</div>
+<script>
+(() => {
+'use strict';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } } };
+const F = { ip: store.get('acw-ip') ?? '', ai: store.get('acw-ai') ?? '60009,60010', calc: store.get('acw-calc') ?? '60011' };
+const host = () => (F.ip ? `${F.ip.trim().replace(/\./g, '-')}.sslip.io` : '<your-ip-with-dashes>.sslip.io');
+const ip = () => F.ip.trim() || '<server ip>';
+const aiUrls = () => F.ai.split(',').map((p) => p.trim()).filter(Boolean).map((p) => `http://host.docker.internal:${p}`).join(',');
+const DIR = 'cd ~/agentic-coder/terminal/app/web-container &&';
+const STEPS = [
+  { id: 'start', chip: 'Start', title: 'Put Agentic Coder Web on your AI server', mins: '≈ 15 min', why: 'This copy is the chat and the calculator, behind https, reachable from anywhere by the people you invite. It runs as two containers beside your calculator: the web, and Caddy, which gets and renews the https certificate by itself.', start: true },
+  { id: 'login', chip: '1 · Log in', title: 'Open a Terminal on the server', mins: '1 min', why: 'From the machine that can log in to it (this Mac\'s key is not on it).', cmd: () => `ssh root@${ip()}`, expect: () => `<span class="dim">Last login: …</span>\n[root@… ~]#`, ok: 'I see the server\'s prompt →', help: [['It asks for a password, or says Permission denied', 'Use the machine whose key the server takes; the server only takes keys, not passwords.'], ['The prompt still says my Mac\'s name', 'The login did not happen: run the line again and look for an error above the prompt.']] },
+  { id: 'docker', chip: '2 · Docker', title: 'Check Docker Compose is there', mins: '1 min', why: 'Your calculator already runs in containers, so it should be.', cmd: () => 'docker compose version', expect: () => 'Docker Compose version v2.<span class="y">N</span>.<span class="y">N</span>  <span class="dim">(what Docker usually prints)</span>', ok: 'It printed a version →', help: [['command not found, or unknown command "compose"', 'Docker or its compose plugin is missing. On a RHEL-type server: <code>dnf install docker-compose-plugin</code>, then run this step again.'], ['permission denied … docker.sock', 'You are not root: run the steps as root, or put <code>sudo</code> in front.']] },
+  { id: 'ports', chip: '3 · Ports', title: 'Check ports 80 and 443 are free', mins: '1 min', why: 'Caddy needs both: 80 to prove the address is yours to Let\'s Encrypt, 443 for https.', cmd: () => "ss -ltnp '( sport = :80 or sport = :443 )'", expect: () => 'State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n<span class="dim">(only this header line: nothing is using them)</span>', ok: 'Only the header line →', help: [['A line with :80 or :443 and a program (nginx, httpd, apache…)', 'Something already serves the web here. Stop it if it is unused; otherwise tell me which one and I will change the setup to sit behind it.'], ['The firewall', 'If the server runs firewalld, open both: <code>firewall-cmd --permanent --add-service=http --add-service=https && firewall-cmd --reload</code>']] },
+  { id: 'code', chip: '4 · Code', title: 'Get Agentic Coder', mins: '1 min', why: 'The repo is public, so no key is needed. Run it again later to update (it pulls when the folder is there).', cmd: () => 'test -d ~/agentic-coder && git -C ~/agentic-coder pull || git clone https://github.com/BuzzScud/Local-Agent-1.git ~/agentic-coder', expect: () => "Cloning into '/root/agentic-coder'...\n<span class=\"dim\">(or, the second time: Already up to date.)</span>", ok: 'It cloned or pulled →', help: [['git: command not found', 'Install it: <code>dnf install git</code> (or <code>apt install git</code>), then run this step again.'], ['No such file … web-container (in the next steps)', 'The web part is not on GitHub yet: it is pushed when you say so.']] },
+  { id: 'env', chip: '5 · Settings', title: 'Write the settings file', mins: '1 min', why: 'It names the web\'s address and where the container finds your AI services and calculator. It stays on the server, never in git.', fields: true, cmd: () => `${DIR} cat > .env <<'EOF'\nWEB_HOST=${host()}\nAGENTIC_WEB_SERVER=${host()}\nAGENTIC_AI_URLS=${aiUrls()}\nAGENTIC_CALC_URL=http://host.docker.internal:${F.calc.trim() || '60011'}\nEOF\ncat .env`, expect: () => `WEB_HOST=${esc(host())}\nAGENTIC_WEB_SERVER=${esc(host())}\nAGENTIC_AI_URLS=${esc(aiUrls())}\nAGENTIC_CALC_URL=http://host.docker.internal:${esc(F.calc.trim() || '60011')}`, ok: 'It printed those four lines →', safe: 'Safe: it writes one new file, .env, in the web-container folder (replacing an older .env there, if any).', help: [['The address part says <your-ip-with-dashes>', 'Type the server\'s IP in the box above first; the command fills itself in.'], ['A container cannot reach host.docker.internal later (step 7)', 'Use the server\'s own address instead: http://<ip>:60009 and so on, in .env.']] },
+  { id: 'up', chip: '6 · Start', title: 'Build and start the two containers', mins: '3–5 min', why: 'The first build downloads Bun and Caddy. Both start again by themselves after a restart of the server.', cmd: () => `${DIR} docker compose up -d --build`, expect: () => '<span class="dim">… building …</span>\n ✔ Container web-container-web-1    Started\n ✔ Container web-container-caddy-1  Started  <span class="dim">(what Docker usually prints)</span>', ok: 'Both say Started →', help: [['bind: address already in use', 'Port 80 or 443 is taken: go back to step 3.'], ['The build fails at bun install', 'Copy its last lines to me; nothing else on the server changed.']] },
+  { id: 'link', chip: '7 · First admin', title: 'Get the link that makes the first admin', mins: '1 min', why: 'With no account yet, the web prints a one-time link (good for a day). Whoever opens it first becomes the admin, so open it right away.', cmd: () => `${DIR} docker compose logs web | grep -E 'invite|chat \\+ calculator|No AI|No calculator'`, expect: () => `web-1  | No account yet. Make the first admin here (works once, for a day): https://${esc(host())}/invite/<span class="y">a1B2…</span>\nweb-1  | Agentic Coder Web (chat + calculator) on 0.0.0.0:8080`, ok: 'I see the invite link →', help: [['It also says "No AI service yet" or "No calculator yet"', 'The .env lines were empty when it started: fix .env (step 5), then <code>docker compose up -d</code> again.'], ['No invite line, but "chat + calculator" is there', 'An admin already exists in its saved data: sign in, or run <code>docker compose exec web bun terminal/src/web/main.mjs invite yourname --admin</code>.']] },
+  { id: 'open', chip: '8 · Open', title: 'Open it in your browser', mins: '2 min', why: 'Paste the link from step 7. The first visit can take a minute while Caddy gets the certificate.', cmd: () => `https://${host()}/invite/…`, browser: true, expect: () => '🔒 in the address bar · “Make the first admin” · then the app, signed in as you', ok: 'I am signed in →', help: [['The browser says the connection is not secure, or will not load', 'Wait a minute and reload: Caddy may still be getting the certificate. Still failing: <code>docker compose logs caddy | tail -20</code> and send me the lines.'], ['The models list says not answering', 'The web cannot reach your AI services: check AGENTIC_AI_URLS in .env (step 5).']] },
+  { id: 'done', chip: 'Done', title: 'It is running', mins: '', why: 'Invite people from Admin → Invite someone. Admin → Settings holds the AI services, the calculator and its login for formulas, and the limits.', done: true },
+];
+let at = Math.min(Number(store.get('acw-step') ?? 0) || 0, STEPS.length - 1);
+let helpOpen = false;
+function draw() {
+  const s = STEPS[at];
+  $('#chips').innerHTML = STEPS.map((x, i) => `<button type="button" data-i="${i}" class="${i === at ? 'on' : i < at ? 'done' : ''}">${esc(x.chip)}</button>`).join('');
+  document.querySelectorAll('#chips button').forEach((b) => { b.onclick = () => { at = Number(b.dataset.i); helpOpen = false; draw(); }; });
+  let h = `<div class="kick">${s.start || s.done ? '' : `Step ${at} of ${STEPS.length - 2}`} ${s.mins ? `<span class="pill">${esc(s.mins)}</span>` : ''}</div><h2>${esc(s.title)}</h2><p class="why">${s.why}</p>`;
+  if (s.start) h += `<ul class="plain"><li>You run every line yourself, in a Terminal logged in to the server. Nothing here starts on its own.</li><li>The server's address goes in a box on step 5; it is kept in this browser only, never in a file.</li><li>Each step shows what Terminal should print. Lines marked “usually prints” are Docker's; the web's own lines are exactly what its code prints, with the parts that change in <span style="color:#b8900f">yellow</span>.</li><li>Before you start: the web part must be on GitHub (it is pushed when you say so).</li></ul>`;
+  if (s.fields) h += `<div class="fields"><label>Server IP<input id="f-ip" value="${esc(F.ip)}" placeholder="e.g. 203.0.113.7" spellcheck="false"></label><label>AI service ports (AI 1 first)<input id="f-ai" value="${esc(F.ai)}" spellcheck="false"></label><label>Calculator port<input id="f-calc" value="${esc(F.calc)}" spellcheck="false"></label></div>`;
+  if (s.cmd) {
+    const text = s.cmd();
+    h += `<div class="${helpOpen ? 'helpopen' : ''}" id="panel"><div class="box"><h3>${s.browser ? 'Put this into your browser' : 'Type this into Terminal'}<button class="copy" id="copy" type="button">Copy</button></h3><div class="term">${s.browser ? '' : '<span class="p">% </span>'}${esc(text)}</div><div class="under">${s.browser ? 'then Return' : 'then ⌘V, Return'}${s.safe ? ` · ${esc(s.safe)}` : ''}</div></div>
+      <div class="box expect"><h3>${s.browser ? 'You should see' : 'Terminal should print'}</h3><div class="term">${s.expect()}</div></div>
+      <div class="help">${s.help.map(([a, b]) => `<div><b>${a}</b>${b}</div>`).join('')}</div></div>`;
+  }
+  if (s.done) h += `<ul class="plain"><li>Update later: step 4's line, then step 6's.</li><li>Stop it: <code>${esc(DIR)} docker compose down</code> (the accounts and chats are kept in its volume).</li><li>A new admin link from the server: <code>${esc(DIR)} docker compose exec web bun terminal/src/web/main.mjs invite yourname --admin</code></li></ul>`;
+  $('#stage').innerHTML = h;
+  const c = $('#copy'); if (c) c.onclick = () => { navigator.clipboard?.writeText(s.cmd()).then(() => { c.textContent = 'Copied'; setTimeout(() => { c.textContent = 'Copy'; }, 1400); }).catch(() => {}); };
+  if (s.fields) for (const [id, k, key] of [['f-ip', 'ip', 'acw-ip'], ['f-ai', 'ai', 'acw-ai'], ['f-calc', 'calc', 'acw-calc']]) $(`#${id}`).oninput = (e) => { F[k] = e.target.value; store.set(key, F[k]); const t = document.querySelector('.term'); if (t) t.innerHTML = `<span class="p">% </span>${esc(s.cmd())}`; const ex = document.querySelectorAll('.term')[1]; if (ex) ex.innerHTML = s.expect(); };
+  $('#back').style.visibility = at ? 'visible' : 'hidden';
+  $('#alt').className = s.help ? '' : 'hide';
+  $('#alt').textContent = helpOpen ? 'Show what it should print' : "Something's different";
+  $('#go').textContent = s.start ? 'Start →' : s.done ? 'Start over' : s.ok;
+  store.set('acw-step', String(at));
+}
+$('#go').onclick = () => { at = STEPS[at].done ? 0 : Math.min(at + 1, STEPS.length - 1); helpOpen = false; draw(); };
+$('#back').onclick = () => { at = Math.max(0, at - 1); helpOpen = false; draw(); };
+$('#alt').onclick = () => { helpOpen = !helpOpen; $('#panel')?.classList.toggle('helpopen', helpOpen); $('#alt').textContent = helpOpen ? 'Show what it should print' : "Something's different"; };
+draw();
+})();
+</script>
+</body>
+</html>
