@@ -191,7 +191,8 @@ export class Agent extends EventEmitter {
   // The Screen tool (tools/screen.mjs): on a Mac, for a model that can look at pictures now or
   // once its vision is turned on (visionOn); "screen": false in settings.json leaves it out.
   // mayLook: the app says whether this model can turn its vision on (App.jsx).
-  screenOn() { return process.platform === 'darwin' && this.screen !== false && !this.isHelper && Boolean(this.canSee || this.mayLook?.()); }
+  // AGENTIC_SCREEN=off: never offered (the web's runs: a person on another computer must not see this Mac's screen).
+  screenOn() { return process.platform === 'darwin' && this.screen !== false && process.env.AGENTIC_SCREEN !== 'off' && !this.isHelper && Boolean(this.canSee || this.mayLook?.()); }
   // The web tools on offer (/web): WebSearch with a search service, WebFetch with reading pages.
   // On the Claude API both are Anthropic's own (claude.mjs), unless /web's Claude row is off.
   webTools() {

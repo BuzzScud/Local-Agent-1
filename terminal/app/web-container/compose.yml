@@ -1,0 +1,32 @@
+# The AI-server copy beside your calculator: the web (port 8080 inside) behind Caddy, which gets
+# and renews the https certificate for WEB_HOST by itself (ports 80 and 443 must be free).
+# Fill .env from env.example first. From the repo's root:
+#   docker compose -f terminal/app/web-container/compose.yml up -d --build
+services:
+  web:
+    build:
+      context: ../../..
+      dockerfile: terminal/app/web-container/Dockerfile
+    env_file: .env
+    volumes:
+      - web-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+  caddy:
+    image: caddy:2.8.4
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+volumes:
+  web-data: {}
+  caddy-data: {}
+  caddy-config: {}

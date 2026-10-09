@@ -974,6 +974,91 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   The app tests run with the Launcher (`pty.mjs`, `term.mjs` and the keeper tests set `AGENTIC_HOME_LOOK`), since
   they were written against it; `terminal/test/home-looks.test.mjs` drives the Menu, in a real window too.
 
+## Agentic Coder Web: the page, the backend and the tools server (8 Oct 2026)
+
+- **What and why.** The owner asked for "a web interface … a backend and tools server with API access … multi user
+  support … route requests to my AI and calculator", for Agentic Coder. Their picks: the full build, two copies (this
+  Mac, Tailscale only: runs in folders; their AI server: chat + calculator, in a container behind https on an sslip.io
+  name, installed by them), accounts made by an admin (invite links), Accept edits with every command asked in the
+  browser, separate accounts per copy, all their models (Laguna q8 admin only), no Claude key for web users, upload and
+  download, the admin may open everyone's chats and files, and a request with no first word moved to AI 2 after 60 s.
+  The Laguna rule (theirs): Laguna q8 only for huge work and only after a switch: never by itself.
+- **Where** (`terminal/src/web/`, `coding web`; `main.mjs` is also the container's entry): `server.mjs` (one Bun
+  server: the page, its API, the API for keys `/api/v1/…`, the gateway's paths, `/mcp`), `auth.mjs` (argon2id, a
+  SameSite=Strict cookie whose changes must come from the page, invites, resets, `acw_` keys and the runs' `acr_`
+  tokens; secrets kept as sha256), `db.mjs` (bun:sqlite), `config.mjs` (the web home `~/.agentic-coder/web/` or
+  `AGENTIC_WEB_HOME`, settings.json 0600: the user's addresses live only there, never in the repo), `gateway.mjs`,
+  `queue.mjs` (one run a person, two at once, turns go round), `runner.mjs`, `chat.mjs` (a model with the calculator as
+  its tools, through the gateway), `files.mjs`, `mcp-http.mjs`, `page.html` (imported as text, so the installed app
+  carries it). The calculator's tools: `terminal/src/tools/calculator.mjs` (a failed sum is a failure though the
+  calculator says ok; phi sent as ((1+sqrt(5))/2); a letter's value may be plain arithmetic like "0.06/12"; one login
+  for formulas, made again once on a 401). The container: `terminal/app/web-container/` (Dockerfile, compose.yml with
+  Caddy, env.example); the owner's step page: `docs/other/agentic-coder-web-server-install-2026-10-08.html`.
+- **The gateway** (`gateway.mjs`): every model request of the web goes through it (the page's chat, the runs, the
+  keys' Ollama and OpenAI-shaped calls). It picks the service that has the model, refuses the last resort to anyone
+  but an admin or a run whose person said yes, drops keep_alive 0, sets num_ctx to the size a model is loaded at,
+  keeps a model kept for ever so (keep_alive -1 on Ollama's own paths, a pin after an OpenAI-shaped one), answers a load
+  of a loaded model itself, and counts usage. **The move to the stand-in**: no first word within `spill.after` seconds
+  plus reading what was sent at the service's measured speed (`readSpeed`, from Ollama's prompt_eval counts; 90 tokens a
+  second until measured: the owner's service read about that fast on 8 Oct, and 1,000 a second would have moved long
+  conversations that were only being read) plus loading when the model is not loaded; a request that does not stream
+  moves only when the service is busy. The run is told, and its next requests go straight there for 2 minutes. **Busy**:
+  Ollama keeps a model past its expires_at only while a request runs on it, so loaded + past it = busy since then.
+- **A run** (`runner.mjs`): `/loop`'s `startRun` (`app/loops.mjs`, with `self` = Agentic Coder itself:
+  `agenticCommand`), in Accept edits, in the person's folder, with their own home written for it: the gateway as an
+  OpenAI-style service with the run's token as its key (`AGENTIC_REMOTE_KEY`), the calculator as MCP server `calculator`
+  at `/mcp/run/<token>` allowed in permissions.json, their folder trusted, web reading off unless the admin allows it.
+  Its environment is a clean one (PATH, HOME, LANG… and the AGENTIC_ switches), with `AGENTIC_SCREEN=off` (new:
+  `agent.screenOn`; a person elsewhere must not see this Mac's screen) and their hooks off. The file tools already refuse
+  outside the folder in every mode but Bypass, which the web never uses; the commands' fence kept a fenced `security`
+  lookup from the Keychain (checked 8 Oct). Follow-ups: the run writes its transcript (`AGENTIC_TRANSCRIPT`) and the
+  next one carries it on (`spec.resume` → cli.jsx → `runHeadless({ resume })`). A message too big for the default model
+  (about its loaded context less 20k; the whole folder counted when the message asks for all of it) asks Switch to
+  Laguna · Stay, read in parts · Stop before it starts.
+- **Admin › Models** (round 2, 8 Oct 2026 evening; the owner: "a clear interface for admins to change the selected
+  models which it will need to query the AI for"; picks: the whole control room, all five jobs, load / keep / let go,
+  unfit models shown with a warning). `terminal/src/web/models.mjs`: five jobs in settings.json `models.roles`
+  (tasks, chat, standIn, lastResort, helper → `{ service, model }`; `roleOf` still reads the older `models.default`,
+  `spill.to`, `models.lastResort`), who may pick per `"<service>|<model>"` in `models.access` (all · admin · off;
+  the last resort is admins' unless set; `accessOf`), and `fitFor` (ok · warn · no: an embedding model cannot take a
+  chat job; no tools is a warning; the last resort must hold more than the tasks default is loaded at). The gateway's
+  list is `ollamaCatalog` (models/runtime/ollama.mjs: abilities, longest context, same weights; /api/show read once
+  per set of weights) plus /api/ps; `test` (one short answer, timed), `keep` (keep_alive -1, or 30 m) and `letGo`
+  (keep_alive 0; refused while a request or run uses it). Server: `/api/admin/models` (`?refresh=1`), `/role`,
+  `/access`, `/test`, `/keep`, `/letgo`; every change goes in the `model_log` table. A chat whose model is switched off
+  or gone goes on with the default and says so. **The Helper in web runs**: the runner writes `webHelper` into the
+  run's home and `coding -p` with `AGENTIC_WEB_RUN=1` sets `agent.helperJobs.side` from it (cli.jsx; `runHeadless`'s
+  `helperJobs`), so summaries, the second look and Stays on task go to it; the gateway lets the Helper through for runs
+  whoever their person is and sends it to the Helper's service. Other `coding -p` runs (loops) are unchanged.
+- **Each copy's own sign-in cookie** (`acw_<settings.instance>`, made at the first start): browsers keep cookies by
+  address, not port, so a second copy on the same Mac (a preview) signed the first one out with one shared name.
+- **The calculator link** (round 3, 8 Oct 2026 night; the owner: "a daemon that connects to this API … detect that the
+  connection dropped and restore it … refresh the token or session … if it's having an issue with the authentication
+  system design, submit a bug or feature request"; picks: inside the web with its own background service as a switch,
+  their own calculator account, reports filed automatically once each, the seven design requests filed with the first
+  session, /calc under /help and a hub tab). `terminal/src/web/calc-link.mjs`: one `CalcLink` signs in (`POST
+  /api/login`; there is no refresh route, so "refresh" is a new sign-in with the saved password), opens the websocket
+  (the server sends `sessionReady` itself), and tells a refused session (close 1008 "unauthorized": sign in again)
+  from the network (any other close: the same session after 1 s, 2 s … 60 s, ±20%). A websocket ping every 20 s with
+  10 s for the pong (a server that never pongs: `/health` twice) catches a connection that died without closing; a
+  beat far too late means the Mac slept, and a waiting retry runs at once. A wrong login is tried once (no lock-out).
+  It signs in again at 4/5 of a session's life (the login reply's expiry, else the shortest seen). Its one session is
+  shared: `formulasClient({ link })` uses it and reports a 401 to it. Reports go to the calculator's `POST
+  /api/requests` (`DESIGN`, `PROBLEMS`), each once: its own record (`<web home>/calc-link/state.json`, no secrets)
+  then the server's list by title; the password and session are scrubbed from every text. **Where it runs**
+  (`settings.calc.link`, `linkHost`): `web` (default, inside `startWeb`) or `service` (`coding calc on`: a LaunchAgent
+  running `coding calc run`, calc-cmd.mjs); the one that runs it answers on `<web home>/calc-link/link.sock` (0600; the
+  lock too), the service takes it over from the web (`/handover`), and the place whose turn it is not stops (the
+  service exits 0). The hub's Calculator tab (`calc-hub.mjs`, `calc.html`), `/calc [on|off|reconnect|status]` (in
+  `WHEN_ROOM`, the row under /help) and Admin › Settings read it. `AGENTIC_CALC_LINK=off` leaves it out of a web copy.
+  Tests: `terminal/test/calc-link.test.mjs` (a pretend calculator and a TCP pass-through that goes quiet).
+- **Tests**: `terminal/test/web-app.test.mjs` (pretend calculator and Ollama services: the fixes, the line, accounts,
+  nobody in unsigned, two people apart, the gateway's rules, the move to the stand-in, the Laguna question, MCP over HTTP
+  and Agentic Coder's own hub connecting to a run's address, the chat, and a real `coding -p` run through the gateway
+  that asks, runs after a yes and carries on; round 2: two copies' cookies, the jobs and access, Test / keep / let go,
+  the fall back to the default, and a web run's side jobs on the Helper). `terminal/test/web.test.mjs` is the web
+  *tools* (WebFetch, WebSearch).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

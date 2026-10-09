@@ -88,8 +88,10 @@ const BUILDS_CODE_OK = ['terminal/src/app/weights-core.mjs'];
 // Opens a server to the network on purpose: `coding serve`, the model for another
 // machine's /remote, only when it is run, and only behind its API key.
 // coding serve (the model, behind its key) and coding door (the background sessions, on the
-// Tailscale address only, behind its key) open a server to other machines on purpose.
-const LISTENS_WIDE_OK = ['models/runtime/serve.mjs', 'terminal/src/app/door.mjs'];
+// Tailscale address only, behind its key) open a server to other machines on purpose. So does coding web
+// (8 Oct 2026): the Mac copy on this Mac and its Tailscale address only, the server copy in its container
+// behind Caddy's https; every page and route but the sign-in needs an account (invite only).
+const LISTENS_WIDE_OK = ['models/runtime/serve.mjs', 'terminal/src/app/door.mjs', 'terminal/src/web/server.mjs'];
 export const buildsCode = (text) => /\beval\s*\(|\bnew Function\s*\(/.test(text);
 
 // ---- a server's address ------------------------------------------------------------------------

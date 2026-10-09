@@ -1,0 +1,7 @@
+# What the web container build leaves out (built from the repo root).
+node_modules
+dist
+docs
+**/results
+.git
+terminal/app/web-container/.env

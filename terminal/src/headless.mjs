@@ -26,7 +26,7 @@ import { agentDriver } from './agent/agents-driver.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false, workRoom = 0, steering = null, maxSteps = null, rewind = null, lean = false }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false, workRoom = 0, steering = null, maxSteps = null, rewind = null, lean = false, resume = null, helperJobs = null }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -99,6 +99,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   // A run from the Tests page's control panel brings its settings (AGENTIC_TEST_SETTINGS) when none are passed.
   limits ??= testLimits(model);
   if (limits) { applyLimits(agent, limits); applySearch(agent, limits); }
+  // The helper models of its side jobs, as a window's /subagents gives them (helper-models.mjs); a web run's Helper.
+  if (helperJobs) agent.helperJobs = helperJobs;
   // A loop's own steps a run (its rules) over /effort's Steps per request.
   if (maxSteps) agent.maxSteps = maxSteps;
   // A way given to the run (bench --way, coding -p --way, AGENTIC_WAY) wins over the limits' row.
@@ -142,6 +144,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   if (visionOn) { agent.visionOn = () => visionOn(agent); agent.mayLook = () => true; }
   let reason;
   await agent.startSession('startup');
+  // resume: the messages of an earlier run to carry on from (its own instructions are this run's).
+  if (resume?.length) { agent.messages = [agent.messages[0], ...resume.filter((m) => m && m.role !== 'system')]; onEvent('note', { text: `Carrying on the conversation (${resume.filter((m) => m?.role === 'user').length} earlier messages).`, tone: 'dim' }); }
   if (agents) {
     // coding -p --agents: the /agents run (agents-run.mjs) with nobody to ask. The interview and the plan
     // take the first answer, a NO-GO is fixed, a task that will not pass is left open; a step on the stop
