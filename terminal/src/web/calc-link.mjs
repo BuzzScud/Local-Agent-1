@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 import { webHome, loadSettings } from './config.mjs';
 
 export const HEARTBEAT_MS = 20_000;
+const ALIVE_EVERY_MS = 60_000;
 const TIMEOUT_MS = 15_000;
 
 export const linkDir = () => join(webHome(), 'calc-link');
@@ -97,7 +98,7 @@ export class CalcLink {
   load() {
     let s = {};
     try { s = JSON.parse(readFileSync(join(this.dir, 'state.json'), 'utf8')); } catch { /* a first start */ }
-    return { reports: s.reports ?? {}, lifetimes: s.lifetimes ?? [], events: s.events ?? [], counts: s.counts ?? {}, designQueued: Boolean(s.designQueued) };
+    return { reports: s.reports ?? {}, lifetimes: s.lifetimes ?? [], events: s.events ?? [], counts: s.counts ?? {}, designQueued: Boolean(s.designQueued), aliveAt: s.aliveAt ?? null, lastDrop: s.lastDrop ?? null, lastLive: s.lastLive ?? null };
   }
   save() {
     try {
@@ -131,6 +132,8 @@ export class CalcLink {
     if (!c.url) { this.set('no-address'); return; }
     if (!c.user || !c.pass) { this.set('no-login'); return; }
     if (!this.beat) { this.lastTick = this.now(); this.beat = setInterval(() => this.heartbeat(), this.heartbeatMs); }
+    this.startedAt = this.now();
+    this.event('start', this.where === 'service' ? 'Started as its own background service' : 'Started inside the web');
     this.signIn('start');
   }
   stop(why = 'stopped') {
@@ -333,6 +336,9 @@ export class CalcLink {
     const gap = t - (this.lastTick ?? t);
     this.lastTick = t;
     if (this.stopped) return;
+    // Still running, kept once a minute (9 Oct 2026: a link that died with the Mac's restart left no mark of how long
+    // it had run, and the hub could only draw "no record" from its last event to the restart).
+    if (t - (this.saved.aliveAt ?? 0) >= ALIVE_EVERY_MS) { this.saved.aliveAt = t; this.save(); }
     if (gap > this.heartbeatMs * 3) {
       this.event('woke', `Back after about ${secs(gap)} away (this Mac slept): checking the connection`);
       if (this.state === 'waiting' && this.retry) { const fn = this.retry; clearTimeout(this.timer); this.timer = null; this.nextTryAt = null; this.retry = null; this.attempt = 0; fn(); return; }
@@ -458,13 +464,13 @@ export class CalcLink {
     const s = this.session;
     const t = this.now();
     return {
-      running: true, where: this.where, pid: process.pid, state: this.state, words: this.words(), since: this.since,
+      running: true, where: this.where, pid: process.pid, state: this.state, words: this.words(), since: this.since, startedAt: this.startedAt ?? null, aliveAt: this.saved.aliveAt ?? null,
       url: c.url, user: c.user, hasPass: Boolean(c.pass),
       session: s ? { at: s.at, ageMs: t - s.at, expiresAt: s.expiresAt ?? null, refreshAt: s.refreshAt ?? null } : null,
       nextTryAt: this.nextTryAt, lastError: this.lastError, heartbeatMs: this.heartbeatMs, pings: Boolean(this.pongSeen),
       lifetimes: this.saved.lifetimes, lastDrop: this.saved.lastDrop ?? null, lastLive: this.saved.lastLive ?? null,
       counts: this.saved.counts.day === new Date(t).toLocaleDateString('en-CA') ? this.saved.counts : {},
-      reports: Object.values(this.saved.reports).map(({ text, ...r }) => r),
+      reports: Object.values(this.saved.reports),
       events: this.saved.events.slice(-60).reverse(),
     };
   }
@@ -586,6 +592,11 @@ export function linkHost({ where, readCalc = () => loadSettings().calc, log = ()
 }
 
 // What the link left behind when nothing runs it (the hub shows its reports and last events).
-export function savedState(dir = linkDir()) {
-  try { const s = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')); return { reports: Object.values(s.reports ?? {}).map(({ text, ...r }) => r), events: (s.events ?? []).slice(-60).reverse(), counts: s.counts ?? {}, lifetimes: s.lifetimes ?? [], lastDrop: s.lastDrop ?? null, lastLive: s.lastLive ?? null }; } catch { return { reports: [], events: [], counts: {}, lifetimes: [], lastDrop: null, lastLive: null }; }
+// The counts are the day's they were kept on: shown only on that day.
+export function savedState(dir = linkDir(), now = Date.now()) {
+  try {
+    const s = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'));
+    const today = s.counts?.day === new Date(now).toLocaleDateString('en-CA');
+    return { reports: Object.values(s.reports ?? {}), events: (s.events ?? []).slice(-60).reverse(), counts: today ? s.counts : {}, lifetimes: s.lifetimes ?? [], lastDrop: s.lastDrop ?? null, lastLive: s.lastLive ?? null, aliveAt: s.aliveAt ?? null };
+  } catch { return { reports: [], events: [], counts: {}, lifetimes: [], lastDrop: null, lastLive: null, aliveAt: null }; }
 }

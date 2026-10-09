@@ -1038,8 +1038,9 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **The box**: `groupFacts` (steps, reads, files with +/−, commands, the last test run's counts by `outcome`,
   thoughts, answers, failures) and `groupTask` (the main task, scored: a test run 3 (a command naming tests, pass or
   fail), an edit 2, another command or a web read 1.5, a file read 1, a thought 0.3; a question to you with little
-  else is ASKING) → `TASKS` (TESTING gold, EDITING purple, RUNNING orange, RESEARCH pink, EXPLORING blue, THINKING
-  grey, ASKING lavender; no green). `GroupBox` draws the top edge by hand (`╭─ TITLE ─ ▸ row ─╮`, the row cut with …
+  else is ASKING) → `TASKS` (since 9 Oct 2026 the owner's "3 · Nord", "i dont really like the purple and orange":
+  TESTING sand, EDITING light blue, RUNNING grey-teal, RESEARCH off-white, EXPLORING steel blue, THINKING grey, ASKING
+  dusty red; no green, purple or orange; the ✎, Ran and ? a closed box carries take EDITING's and ASKING's colours). `GroupBox` draws the top edge by hand (`╭─ TITLE ─ ▸ row ─╮`, the row cut with …
   by `fitPieces`, the files last so they go first) in the task's quieter shade, then, closed, `GroupPins` (your
   answers, the newest failure with how many others failed) or the bottom edge alone (two rows); open, every step
   as always inside it (screen.jsx `GroupView`, at the width less 8).
@@ -1136,6 +1137,22 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   service exits 0). The hub's Calculator tab (`calc-hub.mjs`, `calc.html`), `/calc [on|off|reconnect|status]` (in
   `WHEN_ROOM`, the row under /help) and Admin › Settings read it. `AGENTIC_CALC_LINK=off` leaves it out of a web copy.
   Tests: `terminal/test/calc-link.test.mjs` (a pretend calculator and a TCP pass-through that goes quiet).
+- **The Calculator tab, "2 · Chain"** (9 Oct 2026; the owner, after their Mac restarted and the tab said "Not running":
+  "can we improve / optimize the calculater tab?"; picks: its own background service by default, one row per outage,
+  alerts on the page and the hub's top bar only, then two designs on their real link, "2 · Chain"). `calc.html`: the
+  four things that must work in order (Running, Signed in, Connected, Answering), the first broken one red with its fix
+  (Start it as a background service, Change login, Reconnect now) and the ones after it waiting; the last 24 hours as
+  lanes (the connection's stretches; sign-ins, problems and reports as marks that find their row in the log); the log
+  told as a story and the reports with the text that was sent; the login in a box beside the card that opened it. Only
+  what changed is drawn again (a click or an open report is not lost to the 2 s refresh), nothing while the tab is
+  hidden. `terminal/src/web/calc-story.mjs`: `storyOf` (an outage and its tries as one row, a burst of reports as one,
+  a new login with its sign-in, the Mac's restart) and `dayOf` (up, down, off, none: no record). The link keeps a
+  "still running" mark once a minute (`aliveAt`, state.json) and a start line, so a link that dies with the Mac says
+  when it last ran; the hub reads this Mac's start (`bootTime`, kern.boottime). `GET /calc/brief.json` is the hub's
+  top bar: the status in the Calculator tab's line, and on any other tab a chip while a link with a login is not live.
+  A first login saved in the tab on a Mac, no place picked yet, turns the background service on (`setWhere`). The
+  service runs the installed app when there is one (`programNow`), never a working copy that may go away. The saved
+  counts show only on their own day.
 - **Tests**: `terminal/test/web-app.test.mjs` (pretend calculator and Ollama services: the fixes, the line, accounts,
   nobody in unsigned, two people apart, the gateway's rules, the move to the stand-in, the Laguna question, MCP over HTTP
   and Agentic Coder's own hub connecting to a run's address, the chat, and a real `coding -p` run through the gateway
