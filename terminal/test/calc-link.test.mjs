@@ -16,10 +16,11 @@ process.env.AGENTIC_MEMORY_SAVE = 'off';
 const base = mkdtempSync(join('/tmp', 'acw-calc-'));
 process.env.AGENTIC_WEB_HOME = join(base, 'web');
 process.env.AGENTIC_LAUNCH_DIR = join(base, 'launch');
-const { CalcLink, DESIGN, PROBLEMS, linkHost, askLink, serveLink, sockPath, expiryOf } = await import('../src/web/calc-link.mjs');
+const { CalcLink, DESIGN, PROBLEMS, linkHost, askLink, serveLink, sockPath, expiryOf, savedState } = await import('../src/web/calc-link.mjs');
+const { storyOf, dayOf } = await import('../src/web/calc-story.mjs');
 const { formulasClient } = await import('../src/tools/calculator.mjs');
 const { calcHub } = await import('../src/app/calc-hub.mjs');
-const { calcPlist, statusLines } = await import('../src/web/calc-cmd.mjs');
+const { calcPlist, statusLines, programNow } = await import('../src/web/calc-cmd.mjs');
 const { loadSettings, saveSettings, settingsFile } = await import('../src/web/config.mjs');
 
 const stops = [];
@@ -391,7 +392,7 @@ test('a socket left by a copy that did not stop is taken over; one answering is 
 
 test('the hub tab: status from the socket, the login saved (0600, never shown), where it runs switched with launchctl', async () => {
   const c = fakeThesis();
-  saveSettings({ calc: { url: c.url, user: null, pass: null } });
+  saveSettings({ calc: { url: c.url, user: null, pass: null, link: 'web' } });
   const calls = [];
   const hub = calcHub({ run: (a) => { calls.push(a.join(' ')); return { status: a[0] === 'print' ? 113 : 0, stdout: '', stderr: '' }; }, program: ['/usr/local/bin/bun', '/x/cli.jsx'] });
   const go = (path, body, origin) => hub.route(new Request(`http://127.0.0.1:1${path}`, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json', ...(origin ? { origin } : {}) }, body: JSON.stringify(body) }), new URL(`http://127.0.0.1:1${path}`));
@@ -450,3 +451,136 @@ test('coding calc run says in its log why it stopped: a SIGTERM (the service swi
   expect(out).toContain('calc link: the service was told to stop (SIGTERM');
   expect(code).toBe(0);
 }, 15_000);
+
+// ---- the Calculator tab, "2 · Chain" (9 Oct 2026): the log as a story, the last 24 hours, the top bar --------------
+
+const H = 3_600_000;
+const T0 = Date.parse('2026-10-08T21:00:00-04:00');
+// The owner's real link of 8–9 Oct 2026, its events as it saved them (the web copy stopped with the Mac's restart).
+const REAL = [
+  [7, 'stopped', 'Stopped (stopped)'], [251, 'stopped', 'Stopped (handed over)'], [252, 'stopped', 'Stopped (stopped)'], [253, 'stopped', 'Stopped (handed over)'], [254, 'stopped', 'Stopped (stopped)'],
+  [7334, 'stopped', 'Stopped (the login changed)'], [7334.4, 'signin', 'Signed in'], [7335, 'live', 'Live: the calculator opened the session'],
+  ...DESIGN.map((d, i) => [7336 + i * 0.02, 'report', `Filed a feature request: ${d.title}`]),
+  [15215, 'drop', 'The connection dropped (close 1006 "Connection ended"): reconnecting'], [15216, 'drop', 'The connection dropped (close 1006 "Connection ended"): reconnecting'],
+  [15218, 'drop', 'The connection dropped (close 1006 "Connection ended"): reconnecting'], [15222, 'drop', 'The connection dropped (close 1006 "Connection ended"): reconnecting'],
+  [15229, 'live', 'Live: the calculator opened the session'],
+].map(([s, kind, text]) => ({ at: T0 + s * 1000, kind, text }));
+const BOOT = T0 + 11 * H + 54 * 60_000; // 08:54 the next morning
+
+test('the log as a story: one row per outage, the reports as one, a new login with its sign-in, a restart', () => {
+  const rows = storyOf(REAL, { now: BOOT + 30 * 60_000, bootAt: BOOT });
+  expect(rows.map((r) => r.text)).toEqual([
+    'This Mac restarted',
+    'Dropped, back 14 s later',
+    'Filed 7 feature requests with the calculator',
+    'New login saved · signed in · live',
+    'Switched where it runs, back and forth',
+    'Stopped',
+  ]);
+  expect(rows[0]).toMatchObject({ kind: 'restart', lane: 'prob', sub: 'the link did not start again' });
+  expect(rows[1]).toMatchObject({ kind: 'outage', lane: 'prob', sub: 'the network · close 1006 “Connection ended” · 4 tries' });
+  expect(rows[2]).toMatchObject({ kind: 'report', lane: 'rep', n: 7 });
+  expect(rows[4].sub).toBe('4 steps in 3 s');
+  // still down: one row that counts its tries so far; a session that ran out is a new sign-in, not an outage
+  const down = storyOf([...REAL.slice(0, -1)], { now: T0 + 15225_000 });
+  expect(down[0]).toMatchObject({ kind: 'down', text: 'Dropped: trying again', sub: 'the network · close 1006 “Connection ended” · 4 tries so far' });
+  const renew = storyOf([{ at: T0, kind: 'start', text: 'Started as its own background service' }, { at: T0 + 1000, kind: 'signin', text: 'Signed in' }, { at: T0 + 2000, kind: 'live', text: 'Live' },
+    { at: T0 + 2 * H, kind: 'drop', text: 'The session ran out after 2 h (close 1008 "unauthorized"): signing in again' }, { at: T0 + 2 * H + 500, kind: 'signin', text: 'Signed in again: the session had run out' }, { at: T0 + 2 * H + 900, kind: 'live', text: 'Live' },
+    { at: T0 + 3 * H, kind: 'report', text: 'Problem seen: Sessions run out within minutes. It is filed once, with the next session' }]);
+  expect(renew.map((r) => r.text)).toEqual(['Problem seen: Sessions run out within minutes', 'The session ran out: signed in again', 'Started as its background service · signed in · live']);
+  expect(renew[1].sub).toBe('it lasted 2 h');
+  // a restart the service started with
+  const back = storyOf([...REAL, { at: BOOT + 40_000, kind: 'start', text: 'Started as its own background service' }], { now: BOOT + H, bootAt: BOOT });
+  expect(back.find((r) => r.kind === 'restart').sub).toBe('the link started with it');
+});
+
+test('the last 24 hours: live, the drop, no record after its last word, not running since the restart; a kept "still running" mark ends what is not known', () => {
+  const now = BOOT + 30 * 60_000;
+  const d = dayOf(REAL, { now, bootAt: BOOT });
+  expect(d.to - d.from).toBe(24 * H);
+  const kinds = d.segs.map((x) => x.s);
+  expect(kinds).toEqual(['none', 'off', 'up', 'down', 'up', 'none', 'off']);
+  expect(d.segs[3].b - d.segs[3].a).toBe(14_000);
+  expect(d.segs.at(-1)).toMatchObject({ s: 'off', a: BOOT, b: now });
+  // with the mark the link now keeps each minute: live until then, not running after
+  const kept = dayOf(REAL, { now, bootAt: BOOT, aliveAt: BOOT - 60_000 });
+  expect(kept.segs.map((x) => x.s).slice(-2)).toEqual(['up', 'off']);
+  expect(kept.segs.at(-1).a).toBe(BOOT - 60_000 + 1);
+  // running: the state carries on to now
+  expect(dayOf(REAL, { now, running: true }).segs.at(-1)).toMatchObject({ s: 'up', b: now });
+  // started again 48 minutes after the restart (as on 9 Oct): not running from the restart until then, live after
+  const late = [...REAL, { at: BOOT + 48 * 60_000, kind: 'signin', text: 'Signed in' }, { at: BOOT + 48 * 60_000 + 400, kind: 'live', text: 'Live' }];
+  const again = dayOf(late, { now: BOOT + H, bootAt: BOOT, running: true });
+  expect(again.segs.map((x) => x.s).slice(-4)).toEqual(['up', 'none', 'off', 'up']);
+  expect(again.segs.at(-2)).toMatchObject({ a: BOOT, b: BOOT + 48 * 60_000 + 400 });
+  expect(storyOf(late, { now: BOOT + H, bootAt: BOOT }).find((r) => r.kind === 'restart').sub).toBe('the link was not running until it was started again, 48 min later');
+});
+
+test('the link keeps a "still running" mark and a start line; the saved counts show only on their own day', async () => {
+  const c = fakeThesis();
+  const dir = dirOf();
+  const l = linkTo(c, { dir, opts: { where: 'service' } });
+  l.start();
+  await live(l);
+  await until(() => l.status().aliveAt);
+  const st = l.status();
+  expect(st.startedAt).toBeGreaterThan(0);
+  expect(st.events.at(-1)).toMatchObject({ kind: 'start', text: 'Started as its own background service' });
+  expect(JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')).aliveAt).toBe(st.aliveAt);
+  l.stop();
+  const s = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'));
+  writeFileSync(join(dir, 'state.json'), JSON.stringify({ ...s, counts: { day: '2026-10-08', drops: 1 }, reports: { a: { key: 'a', title: 'T', text: 'what was sent', status: 'filed' } } }));
+  expect(savedState(dir, Date.parse('2026-10-09T09:00:00-04:00')).counts).toEqual({});
+  expect(savedState(dir, Date.parse('2026-10-08T12:00:00-04:00')).counts).toMatchObject({ drops: 1 });
+  expect(savedState(dir).reports[0].text).toBe('what was sent');
+  expect(savedState(dir).aliveAt).toBe(st.aliveAt);
+});
+
+test('the tab: its story, the last 24 hours and this Mac\'s start; the top bar\'s brief; a first login on a Mac starts its background service', async () => {
+  const c = fakeThesis();
+  saveSettings({ calc: { url: null, user: null, pass: null, link: null } });
+  const calls = [];
+  const run = (a) => { calls.push(a.join(' ')); return { status: a[0] === 'print' ? 113 : 0, stdout: '', stderr: '' }; };
+  let clock = BOOT + H; // the tab's clock: the morning of 9 Oct, then the real one for the link that runs now
+  const hub = calcHub({ run, program: ['/app'], boot: () => BOOT, now: () => clock ?? Date.now() });
+  const go = (path, body) => hub.route(new Request(`http://127.0.0.1:1${path}`, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), new URL(`http://127.0.0.1:1${path}`));
+  expect(await (await go('/calc/brief.json')).json()).toMatchObject({ set: false, running: false, words: 'no login saved' });
+  const v = await (await go('/calc.json')).json();
+  expect(v).toMatchObject({ bootAt: BOOT, now: BOOT + H, link: null });
+  expect(Array.isArray(v.story) && v.day.segs.length >= 1).toBe(true);
+  // the first login: its own background service (on a Mac), the LaunchAgent written and loaded
+  await go('/calc/login', { url: c.url, user: 'me', pass: PASS });
+  if (process.platform === 'darwin') {
+    expect(loadSettings().calc.link).toBe('service');
+    expect(calls.some((x) => x.startsWith('bootstrap gui/'))).toBe(true);
+    expect(readFileSync(join(process.env.AGENTIC_LAUNCH_DIR, 'com.agentic-coder.calc-link.plist'), 'utf8')).toContain('<string>/app</string><string>calc</string><string>run</string>');
+  }
+  expect(await (await go('/calc/brief.json')).json()).toMatchObject({ set: true, running: false, tone: 'bad', words: 'not running' });
+  // a place picked already is never changed by a new login
+  calls.length = 0;
+  saveSettings({ calc: { ...loadSettings().calc, link: 'web' } });
+  await go('/calc/login', { pass: 'another' });
+  expect(loadSettings().calc.link).toBe('web');
+  expect(calls.some((x) => x.startsWith('bootstrap'))).toBe(false);
+  // running and live: the brief says so
+  clock = null;
+  saveSettings({ calc: { url: c.url, user: 'me', pass: PASS, link: 'web' } });
+  const web = linkHost({ where: 'web', every: 3_600_000, linkOpts: { ...FAST, fileDesign: false } });
+  stops.push(() => web.stop());
+  await web.tick();
+  await until(async () => (await askLink('/status'))?.state === 'live');
+  expect(await (await go('/calc/brief.json')).json()).toMatchObject({ set: true, running: true, tone: 'ok', words: 'live' });
+  const live = await (await go('/calc.json')).json();
+  expect(live.story[0].text).toContain('Started inside the web');
+  expect(live.day.segs.at(-1).s).toBe('up');
+  web.stop();
+});
+
+test('the background service runs the installed app when there is one, never a working copy that may go away', () => {
+  const home = mkdtempSync(join('/tmp', 'acw-home-'));
+  expect(programNow({ argv: ['bun', '/Users/x/worktrees/a/terminal/src/cli.jsx'], execPath: '/bun', home })).toEqual(['/bun', '/Users/x/worktrees/a/terminal/src/cli.jsx']);
+  expect(programNow({ argv: ['bun', '/Users/x/Desktop/a/cli.jsx'], execPath: '/bun', home })).toBeNull();
+  mkdirSync(join(home, '.agentic-coder', 'app'), { recursive: true });
+  writeFileSync(join(home, '.agentic-coder', 'app', 'agentic-coder'), '');
+  expect(programNow({ argv: ['bun', '/Users/x/worktrees/a/terminal/src/cli.jsx'], execPath: '/bun', home })).toEqual([join(home, '.agentic-coder', 'app', 'agentic-coder')]);
+});

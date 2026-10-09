@@ -36,13 +36,15 @@ export function calcPlist({ program, webHome = process.env.AGENTIC_WEB_HOME }) {
 `;
 }
 
-// What the LaunchAgent runs: this same Agentic Coder (a script run by Bun: that script; macOS keeps a login
-// item out of Desktop, Documents and Downloads, so from there the installed app), else the installed app.
+// What the LaunchAgent runs: the installed app when there is one (9 Oct 2026: a copy run from a worktree would have
+// left the service pointing at a folder that goes away), else this same script run by Bun (macOS keeps a login item
+// out of Desktop, Documents and Downloads, so not from there).
 export function programNow({ argv = process.argv, execPath = process.execPath, home = homedir() } = {}) {
   const app = join(home, '.agentic-coder', 'app', 'agentic-coder');
+  if (existsSync(app)) return [app];
   const script = argv[1];
   if (script && /\.(m?js|jsx)$/.test(script) && !/\/(Desktop|Documents|Downloads)\//.test(script)) return [execPath, script];
-  return existsSync(app) ? [app] : null;
+  return null;
 }
 
 // The background service on this Mac: launchctl, put in a test's hands.

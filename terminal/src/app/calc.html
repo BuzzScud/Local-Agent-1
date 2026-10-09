@@ -8,113 +8,141 @@
 :root {
   --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
   --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --tint: rgba(42,120,214,.08);
-  --up: #1d7a46; --down: #b3261e; --warn: #8a5a00;
+  --up: #1d7a46; --down: #b3261e; --warn: #8a5a00; --off: #a8a69d; --mark-ink: #fff;
+  --none: repeating-linear-gradient(135deg, #e3e2dc 0 4px, #f3f3f0 4px 8px);
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; --off: #6b6a63; --mark-ink: #0d0d0d; --none: repeating-linear-gradient(135deg, #34342f 0 4px, #232322 4px 8px); }
 }
-:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; --off: #6b6a63; --mark-ink: #0d0d0d; --none: repeating-linear-gradient(135deg, #34342f 0 4px, #232322 4px 8px); }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color-scheme: light dark; display: flex; flex-direction: column; overflow: hidden; }
-/* One container that fits the window: the connection and its login on the left, the reports and what happened on the right; each list scrolls inside its own box. */
-header { padding: 14px 18px 10px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px; }
-header div { flex: 1; min-width: 0; }
-h1 { font-size: 17px; margin: 0 0 2px; }
-.sub { color: var(--ink2); margin: 0; }
-.big { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; white-space: nowrap; }
-.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink3); flex: none; }
-.dot.ok { background: var(--up); } .dot.bad { background: var(--down); } .dot.warn { background: var(--warn); }
-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 14px 18px; }
-.col { min-height: 0; display: flex; flex-direction: column; gap: 16px; }
-section { min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
-section.grow { flex: 1; }
-section h2 { font-size: 14px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; }
-section h2 small { color: var(--ink3); font-weight: 400; }
-.pad { padding: 10px 14px 12px; }
-.scroll { overflow: auto; min-height: 0; padding: 4px 14px 10px; }
-dl { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 7px 12px; margin: 0; }
-dt { color: var(--ink3); }
-dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* "2 · Chain" (9 Oct 2026, the owner's pick): the four things that must work, in order, the first broken one with its
+   fix; the last 24 hours as lanes; then the log (one row per outage) and the reports. It fits the window; each list
+   scrolls inside its own box. */
+.chain { display: grid; grid-template-columns: 1fr 22px 1fr 22px 1fr 22px 1fr; padding: 14px 18px 0; align-items: stretch; flex: none; }
+.joint { align-self: center; height: 2px; background: var(--line); }
+.link { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.link.bad { border-color: color-mix(in srgb, var(--down) 55%, transparent); background: linear-gradient(color-mix(in srgb, var(--down) 7%, transparent), transparent); }
+.link.warn { border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
+.link.wait { opacity: .62; }
+.ln { display: flex; gap: 8px; align-items: center; color: var(--ink3); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
+.ln .num { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); display: inline-grid; place-items: center; font-size: 11px; letter-spacing: 0; }
+.w { display: flex; gap: 9px; align-items: center; margin-top: 4px; min-width: 0; }
+.w b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link p { margin: 0; color: var(--ink2); font-size: 13px; overflow-wrap: anywhere; }
+.fix { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+.foot { margin-top: auto; padding-top: 8px; font-size: 12.5px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.foot a { color: var(--accent); text-decoration: none; cursor: pointer; }
+.dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--ink3); }
+.dot.ok { background: var(--up); box-shadow: 0 0 0 4px color-mix(in srgb, var(--up) 18%, transparent); }
+.dot.bad { background: var(--down); box-shadow: 0 0 0 4px color-mix(in srgb, var(--down) 18%, transparent); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 18%, transparent); }
+.dot.wait { background: transparent; border: 2px solid var(--off); }
+.btn { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn:hover { border-color: var(--ink3); }
+.btn[disabled] { opacity: .55; cursor: default; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.seg button { font: inherit; border: 0; background: var(--panel); color: var(--ink2); padding: 4px 10px; cursor: pointer; }
+.seg button { font: inherit; font-size: 12.5px; border: 0; background: var(--panel); color: var(--ink2); padding: 3px 9px; cursor: pointer; white-space: nowrap; }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--accent); color: #fff; }
-.btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.btn { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn:hover { border-color: var(--ink3); }
-.form { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px 12px; align-items: center; }
-.form input { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 100%; }
-.hint { color: var(--ink3); font-size: 12.5px; margin: 8px 0 0; }
-.rep { padding: 9px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; }
-.rep:last-child, .ev:last-child { border-bottom: 0; }
+section { min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+section h2 { font-size: 14px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+section h2 small { color: var(--ink3); font-weight: 400; font-size: 12.5px; }
+.tl { margin: 14px 18px 0; padding: 10px 16px 6px; flex: none; }
+.tl .h { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.tl .h b { font-size: 14px; } .tl .h b small { font-weight: 400; color: var(--ink3); font-size: 12.5px; }
+.tl .h > span { color: var(--ink2); font-size: 12.5px; display: flex; gap: 14px; flex-wrap: wrap; }
+.lane { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; align-items: center; height: 22px; }
+.lane .nm { color: var(--ink3); font-size: 12px; }
+.lane .tr { position: relative; height: 100%; border-bottom: 1px dashed var(--line); }
+.lane.axis { height: 18px; }
+.track { position: relative; height: 14px; border-radius: 4px; background: var(--panel); overflow: hidden; }
+.seg-t { position: absolute; top: 0; bottom: 0; }
+.seg-t.up { background: var(--up); opacity: .8; } .seg-t.down { background: var(--down); } .seg-t.off { background: var(--off); opacity: .55; } .seg-t.none { background: var(--none); }
+.ticks { position: relative; height: 16px; }
+.ticks span { position: absolute; transform: translateX(-50%); color: var(--ink3); font-size: 11px; white-space: nowrap; }
+.ticks .nowt { transform: translateX(-100%); color: var(--ink2); }
+.mk { position: absolute; top: 3px; transform: translateX(-50%); min-width: 14px; height: 14px; border-radius: 7px; border: 0; padding: 0 4px; font: 600 10px/14px -apple-system, sans-serif; color: var(--mark-ink); cursor: pointer; background: var(--ink3); }
+.mk.live { background: var(--up); } .mk.outage, .mk.down, .mk.restart, .mk.problem { background: var(--down); } .mk.report { background: var(--accent); color: #fff; }
+.mk:hover, .mk:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.key { display: inline-flex; gap: 12px; color: var(--ink3); font-size: 12px; flex-wrap: wrap; }
+.key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+.grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; padding: 14px 18px 16px; }
+.scroll { overflow: auto; min-height: 0; flex: 1; padding: 2px 14px 8px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.scroll::-webkit-scrollbar { width: 8px; } .scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; } .scroll::-webkit-scrollbar-track { background: transparent; }
+.ev { display: grid; grid-template-columns: 70px 14px minmax(0, 1fr); gap: 10px; padding: 8px 6px; border-bottom: 1px solid var(--line); align-items: baseline; border-radius: 6px; }
+.ev:last-child { border-bottom: 0; }
+.ev time { color: var(--ink3); font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.ev .k { width: 8px; height: 8px; border-radius: 50%; background: var(--ink3); align-self: center; }
+.ev.outage .k, .ev.down .k, .ev.restart .k, .ev.problem .k { background: var(--down); } .ev.live .k { background: var(--up); } .ev.report .k { background: var(--accent); } .ev.stop .k { background: var(--off); }
+.ev b { font-weight: 500; } .ev.down b, .ev.outage b, .ev.problem b { color: var(--down); } .ev.stop b { color: var(--ink2); font-weight: 400; }
+.ev small { display: block; color: var(--ink3); font-size: 12.5px; }
+.ev.hi { background: var(--tint); }
+.day-head { color: var(--ink3); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; padding: 10px 6px 2px; }
+details.rep { border-bottom: 1px solid var(--line); }
+details.rep:last-child { border-bottom: 0; }
+details.rep summary { list-style: none; display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 8px 0; cursor: pointer; }
+details.rep summary::-webkit-details-marker { display: none; }
+details.rep summary b { font-weight: 500; }
+details.rep summary b::after { content: '  ▸'; color: var(--ink3); font-size: 11px; }
+details.rep[open] summary b::after { content: '  ▾'; }
+details.rep p { margin: 0 0 10px 72px; color: var(--ink2); font-size: 13px; }
 .chip { font-size: 11.5px; border-radius: 5px; padding: 1px 6px; background: var(--panel); color: var(--ink2); text-align: center; }
-.chip.issue { background: rgba(179,38,30,.1); color: var(--down); }
-.rep .st { font-size: 12.5px; color: var(--ink3); white-space: nowrap; }
-.rep .st.filed { color: var(--up); } .rep .st.failed { color: var(--down); }
-.rep .more { grid-column: 2 / -1; color: var(--ink3); font-size: 12.5px; }
-.ev { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-.ev time { color: var(--ink3); font-family: var(--mono); font-size: 12px; padding-top: 1px; white-space: nowrap; }
-.ev.drop span, .ev.silent span, .ev.wrong-login span { color: var(--down); } .ev.live span { color: var(--up); } .ev.report span { color: var(--accent); }
-.empty { color: var(--ink3); padding: 14px 0; }
-.flash { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 6px 12px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+.chip.issue { background: color-mix(in srgb, var(--down) 12%, transparent); color: var(--down); }
+.st { font-size: 12.5px; color: var(--ink3); white-space: nowrap; }
+.st.filed { color: var(--up); } .st.failed { color: var(--down); }
+.empty { color: var(--ink3); padding: 14px 6px; margin: 0; }
+#login { position: fixed; z-index: 5; width: min(520px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.35); }
+#login[hidden] { display: none; }
+#login .lh { padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+#login .lh button { font: inherit; background: none; border: 0; color: var(--ink3); cursor: pointer; font-size: 15px; padding: 2px 6px; border-radius: 6px; }
+#login .lh button:hover { color: var(--ink); background: var(--panel); }
+#login .lb { padding: 12px 14px 14px; }
+.form { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.form input { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 100%; }
+.form-end { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+.hint { color: var(--ink3); font-size: 12.5px; margin: 0; }
+.flash { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 6px 12px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); z-index: 9; }
 .flash.show { opacity: .92; }
-@media (max-width: 860px) { body { overflow: auto; height: auto; } main { grid-template-columns: 1fr; } section.grow { max-height: 60vh; } header { flex-wrap: wrap; } }
-@media (max-width: 520px) { main { padding: 12px 16px; } header { padding: 12px 16px 10px; } dl, .form { grid-template-columns: 1fr; gap: 2px 0; } dd { margin-bottom: 6px; } .rep { grid-template-columns: 56px minmax(0, 1fr); } .rep .st { grid-column: 2; } }
+@media (max-width: 1100px) { .chain { grid-template-columns: 1fr 1fr; gap: 12px; } .joint { display: none; } }
+@media (max-width: 860px) { body { overflow: auto; height: auto; } .grid { grid-template-columns: 1fr; } section.list { max-height: 60vh; } }
+@media (max-width: 560px) { .chain { grid-template-columns: 1fr; padding: 12px 16px 0; } .tl { margin: 12px 16px 0; padding: 10px 12px 6px; } .grid { padding: 12px 16px 16px; } .lane { grid-template-columns: 70px minmax(0, 1fr); gap: 8px; } .form { grid-template-columns: 1fr; gap: 2px 0; } details.rep summary { grid-template-columns: 56px minmax(0, 1fr); } details.rep summary .st { grid-column: 2; } details.rep p { margin-left: 0; } }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>Calculator link</h1>
-    <p class="sub">One always-on connection to your calculator: it notices a drop and reconnects, signs in again when the session runs out, and files sign-in problems with the calculator, once each.</p>
+<div class="chain" id="chain"></div>
+<section class="tl" id="tl"></section>
+<div class="grid">
+  <section class="list"><h2>What happened <small>one row per outage · newest first</small></h2><div class="scroll" id="events"></div></section>
+  <section class="list"><h2>Reports to the calculator <small id="rcount"></small></h2><div class="scroll" id="reports"></div></section>
+</div>
+<div id="login" role="dialog" aria-label="Change login" hidden>
+  <div class="lh"><span>Your calculator login</span><button type="button" id="login-x" aria-label="Close">✕</button></div>
+  <div class="lb">
+    <form class="form" id="login-form" autocomplete="off">
+      <label for="f-url">Address</label><input id="f-url" spellcheck="false" placeholder="http://host:port">
+      <label for="f-user">Username</label><input id="f-user" spellcheck="false" autocomplete="off">
+      <label for="f-pass">Password</label><input id="f-pass" type="password" autocomplete="new-password">
+    </form>
+    <div class="form-end"><button class="btn primary" id="save" type="button">Save and sign in</button><p class="hint">Kept on this Mac only, never shown on a page. A wrong password is tried once, then the link waits for a new one.</p></div>
   </div>
-  <span class="big" id="big"><i class="dot"></i>Asking…</span>
-</header>
-<main>
-  <div class="col">
-    <section>
-      <h2>Connection <small id="pid"></small></h2>
-      <div class="pad">
-        <dl id="kv"></dl>
-        <div class="btns"><button class="btn" id="reconnect" type="button">Reconnect now</button><button class="btn" id="signin" type="button">Sign in again</button></div>
-      </div>
-    </section>
-    <section>
-      <h2>Sign-in <small>your calculator account</small></h2>
-      <div class="pad">
-        <form class="form" id="login" autocomplete="off">
-          <label for="f-url">Address</label><input id="f-url" spellcheck="false" placeholder="http://host:port">
-          <label for="f-user">Username</label><input id="f-user" spellcheck="false" autocomplete="off">
-          <label for="f-pass">Password</label><input id="f-pass" type="password" autocomplete="new-password">
-        </form>
-        <div class="btns"><button class="btn primary" id="save" type="button">Save and connect</button></div>
-        <p class="hint">Kept on this Mac only (the web settings, readable by you alone), never shown on a page. A wrong password is tried once, then the link waits for a new one.</p>
-      </div>
-    </section>
-  </div>
-  <div class="col">
-    <section class="grow">
-      <h2>Reports to the calculator <small id="rcount"></small></h2>
-      <div class="scroll" id="reports"></div>
-    </section>
-    <section class="grow">
-      <h2>What happened <small>newest first</small></h2>
-      <div class="scroll" id="events"></div>
-    </section>
-  </div>
-</main>
+</div>
 <div class="flash" id="flash"></div>
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const clock = (t) => (t ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—');
-const many = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-const age = (ms) => (ms < 90000 ? `${Math.round(ms / 1000)} s` : ms < 5400000 ? `${Math.round(ms / 60000)} min` : `${(ms / 3600000).toFixed(1)} h`);
-let D = null, typed = false, busy = false;
+const clock = (t) => (t ? new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—');
+const many = (n, w, ws = `${w}s`) => `${n} ${n === 1 ? w : ws}`;
+const age = (ms) => (ms < 90000 ? `${Math.max(1, Math.round(ms / 1000))} s` : ms < 5400000 ? `${Math.round(ms / 60000)} min` : `${Math.floor(ms / 3600000)} h ${Math.round((ms % 3600000) / 60000)} min`);
+let D = null, busy = false;
+const openReports = new Set();
 function flash(t) { const f = $('#flash'); f.textContent = t; f.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => f.classList.remove('show'), 2600); }
+// Only what changed is drawn again, so a click, a hover or an open report is never lost to the 2-second refresh.
+const put = (el, html) => { if (el.dataset.html !== html) { el.dataset.html = html; el.innerHTML = html; } };
 async function post(path, body = {}) {
   busy = true;
   try {
@@ -124,44 +152,140 @@ async function post(path, body = {}) {
     D = j; draw(); return true;
   } catch (e) { flash(e.message); return false; } finally { busy = false; }
 }
-const tone = (st) => (st === 'live' ? 'ok' : ['login-wrong', 'no-login', 'no-address', 'stopped'].includes(st) ? 'bad' : 'warn');
-function draw() {
-  const l = D.link, s = l ?? D.saved ?? {};
-  const words = l ? l.words : D.where === 'service' ? 'Not running: its background service is off' : 'Not running: no web copy is running it';
-  $('#big').innerHTML = `<i class="dot ${l ? tone(l.state) : 'bad'}"></i>${esc(words)}`;
-  $('#pid').textContent = l ? `${l.where === 'service' ? 'background service' : 'inside the web'} · pid ${l.pid}` : '';
-  const c = (l ? l.counts : s.counts) ?? {};
-  const drop = s.lastDrop ? `${clock(s.lastDrop.at)} · ${s.lastDrop.code === 1008 ? 'the session ran out' : s.lastDrop.code === 4000 ? 'went quiet (no heartbeat answer)' : `the network (close ${s.lastDrop.code}${s.lastDrop.reason ? ` "${esc(s.lastDrop.reason)}"` : ''})`}` : 'none yet';
-  const rows = [
-    ['Where it runs', `<span class="seg"><button type="button" data-w="web" class="${D.where === 'web' ? 'on' : ''}">Inside the web</button><button type="button" data-w="service" class="${D.where === 'service' ? 'on' : ''}">Own background service</button></span>`],
-    ['State', l ? `${esc(l.words)} · since ${clock(l.since)}${l.lastError && l.state !== 'live' ? `<br><span style="color:var(--down)">${esc(l.lastError)}</span>` : ''}` : esc(words)],
-    ['Signed in as', l?.user ? `${esc(l.user)} at ${esc(l.url)}` : D.login.user ? `${esc(D.login.user)} (not signed in now)` : 'no login saved'],
-    ['Session', l?.session ? `${age(l.session.ageMs)} old${l.session.refreshAt ? ` · signs in again at ${clock(l.session.refreshAt)}` : ' · signs in again when it runs out'}` : '—'],
-    ['Heartbeat', l ? (l.state === 'live' ? `every ${Math.round(l.heartbeatMs / 1000)} s · ${l.pings ? 'pings answered' : 'checked through /health'}` : `every ${Math.round(l.heartbeatMs / 1000)} s, once live`) : '—'],
-    ['Today', `${many(c.drops ?? 0, 'drop')} · ${many(c.reconnects ?? 0, 'reconnect')} · ${many(c.signIns ?? 0, 'sign-in')}`],
-    ['Last drop', drop],
-    ['Session lengths seen', s.lifetimes?.length ? s.lifetimes.map(age).join(', ') : 'none ran out yet'],
-    ['Background service', D.service.mac ? (D.service.loaded ? 'on: starts with this Mac' : 'off') : 'not on this computer (a Mac only)'],
-  ];
-  $('#kv').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  document.querySelectorAll('[data-w]').forEach((b) => { b.onclick = async () => { if (b.dataset.w === D.where) return; if (await post('/calc/where', { where: b.dataset.w })) flash(b.dataset.w === 'service' ? 'Its own background service now: it starts with this Mac.' : 'Inside the web now: the web picks it up within 5 s.'); }; });
-  const reps = (l ? l.reports : s.reports) ?? [];
-  $('#rcount').textContent = reps.length ? `${reps.filter((r) => r.status === 'filed').length} of ${reps.length} filed` : '';
-  $('#reports').innerHTML = reps.length ? reps.map((r) => `<div class="rep"><span class="chip ${r.kind}">${r.kind === 'feature' ? 'Feature' : 'Issue'}</span><b>${esc(r.title)}</b><span class="st ${r.status}">${r.status === 'filed' ? `Filed${r.id != null ? ` #${esc(r.id)}` : ''} · ${clock(r.filedAt)}` : r.status === 'failed' ? 'Not filed yet' : 'Waiting for a session'}</span>${r.error || r.note || r.seen > 1 ? `<span class="more">${[r.note, r.error ? `last try: ${esc(r.error)}` : '', r.seen > 1 ? `seen ${r.seen} times` : ''].filter(Boolean).join(' · ')}</span>` : ''}</div>`).join('') : '<p class="empty">None yet. The seven sign-in design requests go out with the first session, and a problem the link runs into is filed the first time it is seen.</p>';
-  const evs = (l ? l.events : s.events) ?? [];
-  $('#events').innerHTML = evs.length ? evs.map((e) => `<div class="ev ${e.kind}"><time>${clock(e.at)}</time><span>${esc(e.text)}</span></div>`).join('') : '<p class="empty">Nothing yet.</p>';
-  if (!typed) { $('#f-url').value = D.login.url ?? ''; $('#f-user').value = D.login.user ?? ''; $('#f-pass').placeholder = D.login.hasPass ? 'saved: type to replace' : 'password'; }
+
+// ---- the chain: 1 running → 2 signed in → 3 connected → 4 answering ----
+const btn = ([cls, label, act]) => `<button class="btn ${cls}" type="button" data-act="${act}">${esc(label)}</button>`;
+function links() {
+  const l = D.link, s = l ?? D.saved ?? {}, c = s.counts ?? {}, lg = D.login;
+  const has = Boolean(lg.url && lg.user && lg.hasPass), now = D.now;
+  const wait = (n) => ({ tone: 'wait', word: `Waits for ${n}` });
+  const mac = D.service.mac;
+  const where = mac ? `<span class="seg" role="group" aria-label="Where it runs"><button type="button" data-act="where:service" class="${D.where === 'service' ? 'on' : ''}">Background service</button><button type="button" data-act="where:web" class="${D.where === 'web' ? 'on' : ''}">Inside the web</button></span>` : '';
+  // 1 · running
+  let a;
+  if (l) a = { tone: 'ok', word: l.where === 'service' ? 'Running · background service' : 'Running · inside the web', lines: [`since ${clock(l.startedAt ?? l.since)}${l.where === 'service' ? ' · starts with this Mac' : ' · while the web runs'}`] };
+  else if (!has) a = { tone: 'bad', word: 'Not set up', lines: ['Add your calculator login. The link then runs as its own background service and starts with this Mac.'], act: ['primary', 'Add your login', 'login'] };
+  else {
+    const last = Math.max(s.aliveAt ?? 0, s.lastLive ?? 0);
+    const restarted = D.bootAt && last && D.bootAt > last ? `Your Mac restarted at ${clock(D.bootAt)}. ` : '';
+    const why = D.where === 'service' ? (D.service.loaded ? 'Its background service is on but does not answer yet.' : 'Its background service is off.') : 'It runs inside the web, and no web copy is running.';
+    a = { tone: 'bad', word: 'Not running', lines: [`${restarted}${why}`], act: ['primary', D.where === 'service' && D.service.loaded ? 'Restart its background service' : 'Start it as a background service', 'where:service'] };
+  }
+  a.foot = where;
+  // 2 · signed in
+  let b;
+  const change = '<a data-act="login">Change login</a>';
+  if (!l) b = { ...wait(1), lines: [has ? `${lg.user} · password saved` : 'no login saved'], foot: change };
+  else if (l.state === 'login-wrong') b = { tone: 'bad', word: 'Password refused', lines: [`The calculator says the password for ${l.user} is wrong${l.lastError ? ` (“${l.lastError}”)` : ''}. It tries once, then waits for a new one.`], act: ['primary', 'Change login', 'login'] };
+  else if (l.state === 'no-login' || l.state === 'no-address') b = { tone: 'bad', word: 'No login saved', lines: ['Add the address, username and password of your calculator account.'], act: ['primary', 'Add your login', 'login'] };
+  else if (l.state === 'signing-in') b = { tone: 'warn', word: 'Signing in…', lines: [l.user ?? ''], foot: change };
+  else if (l.session) b = { tone: 'ok', word: l.user, lines: [`session ${age(l.session.ageMs)} old`, l.session.refreshAt ? `signs in again at ${clock(l.session.refreshAt)}` : 'signs in again when it runs out'], foot: `<a data-act="signin">Sign in again</a>${change}` };
+  else if (l.state === 'waiting') b = { tone: 'warn', word: 'Can’t sign in yet', lines: [l.lastError ?? '', l.nextTryAt ? `next try in ${age(Math.max(1000, l.nextTryAt - now))}` : ''].filter(Boolean), act: ['', 'Sign in again', 'signin'], foot: change };
+  else b = { ...wait(1), lines: [l.words], foot: change };
+  // 3 · connected
+  let d;
+  const drops = `${many(c.drops ?? 0, 'drop')} · ${many(c.reconnects ?? 0, 'reconnect')} today`;
+  if (!l || !l.session || b.tone !== 'ok') d = { ...wait(2), lines: [drops] };
+  else if (l.state === 'live') d = { tone: 'ok', word: `Live since ${clock(l.since)}`, lines: [drops], foot: '<a data-act="reconnect">Reconnect now</a>' };
+  else if (l.state === 'waiting') {
+    const cause = l.lastDrop ? (l.lastDrop.code === 4000 ? 'no answer to the heartbeat' : l.lastDrop.code === 1008 ? 'the session ran out' : 'the network') : l.lastError;
+    d = { tone: 'warn', word: 'Reconnecting', lines: [l.lastDrop ? `dropped ${age(now - l.lastDrop.at)} ago (${cause})` : (l.lastError ?? ''), `${l.words.toLowerCase()} · the session is kept`], act: ['', 'Reconnect now', 'reconnect'] };
+  } else d = { tone: 'warn', word: 'Connecting…', lines: [drops] };
+  // 4 · answering
+  const e = l && l.state === 'live'
+    ? { tone: 'ok', word: 'Heartbeat answered', lines: [`a check every ${Math.round(l.heartbeatMs / 1000)} s`, l.pings ? 'it answers pings' : 'checked through /health (no ping answers)'] }
+    : { ...wait(3), lines: [`a check every ${Math.round((l?.heartbeatMs ?? 20000) / 1000)} s once connected`] };
+  return [['Running', a], ['Signed in', b], ['Connected', d], ['Answering', e]];
 }
-async function load() { if (busy) return; try { D = await (await fetch('/calc.json')).json(); draw(); } catch { /* the hub closed */ } }
+function drawChain() {
+  put($('#chain'), links().map(([name, x], i) => `<div class="link ${x.tone}"><div class="ln"><span class="num">${i + 1}</span><span>${name}</span></div><div class="w"><i class="dot ${x.tone}"></i><b>${esc(x.word)}</b></div>${x.lines.map((t) => `<p>${esc(t)}</p>`).join('')}${x.act ? `<div class="fix">${btn(x.act)}</div>` : ''}${x.foot ? `<div class="foot">${x.foot}</div>` : ''}</div>`).join('<i class="joint" aria-hidden="true"></i>'));
+}
+
+// ---- the last 24 hours: the connection's stretches and each lane's marks, which find their row in the log ----
+const NAMES = { up: 'live', down: 'down', off: 'not running', none: 'no record' };
+function drawDay() {
+  const d = D.day, W = d.to - d.from, pct = (t) => ((t - d.from) / W) * 100;
+  const segs = d.segs.map((x) => `<i class="seg-t ${x.s}" style="left:${pct(x.a)}%;width:max(${x.s === 'down' ? 3 : 0}px, ${pct(x.b) - pct(x.a)}%)" title="${NAMES[x.s]} · ${clock(x.a)} to ${clock(x.b)}"></i>`).join('');
+  const ticks = [];
+  const first = new Date(d.from); first.setMinutes(0, 0, 0); first.setHours(Math.ceil((first.getHours() + 1) / 3) * 3);
+  for (let t = first.getTime(); t < d.to - 0.05 * W; t += 3 * 3600000) ticks.push(`<span style="left:${pct(t)}%">${new Date(t).toLocaleTimeString([], { hour: 'numeric' })}</span>`);
+  const sum = (k) => d.segs.filter((x) => x.s === k).reduce((n, x) => n + x.b - x.a, 0);
+  const downs = d.segs.filter((x) => x.s === 'down');
+  const bits = [`live ${age(sum('up'))}`];
+  if (downs.length) bits.push(`${many(downs.length, 'drop')} (${downs.slice(-3).map((x) => age(x.b - x.a)).join(', ')})`);
+  if (sum('off') > 60000) bits.push(`not running ${age(sum('off'))}`);
+  const first0 = D.story.length ? D.story.at(-1).at : d.to;
+  const unknown = d.segs.filter((x) => x.s === 'none' && x.a >= first0).reduce((n, x) => n + x.b - x.a, 0);
+  if (unknown > 60000) bits.push(`no record ${age(unknown)}`);
+  const lane = (k) => D.story.map((r, i) => (r.lane === k && r.at >= d.from ? `<button class="mk ${r.kind}" type="button" style="left:${pct(r.at)}%" data-row="r${i}" title="${esc(`${clock(r.at)} · ${r.text}`)}" aria-label="${esc(`${clock(r.at)} · ${r.text}`)}">${r.n > 1 ? r.n : ''}</button>` : '')).join('');
+  const key = '<span class="key"><span><i style="background:var(--up)"></i>live</span><span><i style="background:var(--down)"></i>down</span><span><i style="background:var(--off)"></i>not running</span><span><i style="background:var(--none)"></i>no record</span></span>';
+  put($('#tl'), `<div class="h"><b>Last 24 hours <small>· click a mark to find it in the log</small></b><span><span>${esc(bits.join(' · '))}</span>${key}</span></div>
+    <div class="lane"><span class="nm">Connection</span><div class="track">${segs}</div></div>
+    ${[['sign', 'Sign-ins'], ['prob', 'Problems'], ['rep', 'Reports']].map(([k, n]) => `<div class="lane"><span class="nm">${n}</span><div class="tr">${lane(k)}</div></div>`).join('')}
+    <div class="lane axis"><span class="nm"></span><div class="ticks">${ticks.join('')}<span class="nowt" style="left:100%">now</span></div></div>`);
+}
+
+// ---- the log and the reports ----
+function drawLists() {
+  let lastDay = null;
+  const today = new Date(D.now).toDateString();
+  put($('#events'), D.story.length ? D.story.map((r, i) => {
+    const day = new Date(r.at).toDateString();
+    const head = day !== lastDay ? `<div class="day-head">${day === today ? 'Today' : new Date(r.at).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}</div>` : '';
+    lastDay = day;
+    return `${head}<div class="ev ${r.kind}" id="r${i}"><time>${clock(r.at)}</time><i class="k"></i><span><b>${esc(r.text)}</b>${r.sub ? `<small>${esc(r.sub)}</small>` : ''}</span></div>`;
+  }).join('') : '<p class="empty">Nothing yet.</p>');
+  const reps = (D.link ?? D.saved ?? {}).reports ?? [];
+  const filed = reps.filter((r) => r.status === 'filed').length;
+  $('#rcount').textContent = reps.length ? `${filed} of ${reps.length} filed · click one for what was sent` : '';
+  put($('#reports'), reps.length ? reps.map((r) => `<details class="rep" data-key="${esc(r.key)}"${openReports.has(r.key) ? ' open' : ''}><summary><span class="chip ${r.kind}">${r.kind === 'feature' ? 'Feature' : 'Issue'}</span><b>${esc(r.title)}</b><span class="st ${r.status}">${r.status === 'filed' ? `${r.id != null ? `#${esc(r.id)} · ` : ''}${clock(r.filedAt)}` : r.status === 'failed' ? 'Not filed yet' : 'Waiting for a session'}</span></summary><p>${esc(r.text ?? '')}${r.error ? `<br>Last try: ${esc(r.error)}` : ''}${r.seen > 1 ? `<br>Seen ${r.seen} times.` : ''}</p></details>`).join('') : '<p class="empty">None yet. The seven sign-in design requests go out with the first session, and a problem the link runs into is filed the first time it is seen.</p>');
+}
+function draw() { drawChain(); drawDay(); drawLists(); }
+
+// ---- the login, next to what opened it ----
+let typed = false;
+function openLogin(from) {
+  const box = $('#login');
+  if (!typed) { $('#f-url').value = D.login.url ?? ''; $('#f-user').value = D.login.user ?? ''; $('#f-pass').value = ''; $('#f-pass').placeholder = D.login.hasPass ? 'saved: type to replace' : 'password'; }
+  box.hidden = false;
+  const card = from?.closest('.link'), r = (card ?? from)?.getBoundingClientRect();
+  const w = box.offsetWidth;
+  box.style.top = `${Math.min(window.innerHeight - box.offsetHeight - 8, (r ? r.bottom : 80) + 8)}px`;
+  box.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r ? r.left : 16))}px`;
+  (D.login.url ? (D.login.user ? $('#f-pass') : $('#f-user')) : $('#f-url')).focus();
+}
+const closeLogin = () => { $('#login').hidden = true; };
 ['#f-url', '#f-user', '#f-pass'].forEach((s) => $(s).addEventListener('input', () => { typed = true; }));
+$('#login-x').onclick = closeLogin;
 $('#save').onclick = async () => {
   const body = { url: $('#f-url').value.trim(), user: $('#f-user').value.trim(), ...($('#f-pass').value ? { pass: $('#f-pass').value } : {}) };
-  if (await post('/calc/login', body)) { typed = false; $('#f-pass').value = ''; flash(D.link ? 'Saved: the link signs in with it now.' : 'Saved. The link signs in once it runs (inside the web, or its own service).'); setTimeout(load, 1500); }
+  if (await post('/calc/login', body)) { typed = false; $('#f-pass').value = ''; closeLogin(); flash(D.link ? 'Saved: the link signs in with it now.' : 'Saved. The link signs in once it runs.'); setTimeout(load, 1500); }
 };
-$('#reconnect').onclick = async () => { if (await post('/calc/reconnect')) flash('Reconnecting now.'); };
-$('#signin').onclick = async () => { if (await post('/calc/signin')) flash('Signing in again now.'); };
+$('#login-form').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#save').click(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#login').hidden) closeLogin(); });
+
+// ---- clicks: the fixes, the switch, a mark on the timeline ----
+const SAID = { 'where:service': 'Its own background service now: it starts with this Mac.', 'where:web': 'Inside the web now: it runs while the web runs.', reconnect: 'Reconnecting now.', signin: 'Signing in again now.' };
+document.addEventListener('click', async (e) => {
+  const a = e.target.closest('[data-act]');
+  if (a) {
+    e.preventDefault();
+    const act = a.dataset.act;
+    if (act === 'login') return openLogin(a);
+    if (act.startsWith('where:')) { const w = act.slice(6); if (w === D.where && (w === 'web' || D.link)) return; if (await post('/calc/where', { where: w })) flash(SAID[act]); setTimeout(load, 1500); return; }
+    if (await post(`/calc/${act}`)) flash(SAID[act]);
+    return;
+  }
+  const m = e.target.closest('[data-row]');
+  if (m) { const r = document.getElementById(m.dataset.row); if (r) { document.querySelectorAll('.ev.hi').forEach((x) => x.classList.remove('hi')); r.classList.add('hi'); r.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } }
+  if (!$('#login').hidden && !e.target.closest('#login')) closeLogin();
+});
+$('#reports').addEventListener('toggle', (e) => { const k = e.target.dataset?.key; if (k) { if (e.target.open) openReports.add(k); else openReports.delete(k); } }, true);
+
+async function load() { if (busy || document.hidden) return; try { D = await (await fetch('/calc.json')).json(); draw(); } catch { /* the hub closed */ } }
 load();
 setInterval(load, 2000);
+document.addEventListener('visibilitychange', load);
 </script>
 </body>
 </html>

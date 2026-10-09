@@ -8,12 +8,13 @@
 :root {
   --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
   --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --accent-ink: #fff;
+  --up: #1d7a46; --down: #b3261e; --warn: #8a5a00;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; }
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
 }
-:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; }
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
@@ -24,6 +25,11 @@ header button:hover { color: var(--ink); background: var(--panel); }
 header button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 8px 8px 0 0; }
 header .spacer { flex: 1; }
 header .now { color: var(--ink3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; min-width: 0; }
+/* The calculator link's status (9 Oct 2026): in the line on its own tab, and a chip on the others while it is down */
+header .c-ok { color: var(--up); } header .c-warn { color: var(--warn); } header .c-bad { color: var(--down); }
+header .cdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 0; }
+header a.calcnow { font-size: 12px; white-space: nowrap; border: 1px solid currentColor; border-radius: 999px; padding: 2px 9px; margin-right: 4px; }
+header a.calcnow[hidden] { display: none; }
 header button, header h1, header a { flex: none; }
 header a { color: var(--accent); font-size: 12px; text-decoration: none; white-space: nowrap; padding: 6px 8px; border-radius: 8px; }
 header a:hover { background: var(--panel); }
@@ -85,6 +91,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="calc">Calculator</button>
   <button data-tab="help">Help</button>
   <span class="spacer"></span>
+  <a class="calcnow" id="calcnow" href="?tab=calc" hidden></a>
   <span class="now" id="now"></span>
   <a id="own" href="/weights" target="_blank" rel="noopener">open in its own tab ↗</a>
 </header>
@@ -186,7 +193,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   function show(url, label) {
     list.classList.remove('on'); frame.classList.remove('off');
     if (frame.getAttribute('src') !== url) { frameReady = false; frame.src = url; }
-    now.textContent = label || ''; own.href = url; own.style.display = '';
+    now.textContent = label || ''; now.className = 'now'; own.href = url; own.style.display = '';
     const q = new URL(location.href); if (url.startsWith('/docs/')) q.searchParams.set('page', url.slice(6)); else q.searchParams.delete('page'); history.replaceState(null, '', q);
   }
   function showList() {
@@ -204,6 +211,23 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   // The menu under the Structure tab: a click on the tab while it is open (or on its caret) shows it; a pick, Esc or a click elsewhere closes it.
   function openMenu() { const r = stab.getBoundingClientRect(); menu.style.left = `${Math.max(8, Math.min(r.left, innerWidth - 364))}px`; menu.style.top = `${r.bottom + 6}px`; menu.hidden = false; stab.setAttribute('aria-expanded', 'true'); (menu.querySelector('[aria-checked="true"]') ?? menu.querySelector('button')).focus(); }
   function closeMenu() { menu.hidden = true; stab.setAttribute('aria-expanded', 'false'); }
+  // The calculator link in the top bar (9 Oct 2026, the owner's pick: its alerts on "the page and the hub's top bar
+  // only"): on the Calculator tab its status in the tab's line; on another tab a chip, only while a link with a login
+  // is not live. A click on the chip opens the tab.
+  const calcNow = $('#calcnow');
+  let calcBrief = null;
+  const calcWords = (b) => `<i class="cdot"></i>calculator link: ${String(b.words).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))}`;
+  function paintCalc() {
+    const b = calcBrief, onCalc = document.querySelector('header > button.on')?.dataset.tab === 'calc';
+    if (onCalc && b) { now.innerHTML = calcWords(b); now.className = `now c-${b.tone}`; }
+    const chip = Boolean(b && !onCalc && b.set && b.tone !== 'ok');
+    calcNow.hidden = !chip;
+    if (chip) { calcNow.className = `calcnow c-${b.tone}`; calcNow.innerHTML = calcWords(b); }
+  }
+  async function readCalc() { try { calcBrief = await (await fetch('/calc/brief.json')).json(); } catch { calcBrief = null; } paintCalc(); }
+  calcNow.onclick = (e) => { e.preventDefault(); open('calc'); };
+  readCalc();
+  setInterval(readCalc, 5000);
   function open(tab, page, view) {
     tab = ALIAS[tab] ?? tab;
     // Flow was a tab of its own until 30 Sep 2026: an old address or `coding hub flow` opens it in Structure.
@@ -225,7 +249,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'remote' && !page) return show('/remote', 'the models on the services you connect to with /remote');
     if (tab === 'profiles' && !page) return show('/profiles', 'which server and model each AI, task type and skill uses');
     if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
-    if (tab === 'calc' && !page) return show('/calc', 'the calculator link: connected, signed in, problems filed');
+    if (tab === 'calc' && !page) { show('/calc', 'the calculator link'); paintCalc(); return; }
     if (tab === 'docs' && !page) return showList();
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
     const p = page ? docs.pages.find((x) => x.file === page) : docs.pinned[tab];
