@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Big files split · before and after</title>
+<style>
+:root{--bg:#0f0f10;--panel:#18181a;--ink:#ececec;--dim:#9a9a9a;--line:#2c2c2e;--acc:#87d787;--warn:#e5c07b;--track:#232326}
+@media (prefers-color-scheme: light){:root{--bg:#f4f4f2;--panel:#fff;--ink:#1b1b1b;--dim:#5e5e5e;--line:#ddd;--acc:#2f8f3a;--warn:#9a6a00;--track:#ececea}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}
+main{max-width:980px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:24px;margin:0 0 4px;font-weight:700}
+.date{color:var(--dim);font-size:13px;margin:0 0 20px}
+code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.top{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:26px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-height:96px}
+.stat b{display:block;font-size:24px;font-weight:700}
+.stat span{color:var(--dim);font-size:13px}
+.good{color:var(--acc)}.bad{color:var(--warn)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 16px 10px;margin-bottom:16px}
+.card h2{font-size:17px;margin:0 0 10px;display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.card h2 code{font-size:16px}.card h2 span{color:var(--dim);font-size:14px;font-weight:500}
+h3{font-size:12px;margin:10px 0 2px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) 104px;gap:14px;align-items:center;padding:8px 0;border-top:1px solid var(--line);min-height:62px}
+.who{min-width:0}.who code{font-weight:600}
+.what{display:block;color:var(--dim);font-size:13px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:0 7px;margin-left:6px;color:var(--dim)}
+.bar{position:relative;height:12px;background:var(--track);border-radius:6px}
+.fill{position:absolute;left:0;top:0;bottom:0;background:var(--acc);border-radius:6px}
+.fill.over{background:var(--warn)}
+.mark{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);opacity:.55}
+.num{text-align:right;font-size:13px;line-height:1.3}.num b{font-size:15px}.num span{color:var(--dim)}
+.into{color:var(--dim);font-size:13px;margin:8px 0 6px;padding-top:8px;border-top:1px solid var(--line)}
+.key{color:var(--dim);font-size:13px;margin:-14px 0 18px}
+.key i{display:inline-block;width:2px;height:12px;background:var(--ink);opacity:.55;vertical-align:-1px;margin:0 4px}
+.key em{display:inline-block;width:18px;height:8px;border-radius:4px;vertical-align:0;margin:0 4px}
+.how{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.how h2{font-size:17px;margin:0 0 8px}.how ol{margin:0;padding-left:20px}.how li{margin:6px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:6px 0 4px}
+td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:right}th:first-child,td:first-child{text-align:left}th{color:var(--dim);font-weight:600}
+@media (max-width:700px){.top{grid-template-columns:1fr 1fr}.row{grid-template-columns:minmax(0,1fr) 84px;gap:8px}.row .bar{grid-column:1 / -1;grid-row:2}.num{grid-row:1;grid-column:2}}
+</style>
+</head>
+<body>
+<main>
+<h1>Four big files, split into smaller ones</h1>
+<p class="date">9 Oct 2026 · in a separate copy of the repo (branch split-big-files), not committed yet · the app works exactly as before</p>
+
+<div class="top">
+  <div class="stat"><b class="bad">4 → <span class="good">0</span></b><span>files too big for a model to read whole (over 1,000 lines or about 20,000 tokens)</span></div>
+  <div class="stat"><b>2,399 → 949</b><span>lines in the biggest file the split touched</span></div>
+  <div class="stat"><b>15</b><span>new files, each one part of an old one</span></div>
+  <div class="stat"><b class="good">0</b><span>tests that changed result: the same 1,813 pass before and after</span></div>
+</div>
+
+<p class="key">Bars are to one scale (the longest is 2,399 lines). <i></i> marks the 1,000-line limit. <em style="background:var(--warn)"></em> over a limit <em style="background:var(--acc)"></em> within both.</p>
+
+<section class="card"><h2><code>screen.jsx</code> <span>2,399 → 243 lines</span></h2>
+<div class="side"><h3>Before</h3><div class="row"><div class="who"><code>screen.jsx</code><span class="tag">too big</span><span class="what">Everything the terminal window draws</span></div><div class="bar"><i class="fill over" style="width:99.96%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>2,399</b> lines<br><span>≈42,745 tokens</span></div></div></div>
+<div class="side"><h3>After · 8 files, the biggest 601 lines</h3><div class="row"><div class="who"><code>screen.jsx</code><span class="what">What is left: the screen as a whole, putting the parts together</span></div><div class="bar"><i class="fill" style="width:10.13%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>243</b> lines<br><span>≈4,361 tokens</span></div></div><div class="row"><div class="who"><code>screen-items.jsx</code><span class="tag">new</span><span class="what">The finished lines of the conversation: tool calls and results, /context, /rules</span></div><div class="bar"><i class="fill" style="width:15.29%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>367</b> lines<br><span>≈6,543 tokens</span></div></div><div class="row"><div class="who"><code>screen-live.jsx</code><span class="tag">new</span><span class="what">The live area: the spinner, the meters, the step running now</span></div><div class="bar"><i class="fill" style="width:8.50%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>204</b> lines<br><span>≈3,396 tokens</span></div></div><div class="row"><div class="who"><code>screen-ask.jsx</code><span class="tag">new</span><span class="what">What asks you something: permission prompts, the question box, the / menu</span></div><div class="bar"><i class="fill" style="width:14.71%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>353</b> lines<br><span>≈7,023 tokens</span></div></div><div class="row"><div class="who"><code>screen-footer.jsx</code><span class="tag">new</span><span class="what">The bottom of the window: shortcuts, footer, status rows, prompt box</span></div><div class="bar"><i class="fill" style="width:10.63%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>255</b> lines<br><span>≈4,290 tokens</span></div></div><div class="row"><div class="who"><code>screen-pickers.jsx</code><span class="tag">new</span><span class="what">The pickers: mode, /jump, /rewind, /settings, /effort</span></div><div class="bar"><i class="fill" style="width:14.50%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>348</b> lines<br><span>≈5,762 tokens</span></div></div><div class="row"><div class="who"><code>screen-forms.jsx</code><span class="tag">new</span><span class="what">The forms and model lists: /remote, /web, /hooks, /mcp, /model, /help</span></div><div class="bar"><i class="fill" style="width:25.04%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>601</b> lines<br><span>≈10,895 tokens</span></div></div><div class="row"><div class="who"><code>screen-btw.jsx</code><span class="tag">new</span><span class="what">The /btw side panel</span></div><div class="bar"><i class="fill" style="width:4.38%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>105</b> lines<br><span>≈1,623 tokens</span></div></div></div></section>
+<section class="card"><h2><code>tools.mjs</code> <span>1,595 → 521 lines</span></h2>
+<div class="side"><h3>Before</h3><div class="row"><div class="who"><code>tools.mjs</code><span class="tag">too big</span><span class="what">The tools the model can call</span></div><div class="bar"><i class="fill over" style="width:66.46%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>1,595</b> lines<br><span>≈34,240 tokens</span></div></div></div>
+<div class="side"><h3>After · 6 files, the biggest 521 lines</h3><div class="row"><div class="who"><code>tools.mjs</code><span class="what">What is left: the code that runs each tool</span></div><div class="bar"><i class="fill" style="width:21.71%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>521</b> lines<br><span>≈11,943 tokens</span></div></div><div class="row"><div class="who"><code>tools-defs.mjs</code><span class="tag">new</span><span class="what">The tools the model is offered, and other names it may use for them</span></div><div class="bar"><i class="fill" style="width:9.46%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>227</b> lines<br><span>≈6,153 tokens</span></div></div><div class="row"><div class="who"><code>tools-args.mjs</code><span class="tag">new</span><span class="what">A tool call’s arguments: fixing them up, what a call needs, how it is shown</span></div><div class="bar"><i class="fill" style="width:11.04%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>265</b> lines<br><span>≈5,352 tokens</span></div></div><div class="row"><div class="who"><code>tools-paths.mjs</code><span class="tag">new</span><span class="what">Where a path the model typed points, and a near name when it is wrong</span></div><div class="bar"><i class="fill" style="width:7.12%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>171</b> lines<br><span>≈2,935 tokens</span></div></div><div class="row"><div class="who"><code>tools-edit.mjs</code><span class="tag">new</span><span class="what">Finding the text an Edit changes, and the syntax check after it</span></div><div class="bar"><i class="fill" style="width:9.71%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>233</b> lines<br><span>≈3,798 tokens</span></div></div><div class="row"><div class="who"><code>tools-web.mjs</code><span class="tag">new</span><span class="what">WebSearch and WebFetch, and a cat or curl read as Read or WebFetch</span></div><div class="bar"><i class="fill" style="width:9.00%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>216</b> lines<br><span>≈4,753 tokens</span></div></div></div></section>
+<section class="card"><h2><code>agent-work.mjs</code> <span>1,088 → 901 lines</span></h2>
+<div class="side"><h3>Before</h3><div class="row"><div class="who"><code>agent-work.mjs</code><span class="tag">too big</span><span class="what">The agent working through one message</span></div><div class="bar"><i class="fill over" style="width:45.33%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>1,088</b> lines<br><span>≈24,098 tokens</span></div></div></div>
+<div class="side"><h3>After · 3 files, the biggest 901 lines</h3><div class="row"><div class="who"><code>agent-work.mjs</code><span class="what">What is left: the step-by-step loop itself</span></div><div class="bar"><i class="fill" style="width:37.54%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>901</b> lines<br><span>≈19,684 tokens</span></div></div><div class="row"><div class="who"><code>agent-start.mjs</code><span class="tag">new</span><span class="what">First steps: reload changed instructions, describe a picture, the rename/fix/change paths</span></div><div class="bar"><i class="fill" style="width:3.75%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>90</b> lines<br><span>≈1,517 tokens</span></div></div><div class="row"><div class="who"><code>agent-notes.mjs</code><span class="tag">new</span><span class="what">The notes a request brings: look first, skills, bug steps, design cards, web pages</span></div><div class="bar"><i class="fill" style="width:6.00%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>144</b> lines<br><span>≈3,453 tokens</span></div></div></div></section>
+<section class="card"><h2><code>App.jsx</code> <span>1,041 → 949 lines</span></h2>
+<div class="side"><h3>Before</h3><div class="row"><div class="who"><code>App.jsx</code><span class="tag">too big</span><span class="what">The terminal window itself</span></div><div class="bar"><i class="fill over" style="width:43.38%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>1,041</b> lines<br><span>≈21,927 tokens</span></div></div></div>
+<div class="side"><h3>After · 2 files, the biggest 949 lines</h3><div class="row"><div class="who"><code>App.jsx</code><span class="what">What is left: the window, its state and its keys</span></div><div class="bar"><i class="fill" style="width:39.54%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>949</b> lines<br><span>≈19,895 tokens</span></div></div><div class="row"><div class="who"><code>app-menu.mjs</code><span class="tag">new</span><span class="what">The menu under the prompt: / commands, @ files, MCP prompts and resources</span></div><div class="bar"><i class="fill" style="width:1.96%"></i><i class="mark" style="left:41.67%"></i></div><div class="num"><b>47</b> lines<br><span>≈1,288 tokens</span></div></div><p class="into">Three pieces moved into an existing file, app-run.mjs: opening a saved conversation again, the model carrying on when a background job ends, and the clean-up of old /rewind copies and pasted pictures at start. It grew from 712 to 778 lines.</p></div></section>
+
+<section class="how">
+<h2>How it was checked</h2>
+<ol>
+<li><b>Moved, not rewritten.</b> Each piece was cut from the old file and compared line by line with the original afterwards. The only differences are where a piece now reads the window's values through the shared object its neighbours already use.</li>
+<li><b>The app still builds</b> with every new file in place. The agent picks up its two new parts in <code>agent.mjs</code> (612 → 614 lines).</li>
+<li><b>The project's size check</b> now says every code file of the app is under 1,000 lines and about 20k tokens. Before, it listed these 4.</li>
+<li><b>The whole test suite</b> was run before any change and again at the end:
+<table><tr><th></th><th>pass</th><th>fail</th><th>skipped</th></tr>
+<tr><td>Before (main)</td><td>1,813</td><td>72</td><td>4</td></tr>
+<tr><td>After the split</td><td>1,813</td><td>72</td><td>4</td></tr></table>
+The 72 failures are the same tests both times, mostly screen and session tests that also fail on main. None is new and none was fixed.</li>
+</ol>
+</section>
+</main>
+</body>
+</html>
