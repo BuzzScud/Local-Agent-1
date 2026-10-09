@@ -1097,45 +1097,55 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   range, the same frames twice, the cells, /bot in the menu, the pointer parsed, and the real window at 150 × 50:
   over the title, onto the box, /bot hides it and brings it back, kept in settings.json).
 
-## Folders: a reply's steps in boxes (9 Oct 2026)
+## Steps grouped: task rows (9 Oct 2026)
 
 - **What and why.** The owner, on a screenshot of a long turn: "can we make this less busy? can we group stuff and
-  if we want to see it, we click it and it expands?". Their picks over four preview rounds (private, with their own
-  sessions: `docs/private/design rounds/agentic-coder-folders-preview-2026-10-09*.html`): a group for each stretch
-  of steps between the model's words, opened in place by a click or from the keyboard; failures and the questions
-  they answered kept in sight; "compact it more" (no empty rows around the model's sentences, the files changed on
-  the group's row); "design them with boxes" (the row in a box's top edge); then "categorize with a very small
-  title at the top and different colors, for different main tasks". Their 8 Oct session: 688 rows → 194.
-- **The grouping** (`terminal/src/app/rail.jsx`): `groupWork` over foldSteps' list: a run of two or more steps
-  (`isWork`: tools, thoughts, folded reads, notes, the window's own lines, answers typed mid-turn) becomes
-  `{ type: 'group', id, open, list }`; one step stays a step; the model's sentences are marked `tight` (no gaps,
-  screen.jsx `gapOver`/`gapUnder`). Nothing looks ahead, since printed rows never change. While a turn works the
-  stretch at the end is `held` and drawn in the live area by `LiveGroup` (its row counting and its last two steps),
-  and printed closed once the model speaks or the turn ends. A group's `id` comes from its first step's words and
-  how many groups began the same way (`idOf`), so it is the same after /resume, which gives items new keys.
-- **The box**: `groupFacts` (steps, reads, files with +/−, commands, the last test run's counts by `outcome`,
-  thoughts, answers, failures) and `groupTask` (the main task, scored: a test run 3 (a command naming tests, pass or
-  fail), an edit 2, another command or a web read 1.5, a file read 1, a thought 0.3; a question to you with little
-  else is ASKING) → `TASKS` (since 9 Oct 2026 the owner's "3 · Nord", "i dont really like the purple and orange":
-  TESTING sand, EDITING light blue, RUNNING grey-teal, RESEARCH off-white, EXPLORING steel blue, THINKING grey, ASKING
-  dusty red; no green, purple or orange; the ✎, Ran and ? a closed box carries take EDITING's and ASKING's colours). `GroupBox` draws the top edge by hand (`╭─ TITLE ─ ▸ row ─╮`, the row cut with …
-  by `fitPieces`, the files last so they go first) in the task's quieter shade, then, closed, `GroupPins` (your
-  answers, the newest failure with how many others failed) or the bottom edge alone (two rows); open, every step
-  as always inside it (screen.jsx `GroupView`, at the width less 8).
-- **Opening** (App.jsx `openGroups`, `toggleGroup`; kept with the conversation as `open` in its saved file, read
-  back by /resume, emptied by /clear): a click on a closed box, or on an open one's top edge (app-keys.mjs: the
-  window row counted up from the live part, whose height is `liveBoxRef`'s, then screen.jsx `printedAt` over the
-  measured heights; only what is in the window, since a click scrolled up is Terminal's), or ctrl+o: a list of the
-  boxes, newest first (`stepGroups`, `groupLine`; picker kind `groups`), enter opens or closes one. Any change of
-  the view prints the conversation again (`viewKey` → `win.clear()`, as a resize does), just after the render: the
-  redraw measures the open box with a render of its own (`primeRows`), and Ink's layout engine crashed when that
-  ran inside a commit.
+  if we want to see it, we click it and it expands?" (four preview rounds: a box for each stretch of steps, its
+  task's small title and colour; 688 rows → 194), then on two screenshots of many small boxes the same afternoon:
+  "can we categorize / group the boxes together a bit more?". The model says a line between nearly every step, so
+  most boxes held one or two steps (their "split the big files" turn: 65 boxes, 307 rows). Three live designs
+  drawn by the app's own code on their sessions (private: `docs/private/design rounds/
+  agentic-coder-box-groups-3-designs-2026-10-09.html`); their picks: **3 · Task rows**, the model's line cut to one
+  row, the smarter task names with COMMITTING, in place of the box for each stretch. That turn: 90 rows in 3 boxes.
+- **What makes a row** (`terminal/src/app/task-rows.jsx` `taskRows`, over rail.jsx `groupWork`'s stretches): a
+  short line the model says (`said`: one paragraph, 300 characters at most) and the stretch after it are one row;
+  a stretch with no line before it is a row named by its first step, in grey; a longer answer (an analysis, a
+  plan, a list) is never folded, and the box ends above it. Neighbouring rows of one kind of work are one **task
+  row**: a row that acts has its own kind (`groupTask`), and looking (EXPLORING, THINKING) takes the kind of the
+  next row that acts, so a read or a grep before an edit is part of the EDITING task row. The task rows of one
+  answer share a box with a plain top edge; its bottom edge holds the answer's totals, with the newest failure
+  over it. What follows the last stretch that did something (the answer, a second opinion's notes) is as before.
+- **What a command is** (rail.jsx `commandKind`): a test run (a test runner, the project's check, or a look at a
+  test log for pass and fail), a commit or push (COMMITTING, new: pale sea 152 / 30), a change to files (sed -i, cp,
+  mv, rm, a redirect into a file; never one into /tmp), only looking (grep, sed -n, cat, git log …: EXPLORING), else
+  running something. What is in quotes is left out first, so a `|` or `>` in a grep pattern is not the shell's.
+  Before, every command was RUNNING.
+- **A task row** reads `▸ TESTING  <the last line said in it>  <answers · pass · fail · ✗ failed · ✎ files>
+  <parts> <steps>`, the steps ending every row in one column; your answers stay in sight under it. Open, its rows
+  under it (each with its own counts); a row open, its whole line and its steps as always.
+- **Printed rows never change** (Ink's `<Static>` prints only what is new at the end), so nothing is printed until
+  it is settled: a task row once a row of another kind that acts has finished, or the box ends; the bottom edge
+  once what follows the box is printed. While a turn works, the task row under way, the line just said and the
+  stretch under way are `held` and drawn by `LiveRun` in the live area (with the box's top edge while nothing of
+  the box is printed yet). Checked on every step of 16 saved conversations: what is printed only ever grows at its
+  end (`folders.test.mjs` holds the same on a made-up turn).
+- **Opening** (App.jsx `openGroups`, `toggleGroup`; kept with the conversation as `open`, read back by /resume,
+  emptied by /clear): a click on a task row's line or the box's top edge above it, or on a row's line inside an
+  open one (app-keys.mjs `onConversation` → screen.jsx `printedAt`, then `pieceAt`, which measures the open rows);
+  ctrl+o lists the task rows newest first, an open one's rows under it (`stepRuns`, `runWords`, `rowWords`). Ids
+  come from a row's first item's words (`idOf`), so they are the same after /resume. Any change prints the
+  conversation again (`viewKey` → `win.clear()` just after the render, as before). The click's row was one too
+  high before (counted from the row under the last printed one); a closed box had opened from any of its rows, so
+  it never showed.
 - **/steps** grouped (the default) · open (every step, as before; ctrl+o is then the old newest-fold opener) · words
-  (no boxes): settings.json `steps`, `AGENTIC_STEPS` for one window; in the / menu where there is room (`WHEN_ROOM`,
-  after /bot). The app tests run with `AGENTIC_STEPS=open` (pty.mjs, term.mjs, the keeper and sessions tests).
-- **Tests**: `terminal/test/folders.test.mjs` (the grouping, held, the id after new keys, the tasks and their colours,
-  the box's rows at 135 and 80 columns, a click's row to its box, ctrl+o's list, and the real window: a reply's
-  steps in a box, a click opens it, ctrl+o closes it, /steps open, kept in settings.json).
+  (only what the model says; the live area shows the last two steps): settings.json `steps`, `AGENTIC_STEPS` for
+  one window; in the / menu where there is room (`WHEN_ROOM`, after /bot). The app tests run with
+  `AGENTIC_STEPS=open` (pty.mjs, term.mjs, the keeper and sessions tests).
+- **Tests**: `terminal/test/folders.test.mjs` (stretches, what a command is, the task colours with no purple, orange
+  or green, the rows, looking joining what it was for, a long answer in the open, the ids after new keys, the task
+  row under way and nothing printed ever changing, the box at 135 and 80 columns, a click's row to its task row or
+  row, ctrl+o's list, and the real window: a reply's steps as a task row, a click opens it and its row, ctrl+o
+  closes it, /steps open, kept in settings.json).
 
 ## The conversation's text is Terminal's (9 Oct 2026)
 

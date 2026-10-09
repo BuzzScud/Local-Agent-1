@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backend clean-up plan · split and test · 9 Oct 2026</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--soft:#6b675e;--line:#e3dfd5;--acc:#1f66bd;--on:#ffffff;
+--good:#1d6b3d;--goodbg:#e3f2e8;--wait:#7a5200;--waitbg:#fbf0d9;--bad:#a5301b;--badbg:#fbe8e3}
+@media (prefers-color-scheme:dark){:root{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--soft:#a4a19a;--line:#34363e;--acc:#6aa5ec;--on:#0e1726;
+--good:#8fd6a8;--goodbg:#1f3328;--wait:#f0c674;--waitbg:#3a3020;--bad:#f2a593;--badbg:#3d2420}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:1320px;margin:0 auto;padding:24px 24px 32px}
+h1{font-size:28px;line-height:1.25;margin:0 0 4px;font-weight:700}
+.lede{color:var(--soft);margin:0 0 16px;max-width:80ch}
+h2{font-size:20px;margin:0 0 4px;font-weight:700}
+h3{font-size:15px;margin:0 0 4px;font-weight:700}
+p{margin:0}
+code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.tabs button{font:inherit;font-weight:600;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 16px;cursor:pointer}
+.tabs button:hover{border-color:var(--acc)}
+.tabs button:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.tabs button[aria-selected="true"]{background:var(--acc);color:var(--on);border-color:var(--acc)}
+.panel{display:none}.panel.on{display:block}
+.sub{color:var(--soft);margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.stages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.stage{display:grid;grid-template-rows:auto auto 1fr auto;gap:8px}
+.stage .n{font-size:13px;font-weight:700;color:var(--acc)}
+.stage .what{color:var(--ink)}
+.stage .how{font-size:13px;color:var(--soft);border-top:1px solid var(--line);padding-top:8px}
+.tag{display:inline-block;font-size:13px;font-weight:600;border-radius:999px;padding:2px 10px;white-space:nowrap}
+.tag.good{background:var(--goodbg);color:var(--good)}.tag.wait{background:var(--waitbg);color:var(--wait)}.tag.bad{background:var(--badbg);color:var(--bad)}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{font-size:13px;color:var(--soft);font-weight:600}
+tr:last-child td{border-bottom:0}
+.num{font-variant-numeric:tabular-nums;text-align:right}
+.two{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+ul.plain{margin:8px 0 0;padding-left:20px}ul.plain li{margin:4px 0}
+.base{display:flex;flex-wrap:wrap;gap:16px;margin:0 0 16px}
+.base .card{flex:1 1 200px;padding:12px 16px}
+.base b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.base span{color:var(--soft);font-size:13px}
+footer{margin-top:16px;color:var(--soft);font-size:13px}
+@media (max-width:1000px){.stages{grid-template-columns:repeat(2,minmax(0,1fr))}.two{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.stages{grid-template-columns:minmax(0,1fr)}main{padding:16px}h1{font-size:22px}th.hide,td.hide{display:none}}
+</style></head><body><main>
+
+<h1>Split three app files and test their decisions: nothing on screen changes</h1>
+<p class="lede">The plan for the terminal backend clean-up, from the 9 Oct analysis report and your five answers. Measured on main at <code>9657699</code>, Thursday 9 Oct 2026. Nothing in the code has been changed yet.</p>
+
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-t="0">1 · The plan</button>
+  <button role="tab" aria-selected="false" data-t="1">2 · What I checked</button>
+  <button role="tab" aria-selected="false" data-t="2">3 · Your answers</button>
+</div>
+
+<section class="panel on" role="tabpanel">
+  <div class="base">
+    <div class="card"><b>2,407 lines</b><span>in the three files to split (panels 828, keys 794, slash 785)</span></div>
+    <div class="card"><b>1,888 / 1,888</b><span>tests passed in the last full run, today at 1:16 pm: the result to keep</span></div>
+    <div class="card"><b>9 helpers</b><span>the three files borrow from screen files today</span></div>
+    <div class="card"><b>0 changes</b><span>to what you see on screen, by your choice</span></div>
+  </div>
+  <div class="stages">
+    <article class="card stage"><span class="n">Stage 1</span><h3>Set up a separate copy</h3><p class="what">A new working copy from main, so other sessions keep working undisturbed.</p><p class="how">Check: the nearest tests pass there before any move.</p></article>
+    <article class="card stage"><span class="n">Stage 2</span><h3>Move the borrowed helpers out</h3><p class="what">Permission choices, home looks, recent folders, the bot switch, step names, the group line go to plain files; the screen imports them back. The 3 row-height helpers stay with the screen.</p><p class="how">Check: screen and permission tests, then push.</p></article>
+    <article class="card stage"><span class="n">Stage 3</span><h3>Split the panels file</h3><p class="what">828 lines become one file per topic: web, MCP, hooks, rewind, effort and limits, settings. Same names in App.jsx.</p><p class="how">Check: panel tests and app-driving tests that open them, then push.</p></article>
+    <article class="card stage"><span class="n">Stage 4</span><h3>Split the keys file</h3><p class="what">794 lines, split the same way by what the keys do: the prompt box, menus, the home screen, scrolling.</p><p class="how">Check: key and menu tests, then push.</p></article>
+    <article class="card stage"><span class="n">Stage 5</span><h3>Split the slash-commands file</h3><p class="what">785 lines, split by command group, with the same answers to every command.</p><p class="how">Check: command tests and the help list, then push.</p></article>
+    <article class="card stage"><span class="n">Stage 6</span><h3>Fast tests for the decisions</h3><p class="what">Each choice inside the new files becomes a plain function with its own quick test, as limits and permissions already are.</p><p class="how">Check: the new tests, then the full suite once, from your own Terminal.</p></article>
+  </div>
+  <footer>Each stage is one commit: its nearest tests, the quick repo check, other sessions' work pulled in, then pushed. The full suite only finishes outside Agentic Coder.</footer>
+</section>
+
+<section class="panel" role="tabpanel">
+  <h2>The report holds up, with one half-right point</h2>
+  <p class="sub">Each point from the analysis report, checked against the code.</p>
+  <div class="card" style="padding:4px 4px">
+  <table>
+    <colgroup><col style="width:24%"><col style="width:58%"><col style="width:18%"></colgroup>
+    <thead><tr><th>Point</th><th>What the code shows</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Six huge app functions</td><td>panels 828, keys 794, slash 785, run 711, remote 584, model 441 lines; each is App's own code moved over, sharing one object rebuilt on every render.</td><td><span class="tag good">Confirmed</span></td></tr>
+      <tr><td>Logic reaches into the screen</td><td>All 12 imports are there. 9 names are plain helpers that only live in screen files; 3 row-height helpers read the screen's own height cache.</td><td><span class="tag good">Confirmed</span></td></tr>
+      <tr><td>Two circular imports</td><td>Notes ↔ pack is real. Tools ↔ localize is already broken: tools loads localize only when it is called.</td><td><span class="tag wait">Half right</span></td></tr>
+      <tr><td>Errors dropped</td><td>200 empty catches in 847 try blocks (the report counted 202 of 860). A failed save of a session's folder is dropped without a word; there is no shared log helper.</td><td><span class="tag good">Confirmed</span></td></tr>
+      <tr><td>Code map behind</td><td>It still says agent.mjs 3,784 and App.jsx 4,123 lines; they are 611 and 1,040 now.</td><td><span class="tag good">Confirmed</span></td></tr>
+      <tr><td>Speed</td><td>The report has no timings, so nothing can be said about speed yet.</td><td><span class="tag bad">Not measured</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel" role="tabpanel">
+  <div class="two">
+    <div>
+      <h2>Your five answers</h2>
+      <p class="sub">They set the plan on tab 1.</p>
+      <div class="card" style="padding:4px 4px">
+      <table>
+        <colgroup><col style="width:44%"><col style="width:56%"></colgroup>
+        <thead><tr><th>Question</th><th>Your pick</th></tr></thead>
+        <tbody>
+          <tr><td>How far should it go?</td><td>Split and test: the three biggest files</td></tr>
+          <tr><td>What does "optimize" mean?</td><td>Tidier code</td></tr>
+          <tr><td>How should it land?</td><td>Separate copy, pushed after each stage</td></tr>
+          <tr><td>Can anything you see change?</td><td>Nothing visible</td></tr>
+          <tr><td>What keeps it from sliding back?</td><td>Fast tests</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    <div>
+      <h2>Not in this round</h2>
+      <p class="sub">Left for later; say if one should come in.</p>
+      <div class="card">
+        <ul class="plain">
+          <li>The remote, run and model files (584, 711, 441 lines)</li>
+          <li>The notes ↔ pack circular import</li>
+          <li>A log line when a session's folder fails to save</li>
+          <li>Refreshing the code map: worth doing after stage 5, since the split moves code again</li>
+          <li>Any speed work</li>
+        </ul>
+      </div>
+      <h2 style="margin-top:16px">Risks</h2>
+      <div class="card">
+        <ul class="plain">
+          <li>Only the tests that drive the real app reach these files, and they time out inside Agentic Coder: the full suite is judged from your own Terminal.</li>
+          <li>The busiest files change in other sessions too: small stages, landed quickly.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>Made 9 Oct 2026 from main at 9657699, from docs/reports/agentic-coder-terminal-backend-analysis-2026-10-09.html.</footer>
+</main>
+<script>
+const tabs=[...document.querySelectorAll('[role=tab]')],panels=[...document.querySelectorAll('.panel')];
+function show(i){tabs.forEach((t,k)=>t.setAttribute('aria-selected',k===i));panels.forEach((p,k)=>p.classList.toggle('on',k===i));}
+tabs.forEach((t,i)=>t.addEventListener('click',()=>show(i)));
+addEventListener('keydown',e=>{if(e.target.closest&&e.target.closest('input,textarea'))return;
+const cur=tabs.findIndex(t=>t.getAttribute('aria-selected')==='true');
+if(/^[1-3]$/.test(e.key))show(+e.key-1);else if(e.key==='ArrowRight')show((cur+1)%tabs.length);else if(e.key==='ArrowLeft')show((cur+tabs.length-1)%tabs.length);});
+</script>
+</body></html>
