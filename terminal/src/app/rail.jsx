@@ -297,16 +297,22 @@ export function groupFacts(list) {
 // What a group was mostly about (9 Oct 2026, the owner: "categorize with a very small title at the top and
 // different colors, for different main tasks"): scored from its steps, a test run counting most, then an
 // edit, another command, a web read, a file read, a thought; ties go in that order. title: its colour for
-// the small title; edge: a quieter one for the box. No green: the app's hue rule (theme.test.mjs).
+// the small title; edge: a quieter one for the box. The colours are "3 · Nord" (9 Oct 2026, the owner: "i
+// dont really like the purple and orange"): frost blues, sand and a dusty red, soft and muted. No green
+// (the app's hue rule, theme.test.mjs), no purple, no orange.
 export const TASKS = {
-  testing: { label: 'TESTING', title: 'ansi256(179)', edge: 'ansi256(136)' },
-  editing: { label: 'EDITING', title: 'ansi256(141)', edge: 'ansi256(97)' },
-  running: { label: 'RUNNING', title: 'ansi256(215)', edge: 'ansi256(130)' },
-  research: { label: 'RESEARCH', title: 'ansi256(176)', edge: 'ansi256(132)' },
-  exploring: { label: 'EXPLORING', title: 'ansi256(75)', edge: 'ansi256(67)' },
-  thinking: { label: 'THINKING', title: 'ansi256(250)', edge: 'ansi256(241)' },
-  asking: { label: 'ASKING', title: 'ansi256(147)', edge: 'ansi256(103)' },
+  testing: { label: 'TESTING', title: 'ansi256(222)', edge: 'ansi256(101)' },
+  editing: { label: 'EDITING', title: 'ansi256(117)', edge: 'ansi256(31)' },
+  running: { label: 'RUNNING', title: 'ansi256(109)', edge: 'ansi256(66)' },
+  research: { label: 'RESEARCH', title: 'ansi256(253)', edge: 'ansi256(243)' },
+  exploring: { label: 'EXPLORING', title: 'ansi256(110)', edge: 'ansi256(60)' },
+  thinking: { label: 'THINKING', title: 'ansi256(245)', edge: 'ansi256(239)' },
+  asking: { label: 'ASKING', title: 'ansi256(174)', edge: 'ansi256(95)' },
 };
+// The marks a box carries (✎ the files on its row; Ran and ? on the rows kept in sight) take the box
+// colours of editing and asking, not the app's purple edit and question colours.
+const BOX_EDIT = TASKS.editing.title;
+const BOX_ASK = TASKS.asking.title;
 // a test run, or a look at one's results (a grep of a test log for pass and fail)
 const TEST_CMD = /\btests?\b|pytest|jest|vitest|mocha|unittest|\bpass\b|\bfail\b|\.test\./i;
 export function groupTask(list) {
@@ -346,7 +352,7 @@ function headPieces(f, { open = false, live = false } = {}) {
   if (bits.length) out.push({ t: ` · ${bits.join(' · ')}`, c: C.dim });
   if (f.test) out.push({ t: ` · ${f.test.words}`, c: f.test.bad ? C.bad : C.ok });
   if (f.thoughts) out.push({ t: ` · ${plural(f.thoughts, 'thought')}`, c: C.dim });
-  if (f.files.length) out.push({ t: '  ✎ ', c: C.edits }, { t: fileWords(f.files).join(', '), c: PATH });
+  if (f.files.length) out.push({ t: '  ✎ ', c: BOX_EDIT }, { t: fileWords(f.files).join(', '), c: PATH });
   return out;
 }
 // A group in words, for ctrl+o's list: its task, then its row.
@@ -402,7 +408,7 @@ function GroupPins({ facts: f, cwd }) {
   for (const it of f.answers) {
     const q = it.type === 'user' ? null : cut(it.view?.question ?? it.arg, 70);
     const a = it.type === 'user' ? it.text : it.view?.text;
-    rows.push(<Row key={`a${it.key}`}><Text wrap="truncate-end"><Text color={C.ask}>? </Text>{q ? <Text color={C.dim}>{q} → </Text> : <Text color={C.dim}>You: </Text>}<Text color={WHITE}>{cut(a, 80)}</Text></Text></Row>);
+    rows.push(<Row key={`a${it.key}`}><Text wrap="truncate-end"><Text color={BOX_ASK}>? </Text>{q ? <Text color={C.dim}>{q} → </Text> : <Text color={C.dim}>You: </Text>}<Text color={WHITE}>{cut(a, 80)}</Text></Text></Row>);
   }
   const last = f.failures.at(-1);
   if (last) rows.push(<Row key={`f${last.key}`}><FailRow it={last} cwd={cwd} more={f.failures.length - 1} /></Row>);
@@ -412,7 +418,7 @@ function FailRow({ it, cwd, more = 0 }) {
   const also = more > 0 ? <Text color={C.faint}>  · {more} more failed</Text> : null;
   if (it.type === 'note') return <Text wrap="truncate-end"><Text color={it.tone === 'error' ? C.bad : C.warn}>{it.tone === 'error' ? '✗' : '!'} {cut(it.text, 110)}</Text>{also}</Text>;
   const v = it.view ?? {};
-  if (v.kind === 'bash') { const o = outcome(it.arg, v); return <Text wrap="truncate-end"><Text color={C.bad}>✗ </Text><Text color={C.edits} bold>Ran</Text><Text color={PATH}>  {cut(shortCommand(cmdShown(it.arg, v.saved), cwd), 80)}</Text><Text color={o.color}> · {o.end}</Text>{also}</Text>; }
+  if (v.kind === 'bash') { const o = outcome(it.arg, v); return <Text wrap="truncate-end"><Text color={C.bad}>✗ </Text><Text color={BOX_EDIT} bold>Ran</Text><Text color={PATH}>  {cut(shortCommand(cmdShown(it.arg, v.saved), cwd), 80)}</Text><Text color={o.color}> · {o.end}</Text>{also}</Text>; }
   const why = v.message ?? v.reason ?? '';
   return <Text wrap="truncate-end"><Text color={C.bad}>✗ </Text><Text color={C.bad} bold>{it.label}</Text><Text color={PATH}>  {cut(shortPath(String(it.arg ?? ''), cwd), 60)}</Text>{why ? <Text color={C.dim}> · {cut(why, 70)}</Text> : null}{also}</Text>;
 }
