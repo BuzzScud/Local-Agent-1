@@ -148,6 +148,19 @@ export function recentFolders({ dir = SESSIONS, max = 6, look = 200, exists = (f
 export function loadSession(cwd, id) {
   return JSON.parse(readFileSync(join(SESSIONS, slug(cwd), `${id}.json`), 'utf8'));
 }
+// A conversation by its id in whichever folder it was saved under (9 Oct 2026: a window moved to another
+// folder by "Work in …? → Yes" saves there, and a restart that started where coding was typed looked only
+// there). The session, or null.
+export function findSession(id) {
+  if (!/^[\w.-]+$/.test(String(id ?? ''))) return null;
+  try {
+    for (const d of readdirSync(SESSIONS)) {
+      const f = join(SESSIONS, d, `${id}.json`);
+      if (existsSync(f)) return JSON.parse(readFileSync(f, 'utf8'));
+    }
+  } catch {}
+  return null;
+}
 
 const HISTORY = join(HOME, 'history.jsonl');
 export function loadHistory(cwd, max = 200) {

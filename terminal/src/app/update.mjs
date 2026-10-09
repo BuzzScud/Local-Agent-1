@@ -187,6 +187,12 @@ const short = (p) => (process.env.HOME && p.startsWith(process.env.HOME) ? `~${p
 // process and left one more of them behind at each /update.
 export const RESTART_CODE = 75;
 export const canRestart = () => Boolean(process.env.AGENTIC_RESTART_FILE);
+// The folder a restart starts in (9 Oct 2026): the one the window works in now when "Work in …? → Yes" moved
+// it there (its conversation is saved under that folder), else the one picked or given at the start, else
+// where coding was typed (the launcher's own). Before, a moved window came back where it started and its
+// --resume found no conversation ("Could not open that conversation: ENOENT").
+export const folderArgs = (cwd, startCwd) => (cwd && cwd !== startCwd ? ['--folder', cwd] : []);
+export const withStartFolder = (args, opts) => (!args.includes('--folder') && (opts.picked || opts.folder) ? ['--folder', opts.cwd, ...args] : args);
 // Written fresh ('wx': a file or link someone put in its place is removed, not
 // followed or reused), readable by you only. If it cannot be written, Agentic Coder
 // ends normally instead (code 0), so the launcher does not restart it.
