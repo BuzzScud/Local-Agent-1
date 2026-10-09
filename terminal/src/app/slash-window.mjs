@@ -28,14 +28,14 @@ export function slashWindow(self) {
         break;
       }
       case 'steps': {
-        // How a reply's steps show (rail.jsx groupWork): typed alone the next one, else the one named; kept in
+        // How a reply's steps show (task-rows.jsx): typed alone the next one, else the one named; kept in
         // settings.json. The conversation is printed again in the new way (App.jsx viewKey).
         const w = arg.trim().toLowerCase();
         if (w && !STEPS.includes(w)) { self.flash('/steps grouped, open or words (alone: the next one)'); break; }
         const next = w || STEPS[(STEPS.indexOf(self.S.current.steps) + 1) % STEPS.length];
         self.setSteps(next);
         try { saveSettings({ steps: next }); } catch {}
-        self.flash({ grouped: 'Grouped: each stretch of work is one box · a click or ctrl+o opens it', open: 'Open: every step, as before', words: 'Words: only what the model says, your messages and the end lines' }[next], 5000);
+        self.flash({ grouped: 'Grouped: a row for each kind of work · a click or ctrl+o opens it', open: 'Open: every step, as before', words: 'Words: only what the model says, your messages and the end lines' }[next], 5000);
         break;
       }
       case 'bot': {

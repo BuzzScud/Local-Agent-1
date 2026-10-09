@@ -40,7 +40,7 @@ export const COMMANDS = [
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'autostart', desc: 'Load the model as soon as a window opens (on), or only when you type /start (off, the default)', arg: '[on|off]', picker: true },
   { name: 'mouse', desc: 'Drag to highlight the text you are typing in the prompt box (copied at once, delete removes it); click the model’s label in the footer to start or stop it', arg: '[on|off]', picker: true },
-  { name: 'steps', desc: 'How a reply’s steps show: grouped (each stretch of work is one box; a click or ctrl+o opens it), open (every step) or words (only what the model says); alone: the next one', arg: '[grouped|open|words]' },
+  { name: 'steps', desc: 'How a reply’s steps show: grouped (a row for each kind of work; a click or ctrl+o opens it), open (every step) or words (only what the model says); alone: the next one', arg: '[grouped|open|words]' },
   { name: 'bot', desc: 'The bot over the prompt box: hide it (it waves and dives into the box) or show it again (it pops back out); alone: the other one', arg: '[hide|show]' },
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },
   { name: 'weights', desc: "See the models' weights in the browser (the hub)" },
@@ -110,7 +110,7 @@ const CLAUDE_MENU = new Set(['usage']);
 // /calc (8 Oct 2026, the owner: "add it to the agentic coder commands, under the hub (/help) command") last:
 // in a window with room it is the row under /help, and typing /c finds it anywhere.
 // /bot (9 Oct 2026): hides or shows the bot over the prompt box (bot-layer.jsx); last, so it goes first.
-// /steps (9 Oct 2026): how a reply's steps show (rail.jsx groupWork); after /bot.
+// /steps (9 Oct 2026): how a reply's steps show (task-rows.jsx); after /bot.
 export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'loops', 'mcp', 'jobs', 'calc', 'bot', 'steps']);
 const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
