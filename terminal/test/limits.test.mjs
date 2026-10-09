@@ -235,6 +235,26 @@ test('the agent stops after the steps /effort set, and says where to move it', a
   expect(notes).toContain('Stopped after 3 steps (/effort moves this).');
 });
 
+test('at the step limit it asks whether to keep going: Keep going gives as many steps again, Stop here stops', async () => {
+  const cwd = project();
+  // Each step a different one, so the same step again (Stuck asks) does not come into it.
+  const fake = await startFakeServer(Array.from({ length: 10 }, (_, i) => ({ tool: { name: 'Bash', args: { command: `echo step ${i}` } } })));
+  const asked = [];
+  const answers = ['Keep going', 'Stop here'];
+  const ask = async (req) => { if (req.id.startsWith('limit_')) { asked.push(req.args.question); return { text: answers.shift() }; } return { choice: 'yes' }; };
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, ctx: 32768, mode: 'edits', flows: false, ask });
+  applyLimits(agent, { ...defaultLimits(model), steps: 3 });
+  const notes = [];
+  agent.on('note', (n) => notes.push(n.text));
+  const reason = await agent.send('list the files forever');
+  await fake.close();
+  expect(reason).toBe('limit');
+  expect(fake.requests.length).toBe(6);
+  expect(asked).toEqual(['I have taken 3 steps, and the task is not done yet. Keep going?', 'I have taken 6 steps, and the task is not done yet. Keep going?']);
+  expect(notes).toContain('Stopped after 6 steps (/effort moves this).');
+  expect(agent.maxSteps).toBe(3); // the next message starts from /effort's limit again
+});
+
 test('Bash shows the output lines and stops at the timeout /effort set', async () => {
   const cwd = project();
   const cut = await execute('Bash', { command: 'seq 1 100' }, {}, { cwd, bash: { maxLines: 10, timeoutMs: 120_000 } });

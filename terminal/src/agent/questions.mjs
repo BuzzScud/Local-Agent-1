@@ -180,6 +180,17 @@ export function stuckQuestion(why, step, err, { tries = 3, goal = '', result = '
     typeAbout: 'Say what to try, or where to look, and I follow that.',
   };
 }
+// The step limit reached with the work not done (9 Oct 2026, the owner's pick: ask, rather than stop
+// or no limit). Keep going gives it as many steps again; stop ends the message as before.
+export function limitQuestion(steps, { goal = '' } = {}) {
+  return {
+    question: `I have taken ${steps} steps${goal ? ` and am on "${clip(goal, 70)}"` : ''}, and the task is not done yet. Keep going?`,
+    options: ['Keep going', 'Stop here'],
+    about: [`I carry on for up to ${steps} more steps.`, 'I stop now, at this step, as before.'],
+    typeLabel: 'Tell me what to do next…',
+    typeAbout: 'Say what to focus on, and I carry on with that.',
+  };
+}
 // What a repeated step gave, in a few words, for the question.
 export function sameResultSaid(name, outText = '') {
   if ((name === 'Write' || name === 'Edit') && /\(\+0 −0 lines\)/.test(outText)) return 'the file already holds that content';

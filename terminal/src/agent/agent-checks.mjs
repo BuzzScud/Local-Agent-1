@@ -2,7 +2,7 @@
 // Look first, Stays on task, the second look, the check-ins, the stuck question and asking the user.
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
 import { endpointOf } from '../../../models/index.mjs';
-import { askedQuestions, checkInQuestion, errorSaid, lookSaid, planQuestion, sameResultSaid, stepSaid, stuckQuestion } from './questions.mjs';
+import { askedQuestions, checkInQuestion, errorSaid, limitQuestion, lookSaid, planQuestion, sameResultSaid, stepSaid, stuckQuestion } from './questions.mjs';
 import { CASES_ASK, CASES_FIX, MAX_CASES, REVIEW_CODE, REVIEW_MAX, REVIEW_SCHEMA, REVIEW_SYSTEM, addCase, casesFromList, casesOf, casesTold, gapCases, isTestPath, reviewAsk, reviewBack, reviewWrong, signSample } from './cases.mjs';
 import { display, parseArgs } from './tools.mjs';
 import { readFileSync } from 'node:fs';
@@ -416,6 +416,27 @@ export class ChecksPart {
     if (/^(try (a|an)?\s*(different|other|another) way|keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return { text: `[Stuck] ${was}. The user says: try a different way. Do not send that step again; reach what it was for another way, or go on to the next step.` };
     if (/^skip( (this|that|the) step| it)?\W*$/i.test(text)) return { text: `[Stuck] ${was}. The user says: skip this step. Leave it and go on with the rest of the request${next ? `; next in your plan: ${next}` : ''}. In your final answer, say that this step was skipped.` };
     return { text: `[Stuck] You were going round in circles and asked the user for a hint. The user answered: ${text}\nFollow that.` };
+  }
+
+  // The step limit reached: one question, Keep going or Stop here. { more: true } carries on, with
+  // { text } for the model when you said what to do next; { stop } ends the message. No one to ask
+  // (coding -p, a loop: 'skip') stops, as before.
+  async limitAsk(steps, signal) {
+    const plan = this.turn?.planAt != null ? this.todos ?? [] : [];
+    const q = limitQuestion(steps, { goal: plan.find((x) => x.status === 'in_progress')?.text ?? '' });
+    const { question } = q;
+    const id = `limit_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'stuck', args: q, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return { stop: 'interrupted' };
+    if (answer.choice === 'skip') return { stop: 'limit' };
+    if (answer.choice === 'no' && !answer.feedback) return { stop: 'limit' };
+    const text = (answer.text ?? answer.feedback ?? '').trim();
+    if (!text || /^stop( here)?\W*$/i.test(text)) return { stop: 'limit' };
+    this.turn?.asked.push(question);
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text } });
+    if (/^(keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return { more: true };
+    return { more: true, text: `[Step limit] You reached ${steps} steps and asked the user whether to keep going. The user answered: ${text}\nFollow that.` };
   }
 
   // One yes-or-steer question before changing files; yes (or "ok", "go")

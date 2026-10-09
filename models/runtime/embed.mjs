@@ -4,7 +4,8 @@
 // use, shared between windows and kept loaded like the 27B's (server.mjs).
 import { existsSync } from 'node:fs';
 import { serverBinOf, EMBEDDERS, DEFAULT_EMBEDDER, modelPath } from '../registry.mjs';
-import { ModelServer, LINGER_SECS } from './server.mjs';
+import { ModelServer, LINGER_SECS, scanServers } from './server.mjs';
+import { availableBytes } from './memory.mjs';
 
 const CACHE = 256; // texts whose numbers are kept for the next ask
 
@@ -21,8 +22,14 @@ export class Embedder {
 
   get url() { return this.fixedUrl ?? this.server?.url ?? null; }
 
-  async start({ lingerSecs = LINGER_SECS } = {}) {
+  // free: the memory free now (tests pass their own). One already loaded (by
+  // another window) is shared; a new one needs its memory free, or the
+  // caller goes on matching by words this time and says why (as the reranker).
+  async start({ lingerSecs = LINGER_SECS, free = availableBytes } = {}) {
     if (this.fixedUrl || this.server) return this.url;
+    const loaded = scanServers().some((e) => e.model === this.model.file);
+    const need = this.model.loadedBytes ?? 1.1e9;
+    if (!loaded && !this.starting && free() < need) throw new Error(`only ${(free() / 1e9).toFixed(1)} GB of memory is free and it needs about ${(need / 1e9).toFixed(1)} GB`);
     this.starting ??= (async () => {
       const server = new ModelServer(this.model);
       await server.start({ ctx: this.model.ctx, lingerSecs });

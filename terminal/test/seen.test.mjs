@@ -1,10 +1,10 @@
 // A file that changed since the model read it (agent/seen.mjs): the change is turned back with
 // the lines that changed, which count as reading it again; too many, and it reads it again.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SeenFiles, changedBlocks, changedNote, SHOW_MAX } from '../src/agent/seen.mjs';
+import { SeenFiles, changedBlocks, changedNote, SHOW_MAX, printedFiles } from '../src/agent/seen.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
@@ -125,5 +125,41 @@ test('its own Edits one after another need no new Read', async () => {
   await fake.close();
   expect(events.map((e) => `${e.name}${e.error ? ' ✗' : ''}`)).toEqual(['Read', 'Edit', 'Edit']);
   expect(readFileSync(join(d, 'notes.txt'), 'utf8')).toBe('ALPHA\nbeta\nGAMMA\n');
+  rmSync(d, { recursive: true });
+});
+
+test('a file printed by a command (cat, sed -n, head) counts as seen; a pipe, a write or a sed -i does not', () => {
+  const d = dir();
+  mkdirSync(join(d, 'sub'));
+  for (const f of ['a.mjs', 'b.mjs', 'sub/c.mjs']) writeFileSync(join(d, f), 'x\n');
+  const p = (c) => printedFiles(c, d, d).map((f) => f.slice(d.length + 1));
+  expect(p('cat a.mjs')).toEqual(['a.mjs']);
+  expect(p("sed -n '280,295p' a.mjs; sed -n 1,5p b.mjs")).toEqual(['a.mjs', 'b.mjs']);
+  expect(p('head -n 40 a.mjs && tail -20 b.mjs')).toEqual(['a.mjs', 'b.mjs']);
+  expect(p('cd sub && nl c.mjs')).toEqual(['sub/c.mjs']);
+  expect(p('cd ~/sub && cat c.mjs')).toEqual(['sub/c.mjs']);
+  expect(p('cat a.mjs | grep x')).toEqual([]);
+  expect(p('cat a.mjs > b.mjs')).toEqual([]);
+  expect(p("sed -i '' s/x/y/ a.mjs")).toEqual([]);
+  expect(p('sed s/x/y/ a.mjs')).toEqual([]);
+  expect(p('cat nope.mjs')).toEqual([]);
+  rmSync(d, { recursive: true });
+});
+
+test('an Edit after a sed -n of the file lands, with no "Read it first"', async () => {
+  const d = dir();
+  writeFileSync(join(d, 'notes.txt'), 'alpha\nbeta\ngamma\n');
+  const fake = await startFakeServer([
+    { tool: { name: 'Bash', args: { command: 'sed -n 1,3p notes.txt' } } },
+    { tool: { name: 'Edit', args: { path: 'notes.txt', old_text: 'beta', new_text: 'BETA' } } },
+    { text: 'Done.' },
+  ]);
+  const events = [];
+  const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd: d, system: systemPrompt({ cwd: d, git: 'test' }), thinking: false, ctx: 32768, mode: 'edits', flows: false, way: 'model', hooks: [], verify: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('tool', (e) => events.push(e));
+  await agent.send('Capitalise beta in notes.txt.');
+  await fake.close();
+  expect(events.map((e) => `${e.name}${e.error ? ' ✗' : ''}`)).toEqual(['Bash', 'Edit']);
+  expect(readFileSync(join(d, 'notes.txt'), 'utf8')).toBe('alpha\nBETA\ngamma\n');
   rmSync(d, { recursive: true });
 });

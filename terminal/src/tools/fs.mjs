@@ -80,13 +80,17 @@ function isGitRepo(root) {
 }
 
 export function searchFiles(root, { pattern, path = '.', glob, max = 50 } = {}) {
+  // A leading (?i), the way ripgrep and Python ask for any case, is a flag here: JavaScript and
+  // git grep -E refuse it (8 Oct 2026: "(?i)claude code" came back "Bad pattern").
+  const anyCase = /^\(\?i\)/.test(String(pattern ?? ''));
+  if (anyCase) pattern = pattern.slice(4);
   let re;
-  try { re = new RegExp(pattern); } catch (e) { return { error: `Bad pattern: ${e.message}` }; }
+  try { re = new RegExp(pattern, anyCase ? 'i' : ''); } catch (e) { return { error: `Bad pattern: ${e.message}` }; }
   const matches = [];
   let total = 0;
   if (isGitRepo(root)) {
     const rel = relative(root, resolve(root, path)) || '.';
-    const args = ['grep', '-n', '-I', '-E', '--untracked', pattern, '--', glob ? `${rel}/${glob}`.replace(/^\.\//, '') : rel];
+    const args = ['grep', '-n', '-I', '-E', ...(anyCase ? ['-i'] : []), '--untracked', pattern, '--', glob ? `${rel}/${glob}`.replace(/^\.\//, '') : rel];
     const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 20e6 });
     if (r.status === 0 || r.status === 1) {
       const lines = r.stdout.split('\n').filter(Boolean);

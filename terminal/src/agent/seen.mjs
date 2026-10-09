@@ -7,6 +7,9 @@
 // model does not have to read the whole file once more.
 import { readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
+import { resolve } from 'node:path';
+import { splitCommand } from './permissions.mjs';
 
 // A file is kept in full up to this size; a bigger one keeps only its fingerprint, and a
 // change to it asks for a new Read.
@@ -122,4 +125,33 @@ export function changedNote(rel, ch, name = 'Edit') {
     return { shown: false, text: `${head} Too much changed to show here${blocks ? ` (${blocks.length} ${blocks.length === 1 ? 'place' : 'places'})` : ''}: Read it again${first ? ` (offset ${Math.max(1, first - 3)} starts just before the first change)` : ''}; it is ${count} lines now. Then ${again[0].toLowerCase()}${again.slice(1)}` };
   }
   return { shown: true, text: `${head} What changed (this counts as reading it again):\n${lines}\n${again}` };
+}
+
+// The files a command printed for the model to see: cat, head, tail, nl, or sed -n with its lines
+// (cat x; sed -n 20,40p x), after any cd in the same command. Like a Read, they count as seen, so
+// the Edit that follows is not turned back with "Read it first" (8 Oct 2026: a sed -n of
+// agent-said.mjs, then its Edit, cost a step). Not a file whose output went on into a pipe, and
+// nothing from a command that runs another or writes a file.
+const PRINTERS = /^(cat|head|tail|nl|sed)$/;
+export function printedFiles(command, cwd, home = homedir()) {
+  const s = splitCommand(command);
+  if (s.nested || s.writes || s.open) return [];
+  const out = [];
+  let dir = cwd;
+  s.parts.forEach((part, i) => {
+    const words = (part.trim().match(/'[^']*'|"[^"]*"|\S+/g) ?? []).map((w) => w.replace(/^(['"])(.*)\1$/, '$2'));
+    if (!words.length) return;
+    const [cmd, ...rest] = words;
+    const full = (p) => resolve(dir, p.replace(/^~(?=\/|$)/, home));
+    if (cmd === 'cd') { dir = full(rest[0] ?? home); return; }
+    if (!PRINTERS.test(cmd) || s.seps[i] === '|' || s.seps[i - 1] === '|') return;
+    if (cmd === 'sed' && (rest[0] !== '-n' || rest.some((w) => /^-[A-Za-z]*i|^--in-place/.test(w)))) return;
+    // sed -n's script, and the number after head/tail -n, are not files
+    const args = cmd === 'sed' ? rest.slice(2) : rest.filter((w, k) => !w.startsWith('-') && !(/^-[nc]$/.test(rest[k - 1] ?? '')));
+    for (const a of args) {
+      const abs = full(a);
+      try { if (statSync(abs).isFile()) out.push(abs); } catch {}
+    }
+  });
+  return out;
 }

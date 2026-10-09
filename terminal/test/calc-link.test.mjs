@@ -430,3 +430,23 @@ test('the hub tab: status from the socket, the login saved (0600, never shown), 
   expect(lines[0]).toContain('not running');
   expect((await go('/calc/where', { where: 'somewhere' })).status).toBe(409);
 });
+
+test('coding calc run says in its log why it stopped: a SIGTERM (the service switched off) is not a crash', async () => {
+  const { spawn } = await import('node:child_process');
+  const home = mkdtempSync(join('/tmp', 'acw-run-'));
+  // set to run as the service (no address: it waits for one), or it leaves at once for the web
+  mkdirSync(join(home, 'web'), { recursive: true });
+  writeFileSync(join(home, 'web', 'settings.json'), JSON.stringify({ calc: { link: 'service' } }));
+  const child = spawn('bun', [join(import.meta.dir, '..', 'src', 'cli.jsx'), 'calc', 'run'], { env: { ...process.env, AGENTIC_HOME: home, AGENTIC_WEB_HOME: join(home, 'web'), AGENTIC_MEMORY_SAVE: 'off' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  const exited = new Promise((r) => child.on('exit', r));
+  for (let i = 0; i < 100 && !out.includes('the background service started'); i++) await Bun.sleep(50);
+  await Bun.sleep(300); // its signal handlers are set just after that line
+  expect(out).not.toContain('so the service stops');
+  child.kill('SIGTERM');
+  const code = await exited;
+  expect(out).toContain('the background service started');
+  expect(out).toContain('calc link: the service was told to stop (SIGTERM');
+  expect(code).toBe(0);
+}, 15_000);

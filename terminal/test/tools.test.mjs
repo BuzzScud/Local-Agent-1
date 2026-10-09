@@ -2,6 +2,7 @@ import { test, expect, beforeAll } from 'bun:test';
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { findEdit, parseArgs, prepare, execute, display, resolvePath, didYouMean, toolNameOf } from '../src/agent/tools.mjs';
 import { diffLines } from '../src/tools/edit.mjs';
 
@@ -116,6 +117,21 @@ test('Read, List and Search', async () => {
   expect((await execute('List', { path: 'a.js' }, {}, env)).text).toContain('is a file');
   expect((await execute('Search', { pattern: 'port' }, {}, env)).text).toContain('src/b.js:1:export const port = 8790;');
   expect((await execute('Search', { pattern: 'return', path: 'a.js' }, {}, env)).view.count).toBe(2);
+});
+
+test('Search takes a leading (?i) as "any case", in a git repo and outside one', async () => {
+  const plain = mkdtempSync(join(tmpdir(), 'agentic-anycase-'));
+  writeFileSync(join(plain, 'n.md'), 'Claude Code reads it\n');
+  const repo = mkdtempSync(join(tmpdir(), 'agentic-anycase-git-'));
+  writeFileSync(join(repo, 'n.md'), 'Claude Code reads it\n');
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  for (const cwd of [plain, repo]) {
+    const r = await execute('Search', { pattern: '(?i)claude code' }, {}, { cwd });
+    expect(r.error).toBeFalsy();
+    expect(r.text).toContain('n.md:1:Claude Code reads it');
+    // without it the case still counts
+    expect((await execute('Search', { pattern: 'claude code' }, {}, { cwd })).text).not.toContain('n.md:1:');
+  }
 });
 
 test('Edit and Write change files and report a diff', async () => {
