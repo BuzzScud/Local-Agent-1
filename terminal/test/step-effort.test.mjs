@@ -11,9 +11,10 @@ import { startFakeServer } from './fake-server.mjs';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'agentic-step-effort-'));
 
-// Bonsai's template writes "Reasoning effort is set to xhigh…" first: a new effort mid-turn
-// made the server read the whole conversation again (1 Oct: 3 minutes, three times).
-test('a turn keeps one effort when the template writes it at the top (Bonsai); others step down after a change', async () => {
+// Bonsai's template wrote "Reasoning effort is set to xhigh…" first: a new effort mid-turn
+// made the server read the whole conversation again (1 Oct: 3 minutes, three times). Bonsai left
+// the list on 9 Oct 2026 and no model left has effortAtTop, so a stand-in (K2 with it set) is that model.
+test('a turn keeps one effort when the template writes it at the top (a stand-in with effortAtTop); others step down after a change', async () => {
   const kwargs = async (m) => {
     const cwd = folder();
     const fake = await startFakeServer([
@@ -27,7 +28,7 @@ test('a turn keeps one effort when the template writes it at the top (Bonsai); o
     expect(sent.length).toBeGreaterThan(1);
     return [...new Set(sent)];
   };
-  expect(MODELS.bonsai.effortAtTop).toBe(true);
-  expect(await kwargs(MODELS.bonsai)).toEqual(['xhigh']);
+  const atTop = { ...MODELS.k2, effortAtTop: true };
+  expect(await kwargs(atTop)).toEqual(['high']);
   expect(await kwargs(MODELS.k2)).toEqual(['high', 'medium']); // K2's effort sits at the end of its prompt
 });

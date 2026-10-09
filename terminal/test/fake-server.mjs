@@ -11,7 +11,7 @@
 // remote is asked by /remote. seen: every request's path and key header.
 import { createServer } from 'node:http';
 
-export const FAKE_PROPS = { default_generation_settings: { n_ctx: 32768 }, total_slots: 2, model_path: '/models/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf' };
+export const FAKE_PROPS = { default_generation_settings: { n_ctx: 32768 }, total_slots: 2, model_path: '/models/Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf' };
 // vision: its /props says it can look at pictures (as llama-server with --mmproj does).
 // timings: false sends no speed with the answer, as the Claude API and OpenRouter do.
 export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null, key = null, props = false, vision = false, timings = true } = {}) {

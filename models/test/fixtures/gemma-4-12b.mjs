@@ -1,3 +1,6 @@
+// Test material, not a model of the app: Gemma 4 12B QAT's settings as they were when it left /model
+// (9 Oct 2026). The memory math and the server's flags are checked against them: a measured model
+// with an MTP helper in a file of its own and two thinking levels.
 // Gemma 4 12B it QAT (Google, quantization-aware 4-bit): the swap-in candidate
 // measured against the 27B on 2026-09-28. Live-checked on this Mac the same
 // morning: clean OpenAI tool calls through our engine, reads 126-128 tok/s,

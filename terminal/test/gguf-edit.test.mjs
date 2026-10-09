@@ -80,7 +80,7 @@ test('edits apply in order: a copy after a scale carries the scaled row', async 
 test('refusals: the source itself, a registered model name, missing tensors, rows outside, one weight of a mixed row, a range backwards, wild factors', async () => {
   const scale = (over) => [{ op: 'scale', tensor: 'blk.0.ffn_up.weight', row: 0, k: 1, ...over }];
   await expect(applyEdits({ src: SRC, dest: SRC, edits: scale() })).rejects.toThrow('refusing to write the model being read');
-  await expect(applyEdits({ src: SRC, dest: out('gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), edits: scale() })).rejects.toThrow('refusing to write over');
+  await expect(applyEdits({ src: SRC, dest: out('Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf'), edits: scale() })).rejects.toThrow('refusing to write over');
   await expect(applyEdits({ src: SRC, dest: out('x.gguf'), edits: scale({ tensor: 'nope' }) })).rejects.toThrow('no tensor named nope');
   await expect(applyEdits({ src: SRC, dest: out('x.gguf'), edits: scale({ row: 5 }) })).rejects.toThrow('rows 0–4');
   await expect(applyEdits({ src: SRC, dest: out('x.gguf'), edits: [{ op: 'set', tensor: 'blk.0.ffn_up.weight', row: 0, col: 3, value: 0.1 }] })).rejects.toThrow('its rows were mixed before storing'); // PQ2_0: one weight is spread over its row

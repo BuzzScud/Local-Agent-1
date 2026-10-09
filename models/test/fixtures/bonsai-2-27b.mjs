@@ -1,3 +1,6 @@
+// Test material, not a model of the app: Bonsai 2 27B's settings as they were when it left /model
+// (9 Oct 2026). The memory math and the server's flags are checked against them: a measured model
+// with a helper in a file of its own (-md) and three thinking levels.
 // Bonsai 2 27B (Prism ML, ternary PQ2_0): Qwen3.8 27B with every weight cut
 // to -1, 0 or +1, keeping 98.2% of the full model's scores on Prism's 14 tests.
 // It was the model Bonsai Code ran until 28 Sep 2026, then left /model to free

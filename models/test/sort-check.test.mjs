@@ -30,7 +30,7 @@ const server = createServer(async (req, res) => {
 const url = await new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(`http://127.0.0.1:${server.address().port}`)));
 afterAll(() => server.close());
 
-const run = (out, extra = ['--model', 'gemma', '--url', url, '--out', out]) => new Promise((ok) => {
+const run = (out, extra = ['--model', 'qwen', '--url', url, '--out', out]) => new Promise((ok) => {
   const child = spawn(NODE, [join(REPO, 'models', 'evals', 'tools', 'sort-check.mjs'), ...extra], { cwd: REPO, env: { ...process.env, AGENTIC_DOCS: DOCS, AGENTIC_TEST_RECORD: RECORD, AGENTIC_HOME: HOME } });
   let text = '';
   child.stdout.on('data', (d) => { text += d; }); child.stderr.on('data', (d) => { text += d; });
@@ -47,18 +47,18 @@ test('a run: a line per request, the raw results, a results page, and a line in 
   expect(lines.filter((l) => /^(PASS|FAIL)\s/.test(l))).toHaveLength(82);
   expect(lines.filter((l) => /^----\s/.test(l))).toHaveLength(3); // "api" twice, and "i need help with…"
   expect(lines.filter((l) => /^PASS\s/.test(l))).toHaveLength(22); // the 18 change lines + the 4 model-sorted ones
-  expect(r.text).toContain('Sorting check on Gemma');
+  expect(r.text).toContain('Sorting check on Qwen');
   const rows = JSON.parse(readFileSync(join(out1, 'rows.json'), 'utf8'));
   expect(rows).toHaveLength(85);
   expect(rows.every((x) => x.via === 'odds' && x.kind === 'change' && Math.abs(x.conf - 0.8) < 1e-9)).toBe(true);
   const sum = JSON.parse(readFileSync(join(out1, 'summary.json'), 'utf8'));
-  expect(sum).toMatchObject({ model: 'gemma', total: 82, right: 22, wrong: 60, pass: false, stopped: false, odds: 85 });
+  expect(sum).toMatchObject({ model: 'qwen', total: 82, right: 22, wrong: 60, pass: false, stopped: false, odds: 85 });
 
   const line = readFileSync(RECORD, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1);
-  expect(line).toMatchObject({ kind: 'other', name: 'Sorting check', model: 'gemma', passed: 22, total: 82, result: 'fail', part: false });
-  expect(line.page).toMatch(/^tests\/agentic-coder-sorting-check-gemma-\d{4}-\d\d-\d\d-\d{4}\.html$/);
+  expect(line).toMatchObject({ kind: 'other', name: 'Sorting check', model: 'qwen', passed: 22, total: 82, result: 'fail', part: false });
+  expect(line.page).toMatch(/^tests\/agentic-coder-sorting-check-qwen-\d{4}-\d\d-\d\d-\d{4}\.html$/);
   const html = readFileSync(join(DOCS, line.page), 'utf8');
-  expect(html).toContain('<title>Sorting check · Gemma');
+  expect(html).toContain('<title>Sorting check · Qwen');
   expect(html).toContain('Failed: 22 of 82 right');
   expect(new RegExp('^Sorting check$').test(line.name)).toBe(true);
 }, 60_000);

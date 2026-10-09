@@ -127,9 +127,9 @@ test.skipIf(needs('pictures', media.mediaTool))('Read of a picture: shown to the
   expect(needsSight(proj, { path: 'text.pdf', page: 1 })).toBe(true);
 });
 
-test('the vision add-on: each model has one but K2 Horizon and Bonsai 2 27B ConstantKV (text only); loaded only with vision on (--mmproj, when its file is here), and counted in the memory then', () => {
+test('the vision add-on: each model has one but K2 Horizon (text only); loaded only with vision on (--mmproj, when its file is here), and counted in the memory then', () => {
   for (const m of Object.values(MODELS).filter((x) => x.vision)) expect([m.id, Boolean(m.vision.url && m.vision.sha256?.length === 64 && m.vision.bytes > 1e8)]).toEqual([m.id, true]);
-  expect(Object.values(MODELS).filter((x) => !x.vision).map((x) => x.id)).toEqual(['k2', 'constantkv']); // a picture with it asks to hand that message to one that can see (App.jsx)
+  expect(Object.values(MODELS).filter((x) => !x.vision).map((x) => x.id)).toEqual(['k2']); // a picture with it asks to hand that message to one that can see (App.jsx)
   const q = MODELS.qwen;
   expect(visionBytes(q)).toBe(0);
   expect(visionBytes(withVision(q))).toBe(q.vision.bytes + q.vision.computeBytes);
@@ -141,5 +141,5 @@ test('the vision add-on: each model has one but K2 Horizon and Bonsai 2 27B Cons
   const a = serverArgs(withVision(q), { ctx: 32768, port: 1 });
   expect(a[a.indexOf('--mmproj') + 1]).toBe(visionPath(q));
   expect(a[a.indexOf('--image-min-tokens') + 1]).toBe('1024'); // Qwen misread small pictures at the engine's own size
-  expect(visionPath(MODELS.gemma)).not.toBe(visionPath(q)); // both repos call it mmproj-F16.gguf; kept apart here
+  expect(q.vision.file).not.toBe(q.vision.url.split('/').pop()); // repos call it mmproj-F16.gguf; kept under the model's own name here
 });

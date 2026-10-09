@@ -53,7 +53,7 @@ test('/effort alone opens the Effort and limits panel: ←→ moves Effort, ente
   ] });
   await fake.close();
   expect(r.snapshots.menu).toMatch(/❯ Effort\s+◀ Low\s+▶\s+default · answers straight away \(fastest\)/);
-  expect(r.snapshots.menu).not.toContain('Medium'); // the model has no effort dial (Gemma and Qwen: Low and High)
+  expect(r.snapshots.menu).not.toContain('Medium'); // the model has no effort dial (Qwen: Low and High)
   expect(r.snapshots.menu).toContain('↑↓ choose · ←→ change · enter saves · esc cancels · ↻ restarts model');
   expect(r.snapshots.moved).toMatch(/❯ Effort\s+◀ High\s+▶ •\s+thinks first/); // moved, not saved yet: the •
   expect(r.snapshots.again).toMatch(/❯ Effort\s+◀ High\s+▶\s+thinks first/); // opens on the level in use
@@ -140,37 +140,36 @@ test('/model: the model list and the effort in one picker; the choice is used an
   expect(fake2.requests.find((q) => q.stream && q.tools).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
 }, T);
 
-test('/model: the Effort row is the highlighted model\'s own (K2 Horizon and Bonsai have Medium); the level you pick is kept while the cursor moves, and enter saves it', async () => {
+test('/model: the Effort row is the highlighted model\'s own (K2 Horizon has Medium); the level you pick is kept while the cursor moves, and enter saves it', async () => {
   const { cwd, env, base } = setup();
-  // /model lists only the models whose file is on this Mac (and the one in use): stand-ins for K2 Horizon and Bonsai.
+  // /model lists only the models whose file is on this Mac (and the one in use): a stand-in for K2 Horizon.
   const models = join(base, 'home', 'models'); mkdirSync(models, { recursive: true });
-  for (const id of ['k2', 'bonsai']) writeFileSync(join(models, MODELS[id].file), 'stand-in');
+  writeFileSync(join(models, MODELS.k2.file), 'stand-in');
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/model' }, { key: 'enter' }, { wait: 'Pick the model and its effort' }, { sleep: 200 },
-    // the model list: Qwen (in use), K2 Horizon, Bonsai (Gemma's file is not here, so it is not listed)
-    { key: 'down' }, { sleep: 150 }, { key: 'down' }, { sleep: 300 }, { snapshot: 'bonsai' },
+    // the model list: Qwen (in use), K2 Horizon
+    { key: 'down' }, { sleep: 300 }, { snapshot: 'k2' },
     { key: 'right' }, { sleep: 300 }, { snapshot: 'medium' },
-    { key: 'up' }, { sleep: 150 }, { key: 'up' }, { sleep: 300 }, { snapshot: 'qwen' },
-    { key: 'down' }, { sleep: 150 }, { key: 'down' }, { sleep: 300 }, { snapshot: 'back' },
+    { key: 'up' }, { sleep: 300 }, { snapshot: 'qwen' },
+    { key: 'down' }, { sleep: 300 }, { snapshot: 'back' },
     { key: 'enter' }, { wait: 'not ready on this Mac yet' }, { sleep: 300 },
     ...quit,
   ] });
   await fake.close();
   const effort = (s) => /Effort\s+◀\s+(.*?)\s+▶/.exec(s)?.[1].replace(/\s+/g, ' ');
   const note = (s) => /(?:Low|Medium|High): [^│\n]*/.exec(s.split('Effort')[1] ?? '')?.[0].trim();
-  expect(r.snapshots.bonsai).toMatch(/❯ Bonsai 2 27B/);
-  expect(r.snapshots.bonsai).toMatch(/K2 Horizon 7B/); // a model is listed once its file is here…
-  expect(r.snapshots.bonsai).not.toMatch(/Gemma 4 12B|ConstantKV/); // …and left out while it is not
-  expect(effort(r.snapshots.bonsai)).toBe('Low · Medium · High'); // its own three levels, not Qwen's two
-  expect(note(r.snapshots.medium)).toMatch(/^Medium: thinks briefly first/);
+  expect(r.snapshots.k2).toMatch(/❯ K2 Horizon 7B/); // a model is listed once its file is here…
+  expect(r.snapshots.k2).not.toMatch(/Gemma 4 12B|Bonsai|ConstantKV/); // …and the models that left the list are not
+  expect(effort(r.snapshots.k2)).toBe('Low · Medium · High'); // its own three levels, not Qwen's two
+  expect(note(r.snapshots.medium)).toMatch(/^Medium: thinks in its faster mode first/);
   // Qwen has no Medium: it shows its nearest, High…
   expect(effort(r.snapshots.qwen)).toBe('Low · High');
   expect(note(r.snapshots.qwen)).toMatch(/^High: /);
-  // …and back on Bonsai the pick is still Medium: moving the cursor changes nothing.
+  // …and back on K2 Horizon the pick is still Medium: moving the cursor changes nothing.
   expect(note(r.snapshots.back)).toMatch(/^Medium: /);
-  // Enter: the effort is saved (Bonsai's model server is not in this test's home, so it says how to get it and keeps Qwen).
-  expect(r.text).toContain('Bonsai 2 27B is not ready on this Mac yet: coding setup --model bonsai');
+  // Enter: the effort is saved (K2 Horizon's model server is not in this test's home, so it says how to get it and keeps Qwen).
+  expect(r.text).toContain('K2 Horizon 7B is not ready on this Mac yet: coding setup --model k2');
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
   expect([saved.thinking, saved.effort]).toEqual([true, 'medium']);
 }, T);

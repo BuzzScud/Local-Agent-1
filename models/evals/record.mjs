@@ -11,7 +11,7 @@
 //   result  pass · fail · stopped · measured (a number with no pass or fail: a speed, a count)
 //   part    true for a run of only some of the set (a rerun of two tasks): kept, never shown as "the latest full run"
 //   code    the commit under test ("7595055", "7595055+" with uncommitted changes)
-//   model   the model the run used, by its id in models/registry.mjs ("gemma", "qwen"); null for a check that is of no one model (unit tests, the repo check)
+//   model   the model the run used, by its id in models/registry.mjs ("qwen", "k2"); null for a check that is of no one model (unit tests, the repo check)
 //   raw     where the raw results are, from the repo's top
 //   page    its results page in the DOCS folder ("tests/agentic-coder-….html"), if one was made
 //   bar     what counts as a pass when it is not "every one" ("at most 4 wrong"); only then
@@ -73,8 +73,8 @@ export function rawPlace(raw, top = repo) {
 // not: it is read off where its raw results are (models/<folder>/results), then
 // off the model named in its words. A practice, real-request or bug run that
 // names no model is by date: the Bonsai 27B until 28 Sep 2026, Gemma after.
-// The unit tests and the checks (the repo check) are of no one model: null. The Bonsai 27B is no
-// longer in the registry, but its runs keep their id.
+// The unit tests and the checks (the repo check) are of no one model: null. The Bonsai 27B and
+// Gemma are no longer in the registry, but their runs keep their ids.
 const FOLDER_MODEL = { 'gemma-4-12b': 'gemma', 'qwen3.5-9b': 'qwen', 'bonsai-2-27b': 'bonsai' };
 const GEMMA_FROM = '2026-09-28';
 export function modelOf(r) {

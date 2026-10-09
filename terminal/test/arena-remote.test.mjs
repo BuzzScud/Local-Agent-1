@@ -54,14 +54,14 @@ test('a test on a remote model alone: it runs and is named, holds no memory here
   await until(async () => { held ||= existsSync(join(HOME, 'battle', 'running.json')); const x = await get('/api/state'); return x.tests.find((t) => t.id === id)?.last?.[R('tiny:3b')]; });
   expect(held).toBe(false);
   await idle();
-  // Gemma against it: either order, the names hidden until the vote, then counted for the remote model.
-  expect((await line([{ kind: 'test', id, who: 'both', vs: ['gemma', R('tiny:3b')] }])).status).toBe(200);
+  // K2 Horizon against it: either order, the names hidden until the vote, then counted for the remote model.
+  expect((await line([{ kind: 'test', id, who: 'both', vs: ['k2', R('tiny:3b')] }])).status).toBe(200);
   const live = await until(async () => { const x = await get('/api/state'); return x.running ? x.running : null; });
-  expect(live.vs).toEqual(['gemma', R('tiny:3b')]);
+  expect(live.vs).toEqual(['k2', R('tiny:3b')]);
   const t = await until(async () => (await get('/api/state')).tests.find((x) => x.id === id && x.latest?.mode === 'battle' && x.latest.status === 'done'));
   await idle();
   const v = await post('/api/vote', { id: t.latest.id, v: 'A' });
-  expect(Object.values(v.body.order).sort()).toEqual(['gemma', R('tiny:3b')]);
+  expect(Object.values(v.body.order).sort()).toEqual(['k2', R('tiny:3b')]);
   expect((await get('/api/state')).score.votes[v.body.order.A]).toBe(1);
 });
 
@@ -71,14 +71,14 @@ test('a check runs on the models on this Mac only: a remote one for it is refuse
   const r = await line([{ kind: 'check', id: c.id, who: R('coder:30b') }]);
   expect(r.status).toBe(400);
   expect(r.body.error).toContain('on this Mac only');
-  const b = await line([{ kind: 'check', id: c.id, who: 'both', vs: ['gemma', R('coder:30b')] }]);
+  const b = await line([{ kind: 'check', id: c.id, who: 'both', vs: ['k2', R('coder:30b')] }]);
   expect(b.status).toBe(400);
 });
 
 test('/remote off: its models leave the list and cannot be picked, but a battle already waiting keeps its remote model', async () => {
   const id = (await post('/api/tests', { title: 'Waiting battle', kind: 'question', prompt: 'Which rate does addTax use?', checks: [{ type: 'answer-has', value: 'rate' }] })).body.id;
-  // A run on Gemma, then the battle; Stop on the first leaves the battle waiting (the line pauses).
-  expect((await line([{ kind: 'test', id, who: 'gemma' }, { kind: 'test', id, who: 'both', vs: ['qwen', R('words:7b')] }])).body.added).toBe(2);
+  // A run on K2 Horizon, then the battle; Stop on the first leaves the battle waiting (the line pauses).
+  expect((await line([{ kind: 'test', id, who: 'k2' }, { kind: 'test', id, who: 'both', vs: ['qwen', R('words:7b')] }])).body.added).toBe(2);
   await until(async () => (await get('/api/state')).running);
   await post('/api/stop');
   const paused = await idle();
@@ -89,7 +89,7 @@ test('/remote off: its models leave the list and cannot be picked, but a battle 
   const no = await line([{ kind: 'test', id, who: R('words:7b') }]);
   expect(no.status).toBe(400);
   expect(no.body.error).toContain('/remote');
-  expect((await line([{ kind: 'test', id, who: 'both', vs: ['gemma', R('words:7b')] }])).status).toBe(400);
+  expect((await line([{ kind: 'test', id, who: 'both', vs: ['k2', R('words:7b')] }])).status).toBe(400);
   await post('/api/resume');
   const r = await until(async () => { const x = await get('/api/state'); return x.running ? x.running : null; });
   expect(r.vs).toEqual(['qwen', R('words:7b')]); // not swapped for the default pair

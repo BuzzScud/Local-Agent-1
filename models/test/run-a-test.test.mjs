@@ -47,7 +47,7 @@ test('--set hard plays the 10 hard tasks (30–39), each with its project, a ref
 });
 
 test('each test the tab can run: its script is there, its command names the model, one without a model takes none', () => {
-  const models = ['gemma', 'qwen'];
+  const models = ['k2', 'qwen'];
   for (const t of RUN_TESTS) {
     expect(existsSync(join(REPO, t.script))).toBe(true);
     if (t.own || t.pick?.own) continue; // My tests (all, a level, or one of them), with none yet: below
@@ -56,31 +56,31 @@ test('each test the tab can run: its script is there, its command names the mode
     if (t.model) expect(c.argv.slice(1, 3)).toEqual(['--model', 'qwen']);
     else expect(c.argv).not.toContain('--model');
   }
-  expect(runCommand('practice28', { model: 'gemma', models }).argv).toEqual(['models/evals/bench/run.mjs', '--model', 'gemma', '--think', 'off', '--set', '28']);
+  expect(runCommand('practice28', { model: 'k2', models }).argv).toEqual(['models/evals/bench/run.mjs', '--model', 'k2', '--think', 'off', '--set', '28']);
   // One practice task: the Practice 28 test picked, as the Battle tab keeps it (run-set.mjs --set practice).
-  expect(runCommand('task', { model: 'gemma', n: 12, models }).argv).toEqual(['models/evals/battle/run-set.mjs', '--model', 'gemma', '--set', 'practice', '--only', 'p12']);
-  expect(runCommand('task', { model: 'gemma', n: '3', models }).argv.slice(-2)).toEqual(['--only', 'p03']);
-  expect(runCommand('task', { model: 'gemma', models }).n).toBe('10');
-  expect(() => runCommand('task', { model: 'gemma', n: 29, models })).toThrow('no practice test "29" (1 to 28, or a copy of yours like 18b)');
-  expect(() => runCommand('task', { model: 'gemma', n: '18b', models })).toThrow('no practice test "18b"');
+  expect(runCommand('task', { model: 'k2', n: 12, models }).argv).toEqual(['models/evals/battle/run-set.mjs', '--model', 'k2', '--set', 'practice', '--only', 'p12']);
+  expect(runCommand('task', { model: 'k2', n: '3', models }).argv.slice(-2)).toEqual(['--only', 'p03']);
+  expect(runCommand('task', { model: 'k2', models }).n).toBe('10');
+  expect(() => runCommand('task', { model: 'k2', n: 29, models })).toThrow('no practice test "29" (1 to 28, or a copy of yours like 18b)');
+  expect(() => runCommand('task', { model: 'k2', n: '18b', models })).toThrow('no practice test "18b"');
   // My tests: none yet, so nothing to run.
-  expect(() => runCommand('mine', { model: 'gemma', models })).toThrow('you have no tests of your own yet: the Test builder (in the Arena) makes one');
+  expect(() => runCommand('mine', { model: 'k2', models })).toThrow('you have no tests of your own yet: the Test builder (in the Arena) makes one');
   // A level of them (the Test builder sets a test's level), and one of them by its number: the same.
-  expect(() => runCommand('mine-hard', { model: 'gemma', models })).toThrow('you have no Hard tests yet');
-  expect(() => runCommand('mytest', { model: 'gemma', n: 1, models })).toThrow('you have no tests of your own yet');
-  expect(RUN_TESTS.filter((t) => t.own).map((t) => [t.id, t.own, t.args('gemma', null, false).slice(-2)])).toEqual([['mine', true, ['--set', 'mine']], ['mine-easy', 'easy', ['--level', 'easy']], ['mine-medium', 'medium', ['--level', 'medium']], ['mine-hard', 'hard', ['--level', 'hard']]]);
+  expect(() => runCommand('mine-hard', { model: 'k2', models })).toThrow('you have no Hard tests yet');
+  expect(() => runCommand('mytest', { model: 'k2', n: 1, models })).toThrow('you have no tests of your own yet');
+  expect(RUN_TESTS.filter((t) => t.own).map((t) => [t.id, t.own, t.args('k2', null, false).slice(-2)])).toEqual([['mine', true, ['--set', 'mine']], ['mine-easy', 'easy', ['--level', 'easy']], ['mine-medium', 'medium', ['--level', 'medium']], ['mine-hard', 'hard', ['--level', 'hard']]]);
   expect(findRunTest('my tests easy')?.id).toBe('mine-easy');
   expect(() => runCommand('practice28', { model: 'bonsai', models })).toThrow('pick a model');
-  expect(() => runCommand('nope', { model: 'gemma', models })).toThrow('no test "nope"');
+  expect(() => runCommand('nope', { model: 'k2', models })).toThrow('no test "nope"');
   expect(runCommand('unit', { models }).argv).toEqual(['models/evals/tools/run-suite.mjs']);
   // Thinking on (the tab's switch): at High, in each runner's own words; a test with no model takes none.
-  expect(runCommand('practice28', { model: 'gemma', think: true, models }).argv).toEqual(['models/evals/bench/run.mjs', '--model', 'gemma', '--think', 'on', '--effort', 'high', '--set', '28']);
+  expect(runCommand('practice28', { model: 'k2', think: true, models }).argv).toEqual(['models/evals/bench/run.mjs', '--model', 'k2', '--think', 'on', '--effort', 'high', '--set', '28']);
   expect(runCommand('task', { model: 'qwen', n: 5, think: true, models }).argv.slice(-4)).toEqual(['--only', 'p05', '--think', 'on']);
-  expect(runCommand('requests', { model: 'gemma', think: true, models }).argv.slice(-2)).toEqual(['--think', 'on']);
-  expect(runCommand('long', { model: 'gemma', think: true, models }).argv).toContain('high');
-  expect(runCommand('long', { model: 'gemma', models }).argv.join(' ')).toContain('--effort low');
-  expect(runCommand('work28', { model: 'gemma', think: true, models }).argv.slice(-2)).toEqual(['--think', 'on']);
-  expect(runCommand('new28', { model: 'gemma', models }).argv).not.toContain('--think');
+  expect(runCommand('requests', { model: 'k2', think: true, models }).argv.slice(-2)).toEqual(['--think', 'on']);
+  expect(runCommand('long', { model: 'k2', think: true, models }).argv).toContain('high');
+  expect(runCommand('long', { model: 'k2', models }).argv.join(' ')).toContain('--effort low');
+  expect(runCommand('work28', { model: 'k2', think: true, models }).argv.slice(-2)).toEqual(['--think', 'on']);
+  expect(runCommand('new28', { model: 'k2', models }).argv).not.toContain('--think');
   const u = runCommand('unit', { think: true, models });
   expect([u.think, u.argv.includes('--think')]).toEqual([false, false]);
   for (const t of RUN_TESTS) if (!t.model) expect(Boolean(t.think)).toBe(false);
@@ -92,8 +92,8 @@ test('each test the tab can run: its script is there, its command names the mode
   const ed = runCommand('edited', { model: 'qwen', think: true, models });
   expect([ed.think, ed.argv]).toEqual([false, ['models/evals/tools/edited-check.mjs', '--model', 'qwen']]);
   expect(countLines(runTestById('edited'), ['original: loaded in 9 s', 'PASS original · 17 × 23 → "391"', 'FAIL edited · the capital of Japan → "Kyoto"', 'ASKED edited · “<start_of_turn>” (row 3): a special token or a space, nothing to write back'])).toEqual({ done: 3, passed: 1, total: null });
-  const so = runCommand('sorting', { model: 'gemma', think: true, models });
-  expect([so.think, so.argv]).toEqual([false, ['models/evals/tools/sort-check.mjs', '--model', 'gemma']]);
+  const so = runCommand('sorting', { model: 'k2', think: true, models });
+  expect([so.think, so.argv]).toEqual([false, ['models/evals/tools/sort-check.mjs', '--model', 'k2']]);
   expect(findRunTest('sorting')?.id).toBe('sorting');
   expect(countLines(runTestById('sorting'), ['loaded in 6 s', 'PASS #1 other · odds 91% · 0.61 s · "x"', 'FAIL #2 change (should be other) · odds 77% · 0.60 s · "y"', '---- #3 change · odds 76% · 0.59 s · "api"'])).toEqual({ done: 2, passed: 1, total: 82 });
   // What /test takes for a name.
@@ -111,7 +111,7 @@ test('each test the tab can run: its script is there, its command names the mode
   expect(cat.find((t) => t.id === 'check').command.none).toBe('node models/evals/tools/check.mjs --fast');
   expect(cat.find((t) => t.id === 'requests').commandThink.qwen).toBe('node models/evals/bench/words/real.mjs --model qwen --think on');
   expect(cat.find((t) => t.id === 'check').commandThink).toBeUndefined();
-  expect(cat.find((t) => t.id === 'task').command.gemma).toBe('node models/evals/battle/run-set.mjs --model gemma --set practice --only p10');
+  expect(cat.find((t) => t.id === 'task').command.k2).toBe('node models/evals/battle/run-set.mjs --model k2 --set practice --only p10');
   expect(cat.find((t) => t.id === 'task').choices).toHaveLength(28);
   expect(cat.find((t) => t.id === 'mine')).toMatchObject({ own: true, total: 0 });
   expect(cat.find((t) => t.id === 'mine-medium')).toMatchObject({ own: true, level: 'medium', total: 0, name: 'My tests · Medium' });
@@ -140,28 +140,28 @@ test('One practice task picks from the Practice 28 as the Battle tab keeps them:
 });
 
 test('what the app says while a test run holds the memory names the test and its model', () => {
-  expect(holdText({ kind: 'test', state: 'want', title: 'Practice 28 on Gemma 4 12B QAT' })).toBe('a test run is about to start (Practice 28 on Gemma 4 12B QAT)');
+  expect(holdText({ kind: 'test', state: 'want', title: 'Practice 28 on K2 Horizon 7B' })).toBe('a test run is about to start (Practice 28 on K2 Horizon 7B)');
   expect(holdText({ kind: 'test', state: 'running', title: 'Work 28 on Qwen3.5 9B', startedAt: 1000 }, 1000 + 7 * 60_000)).toBe('a test is running (Work 28 on Qwen3.5 9B · 7 min so far)');
-  expect(holdText({ kind: 'test', state: 'running', title: 'Long task on Gemma 4 12B QAT', startedAt: 1000 }, 2000)).toContain('just started');
+  expect(holdText({ kind: 'test', state: 'running', title: 'Long task on K2 Horizon 7B', startedAt: 1000 }, 2000)).toContain('just started');
   expect(holdText({ state: 'running', title: 'Fix a bug', run: 1, of: 2, startedAt: 0 }, 0)).toContain('a battle is running (Fix a bug · run 1 of 2');
 });
 
-const runSet = (extra, env = {}) => spawn(NODE, [join(REPO, 'models', 'evals', 'battle', 'run-set.mjs'), '--model', 'gemma', ...extra], { cwd: REPO, env: { ...process.env, AGENTIC_BATTLE_FAKE: '1', AGENTIC_BATTLE_FAKE_MS: '20', ...env } });
+const runSet = (extra, env = {}) => spawn(NODE, [join(REPO, 'models', 'evals', 'battle', 'run-set.mjs'), '--model', 'k2', ...extra], { cwd: REPO, env: { ...process.env, AGENTIC_BATTLE_FAKE: '1', AGENTIC_BATTLE_FAKE_MS: '20', ...env } });
 const collect = (child) => new Promise((ok) => { let out = ''; child.stdout.on('data', (d) => { out += d; }); child.stderr.on('data', (d) => { out += d; }); child.on('exit', (code) => ok({ code, out })); });
 
 test('a Battle set on one model: a line per test, the checks as the arena runs them, one line in the record (Battle sets)', async () => {
   const out = join(HOME, 'sets-a');
   const r = await collect(runSet(['--set', 'work28', '--only', 'w01,w02', '--out', out]));
   expect(r.code).toBe(0);
-  expect(r.out).toContain('Gemma 4 12B QAT · Work 28 · thinking off (Low) · 2 tests, one at a time, each stops at 10 minutes · practice run: no model');
+  expect(r.out).toContain('K2 Horizon 7B · Work 28 · thinking off (Low) · 2 tests, one at a time, each stops at 10 minutes · practice run: no model');
   expect(r.out).toMatch(/^(PASS|FAIL)  w01-contract-roll\s+\d+s\s+\d+ steps/m);
   expect(r.out).toMatch(/^(PASS|FAIL)  w02-tick-rounding/m);
-  expect(r.out).toMatch(/Work 28 on Gemma: \d of 2 passed/);
+  expect(r.out).toMatch(/Work 28 on K2: \d of 2 passed/);
   const sum = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8'));
-  expect(sum).toMatchObject({ model: 'gemma', set: 'work28', total: 2, stopped: false, fake: true });
+  expect(sum).toMatchObject({ model: 'k2', set: 'work28', total: 2, stopped: false, fake: true });
   expect(existsSync(join(out, 'w01-contract-roll', 'result.json'))).toBe(true);
   const line = readRecord(join(HOME, 'record.jsonl')).find((x) => x.kind === 'sets');
-  expect(line).toMatchObject({ name: 'The Work 28 (2 picked), one model', model: 'gemma', total: 2, part: true });
+  expect(line).toMatchObject({ name: 'The Work 28 (2 picked), one model', model: 'k2', total: 2, part: true });
   expect(line.note).toContain('practice run: no model ran');
   expect(new RegExp(runTestById('work28').record.name).test(line.name)).toBe(true);
   expect((await collect(runSet(['--set', 'nope']))).code).toBe(2);
@@ -170,15 +170,15 @@ test('a Battle set on one model: a line per test, the checks as the arena runs t
 test('One practice task and My tests on one model: run-set plays the pick (or every test of yours) and names its line so the tab finds it', async () => {
   const r = await collect(runSet(['--set', 'practice', '--only', 'p12', '--out', join(HOME, 'sets-p')]));
   expect(r.code).toBe(0);
-  expect(r.out).toContain('Gemma 4 12B QAT · Practice 28 · thinking off (Low) · 1 test, one at a time');
+  expect(r.out).toContain('K2 Horizon 7B · Practice 28 · thinking off (Low) · 1 test, one at a time');
   expect(r.out).toMatch(/^(PASS|FAIL|NONE)  p12-feature-currency\s/m);
   let line = readRecord(join(HOME, 'record.jsonl')).find((x) => x.kind === 'sets' && x.name.startsWith('Practice test'));
   expect(line).toMatchObject({ name: 'Practice test 12: Add a currency option to formatMoney(), one model', total: 1, part: true });
   expect(new RegExp(runTestById('task').record.name).test(line.name)).toBe(true);
   // Yours: one, with a check, so a run of it can pass or fail.
   saveTest({ title: 'Port', kind: 'question', prompt: 'Which port does it listen on?', checks: [{ type: 'answer-has', value: '8080' }] });
-  expect(runCommand('mine', { model: 'gemma', models: ['gemma'] }).total).toBe(1);
-  expect(runCatalog(['gemma']).find((t) => t.id === 'mine').total).toBe(1);
+  expect(runCommand('mine', { model: 'k2', models: ['k2'] }).total).toBe(1);
+  expect(runCatalog(['k2']).find((t) => t.id === 'mine').total).toBe(1);
   const m = await collect(runSet(['--set', 'mine', '--out', join(HOME, 'sets-m')]));
   expect(m.code).toBe(0);
   expect(m.out).toContain('· My tests · thinking off (Low) · 1 test, one at a time');
@@ -188,15 +188,15 @@ test('One practice task and My tests on one model: run-set plays the pick (or ev
   expect(countLines(runTestById('mine'), ['PASS  m-port-x   4s', 'x'], 3)).toEqual({ done: 1, passed: 1, total: 3 });
   // A level of yours, and one of yours by its number: each names its own line, with the level and the points.
   const hard = saveTest({ title: 'A player', kind: 'page', prompt: 'Create one HTML file for a media player.', checks: [{ type: 'page-made', value: '' }], level: 'hard' });
-  expect([runCommand('mine-hard', { model: 'gemma', models: ['gemma'] }).total, runCatalog(['gemma']).find((t) => t.id === 'mine-easy').total]).toEqual([1, 0]);
-  const pick = runCommand('mytest', { model: 'gemma', n: hard.n, models: ['gemma'] });
+  expect([runCommand('mine-hard', { model: 'k2', models: ['k2'] }).total, runCatalog(['k2']).find((t) => t.id === 'mine-easy').total]).toEqual([1, 0]);
+  const pick = runCommand('mytest', { model: 'k2', n: hard.n, models: ['k2'] });
   expect([pick.n, pick.argv.slice(-2)]).toEqual([String(hard.n), ['--only', hard.id]]);
-  expect(() => runCommand('mytest', { model: 'gemma', n: 99, models: ['gemma'] })).toThrow('no test of yours numbered "99"');
-  expect(runCatalog(['gemma']).find((t) => t.id === 'mytest')).toMatchObject({ total: 1, choices: [{ key: '1', title: 'Port' }, { key: String(hard.n), only: hard.id, title: 'A player · Hard' }] });
+  expect(() => runCommand('mytest', { model: 'k2', n: 99, models: ['k2'] })).toThrow('no test of yours numbered "99"');
+  expect(runCatalog(['k2']).find((t) => t.id === 'mytest')).toMatchObject({ total: 1, choices: [{ key: '1', title: 'Port' }, { key: String(hard.n), only: hard.id, title: 'A player · Hard' }] });
   const h = await collect(runSet(['--set', 'mine', '--level', 'hard', '--out', join(HOME, 'sets-h')]));
   expect(h.code).toBe(0);
   expect(h.out).toContain('· My tests · Hard · thinking off (Low) · 1 test, one at a time, each stops at 20 minutes');
-  expect(h.out).toMatch(/My tests · Hard on Gemma: \d of 1 passed · \d of 3 points/);
+  expect(h.out).toMatch(/My tests · Hard on K2: \d of 1 passed · \d of 3 points/);
   line = readRecord(join(HOME, 'record.jsonl')).find((x) => x.name.startsWith('My tests · Hard'));
   expect(line).toMatchObject({ name: 'My tests · Hard, one model', total: 1, part: false, level: 'hard', points: { of: 3 } });
   expect([new RegExp(runTestById('mine-hard').record.name).test(line.name), new RegExp(runTestById('mine').record.name).test(line.name), new RegExp(runTestById('mine').record.name).test('My tests, one model'), new RegExp(runTestById('mine').record.name).test('My tests (2 picked), one model')]).toEqual([true, false, true, true]);
@@ -243,10 +243,10 @@ async function standInHome() {
   mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
   symlinkSync(join(REPO, 'terminal', 'test', 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  (await import('node:fs')).writeFileSync(join(home, 'models', MODELS.gemma.file), 'stand-in');
+  (await import('node:fs')).writeFileSync(join(home, 'models', MODELS.k2.file), 'stand-in');
   return home;
 }
-const practice = (home, args, env = {}) => spawn(NODE, [join(REPO, 'models', 'evals', 'bench', 'run.mjs'), '--model', 'gemma', '--think', 'off', '--out', join(home, 'out'), ...args], { cwd: REPO, env: { ...process.env, AGENTIC_HOME: home, AGENTIC_TEST_RECORD: join(home, 'record.jsonl'), AGENTIC_HELPERS: 'off', ...env } });
+const practice = (home, args, env = {}) => spawn(NODE, [join(REPO, 'models', 'evals', 'bench', 'run.mjs'), '--model', 'k2', '--think', 'off', '--out', join(home, 'out'), ...args], { cwd: REPO, env: { ...process.env, AGENTIC_HOME: home, AGENTIC_TEST_RECORD: join(home, 'record.jsonl'), AGENTIC_HELPERS: 'off', ...env } });
 
 test('run.mjs --only 10 on the stand-in: the task runs and is checked, and its line goes in the record as part of the set', async () => {
   const home = await standInHome();
@@ -255,7 +255,7 @@ test('run.mjs --only 10 on the stand-in: the task runs and is checked, and its l
   expect(r.out).toMatch(/^server up on http:\/\/127\.0\.0\.1:\d+, ctx 32768/m);
   expect(r.out).toMatch(/^(PASS|FAIL)  think=off  10-fix-off-by-one/m);
   expect(r.out).toContain('recorded in the test record: The 1 picked practice tasks, helpers off —');
-  expect(readRecord(join(home, 'record.jsonl'))[0]).toMatchObject({ kind: 'tasks', model: 'gemma', total: 1, part: true });
+  expect(readRecord(join(home, 'record.jsonl'))[0]).toMatchObject({ kind: 'tasks', model: 'k2', total: 1, part: true });
   // Today's way of thinking unless --thinking old (Thinking old vs new); each task says whether it stepped down.
   expect(r.out).toMatch(/; thinking: new; who decides: app$/m);
   const sum = JSON.parse(readFileSync(join(home, 'out', 'summary.json'), 'utf8'));
@@ -299,7 +299,7 @@ test('run.mjs --set 28 on the stand-in, stopped during its first task: that task
 test('real.mjs on the stand-in, stopped during its first request: it says so, saves an empty run as stopped, records nothing', async () => {
   const home = await standInHome();
   const out = join(home, 'words.json');
-  const child = spawn(NODE, [join(REPO, 'models', 'evals', 'bench', 'words', 'real.mjs'), '--model', 'gemma', '--only', '1,2', '--think', 'on', '--out', out], { cwd: REPO, env: { ...process.env, AGENTIC_HOME: home, AGENTIC_TEST_RECORD: join(home, 'record.jsonl'), FAKE_LLAMA_REPLY_MS: '20000' } });
+  const child = spawn(NODE, [join(REPO, 'models', 'evals', 'bench', 'words', 'real.mjs'), '--model', 'k2', '--only', '1,2', '--think', 'on', '--out', out], { cwd: REPO, env: { ...process.env, AGENTIC_HOME: home, AGENTIC_TEST_RECORD: join(home, 'record.jsonl'), FAKE_LLAMA_REPLY_MS: '20000' } });
   let seen = '';
   child.stdout.on('data', (d) => { seen += d; if (/server up/.test(seen) && !child.stopSent) { child.stopSent = true; setTimeout(() => child.kill('SIGTERM'), 1500); } });
   const t0 = Date.now();

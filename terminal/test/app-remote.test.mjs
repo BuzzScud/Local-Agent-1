@@ -70,7 +70,7 @@ test('/remote: Run on My other computer, its rows filled in (a pasted key); a Co
   expect(r.snapshots.failed).toMatch(/Connect\s+Save only\s+✗ it did not work/);
   expect(r.snapshots.failed).toContain('the API key was not accepted');
   expect(afterFail).toBe(null); // nothing saved by a Connect that did not work
-  expect(r.snapshots.on).toContain(`On the remote: Gemma 4 12B QAT · 127.0.0.1:${remote.port} · llama.cpp`);
+  expect(r.snapshots.on).toContain(`On the remote: Qwen3.5 9B · 127.0.0.1:${remote.port} · llama.cpp`);
   expect(r.snapshots.on.replace(/\s+/g, ' ')).toMatch(/llama\.cpp · answered in \d+ ms/); // one line now (start-notes.jsx remoteNote)
   expect(r.snapshots.doctor).toContain('in the key file (••••6789)');
   // the chat went to the remote with the key; nothing went there with the right key but /health and the checks
@@ -156,7 +156,7 @@ test('coding -p follows /remote: the answer comes from the remote; --local would
   const run = (args) => new Promise((ok) => { const p = Bun.spawn(['bun', cli, ...args], { cwd, env: { ...process.env, ...env, AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_NO_MEMORY: '1' }, stdout: 'pipe', stderr: 'pipe' }); Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]).then(([out, err, code]) => ok({ out, err, code })); });
   const r = await run(['-p', 'hello', '--no-flows']);
   expect(r.out.trim()).toBe('Printed from the remote.');
-  expect(r.err).toContain(`· On the remote model: Gemma 4 12B QAT · 127.0.0.1:${remote.port}`);
+  expect(r.err).toContain(`· On the remote model: Qwen3.5 9B · 127.0.0.1:${remote.port}`);
   expect(remote.seen.some((x) => x.path === '/v1/chat/completions' && x.auth === `Bearer ${KEY}`)).toBe(true);
   const local = await run(['-p', 'hello', '--no-flows', '--local']);
   expect(local.err).toContain('coding setup'); // no model here: it tried this Mac, not the remote
@@ -240,7 +240,7 @@ test('/remote claude with no key yet asks only for it, then Connect; the compute
     { key: 'enter' }, { wait: 'On the remote: claude-opus-5-5' }, { sleep: 200 },
     { type: 'two' }, { key: 'enter' }, { wait: 'From Claude.' }, { sleep: 200 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Pick the model' }, { sleep: 150 }, { snapshot: 'model' },
-    ...down(12), { key: 'enter' }, { wait: 'On the remote: Gemma' }, { sleep: 200 }, // the last row: the computer
+    ...down(12), { key: 'enter' }, { wait: 'On the remote: Qwen' }, { sleep: 200 }, // the last row: the computer
     { type: 'three' }, { key: 'enter' }, { wait: 'The computer again.' }, { sleep: 200 },
     ...quit,
   ] });

@@ -253,56 +253,54 @@ test('every model: /models.json lists each with its tags, /model/<id> gives that
     const { saveSettings } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'app', 'store.mjs'))});
     mkdirSync(MODELS_DIR, { recursive: true });
     const out = {}; const told = [];
-    const s = startWeightsServer({ path: modelPath(MODELS.gemma), docsDir: null, port: 0, cwd: ${JSON.stringify(home)}, onEdits: (e) => told.push([e.kind, e.saved?.base ?? e.base]) });
+    const s = startWeightsServer({ path: modelPath(MODELS.k2), docsDir: null, port: 0, cwd: ${JSON.stringify(home)}, onEdits: (e) => told.push([e.kind, e.saved?.base ?? e.base]) });
     const get = async (p, init) => { const r = await fetch(s.url + p, init); return { status: r.status, body: r.headers.get('content-type')?.includes('json') ? await r.json() : await r.text() }; };
     out.none = (await get('models.json')).body;
-    writeFileSync(modelPath(MODELS.gemma), tinyModel()); // only the second model's file arrives
-    saveSettings({ model: 'gemma-edited' }); // what /model saves when its edited copy is picked
+    writeFileSync(modelPath(MODELS.k2), tinyModel()); // only the second model's file arrives
+    saveSettings({ model: 'k2-edited' }); // what /model saves when its edited copy is picked
     out.one = (await get('models.json')).body;
     writeFileSync(modelPath(MODELS.qwen), tinyBlockModel());
     out.both = (await get('models.json')).body;
-    out.bytes = [await get('model/qwen', { headers: { Range: 'bytes=0-3' } }), await get('model/gemma', { headers: { Range: 'bytes=0-3' } }), await get('model/qwen'), await get('model/nope', { headers: { Range: 'bytes=0-3' } })].map((r) => [r.status, r.status === 206 ? r.body : '']);
+    out.bytes = [await get('model/qwen', { headers: { Range: 'bytes=0-3' } }), await get('model/k2', { headers: { Range: 'bytes=0-3' } }), await get('model/qwen'), await get('model/nope', { headers: { Range: 'bytes=0-3' } })].map((r) => [r.status, r.status === 206 ? r.body : '']);
     const post = (p, body) => get(p, { method: 'POST', body: JSON.stringify(body) });
     out.saveQ = await post('edits/save', { model: 'qwen', edits: [{ op: 'scale', tensor: 'blk.0.q5_k.weight', row: 2, k: 0.5 }] });
-    out.saveG = await post('edits/save', { model: 'gemma', edits: [{ op: 'scale', tensor: 'blk.0.ffn_up.weight', row: 1, k: 2 }, { op: 'swap', tensor: 'token_embd.weight', a: 0, b: 1 }] });
-    out.wrongModel = await post('edits/save', { model: 'gemma', edits: [{ op: 'scale', tensor: 'blk.0.q5_k.weight', row: 2, k: 0.5 }] }); // Qwen's matrix, asked of Gemma
+    out.saveK = await post('edits/save', { model: 'k2', edits: [{ op: 'scale', tensor: 'blk.0.ffn_up.weight', row: 1, k: 2 }, { op: 'swap', tensor: 'token_embd.weight', a: 0, b: 1 }] });
+    out.wrongModel = await post('edits/save', { model: 'k2', edits: [{ op: 'scale', tensor: 'blk.0.q5_k.weight', row: 2, k: 0.5 }] }); // Qwen's matrix, asked of K2 Horizon
     out.noSuch = await post('edits/save', { model: 'llama', edits: [] });
     out.all = readEditedAll(); out.files = readdirSync(MODELS_DIR).sort();
     out.listed = editedModels().map((m) => [m.id, m.name, m.edited.base, m.edited.edits.length]);
-    out.byId = [modelById('qwen-edited')?.file, modelById('gemma-edited')?.file, modelById('nope-edited')];
+    out.byId = [modelById('qwen-edited')?.file, modelById('k2-edited')?.file, modelById('nope-edited')];
     out.json = (await get('edits.json')).body;
     out.tagged = (await get('models.json')).body.models.map((m) => [m.id, m.edited?.edits.length ?? 0]);
     out.revert = (await post('edits/revert', { model: 'qwen' })).status;
-    out.after = { all: Object.keys(readEditedAll()), files: readdirSync(MODELS_DIR).sort(), gemmaCopyIntact: readFileSync(join(MODELS_DIR, out.all.gemma.file)).length > 0 };
+    out.after = { all: Object.keys(readEditedAll()), files: readdirSync(MODELS_DIR).sort(), k2CopyIntact: readFileSync(join(MODELS_DIR, out.all.k2.file)).length > 0 };
     out.told = told; s.stop();
     console.log(JSON.stringify(out));
   `;
   const r = require('node:child_process').spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 30000 });
   const out = JSON.parse(r.stdout.trim().split('\n').pop() || (() => { throw new Error(r.stderr); })());
-  const G = 'gemma-4-12B-it-qat-UD-Q4_K_XL', Q = 'Qwen3.5-9B-MTP-UD-Q5_K_XL';
-  // no file yet: all are listed (K2 Horizon, the third, since 30 Sep 2026; Bonsai 2 27B, the fourth, since 1 Oct), all "not on this Mac", and the default is the one in use
-  const K = ['k2', 'K2 Horizon 7B', true, 0, ['not on this Mac']];
-  const B = ['bonsai', 'Bonsai 2 27B', true, 0, ['not on this Mac']];
+  const K2 = 'K2-Horizon-7B-Q5_K_M', Q = 'Qwen3.5-9B-MTP-UD-Q5_K_XL';
+  // no file yet: both are listed (Qwen and K2 Horizon since Gemma and Bonsai left on 9 Oct 2026), both "not on this Mac", and the default is the one in use
   expect(out.none.inUse).toBe('qwen');
-  expect(out.none.models.map((m) => [m.id, m.name, m.missing, m.size, m.tags])).toEqual([['gemma', 'Gemma 4 12B QAT', true, 0, ['not on this Mac']], ['qwen', 'Qwen3.5 9B', true, 0, ['default', 'in use now', 'not on this Mac']], K, B]);
+  expect(out.none.models.map((m) => [m.id, m.name, m.missing, m.size, m.tags])).toEqual([['qwen', 'Qwen3.5 9B', true, 0, ['default', 'in use now', 'not on this Mac']], ['k2', 'K2 Horizon 7B', true, 0, ['not on this Mac']]]);
   // the model /model saved last is the one in use, its edited copy counted as the model itself
-  expect(out.one.inUse).toBe('gemma');
-  expect(out.one.models.map((m) => [m.id, m.missing, m.tags])).toEqual([['gemma', false, ['in use now']], ['qwen', true, ['default', 'not on this Mac']], ['k2', true, ['not on this Mac']], ['bonsai', true, ['not on this Mac']]]);
-  expect(out.both.models.map((m) => [m.id, m.missing, m.size > 0, m.by.length > 0, m.file])).toEqual([['gemma', false, true, true, `${G}.gguf`], ['qwen', false, true, true, `${Q}.gguf`], ['k2', true, false, true, 'K2-Horizon-7B-Q5_K_M.gguf'], ['bonsai', true, false, true, 'Ternary-Bonsai-2-27B-PQ2_0.gguf']]);
+  expect(out.one.inUse).toBe('k2');
+  expect(out.one.models.map((m) => [m.id, m.missing, m.tags])).toEqual([['qwen', true, ['default', 'not on this Mac']], ['k2', false, ['in use now']]]);
+  expect(out.both.models.map((m) => [m.id, m.missing, m.size > 0, m.by.length > 0, m.file])).toEqual([['qwen', false, true, true, `${Q}.gguf`], ['k2', false, true, true, `${K2}.gguf`]]);
   expect(out.bytes).toEqual([[206, 'GGUF'], [206, 'GGUF'], [416, ''], [404, '']]);
   // each model's copy is its own file with its own manifest, built from that model's original
   expect([out.saveQ.status, out.saveQ.body.saved.base, out.saveQ.body.saved.file, out.saveQ.body.rowsChanged]).toEqual([200, 'qwen', `${Q}-edited.gguf`, 1]);
-  expect([out.saveG.status, out.saveG.body.saved.base, out.saveG.body.saved.file, out.saveG.body.rowsChanged]).toEqual([200, 'gemma', `${G}-edited.gguf`, 3]);
+  expect([out.saveK.status, out.saveK.body.saved.base, out.saveK.body.saved.file, out.saveK.body.rowsChanged]).toEqual([200, 'k2', `${K2}-edited.gguf`, 3]);
   expect([out.wrongModel.status, out.wrongModel.body.error]).toEqual([400, 'no tensor named blk.0.q5_k.weight']);
   expect([out.noSuch.status, out.noSuch.body.error]).toEqual([404, 'no model called llama in /model']);
-  expect(Object.keys(out.all)).toEqual(['gemma', 'qwen']); expect(out.all.gemma.edits).toHaveLength(2); expect(out.all.qwen.edits).toHaveLength(1);
-  expect(out.files).toEqual([`${Q}-edited.gguf`, `${Q}.gguf`, 'edited-gemma.json', 'edited-qwen.json', `${G}-edited.gguf`, `${G}.gguf`].sort());
-  expect(out.listed).toEqual([['gemma-edited', 'Gemma 4 12B QAT · edited', 'gemma', 2], ['qwen-edited', 'Qwen3.5 9B · edited', 'qwen', 1]]);
-  expect(out.byId).toEqual([`${Q}-edited.gguf`, `${G}-edited.gguf`, null]);
-  expect(out.json.saved.base).toBe('qwen'); expect(Object.keys(out.json.all)).toEqual(['gemma', 'qwen']); // saved: the default model's copy
-  expect(out.tagged).toEqual([['gemma', 2], ['qwen', 1], ['k2', 0], ['bonsai', 0]]);
+  expect(Object.keys(out.all)).toEqual(['qwen', 'k2']); expect(out.all.k2.edits).toHaveLength(2); expect(out.all.qwen.edits).toHaveLength(1);
+  expect(out.files).toEqual([`${Q}-edited.gguf`, `${Q}.gguf`, 'edited-k2.json', 'edited-qwen.json', `${K2}-edited.gguf`, `${K2}.gguf`].sort());
+  expect(out.listed).toEqual([['qwen-edited', 'Qwen3.5 9B · edited', 'qwen', 1], ['k2-edited', 'K2 Horizon 7B · edited', 'k2', 2]]);
+  expect(out.byId).toEqual([`${Q}-edited.gguf`, `${K2}-edited.gguf`, null]);
+  expect(out.json.saved.base).toBe('qwen'); expect(Object.keys(out.json.all)).toEqual(['qwen', 'k2']); // saved: the default model's copy
+  expect(out.tagged).toEqual([['qwen', 1], ['k2', 2]]);
   // removing one model's copy leaves the other's
   expect(out.revert).toBe(200);
-  expect(out.after).toEqual({ all: ['gemma'], files: [`${Q}.gguf`, 'edited-gemma.json', `${G}-edited.gguf`, `${G}.gguf`].sort(), gemmaCopyIntact: true });
-  expect(out.told).toEqual([['save', 'qwen'], ['save', 'gemma'], ['revert', 'qwen']]);
+  expect(out.after).toEqual({ all: ['k2'], files: [`${Q}.gguf`, 'edited-k2.json', `${K2}-edited.gguf`, `${K2}.gguf`].sort(), k2CopyIntact: true });
+  expect(out.told).toEqual([['save', 'qwen'], ['save', 'k2'], ['revert', 'qwen']]);
 });

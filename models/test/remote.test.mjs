@@ -26,7 +26,7 @@ function startFakeServer(_replies, { key = null, props = false } = {}) {
     const json = (code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
     if (req.url === '/health') return json(200, { status: 'ok' });
     if (key && req.headers.authorization !== `Bearer ${key}`) return json(401, { error: { message: 'Invalid API Key' } });
-    if (props && req.url === '/props') return json(200, { default_generation_settings: { n_ctx: 32768 }, total_slots: 2, model_path: '/models/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf' });
+    if (props && req.url === '/props') return json(200, { default_generation_settings: { n_ctx: 32768 }, total_slots: 2, model_path: '/models/Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf' });
     if (props && req.url === '/v1/models') return json(200, { object: 'list', data: [{ id: 'fake-model', context_length: 65536 }] });
     for await (const _ of req) { /* the body is not needed */ }
     return json(200, { choices: [{ message: { content: 'ready' } }] });
@@ -131,7 +131,7 @@ test('each service keeps its key under its own name (a key saved before Run on s
   saveKey('test-machine-0123456789', 'machine');
   const c = await connectRemote(R({ source: 'machine', keyId: 'machine', address: fake.url, kind: 'llama', key: true, keyEnd: '6789' }));
   expect(endpointOf(fake.url)).toMatchObject({ key: 'test-machine-0123456789' });
-  expect(c.model.remote).toEqual({ kind: 'llama', label: `127.0.0.1:${fake.port}`, source: 'machine', model: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', ollama: null, mine: true });
+  expect(c.model.remote).toEqual({ kind: 'llama', label: `127.0.0.1:${fake.port}`, source: 'machine', model: 'Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf', ollama: null, mine: true });
   c.stop();
   await fake.close();
 });
@@ -175,8 +175,8 @@ test('the check on llama.cpp: reached, the key refused or taken, what it runs (c
   expect(wrong.error).toBe('the API key was not accepted');
   const right = await probe({ url: fake.url, kind: 'llama', key: 'test-right-0123456789', reply: true });
   expect(right.ok).toBe(true);
-  expect(right).toMatchObject({ ctx: 32768, slots: 2, file: '/models/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf' });
-  expect(right.steps.map((s) => s.text)).toEqual([expect.stringMatching(/^reached in \d+ ms$/), 'the key was accepted', 'runs gemma-4-12B-it-qat-UD-Q4_K_XL.gguf · 32k context · 2 slots', expect.stringMatching(/^answered ".*" in [\d.]+ s$/)]);
+  expect(right).toMatchObject({ ctx: 32768, slots: 2, file: '/models/Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf' });
+  expect(right.steps.map((s) => s.text)).toEqual([expect.stringMatching(/^reached in \d+ ms$/), 'the key was accepted', 'runs Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf · 32k context · 2 slots', expect.stringMatching(/^answered ".*" in [\d.]+ s$/)]);
   expect(fake.seen.filter((x) => x.path !== '/health').every((x) => x.auth === null || x.auth.startsWith('Bearer '))).toBe(true);
   await fake.close();
 });
@@ -236,7 +236,7 @@ test('connecting registers the address with its key and kind (every call then ca
   const fake = await startFakeServer([], { key: 'test-right-0123456789', props: true });
   const c = await connectRemote(R({ address: fake.url, kind: 'llama', key: true, keyEnd: '6789' }), { key: 'test-right-0123456789' });
   expect(c).toMatchObject({ url: fake.url, ctx: 32768, slots: 2 });
-  expect(c.model).toMatchObject({ id: 'remote', base: 'gemma', name: `${MODELS.gemma.name} · 127.0.0.1:${fake.port}`, bytes: 0, remote: { kind: 'llama' } });
+  expect(c.model).toMatchObject({ id: 'remote', base: 'qwen', name: `${MODELS.qwen.name} · 127.0.0.1:${fake.port}`, bytes: 0, remote: { kind: 'llama' } });
   expect(endpointOf(fake.url)).toMatchObject({ remote: true, kind: 'llama', key: 'test-right-0123456789' });
   expect(authHeaders(`${fake.url}/`)).toEqual({ authorization: 'Bearer test-right-0123456789' });
   c.stop();
@@ -247,8 +247,8 @@ test('connecting registers the address with its key and kind (every call then ca
 });
 
 test('a remote runs with our settings when it serves one of our models, else with plain ones; the form’s Context wins', () => {
-  const ours = remoteModel(R({ address: '10.0.0.5' }), { file: '/x/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', ctx: 65536, slots: 2 });
-  expect(ours).toMatchObject({ base: 'gemma', sampling: MODELS.gemma.sampling, thinkingLevels: MODELS.gemma.thinkingLevels, maxCtx: 65536, slots: 2, draft: null });
+  const ours = remoteModel(R({ address: '10.0.0.5' }), { file: '/x/Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf', ctx: 65536, slots: 2 });
+  expect(ours).toMatchObject({ base: 'qwen', sampling: MODELS.qwen.sampling, thinkingLevels: MODELS.qwen.thinkingLevels, maxCtx: 65536, slots: 2, draft: null });
   const other = remoteModel(R({ address: 'https://api.example.com/v1', kind: 'openai', context: 16384 }), { model: 'some/model', ctx: 131072 });
   expect(other).toMatchObject({ id: 'remote', name: 'some/model · api.example.com', sampling: {}, thinkingLevels: GENERIC_REMOTE.thinkingLevels, maxCtx: 16384 });
 });
@@ -279,9 +279,9 @@ test('the warm-up on a remote llama.cpp reads the instructions into its memory a
 test('coding serve: open to the network behind its key (or this Mac only), https with a certificate; the addresses others use', () => {
   expect(serveArgs({ keyFile: '/k' })).toEqual({ host: '0.0.0.0', keyFile: '/k', https: false, args: ['--api-key-file', '/k'] });
   expect(serveArgs({ local: true, keyFile: '/k', cert: '/c.pem', certKey: '/k.pem' })).toEqual({ host: '127.0.0.1', keyFile: '/k', https: true, args: ['--api-key-file', '/k', '--ssl-cert-file', '/c.pem', '--ssl-key-file', '/k.pem'] });
-  const a = serverArgs(MODELS.gemma, { ctx: 32768, port: 8080, host: '0.0.0.0' });
+  const a = serverArgs(MODELS.qwen, { ctx: 32768, port: 8080, host: '0.0.0.0' });
   expect(a[a.indexOf('--host') + 1]).toBe('0.0.0.0');
-  expect(serverArgs(MODELS.gemma, { ctx: 32768, port: 17600 })[serverArgs(MODELS.gemma, { ctx: 32768, port: 17600 }).indexOf('--host') + 1]).toBe('127.0.0.1');
+  expect(serverArgs(MODELS.qwen, { ctx: 32768, port: 17600 })[serverArgs(MODELS.qwen, { ctx: 32768, port: 17600 }).indexOf('--host') + 1]).toBe('127.0.0.1');
   const ifaces = { lo0: [{ address: '127.0.0.1', family: 'IPv4', internal: true }], en0: [{ address: '192.168.1.40', family: 'IPv4', internal: false }, { address: 'fe80::1', family: 'IPv6', internal: false }], utun4: [{ address: '100.101.12.7', family: 'IPv4', internal: false }], en5: [{ address: '169.254.3.3', family: 'IPv4', internal: false }] };
   expect(lanAddresses(ifaces)).toEqual([{ address: '192.168.1.40', where: 'en0, this network' }, { address: '100.101.12.7', where: 'Tailscale' }]);
 });
@@ -338,7 +338,7 @@ test('the check on an Ollama service that never loads the model: it says what th
       if (req.url === '/v1/models') return json({ object: 'list', data: [{ id: 'big-coder:latest' }, { id: 'small:35b' }] });
       if (req.url === '/api/version') return json({ version: '0.32.12' });
       if (req.url === '/api/tags') return json({ models: [{ name: 'big-coder:latest', size: 51.7e9 }, { name: 'small:35b', size: 23.9e9 }] });
-      if (req.url === '/api/show') return json({ details: { family: 'qwen', parameter_size: '80B' }, capabilities: ['completion', 'tools'], model_info: {} });
+      if (req.url === '/api/show') return json({ details: { family: 'k2', parameter_size: '80B' }, capabilities: ['completion', 'tools'], model_info: {} });
       if (req.url === '/api/ps') return json({ models: [{ name: 'small:35b', size: 23.1e9, size_vram: 23.1e9, context_length: 32768, expires_at: '2319-01-13T09:33:45Z' }] });
       if (req.url === '/api/chat') { if (JSON.parse(body).model === 'small:35b') return json({ message: { content: 'ready' } }); return; } // the big one: no word, ever
       res.statusCode = 404; res.end('{}');

@@ -1,31 +1,26 @@
-// The models part on its own: the registry (Qwen3.5 9B the default, Gemma 4 12B
-// QAT, K2 Horizon 7B and Bonsai 2 27B in /model), the thinking switch, the memory
-// math and the server's flags. The 27B's own tests run against its model file.
+// The models part on its own: the registry (Qwen3.5 9B the default, K2 Horizon
+// 7B in /model), the thinking switch, the memory math and the server's flags.
+// Bonsai 2 27B and Gemma 4 12B left /model on 9 Oct 2026; their settings stay as
+// test material (fixtures/), the measured models the memory math is checked on.
 import { test, expect } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, modelPath, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
-import bonsai27b from '../bonsai-2-27b/model.mjs';
+import bonsai27b from './fixtures/bonsai-2-27b.mjs';
+import gemma12b from './fixtures/gemma-4-12b.mjs';
 
 const m = bonsai27b; // the 27B: its settings as tested on this Mac (25-28 Sep 2026)
-const g = MODELS.gemma;
+const g = gemma12b;
 
-test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second model, K2 Horizon 7B the third, Bonsai 2 27B the fourth (back since 1 Oct 2026), Bonsai 2 27B ConstantKV the fifth (1 Oct 2026)', () => {
-  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2', 'bonsai', 'constantkv']);
+test('Qwen3.5 9B is the default (since 30 Sep 2026) and K2 Horizon 7B the second model; Gemma and both Bonsais left on 9 Oct 2026, their folders with them', () => {
+  expect(Object.keys(MODELS)).toEqual(['qwen', 'k2']);
   expect(DEFAULT_MODEL).toBe('qwen');
+  for (const id of ['gemma', 'bonsai', 'constantkv']) expect(MODELS[id]).toBeUndefined();
+  for (const f of ['gemma-4-12b', 'bonsai-2-27b', 'bonsai-2-27b-constantkv']) expect(existsSync(new URL(`../${f}/model.mjs`, import.meta.url))).toBe(false);
+  // the test material is the models as they were
   expect(g.file).toBe('gemma-4-12B-it-qat-UD-Q4_K_XL.gguf');
-  expect(g.bytes).toBe(6_716_356_800);
-  expect(g.sha256).toBe('90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370');
-  expect(g.thinkingDefault).toBe(false);
-  expect(g.draft.file).toBe('mtp-gemma-4-12b-it.gguf'); // Google's MTP helper (speed probe, 28 Sep)
-  expect(modelFolder(g)).toMatch(/models\/gemma-4-12b\/$/);
-  // the 27B: listed under the id its old runs carry, on Prism's engine only, able to see
-  expect(MODELS.bonsai).toBe(m);
-  expect([m.engine, m.engineOnly]).toEqual(['prism', true]);
-  expect(m.vision.file).toBe('Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf');
+  expect(g.draft.file).toBe('mtp-gemma-4-12b-it.gguf');
   expect(m.file).toBe('Ternary-Bonsai-2-27B-PQ2_0.gguf');
   expect(m.bytes).toBe(7_206_168_928);
-  expect(m.folder).toBe('bonsai-2-27b');
-  expect(existsSync(new URL('../bonsai-2-27b/README.md', import.meta.url))).toBe(true);
 });
 
 // A model's files may leave the Mac to free the disk (3 Oct 2026: all but Qwen's) and come back with
@@ -34,7 +29,7 @@ test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second 
 test('every download names a fixed revision of its repo, so coding setup brings back the file its checksum names', () => {
   const all = [...Object.values(MODELS), ...Object.values(EMBEDDERS), ...Object.values(RERANKERS)];
   const links = all.flatMap((x) => [x, x.draft, x.vision]).filter((x) => x?.url && x.sha256).map((x) => x.url);
-  expect(links.length).toBeGreaterThanOrEqual(11);
+  expect(links.length).toBeGreaterThanOrEqual(5); // 11 until Gemma and the Bonsais left (9 Oct 2026)
   for (const u of links) expect(u).toMatch(/^https:\/\/huggingface\.co\/[^/]+\/[^/]+\/resolve\/[0-9a-f]{40}\//);
   // an MLX model's folder: every file at its pinned revision
   for (const x of all.filter((x) => x.files)) expect(x.revision).toMatch(/^[0-9a-f]{40}$/);
@@ -195,5 +190,5 @@ test('the memory\'s matcher: BGE-M3, in the engine\'s embedding mode, beside the
   // none of the chat model's flags
   for (const f of ['--jinja', '--reasoning-budget', '-md', '--slot-save-path', '--spec-type']) expect(a).not.toContain(f);
   // and it is not one of the models /model offers
-  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2', 'bonsai', 'constantkv']);
+  expect(Object.keys(MODELS)).toEqual(['qwen', 'k2']);
 });

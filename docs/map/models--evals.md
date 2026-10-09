@@ -9,4 +9,4 @@ Every folder under models/evals/ with a plain line, its main files with a line e
 - models/evals/battle/ — Tests and battles for models: runner, store, remote entrants, and one-run logic → models--evals--battle.md
 - models/evals/bench/ — Directory for benchmarking evaluation tasks and their execution scripts → models--evals--bench.md
 - models/evals/dev/ — 1 folders: experiments/; 3 files → models--evals--dev.md
-- models/evals/tools/ — 1 folders: constantkv/; 58 files → models--evals--tools.md
+- models/evals/tools/ — 57 files → models--evals--tools.md

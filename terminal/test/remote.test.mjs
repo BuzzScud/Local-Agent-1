@@ -24,10 +24,10 @@ test('a remote llama.cpp gets the same body as this Mac’s, with its key in the
   const fake = await startFakeServer([{ text: 'hi' }], { key: 'test-remote-0123456789' });
   setEndpoint(fake.url, { remote: true, kind: 'llama', key: 'test-remote-0123456789', model: 'x.gguf', label: 'box' });
   try {
-    const evs = await drain(streamChat({ url: fake.url, messages: [{ role: 'user', content: 'hi' }], model: MODELS.gemma, sampling: MODELS.gemma.sampling, thinking: false, maxTokens: 50, slot: 1 }));
+    const evs = await drain(streamChat({ url: fake.url, messages: [{ role: 'user', content: 'hi' }], model: MODELS.qwen, sampling: MODELS.qwen.sampling, thinking: false, maxTokens: 50, slot: 1 }));
     expect(evs.filter((e) => e.type === 'text').map((e) => e.text).join('')).toBe('hi');
     const body = fake.requests.at(-1);
-    expect(body).toMatchObject({ model: 'coding', cache_prompt: true, id_slot: 1, top_k: 64, chat_template_kwargs: { enable_thinking: false } });
+    expect(body).toMatchObject({ model: 'coding', cache_prompt: true, id_slot: 1, top_k: 20, chat_template_kwargs: { enable_thinking: false } });
     expect(fake.seen.at(-1).auth).toBe('Bearer test-remote-0123456789');
   } finally { dropEndpoint(fake.url); await fake.close(); }
 });
@@ -248,7 +248,7 @@ test('a key the remote does not take: the error says so and points to /remote', 
   const fake = await startFakeServer([], { key: 'test-right-0123456789' });
   setEndpoint(fake.url, { remote: true, kind: 'llama', key: 'test-wrong-0123456789', label: 'box' });
   try {
-    await expect(drain(streamChat({ url: fake.url, messages: [], model: MODELS.gemma, sampling: {}, maxTokens: 5 }))).rejects.toThrow('the remote model (box) did not accept the API key (401); change it in /remote');
+    await expect(drain(streamChat({ url: fake.url, messages: [], model: MODELS.qwen, sampling: {}, maxTokens: 5 }))).rejects.toThrow('the remote model (box) did not accept the API key (401); change it in /remote');
   } finally { dropEndpoint(fake.url); await fake.close(); }
 });
 
@@ -449,7 +449,7 @@ test('the agent connects again only when the connection broke: a server that ans
   const cwd = mkdtempSync(join(tmpdir(), 'agentic-reconnect-'));
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   let waits = 0;
-  const agent = new Agent({ url, model: MODELS.gemma, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, ctx: 32768, mode: 'edits', flows: false, ask: async () => ({ choice: 'yes' }), waitForServer: async () => { waits++; } });
+  const agent = new Agent({ url, model: MODELS.qwen, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, ctx: 32768, mode: 'edits', flows: false, ask: async () => ({ choice: 'yes' }), waitForServer: async () => { waits++; } });
   const notes = [];
   agent.on('note', (n) => notes.push(n));
   try {

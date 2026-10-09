@@ -36,33 +36,33 @@ function runs(dir, { oldPass, newPass, oldSecs = 60, newSecs = 60, newTasks = TA
 }
 
 test('it runs the Practice 28 twice, old prompt first, each unrecorded, with the thinking asked for', async () => {
-  const r = await run('models/evals/tools/prompt-ab.mjs', ['--model', 'qwen', '--think', 'on', '--out', join(HOME, 'dry'), '--dry']);
+  const r = await run('models/evals/tools/prompt-ab.mjs', ['--model', 'k2', '--think', 'on', '--out', join(HOME, 'dry'), '--dry']);
   expect(r.code).toBe(0);
   const [old, now] = r.text.trim().split('\n');
   for (const [line, v] of [[old, 'old'], [now, 'new']]) {
     expect(line.startsWith(`${v}: `)).toBe(true);
-    expect(line).toContain('models/evals/bench/run.mjs --model qwen --think on --effort high --set 28');
+    expect(line).toContain('models/evals/bench/run.mjs --model k2 --think on --effort high --set 28');
     expect(line).toContain(`--prompt ${v} --no-record`);
     expect(line).toContain(join(HOME, 'dry', v));
   }
-  const picked = await run('models/evals/tools/prompt-ab.mjs', ['--model', 'gemma', '--only', '3,5', '--order', 'new,old', '--dry']);
+  const picked = await run('models/evals/tools/prompt-ab.mjs', ['--model', 'qwen', '--only', '3,5', '--order', 'new,old', '--dry']);
   expect(picked.text.trim().split('\n')[0]).toMatch(/^new: .*--think off --only 3,5 .*--prompt new --no-record$/);
-  expect((await run('models/evals/tools/prompt-ab.mjs', ['--model', 'gemma', '--order', 'old,old', '--dry'])).code).toBe(2);
+  expect((await run('models/evals/tools/prompt-ab.mjs', ['--model', 'qwen', '--order', 'old,old', '--dry'])).code).toBe(2);
   // the practice runner refuses a prompt it does not know before it loads anything
-  const bad = await run('models/evals/bench/run.mjs', ['--model', 'gemma', '--prompt', 'purple']);
+  const bad = await run('models/evals/bench/run.mjs', ['--model', 'qwen', '--prompt', 'purple']);
   expect(bad.code).toBe(1); expect(bad.text).toContain('--prompt old or new, not "purple"');
 });
 
 test('from two runs: the new prompt holds with as many passes and at most 10% more time; the page and the record line say so', async () => {
   const dir = runs(join(HOME, 'holds'), { oldPass: (i) => i < 24, newPass: (i) => i < 25 || i === 26, oldSecs: 60, newSecs: 64 });
-  const r = await run('models/evals/tools/prompt-ab.mjs', ['--model', 'gemma', '--from', dir]);
+  const r = await run('models/evals/tools/prompt-ab.mjs', ['--model', 'qwen', '--from', dir]);
   expect(r.code).toBe(0);
-  expect(r.text).toContain('Prompt old vs new on Gemma');
+  expect(r.text).toContain('Prompt old vs new on Qwen');
   expect(r.text).toContain('old 24 of 28, new 26 of 28 · HOLDS');
   const line = lastLine();
-  expect(line).toMatchObject({ kind: 'tasks', name: 'Prompt old vs new', model: 'gemma', passed: 26, total: 28, result: 'pass', part: false, effort: 'low', ctx: 32768 });
+  expect(line).toMatchObject({ kind: 'tasks', name: 'Prompt old vs new', model: 'qwen', passed: 26, total: 28, result: 'pass', part: false, effort: 'low', ctx: 32768 });
   expect(line.note).toBe('old 24 of 28 in 1680 s · new 26 of 28 in 1792 s · fixed: 25-task, 27-task');
-  expect(line.page).toMatch(/^tests\/agentic-coder-prompt-old-vs-new-gemma-\d{4}-\d\d-\d\d-\d{4}\.html$/);
+  expect(line.page).toMatch(/^tests\/agentic-coder-prompt-old-vs-new-qwen-\d{4}-\d\d-\d\d-\d{4}\.html$/);
   const html = readFileSync(join(DOCS, line.page), 'utf8');
   expect(html).toContain('<meta charset="utf-8">');
   expect(html).toContain('The new prompt holds.');
@@ -73,12 +73,12 @@ test('from two runs: the new prompt holds with as many passes and at most 10% mo
 
 test('fewer passes, or more than 10% slower, does not hold; a stopped run is a part run', async () => {
   const fewer = runs(join(HOME, 'fewer'), { oldPass: (i) => i < 24, newPass: (i) => i < 23 });
-  expect((await run('models/evals/tools/prompt-ab.mjs', ['--model', 'qwen', '--from', fewer])).text).toContain('DOES NOT HOLD');
+  expect((await run('models/evals/tools/prompt-ab.mjs', ['--model', 'k2', '--from', fewer])).text).toContain('DOES NOT HOLD');
   expect(lastLine()).toMatchObject({ result: 'fail', passed: 23, note: 'old 24 of 28 in 1680 s · new 23 of 28 in 1680 s · broke: 24-task' });
   const slower = runs(join(HOME, 'slower'), { oldPass: (i) => i < 24, newPass: (i) => i < 24, oldSecs: 60, newSecs: 67 });
-  expect((await run('models/evals/tools/prompt-ab.mjs', ['--model', 'qwen', '--from', slower])).text).toContain('DOES NOT HOLD');
+  expect((await run('models/evals/tools/prompt-ab.mjs', ['--model', 'k2', '--from', slower])).text).toContain('DOES NOT HOLD');
   const cut = runs(join(HOME, 'cut'), { oldPass: () => true, newPass: () => true, newTasks: TASKS.slice(0, 10), stopped: true });
-  const r = await run('models/evals/tools/prompt-ab.mjs', ['--model', 'qwen', '--from', cut, '--no-record']);
+  const r = await run('models/evals/tools/prompt-ab.mjs', ['--model', 'k2', '--from', cut, '--no-record']);
   expect(r.text).toContain('PART RUN');
   expect(r.text).toContain('a look only: no results page, no line in the test record');
   expect(JSON.parse(readFileSync(join(cut, 'summary.json'), 'utf8'))).toMatchObject({ full: false, pass: false, stopped: true, old: { tasks: 10 }, new: { tasks: 10 } });
