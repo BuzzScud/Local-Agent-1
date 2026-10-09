@@ -1012,6 +1012,26 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   The app tests run with the Launcher (`pty.mjs`, `term.mjs` and the keeper tests set `AGENTIC_HOME_LOOK`), since
   they were written against it; `terminal/test/home-looks.test.mjs` drives the Menu, in a real window too.
 
+## Where should it work? The folder page, "2 · Doors" (9 Oct 2026)
+
+- **What and why.** `coding` typed in the home folder first asks which folder to work in (start-folder.mjs
+  `startFolders`, cli.jsx `pickStartFolder`; since 2 Oct). The owner, on a screenshot of it at 132 × 79 (the bot
+  and two cards in the top rows, the rest empty): "can we redesign this menu? show me 3 new designs". Three were
+  drawn by the app's own code on their real folders (private: `docs/private/design rounds/
+  agentic-coder-where-should-it-work-3-designs-2026-10-09.html`): Menu, Doors, Compact. Their pick: **2 · Doors**.
+- **The page** (`terminal/src/app/folder-page.jsx` `FolderPage`; start.jsx's card page is gone): the bot, the
+  question and its lead, then the two folders side by side, each with what it is, what it suits, its last three
+  conversations (`recentOf`: a prompt run again shown once, the app's restart notes left out) and how many it has,
+  in the middle of the window's height. `folderFacts` brings them from the app's own records (`recent`); nothing
+  in a folder is read before the safety check. The one picked has its whole edge in the choice colour. A short
+  window drops the bot, then the lead, then the conversations, then what each suits; under 90 columns the two
+  stand one above the other. cli.jsx gives it the window's rows less two (a page as tall as the window scrolls,
+  and pick.mjs's redraw would leave a copy above) and clears the window after the pick, so the safety check
+  starts at the top. ←→ move as ↑↓ do (pick.mjs `keysOf`: a plain arrow only).
+- **Tests**: start.test.mjs (the page at five sizes: never wider or taller than its room, side by side, the
+  middle, the short and narrow ones, the last conversations), pick.test.mjs (←→), app-start.test.mjs and
+  app-keeper.test.mjs (the real window).
+
 ## The bot over the prompt box (9 Oct 2026)
 
 - **What and why.** The owner asked for "the agent icon, avatar" on the Menu start page, "detailed and animate

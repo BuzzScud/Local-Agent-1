@@ -25,12 +25,12 @@ export function startFolders(opts, { home = homedir(), repo = findRepo() } = {})
   ];
 }
 
-// What the app already knows of a folder, for its card (start.jsx): the conversations had there,
-// when the last one was, and whether a yes covers it (then no safety check follows). All from the
-// app's own records: nothing in the folder is read before the safety check.
+// What the app already knows of a folder, for its door (folder-page.jsx): the conversations had there,
+// when the last one was, the newest few (their titles), and whether a yes covers it (then no safety check
+// follows). All from the app's own records: nothing in the folder is read before the safety check.
 export function folderFacts(f, { sessions = listSessions, trusted = isTrusted } = {}) {
   const list = sessions(f.path);
-  return { ...f, convs: list.length, last: list[0]?.updated ?? null, trusted: trusted(f.path) };
+  return { ...f, convs: list.length, last: list[0]?.updated ?? null, recent: list.slice(0, 12), trusted: trusted(f.path) };
 }
 
 // A row of the menu: the folder as you would type it, then what it is.

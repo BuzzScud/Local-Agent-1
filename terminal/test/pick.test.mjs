@@ -11,6 +11,16 @@ test('keys: arrows in both spellings, a lone esc, other escape sequences skipped
   expect(keysOf('\x1bOB\r')).toEqual(['down', '\r']);
   expect(keysOf('\x1b')).toEqual(['esc']);
   expect(keysOf('\x1b[1;2Cj')).toEqual(['j']);
+  // ←→ for the folder page's doors, side by side (folder-page.jsx); shift+→ is still skipped
+  expect(keysOf('\x1b[C\x1b[D\x1bOC')).toEqual(['right', 'left', 'right']);
+});
+
+test('← and → move too: the doors of the folder page sit side by side', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough(); output.resume();
+  const p = pickOnTerminal(['a', 'b'], { input, output });
+  input.write('\x1b[C\x1b[C\x1b[D\x1b[D\x1b[C\r');
+  expect(await p).toBe(1);
 });
 
 test('the menu picks, takes off every listener it put on stdin, and never pauses it', async () => {

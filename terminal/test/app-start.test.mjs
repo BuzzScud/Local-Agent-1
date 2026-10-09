@@ -128,9 +128,12 @@ test('typed in the home folder: where to start comes first; 2 starts in Agentic 
     { type: 'hello there' }, { wait: '> hello there' }, ...quitTyped, // typing reaches the prompt box after the menu
   ] });
   await fake.close();
-  expect(r.snapshots.menu.split('\n')[0]).toMatch(/^── Agentic Coder/); // the window cleared: the page on its top line
-  expect(r.snapshots.menu).toMatch(/❯ 1  ~ +your home folder/);
-  expect(r.snapshots.menu).toMatch(/ {3}2  ~\/agentic-coder +Agentic Coder/);
+  // the window cleared, the doors side by side in its middle (folder-page.jsx, "2 · Doors")
+  const menu = r.snapshots.menu.split('\n');
+  expect(menu.findIndex((l) => l.includes('Where should it work?'))).toBeGreaterThan(3);
+  expect(menu.find((l) => /❯ 1/.test(l))).toMatch(/❯ 1 .* 2 /);
+  expect(r.snapshots.menu).toContain('your home folder');
+  expect(r.snapshots.menu).toContain('~/agentic-coder');
   expect(r.snapshots.menu.match(/✓ trusted/g)).toHaveLength(2); // the home folder's yes covers both
   expect(r.text).not.toContain('Quick safety check'); // the home folder's yes covers the folder inside it
   expect(r.snapshots.start).toMatch(/● ready[^\n]*~\/agentic-coder/); // the start page: working in the folder picked
