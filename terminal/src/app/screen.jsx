@@ -10,7 +10,7 @@ import { cursorCell, rowText, selection, promptTextWidth } from './edit-input.mj
 import { askOptions, askState, typeLabel } from './app-ask.mjs';
 import { C, MARK, spinFrame, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { money } from '../agent/spend.mjs';
-import { wrap, Row, Result, ToolHead, Diff, diffParts, Todos, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
+import { wrap, Row, Result, ToolHead, Diff, diffParts, Todos, modeLabel, MODE_SHORT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { AgentsView, AgentsLine } from './agents-view.jsx';
@@ -942,8 +942,9 @@ export function modelLabels(ms) {
 
 // The footer's pieces, worked out once for the drawing and for a click on the model's label
 // (App.jsx). The right side ends two cells from the window's edge; a narrow window drops the
-// "(shift+tab to cycle)" hint first, then the label's detail, then the Mac's memory. On a remote
-// it is remoteParts below: gauges, no Mac.
+// label's detail first, then the Mac's memory. The mode is its short name (MODE_SHORT), with no
+// "(shift+tab to cycle)": the owner's pick "1 · Tidy", 9 Oct 2026. On a remote it is remoteParts
+// below: gauges, no Mac.
 // labelAt: the label's first and last cell on the footer's row, counted from 1.
 export function footerParts(app) {
   const { mode, notice, width } = app;
@@ -958,50 +959,57 @@ export function footerParts(app) {
   if (app.modelState?.remote) return remoteParts(app, left, badges);
   // The Mac's memory, live, after the model's label.
   const mac = app.mac ? footerLabel(app.mac) : '';
-  const modeText = MODE_TEXT[mode] ?? '';
+  const modeText = MODE_SHORT[mode] ?? '';
   const room = width - 4 - Math.min(left.length, 15) - 2;
   const labels = modelLabels(app.modelState);
   const ls = labels.length ? labels : [''];
   const tries = [
-    { label: ls[0], mac, cycle: true },
-    ...(app.modelState?.remote ? ls.slice(0, 2) : ls).map((label) => ({ label, mac, cycle: false })),
-    ...ls.map((label) => ({ label, mac: '', cycle: false })),
+    ...ls.map((label) => ({ label, mac })),
+    ...ls.map((label) => ({ label, mac: '' })),
   ];
   // The cost meter (/remote, spend.mjs) leads the right side while it fits, and goes first when it does not.
   const spend = app.spend ?? '';
   const all = spend ? [...tries.map((t) => ({ ...t, spend })), ...tries] : tries;
-  const textOf = (t) => [t.spend, t.label, t.mac && `● ${t.mac}`, badges, modeText && `${modeText}${t.cycle ? CYCLE_HINT : ''}`].filter(Boolean).join(' · ');
+  const textOf = (t) => [t.spend, t.label, t.mac && `● ${t.mac}`, badges, modeText].filter(Boolean).join(' · ');
   const pick = all.find((t) => textOf(t).length <= room) ?? all.at(-1);
   const from = width - 2 - textOf(pick).length + 1;
   const lead = pick.spend ? pick.spend.length + 3 : 0; // the label starts after the cost meter and its " · "
-  return { left, spend: pick.spend ?? '', label: pick.label, mac: pick.mac, badges, cycle: pick.cycle, labelAt: pick.label ? { from: from + lead, to: from + lead + pick.label.length - 1 } : null };
+  return { left: wholeTip(app, left, textOf(pick)), spend: pick.spend ?? '', label: pick.label, mac: pick.mac, badges, labelAt: pick.label ? { from: from + lead, to: from + lead + pick.label.length - 1 } : null };
+}
+
+// A tip shows whole or not at all: one that does not fit beside the right side gives its place to
+// "? for shortcuts" (a cut tip read "ctrl+b sends this windo…").
+function wholeTip(app, left, right) {
+  if (!app.tip || app.notice || app.inputMode === 'bash') return left;
+  return left.length + 2 + right.length <= app.width - 4 ? left : '? for shortcuts';
 }
 
 // On a remote (remote-footer.mjs): no Mac's memory, which holds no model then, and no cost meter
 // (/meters has it). Once the first answer has a speed, gauges take the left side, unless a note,
-// a tip or shell mode is there; the right is the model, where it runs and the mode.
+// a tip or shell mode is there; the right is the model, where it runs and the mode. On the Claude
+// API with its usage line, the model's name goes alone: the line under it is the Claude API's.
 function remoteParts(app, left, badges) {
   const { width, mode } = app;
   const ms = app.modelState;
-  const modeText = MODE_TEXT[mode] ?? '';
+  const modeText = MODE_SHORT[mode] ?? '';
   const labels = modelLabels(ms);
-  const rightOf = (label, cycle) => [label, badges, modeText && `${modeText}${cycle ? CYCLE_HINT : ''}`].filter(Boolean).join(' · ');
+  const near = app.usage && ms.state === 'on' ? labels[1] : labels[0];
+  const rightOf = (label) => [label, badges, modeText].filter(Boolean).join(' · ');
   const list = gaugesOf(app.gaugeList);
   const quiet = !app.notice && app.inputMode !== 'bash' && !app.tip;
   const g = ms.state === 'on' && quiet && app.gauges && gaugeLine(app.gauges, list).length ? app.gauges : null;
-  let label, cycle, gauges = null;
+  let label, gauges = null;
   if (g) {
-    const f = fitRemote({ avail: width - 4, g, list, right: ({ where, cycle: c, bare }) => rightOf(bare ? labels[2] : where ? labels[0] : labels[1], c) });
-    label = f.bare ? labels[2] : f.where ? labels[0] : labels[1];
-    cycle = f.cycle;
+    const f = fitRemote({ avail: width - 4, g, list, right: ({ where, bare }) => rightOf(bare ? labels[2] : where ? near : labels[1]) });
+    label = f.bare ? labels[2] : f.where ? near : labels[1];
     gauges = f.gauges.length ? f.gauges : null;
   } else {
     const room = width - 4 - Math.min(left.length, 15) - 2;
-    const tries = [[labels[0], true], ...labels.map((l) => [l, false])];
-    [label, cycle] = tries.find(([l, c]) => rightOf(l, c).length <= room) ?? tries.at(-1);
+    const tries = [near, ...labels.slice(1)];
+    label = tries.find((l) => rightOf(l).length <= room) ?? tries.at(-1);
   }
-  const from = width - 2 - rightOf(label, cycle).length + 1;
-  return { left, gauges, spend: '', label, mac: '', badges, cycle, labelAt: { from, to: from + label.length - 1 } };
+  const from = width - 2 - rightOf(label).length + 1;
+  return { left: wholeTip(app, left, rightOf(label)), gauges, spend: '', label, mac: '', badges, labelAt: { from, to: from + label.length - 1 } };
 }
 
 const WHITE = 'ansi256(255)'; // the start page's white (start.jsx)
@@ -1020,8 +1028,10 @@ const TONE = { dim: C.dim, value: WHITE, live: C.accent, bar: C.accentDim, warn:
 // The footer's rows, inside the prompt box under its dotted rule (the owner's pick "Panel", 8 Oct
 // 2026: "more uniform … even spacing between edges and borders"): the prompt, the footer and the Claude
 // API's usage line share one frame, each row one cell in from its border, so every row starts and
-// ends in the same columns. An open menu takes the footer's place, as in Claude Code: the box closes
-// under the prompt and the menu sits under it.
+// ends in the same columns. Tidied on 9 Oct 2026 (the owner's pick "1 · Tidy"): each row is words on
+// the left and words on the right, ending on the same column, with the usage line's line between its
+// words; the box's bottom edge is the window's last row (patches/ink@7.1.1.patch). An open menu takes
+// the footer's place, as in Claude Code: the box closes under the prompt and the menu sits under it.
 const footInBox = (app) => !app.menu?.items?.length;
 function FooterRows({ app, border }) {
   const { mode, notice, width } = app;
@@ -1039,7 +1049,7 @@ function FooterRows({ app, border }) {
     p.label ? <Text color={down ? C.bad : C.dim}><Text color={dot}>{p.label[0]}</Text>{named ? <><Text> </Text><Text color={WHITE}>{ms.name}</Text>{p.label.slice(2 + ms.name.length)}</> : p.label.slice(1)}</Text> : null,
     p.mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {p.mac}</Text> : null,
     p.badges ? <Text color={C.accent}>{p.badges}</Text> : null,
-    modeLabel(mode, { cycle: p.cycle }),
+    modeLabel(mode, { short: true }),
   ].filter(Boolean);
   const inner = width - 4;
   return (
@@ -1056,7 +1066,7 @@ function FooterRows({ app, border }) {
         <Box flexShrink={0}><Text wrap="truncate-start">{pieces.map((el, i) => <React.Fragment key={i}>{i ? <Text color={C.dim}> · </Text> : null}{el}</React.Fragment>)}</Text></Box>
       </Box>
       {/* On the Claude API, what is left of the month under the footer: the same ends as the footer's row (usage-bar.mjs). */}
-      {app.usage ? <Box width={inner} height={1} overflow="hidden"><Segs segs={usageRow(app.usage, inner, { now: app.now, live: app.usageLive, pad: 0, wordsFirst: true })} /></Box> : null}
+      {app.usage ? <Box width={inner} height={1} overflow="hidden"><Segs segs={usageRow(app.usage, inner, { now: app.now, live: app.usageLive })} /></Box> : null}
     </Box>
   );
 }
@@ -2279,10 +2289,15 @@ export function Screen({ app }) {
   // The conversation is printed from the top of the window (at the start and
   // again after a resize); the prompt box, footer and status line sit on the
   // last lines, with blank space in between until the conversation fills it.
-  // The last line stays free for the cursor, so nothing scrolls.
+  // The box's bottom edge is the window's last line (Ink draws no line break
+  // under it: patches/ink@7.1.1.patch). The live part alone stays a line short
+  // of the window: one as tall as the window would make Ink wipe the window and
+  // print everything again when it shrinks. With nothing printed above it (the
+  // start page held live), the app starts on the second line (cli.jsx), so it
+  // still ends on the last.
   const items = folded.printed;
   const printed = app.hold ? [] : items;
-  let fill = Math.max(0, app.rows - 1 - usedRows(app, items));
+  let fill = Math.max(0, Math.min(app.rows - 1, app.rows - usedRows(app, items)));
   // Once the window has scrolled (a long reply), keep the live part as tall as
   // it was, less the lines printed above it now: shrinking it would leave
   // blank lines under the prompt box instead of above it.

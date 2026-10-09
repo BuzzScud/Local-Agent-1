@@ -24,7 +24,7 @@ test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', a
     { type: 'say hi' }, { key: 'enter' }, { wait: 'Hi there.' },
     { key: 'up' }, { wait: '> say hi' },
     { key: 'ctrlC' }, { sleep: 200 },
-    { key: 'shiftTab' }, { wait: 'accept edits on' }, { key: 'shiftTab' }, { wait: 'plan mode on' },
+    { key: 'shiftTab' }, { wait: '⏵⏵ accept edits │' }, { key: 'shiftTab' }, { wait: '⏸ plan │' },
     { type: 'look at @exp' }, { wait: '@export.test.mjs' }, { key: 'tab' }, { wait: 'look at @export' },
     ...quitTyped,
   ] });
@@ -32,7 +32,7 @@ test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', a
   expect(r.text).not.toContain('esc or enter to close'); // esc closed the /help box
   expect(r.text).toContain('! echo shell-ok');
   expect(r.text).toContain('Hi there.');
-  expect(r.text).toContain('plan mode on');
+  expect(r.text).toContain('⏸ plan │');
   // the shell output reached the model with the next prompt
   expect(JSON.stringify(fake.requests.at(-1).messages)).toContain('The user ran `echo shell-ok`');
 }, T);
@@ -73,7 +73,7 @@ test('/mode and /meters alone open the same kind of menu: the one in use marked,
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/mode' }, { key: 'enter' }, // the start page is drawn before the app takes keys
     { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode' },
-    { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Mode is accept edits' }, { wait: 'accept edits on' },
+    { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Mode is accept edits' }, { wait: '⏵⏵ accept edits │' },
     { type: '/mo' }, { key: 'enter' }, { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode2' }, { key: 'esc' }, { wait: 'Kept mode as accept edits' },
     { type: '/meters' }, { key: 'enter' }, { wait: 'on one line under the prompt' }, { sleep: 200 }, { snapshot: 'meters' },
     { type: '1' }, { wait: 'Status bar on' },
@@ -178,7 +178,8 @@ test('/model: the Effort row is the highlighted model\'s own (K2 Horizon and Bon
 test('"/" menu like Claude Code: the 18 commands of a window on this Mac (no /btw there, /jumptomac in its row; the rest are in /settings), the footer makes room, tab fills in', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
-  // An 80 × 24 window holds the 18, /exit the last, nothing scrolls; typing /j leaves /jumptomac alone.
+  // An 80 × 24 window holds the 18 and /loop (9 Oct 2026: the box's edge on the window's last line gives the
+  // menu one row more), /exit the last, nothing scrolls; typing /j leaves /jumptomac alone.
   const small = await runInPty({ cwd, env, cols: 80, rows: 24, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 200 }, { snapshot: 'all' },
     { type: 'j' }, { wait: '/jumptomac' }, { sleep: 200 }, { snapshot: 'j' },
@@ -196,11 +197,11 @@ test('"/" menu like Claude Code: the 18 commands of a window on this Mac (no /bt
   // the list holds the names (7 Oct 2026, "3 · Launcher"); the card beside it says the one you are on in full
   const names = (t) => t.split('\n').map((l) => /^\s{2}(?:❯ | {2})(\/[a-z]+)\s/.exec(l)?.[1]).filter(Boolean);
   const all = names(small.snapshots.all);
-  expect(all).toHaveLength(18);
+  expect(all).toHaveLength(19);
   expect(all.at(-1)).toBe('/exit'); // the last one shows too: nothing scrolls
   expect(all).toContain('/jumptomac');
   expect(all).not.toContain('/btw'); // a side question is for a remote: not listed here
-  expect(all.filter((n) => /^\/loops?$/.test(n))).toEqual([]); // no room for them at 80 × 24: typed, they are found
+  expect(all.filter((n) => /^\/loops?$/.test(n))).toEqual(['/loop']); // room for /loop at 80 × 24, not /loops: typed, it is found
   expect(all).not.toContain('/mcp'); // 80 × 24 has no row for it: typed in full it opens
   expect(small.snapshots.all).toMatch(/❯ \/help\s+│\s+\/help/); // the first one is on, its card beside it
   expect(small.snapshots.all).toContain('Open the Help page in the browser');

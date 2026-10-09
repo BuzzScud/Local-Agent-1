@@ -107,22 +107,28 @@ test('stopped at the cap: paused until the 1st (UTC); the next reply that comes 
 const U = { model: OPUS, modelName: 'Opus 5.5', cap: 500, tier: 'Start', spent: 66.56, left: 433.44, monthName: 'October', days: [0, 0, 0, 0, 0, 0, 9.85, 56.71], last14: [...Array(12).fill(0), 9.85, 56.71], today: { usd: 56.71, windows: 2 }, window: 8.82, pace: { perDay: 33.28, runsOut: new Date(2026, 9, 22).getTime(), beforeReset: true }, limits: limitsFrom(startHeaders(new Date(NOW - 599_000).toISOString()), OPUS, NOW - 600_000), resetsOn: Date.parse('2026-11-01T00:00:00Z'), capped: null };
 const WIDTHS = [60, 72, 80, 100, 120, 152, 177];
 
-test('the bar has the footer’s ends at every width: two cells in, ◆ first, the words ending two cells from the edge; the line keeps its room and narrower never says more', () => {
+// "1 · Tidy" (9 Oct 2026): the line's row is drawn at the footer's inner width, inside the prompt box; what is
+// left on the left, today and the run-out day on the right, ending on the row's last cell as the footer's words
+// above it do, the line between them.
+test('the usage line has the footer’s ends at every width: ◆ and what is left first, today and the run-out day ending on the last cell, the line between; narrower never says more', () => {
   let words = Infinity;
   for (const W of [...WIDTHS].reverse()) {
     const row = usageRow(U, W, { now: NOW });
     const t = textOf(row);
     expect(widthOf(row)).toBe(W);
-    expect(t.startsWith('  ◆ ')).toBe(true);
-    expect(t.endsWith('  ')).toBe(true);
-    expect(t[W - 3]).not.toBe(' '); // the last word ends where the footer's right side does
-    const line = t.slice(4).match(/^[━╸─]+/)[0].length;
+    expect(t).toMatch(/^◆ \$433(\.44)? left/);
+    expect(t.at(-1)).not.toBe(' '); // the last word ends where the footer's right side does
+    expect(t).toMatch(/ {2}today \$56\.71 · out (by )?Oct 22$/);
+    const line = t.match(/[━╸─]+/)[0].length;
     expect(line).toBeGreaterThanOrEqual(MIN_LINE);
-    expect(t.slice(4 + line).trim().length).toBeLessThanOrEqual(words);
-    words = t.slice(4 + line).trim().length;
-    expect(t).toContain('$433.44 left');
+    expect(t.length - line).toBeLessThanOrEqual(words);
+    words = t.length - line;
   }
-  expect(textOf(usageRow(U, 152, { now: NOW }))).toContain('$433.44 left of $500 · today $56.71 · out by Oct 22 at ~$33/day · limits 100%');
+  expect(textOf(usageRow(U, 152, { now: NOW }))).toMatch(/^◆ \$433\.44 left of \$500 {2}━[━╸─]+ {2}today \$56\.71 · out by Oct 22$/);
+  // the limits only once the tightest is under half; the daily pace is /usage's
+  expect(textOf(usageRow(U, 152, { now: NOW }))).not.toMatch(/limits|\/day/);
+  const low = { ...U, limits: { requests: { limit: 1000, remaining: 300, reset: NOW + 30_000 } } };
+  expect(textOf(usageRow(low, 152, { now: NOW }))).toMatch(/today \$56\.71 · out by Oct 22 · limits 30% · full in 30s$/);
   // the line is what is left: about 87% of it, then today's 11% in amber, then the rest faint
   const line = usageRow(U, 177, { now: NOW }).filter((s) => /^[━╸─]+$/.test(s.t));
   const cells = (pred) => line.filter(pred).reduce((n, s) => n + s.t.length, 0);
@@ -133,7 +139,7 @@ test('the bar has the footer’s ends at every width: two cells in, ◆ first, t
 
 test('the bar before the first reply (no cap known), and at rest it holds still while a reply makes it shine', () => {
   const none = { ...U, cap: null, left: null, tier: null, limits: null, pace: { perDay: 33.28, runsOut: null, beforeReset: false } };
-  expect(textOf(usageRow(none, 152, { now: NOW }))).toContain('$66.56 this month · today $56.71 · the cap shows after a reply');
+  expect(textOf(usageRow(none, 152, { now: NOW }))).toMatch(/^◆ \$66\.56 this month {2}─+ {2}today \$56\.71 · the cap shows after a reply$/);
   expect(textOf(usageRow(U, 152, { now: NOW }))).toBe(textOf(usageRow(U, 152, { now: NOW + 777 })));
   const colours = (now, live) => usageRow(U, 152, { now, live }).map((s) => `${s.fg}:${s.t.length}`).join(',');
   expect(colours(NOW, false)).toBe(colours(NOW + 777, false));

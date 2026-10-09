@@ -158,7 +158,7 @@ test('the real window opens on the Menu: tab picks, the arrows move, enter does 
   expect(r.snapshots.menu).toContain('Stop the model');
   expect(r.snapshots.one).toMatch(/❯ {2}1 {2}Add a --since flag/);
   expect(r.snapshots.two).toMatch(/❯ {2}2 {2}Why does toCsv/);
-  expect(r.snapshots.mode).toContain('accept edits on'); // the footer says it too
+  expect(r.snapshots.mode).toContain('⏵⏵ accept edits │'); // the footer says it too
   expect(r.snapshots.launcher).not.toContain('PICK UP');
   expect(r.snapshots.opened).toContain('resumed: Add a --since flag to export.mjs'); // as /resume 1 opens it
   expect(JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')).homeLook).toBe('menu');

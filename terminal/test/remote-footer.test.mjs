@@ -49,8 +49,8 @@ test('a spill onto the CPU: GPU in amber with "rest on CPU", the chart amber too
   expect(gaugesAt(100, spill)).toBe('↓41 tok/s  ctx ▰▰▰▱▱▱▱▱ 38%  GPU ▰▰▰▰▰▰▰▰ 62% rest on CPU');
   expect(row(100, spill).gauges.filter((s) => s.tone === 'warn').map((s) => s.text)).toEqual(['▰▰▰', '62%', ' rest on CPU']);
   expect(gaugeLine({ ...G, gpuPct: 62 }).find((s) => s.text === spark(G.speeds)).tone).toBe('warn');
-  // 56 columns: room for one gauge; the speed normally, GPU while it spills
-  expect([gaugesAt(56), gaugesAt(56, spill)]).toEqual(['↓41 tok/s', 'GPU 62%']);
+  // 53 columns: room for one gauge; the speed normally, GPU while it spills
+  expect([gaugesAt(53), gaugesAt(53, spill)]).toEqual(['↓41 tok/s', 'GPU 62%']);
   expect(dropOrder()).toEqual(['cycle', 'where', 'ttft', 'ctxOf', 'spark', 'short', 'bars', 'gpu', 'ctx', 'speed', 'label']);
   expect(dropOrder(undefined, true).slice(-4)).toEqual(['ctx', 'speed', 'gpu', 'label']);
 });
@@ -69,7 +69,7 @@ test('settings.json footer.remote picks the gauges and their order; a narrow win
   expect(gaugesOf(undefined)).toEqual(['speed', 'ttft', 'ctx', 'gpu']);
   expect(gaugesOf(['CTX', 'speed', 'nope', 'ctx'])).toEqual(['ctx', 'speed']);
   expect(gaugesAt(100, { gaugeList: ['ctx', 'speed'] })).toBe(`ctx ▰▰▰▱▱▱▱▱ 38% of 128k  ↓41 tok/s ${spark(G.speeds)}`);
-  expect(gaugesAt(56, { gaugeList: ['ctx', 'speed'] })).toBe('ctx 38%');
+  expect(gaugesAt(53, { gaugeList: ['ctx', 'speed'] })).toBe('ctx 38%');
   expect(row(100, { gaugeList: [] })).toMatchObject({ left: '? for shortcuts', gauges: null });
 });
 

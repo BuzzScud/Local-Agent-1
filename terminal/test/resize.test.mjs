@@ -89,17 +89,20 @@ test.skipIf(needs('python3'))('text and enter arriving together (a busy app) sti
   } finally { await t.close(); await fake.close(); }
 }, T);
 
-test.skipIf(needs('python3'))('the footer fits narrow windows: the right side drops words, never runs into "? for shortcuts"', async () => {
+test.skipIf(needs('python3'))('the footer fits narrow windows: the right side drops words, never runs into "? for shortcuts"; the mode is its short name at every width', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const t = openTerm({ cwd, cols: 80, rows: 24, env, args: ['--url', fake.url, '--mode', 'edits'] });
   try {
     await t.waitFor('? for shortcuts'); await t.idle();
     const footer = (await t.lines()).map((l) => l.text).find((l) => l.includes('? for shortcuts'));
-    expect(footer).toContain('⏵⏵ accept edits on');
+    expect(footer).toContain('⏵⏵ accept edits │');
     expect(footer).not.toContain('…');
     await settle(t, 155, 43);
-    expect((await t.lines()).map((l) => l.text).find((l) => l.includes('? for shortcuts'))).toContain('(shift+tab to cycle)');
+    // "1 · Tidy" (9 Oct 2026): no "(shift+tab to cycle)" on the footer at any width; the ? list has it
+    const wide = (await t.lines()).map((l) => l.text).find((l) => l.includes('? for shortcuts'));
+    expect(wide).toContain('⏵⏵ accept edits │');
+    expect(wide).not.toContain('shift+tab');
   } finally { await t.close(); await fake.close(); }
 }, T);
 

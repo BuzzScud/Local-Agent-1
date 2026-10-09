@@ -119,7 +119,7 @@ const MAC_ONLY = new Set(['start', 'stop']);
 export const REMOTE_ONLY = new Set(['btw']);
 
 // The / menu: every command but the ones /settings holds. service: on an Ollama service now.
-// room: the rows the menu may take in this window (18 at 80 × 24). side: a side question can be
+// room: the rows the menu may take in this window (19 at 80 × 24). side: a side question can be
 // taken here (a remote, or a server with a second lane). claude: on the Claude API now (/usage).
 export function matchCommands(value, { service = false, room = 18, side = false, remote = false, claude = false } = {}) {
   const m = /^\/(\S*)$/.exec(value);

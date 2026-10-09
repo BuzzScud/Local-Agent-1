@@ -293,17 +293,22 @@ test('the real app: the tip on the page under Try until the first message, the f
 }, T);
 
 // 80 × 24: the small page has no Try rows, so the tip stays on the footer, cut there.
-test('a narrow window cuts a long tip, never the memory beside it', async () => {
+// A tip shows whole or not at all ("1 · Tidy", 9 Oct 2026: a cut tip read "ctrl+b sends this windo…"):
+// in a window too narrow for it "? for shortcuts" stands in, and the memory beside it stays whole.
+test('a narrow window leaves out a tip that does not fit whole, never the memory beside it; a wider one shows it whole', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
-  const r = await runInPty({ cwd, env: { ...env, AGENTIC_TIPS: 'on' }, cols: 80, rows: 24, args: ['--url', fake.url, '--no-flows'], steps: [{ wait: 'Tip: /init' }, { sleep: 400 }, { snapshot: 'narrow' }, { key: 'shiftTab' }, { sleep: 400 }, { snapshot: 'mode' }, ...quit] });
+  const footerOf = (text) => text.split('\n').find((l) => l.includes('● Mac '));
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_TIPS: 'on' }, cols: 80, rows: 24, args: ['--url', fake.url, '--no-flows'], steps: [{ wait: '● Mac ' }, { sleep: 400 }, { snapshot: 'narrow' }, { key: 'shiftTab' }, { wait: '⏵⏵ accept edits │' }, { sleep: 200 }, { snapshot: 'mode' }, ...quit] });
+  const w = await runInPty({ cwd, env: { ...env, AGENTIC_TIPS: 'on' }, cols: 110, rows: 24, args: ['--url', fake.url, '--no-flows'], steps: [{ wait: 'Tip: /init' }, { sleep: 400 }, { snapshot: 'wide' }, ...quit] });
   await fake.close();
   for (const k of ['narrow', 'mode']) {
-    const footer = r.snapshots[k].split('\n').find((l) => l.includes('※ Tip:'));
-    expect(footer).toMatch(/…\s{2,}● Mac \d+\.\d\/\d+ GB/); // the tip ends in …, two spaces, then the memory whole
-    expect(footer.trimEnd().length).toBeLessThanOrEqual(80);
+    const footer = footerOf(r.snapshots[k]);
+    expect(footer).toMatch(/^│ \? for shortcuts\s{2,}● Mac \d+\.\d\/\d+ GB/); // no tip, the memory whole
+    expect(footer).not.toContain('…');
+    expect(footer.trimEnd().length).toBe(80);
   }
-  expect(r.snapshots.mode).toContain('accept edits on');
+  expect(footerOf(w.snapshots.wide)).toContain('※ Tip: /init writes an AGENTS.md with notes about this project  ');
 }, T);
 
 test('a panel opened while the model loads prints the page out of its way: whole, once, above the Starting line', async () => {

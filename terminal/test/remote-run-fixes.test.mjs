@@ -61,11 +61,11 @@ test('the window keeps the mode it is left in, and the next one starts in it wit
   const on = { ...env, AGENTIC_LAST_MODE: 'on' };
   const fake = await startFakeServer([]);
   await runInPty({ cwd, env: on, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/mode bypass' }, { key: 'enter' }, { wait: 'bypass permissions on' }, { sleep: 300 }, ...quit,
+    { wait: '? for shortcuts' }, { type: '/mode bypass' }, { key: 'enter' }, { wait: '⏵⏵ bypass │' }, { sleep: 300 }, ...quit,
   ] });
   expect(JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8')).lastMode).toBe('bypass');
   const r = await runInPty({ cwd, env: on, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'as the last window left it' }, { wait: 'bypass permissions on' }, { key: 'shiftTab' }, { sleep: 300 }, ...quit,
+    { wait: 'as the last window left it' }, { wait: '⏵⏵ bypass │' }, { key: 'shiftTab' }, { sleep: 300 }, ...quit,
   ] });
   await fake.close();
   expect(r.text).toContain('Started in bypass permissions, as the last window left it · shift+tab changes it');
