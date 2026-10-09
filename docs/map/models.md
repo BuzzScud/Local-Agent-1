@@ -9,15 +9,8 @@ Every folder under models/ with a plain line, its main files with a line each (l
 - models/bge-m3/ — Folder for BGE-M3 embedding model files
   - models/bge-m3/model.mjs (32) — Exports configuration settings for the small text embedding model
   - models/bge-m3/README.md (34) — Explains how this model matches requests to saved memory facts
-- models/bonsai-2-27b/ — Holds Bonsai 2 27B model settings and documentation
-  - models/bonsai-2-27b/model.mjs (107) — Defines configuration for the ternary Bonsai 2 27B model
-  - models/bonsai-2-27b/README.md (88) — Bonsai 2 27B Prism ML's ternary Bonsai 2 27B, `Ternary-Bonsai-2-27B-PQ2_0.gguf` (7.21 GB, sha256 `3907dc16…62ec1`), run with Prism's llama.cpp built from sourc…
-- models/bonsai-2-27b-constantkv/ — Bonsai 2 model with fixed memory cache for long context
-  - models/bonsai-2-27b-constantkv/model.mjs (73) — Bonsai 2 model code with constant KV cache logic
   - also: files.json
 - models/evals/ — 4 folders: battle/, bench/, dev/, tools/; 3 files → models--evals.md
-- models/gemma-4-12b/ — Gemma 4 12B model config folder
-  - models/gemma-4-12b/model.mjs (98) — Exports Gemma 4 12B QAT model metadata and performance stats
 - models/k2-horizon-7b/ — Folder for the K2 Horizon 7B text-only language model configuration.
   - models/k2-horizon-7b/model.mjs (74) — Exports default settings and metadata for the open-source K2 Horizon 7B model.
 - models/qwen3-reranker-0.6b/ — Qwen3-Reranker model folder for reordering search results
@@ -32,4 +25,4 @@ Every folder under models/ with a plain line, its main files with a line each (l
   - models/test/record.test.mjs (349) — The test record (models/evals/record.mjs): one line per run, read newest first, never a throw, and the saved copy of the Tests page.
   - models/test/run-a-test.test.mjs (322) — The tests the Arena and /test know by name (models/evals/run-tests.mjs): which practice tasks a run plays (--set 28), the list and the command each starts from…
   - models/test/server.test.mjs (205) — 205 lines
-  - also: agents-check.test.mjs, arena-groups.test.mjs, battle.test.mjs, builder.test.mjs, check-kit.test.mjs, check.test.mjs, components.test.mjs, constantkv-model.test.mjs, constantkv.test.mjs, docs-mirror.test.mjs, edited-check.test.mjs, edited.test.mjs, embed.test.mjs, engines-memory.test.mjs, habits-che… (30 files)
+  - also: agents-check.test.mjs, arena-groups.test.mjs, battle.test.mjs, builder.test.mjs, check-kit.test.mjs, check.test.mjs, components.test.mjs, docs-mirror.test.mjs, edited-check.test.mjs, edited.test.mjs, embed.test.mjs, engines-memory.test.mjs, habits-che… (30 files)

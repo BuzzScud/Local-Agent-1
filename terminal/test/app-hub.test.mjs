@@ -39,7 +39,7 @@ test('/settings → Weights starts the viewer inside the window: the note names 
 test('/docs opens the hub on the harness page and says how many pages the DOCS folder holds', async () => {
   const { cwd, env, base } = setup();
   mkdirSync(join(base, 'home', 'models'), { recursive: true });
-  writeFileSync(join(base, 'home', 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(base, 'home', 'models', 'Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf'), 'stand-in');
   const docs = join(base, 'agentic-coder DOCS'); mkdirSync(docs);
   writeFileSync(join(docs, 'agentic-coder-harness-flow-v2.html'), '<!doctype html><title>Agentic Coder harness v2</title><p>flow');
   writeFileSync(join(docs, 'agentic-coder-structure-v4.html'), '<!doctype html><title>Agentic Coder structure v4</title><p>tree');
@@ -128,9 +128,9 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   const { cwd, env, base } = setup();
   // A saved edited copy: its manifest and both stand-in files.
   const models = join(base, 'home', 'models'); mkdirSync(models, { recursive: true });
-  writeFileSync(join(models, 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
-  writeFileSync(join(models, 'gemma-4-12B-it-qat-UD-Q4_K_XL-edited.gguf'), 'stand-in-edited');
-  writeFileSync(join(models, 'edited.json'), JSON.stringify({ base: 'gemma', file: 'gemma-4-12B-it-qat-UD-Q4_K_XL-edited.gguf', saved: '2026-09-26T14:32:00.000Z', edits: [{ op: 'scale', tensor: 'blk.12.ffn_up.weight', row: 3072, k: 0.5 }] }));
+  writeFileSync(join(models, 'Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(models, 'Qwen3.5-9B-MTP-UD-Q5_K_XL-edited.gguf'), 'stand-in-edited');
+  writeFileSync(join(models, 'edited.json'), JSON.stringify({ base: 'qwen', file: 'Qwen3.5-9B-MTP-UD-Q5_K_XL-edited.gguf', saved: '2026-09-26T14:32:00.000Z', edits: [{ op: 'scale', tensor: 'blk.12.ffn_up.weight', row: 3072, k: 0.5 }] }));
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Pick up where you left off' }, { sleep: 400 }, { snapshot: 'badge' },
@@ -145,7 +145,7 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   ] });
   await fake.close();
   expect(r.snapshots.badge).toContain('✱ edited weights ready · /model to switch');
-  expect(r.snapshots.picker).toContain('Gemma 4 12B QAT · edited');
+  expect(r.snapshots.picker).toContain('Qwen3.5 9B · edited');
   expect(r.snapshots.picker).toContain('1 edit · saved');
   expect(r.snapshots.picker).toContain('✔ in use'); // still on the original here
   // No llama-server in this stand-in home: the switch fails cleanly with a
@@ -157,7 +157,7 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
 test('edited weights, one copy per model: the picker lists each after the models, and picking the second model\'s copy is that model edited', async () => {
   const { cwd, env, base } = setup();
   const models = join(base, 'home', 'models'); mkdirSync(models, { recursive: true });
-  for (const [id, file, edits] of [['gemma', 'gemma-4-12B-it-qat-UD-Q4_K_XL', 1], ['qwen', 'Qwen3.5-9B-MTP-UD-Q5_K_XL', 2]]) {
+  for (const [id, file, edits] of [['qwen', 'Qwen3.5-9B-MTP-UD-Q5_K_XL', 1], ['k2', 'K2-Horizon-7B-Q5_K_M', 2]]) {
     writeFileSync(join(models, `${file}.gguf`), 'stand-in'); writeFileSync(join(models, `${file}-edited.gguf`), 'stand-in-edited');
     writeFileSync(join(models, `edited-${id}.json`), JSON.stringify({ base: id, file: `${file}-edited.gguf`, saved: '2026-09-30T14:32:00.000Z', edits: Array.from({ length: edits }, (_, i) => ({ op: 'scale', tensor: 'blk.0.ffn_up.weight', row: i, k: 0.5 })) }));
   }
@@ -174,11 +174,11 @@ test('edited weights, one copy per model: the picker lists each after the models
   expect(r.snapshots.badge).toContain('✱ edited weights ready · /model to switch');
   // each row: the name, then (after a gap, whatever the name's length) its size and what it is
   const rows = r.snapshots.picker.split('\n').filter((l) => /GB · /.test(l)).map((l) => l.replace(/[❯│]/g, '').trim().split(/\s{2,}/).slice(0, 2).map((x) => x.replace(/saved .*/, 'saved')));
-  // only the models whose file is here (Gemma's and Qwen's stand-ins; K2 Horizon and the Bonsais are not), then each copy
-  expect(rows).toEqual([['Gemma 4 12B QAT', '6.7 GB · on this Mac'], ['Qwen3.5 9B', '6.9 GB · on this Mac'], ['Gemma 4 12B QAT · edited', '0.0 GB · 1 edit · saved'], ['Qwen3.5 9B · edited', '0.0 GB · 2 edits · saved']]);
+  // only the models whose file is here (Qwen's and K2 Horizon's stand-ins), then each copy
+  expect(rows).toEqual([['Qwen3.5 9B', '6.9 GB · on this Mac'], ['K2 Horizon 7B', '6.5 GB · on this Mac'], ['Qwen3.5 9B · edited', '0.0 GB · 1 edit · saved'], ['K2 Horizon 7B · edited', '0.0 GB · 2 edits · saved']]);
   expect(r.snapshots.picker).toContain('1 edit · saved'); expect(r.snapshots.picker).toContain('2 edits · saved');
   expect(r.text).toContain('Could not switch:');
-  expect(r.snapshots.after).toContain('✱ on edited weights (2 edits)'); // Qwen's copy, with Qwen's two edits
+  expect(r.snapshots.after).toContain('✱ on edited weights (2 edits)'); // K2 Horizon's copy, with its two edits
 }, T);
 
 

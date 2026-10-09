@@ -236,7 +236,7 @@ td.best{background:var(--best);color:var(--bestInk);font-weight:700}
 <section id="verdict">
 <h2>Is the design folder working, and who builds the better component?</h2>
 ${verdicts.map((v) => `<p class="lead">${v}</p>`).join('')}
-<p class="lead" id="score">${models.length < 2 ? `<b>The battle</b> needs both models: run the test on ${esc(models[0].id === 'gemma' ? 'Qwen' : 'Gemma')} too.` : '<b>The battle</b> (folder on): <span class="dim">drawn by the page’s script.</span>'}</p>
+<p class="lead" id="score">${models.length < 2 ? `<b>The battle</b> needs both models: run the test on ${esc(models[0].id === 'qwen' ? 'K2' : 'Qwen')} too.` : '<b>The battle</b> (folder on): <span class="dim">drawn by the page’s script.</span>'}</p>
 <div class="chips">${chips.map((c) => `<span class="tag ${c.ok === true ? 'ok' : c.ok === false ? 'bad' : 'idle'}">${c.ok === true ? '✓' : c.ok === false ? '✗' : '·'} ${esc(c.text)}</span>`).join('')}</div>
 ${table}
 <p class="sub">The best cell of a row is marked. A vote is yours: tabs 3 and 4 show the pictures without saying who made them. <button class="linkish" id="clear">Clear my votes</button></p>

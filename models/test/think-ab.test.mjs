@@ -36,30 +36,30 @@ function runs(dir, { oldPass, newPass, oldSecs = 100, newSecs = 100, stepped = (
 }
 
 test('it runs the Practice 28 twice at High, the old way first, each unrecorded', async () => {
-  const r = await run(['--model', 'qwen', '--out', join(HOME, 'dry'), '--dry']);
+  const r = await run(['--model', 'k2', '--out', join(HOME, 'dry'), '--dry']);
   expect(r.code).toBe(0);
   const [old, now] = r.text.trim().split('\n');
   for (const [line, v] of [[old, 'old'], [now, 'new']]) {
     expect(line.startsWith(`${v}: `)).toBe(true);
-    expect(line).toContain('models/evals/bench/run.mjs --model qwen --think on --effort high --set 28');
+    expect(line).toContain('models/evals/bench/run.mjs --model k2 --think on --effort high --set 28');
     expect(line).toContain(`--thinking ${v} --no-record`);
     expect(line).toContain(join(HOME, 'dry', v));
   }
-  const picked = await run(['--model', 'gemma', '--only', '3,5', '--order', 'new,old', '--dry']);
+  const picked = await run(['--model', 'qwen', '--only', '3,5', '--order', 'new,old', '--dry']);
   expect(picked.text.trim().split('\n')[0]).toMatch(/^new: .*--think on --effort high --only 3,5 .*--thinking new --no-record$/);
-  expect((await run(['--model', 'gemma', '--order', 'new,new', '--dry'])).code).toBe(2);
+  expect((await run(['--model', 'qwen', '--order', 'new,new', '--dry'])).code).toBe(2);
 });
 
 test('from two runs: as many passes in at least 15% less time holds; the page names both ways and the tasks that stepped down', async () => {
   const dir = runs(join(HOME, 'holds'), { oldPass: (i) => i < 24, newPass: (i) => i < 24, oldSecs: 100, newSecs: 80, stepped: (i) => i === 27 });
-  const r = await run(['--model', 'gemma', '--from', dir]);
+  const r = await run(['--model', 'qwen', '--from', dir]);
   expect(r.code).toBe(0);
-  expect(r.text).toContain('Thinking old vs new on Gemma 4 12B QAT: old 24 of 28, new 24 of 28 · HOLDS');
+  expect(r.text).toContain('Thinking old vs new on Qwen3.5 9B: old 24 of 28, new 24 of 28 · HOLDS');
   const line = lastLine();
-  expect(line).toMatchObject({ kind: 'tasks', name: 'Thinking old vs new', model: 'gemma', effort: 'high', passed: 24, total: 28, result: 'pass', bar: 'new passes ≥ old, ≥ 15% less time' });
+  expect(line).toMatchObject({ kind: 'tasks', name: 'Thinking old vs new', model: 'qwen', effort: 'high', passed: 24, total: 28, result: 'pass', bar: 'new passes ≥ old, ≥ 15% less time' });
   expect(line.note).toContain('stepped down: 28-task');
   const page = readFileSync(join(DOCS, line.page), 'utf8');
-  expect(line.page).toMatch(/^tests\/agentic-coder-thinking-old-vs-new-gemma-\d{4}-\d\d-\d\d-\d{4}\.html$/);
+  expect(line.page).toMatch(/^tests\/agentic-coder-thinking-old-vs-new-qwen-\d{4}-\d\d-\d\d-\d{4}\.html$/);
   expect(page).toContain('The new way holds.');
   expect(page).toContain('"old":"Old thinking","new":"New thinking"');
   expect(page).toContain('stepped down: 1 task (28-task)');
@@ -68,12 +68,12 @@ test('from two runs: as many passes in at least 15% less time holds; the page na
 
 test('10% less time, or a pass fewer, does not hold', async () => {
   const slow = runs(join(HOME, 'slow'), { oldPass: (i) => i < 24, newPass: (i) => i < 24, oldSecs: 100, newSecs: 90 });
-  const a = await run(['--model', 'qwen', '--from', slow]);
+  const a = await run(['--model', 'k2', '--from', slow]);
   expect(a.text).toContain('DOES NOT HOLD');
   expect(lastLine()).toMatchObject({ result: 'fail' });
   expect(readFileSync(join(DOCS, lastLine().page), 'utf8')).toContain('not 15% faster');
   const worse = runs(join(HOME, 'worse'), { oldPass: (i) => i < 24, newPass: (i) => i < 23, oldSecs: 100, newSecs: 50 });
-  const b = await run(['--model', 'qwen', '--from', worse]);
+  const b = await run(['--model', 'k2', '--from', worse]);
   expect(b.text).toContain('DOES NOT HOLD');
   expect(readFileSync(join(DOCS, lastLine().page), 'utf8')).toContain('fewer passes');
 });

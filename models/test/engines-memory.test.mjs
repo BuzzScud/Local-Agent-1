@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { ENGINES, DEFAULT_ENGINE, ENGINE, SERVER_BIN, engineOf, serverBinOf, MODELS, DEFAULT_MODEL, HOME, modelPath, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER } from '../registry.mjs';
 import { contextCheck, needBytes, freeWithHandBack, freeAfterQuit, loadedBytesOf, searchBytes, appName, topMemoryUsers } from '../runtime/memory.mjs';
 import { otherCopies, serverProcesses } from '../runtime/server.mjs';
-import bonsai from '../bonsai-2-27b/model.mjs';
+import bonsai from './fixtures/bonsai-2-27b.mjs'; // left /model on 9 Oct 2026: test material for a model one engine runs
 
 const gemma = MODELS[DEFAULT_MODEL];
 

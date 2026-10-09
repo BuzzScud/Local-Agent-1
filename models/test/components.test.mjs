@@ -82,7 +82,7 @@ test('part 1: a request passes when it is a page request and an example card fit
 
 test('the rule: a fitting card for every request, carried on every folder-on run, and no more layout problems with the folder on', () => {
   const picks = REQS.map((p) => cardPick(p));
-  const good = saved('gemma', 'Gemma 4 12B QAT', { on: [0, 1, 0], off: [2, 1, 0] });
+  const good = saved('qwen', 'Qwen3.5 9B', { on: [0, 1, 0], off: [2, 1, 0] });
   expect(modelSummary({ picks, runs: good.runs, requests: REQS })).toMatchObject({ on: { runs: 3, made: 3, clean: 2, problems: 1, carried: 3 }, off: { runs: 3, clean: 1, problems: 3, carried: 0 }, both: 3, onBoth: 1, offBoth: 3, working: true });
   // More problems with the folder on: not working.
   const worse = saved('worse', 'Worse', { on: [2, 1, 0], off: [0, 1, 0] });
@@ -98,25 +98,25 @@ test('the rule: a fitting card for every request, carried on every folder-on run
 });
 
 test('the page: the verdict, the card pick, and a blind vote whose pictures name no model', () => {
-  const g = saved('gemma', 'Gemma 4 12B QAT', { on: [0, 1, 0], off: [2, 1, 0] });
-  const q = saved('qwen', 'Qwen3.5 9B', { on: [0, 0, 0], off: [0, 3, null] });
+  const g = saved('qwen', 'Qwen3.5 9B', { on: [0, 1, 0], off: [2, 1, 0] });
+  const q = saved('k2', 'K2 Horizon 7B', { on: [0, 0, 0], off: [0, 3, null] });
   const html = buildBattlePage({ dirs: [g.dir, q.dir], date: '2026-09-30', requests: REQS, rule: RULE });
   expect(html).toContain('<title>UI component battle</title>');
-  expect(html).toContain('<b>Gemma 4 12B QAT</b>: the folder is working.');
-  expect(html).toContain('the folder-on pages have 1 layout problem against 3 with it off');
   expect(html).toContain('<b>Qwen3.5 9B</b>: the folder is working.');
+  expect(html).toContain('the folder-on pages have 1 layout problem against 3 with it off');
+  expect(html).toContain('<b>K2 Horizon 7B</b>: the folder is working.');
   expect(html).toContain('carried, the same cards');
   for (const id of ['verdict', 'pick', 'battle', 'before', 'problems', 'how']) expect(html).toContain(`<section id="${id}"`);
   const data = JSON.parse(/<script type="application\/json" id="data">(.*?)<\/script>/s.exec(html)[1]);
-  expect(data.models.map((m) => m.id)).toEqual(['gemma', 'qwen']);
+  expect(data.models.map((m) => m.id)).toEqual(['k2', 'qwen']);
   // A battle for every request both built with the folder on; before/after where a model has both sides.
   expect(data.battle.map((p) => p.req)).toEqual(['data-card', 'notification', 'media-player']);
-  for (const p of data.battle) expect(p.sides.map((k) => k.split('|')[0]).sort()).toEqual(['gemma', 'qwen']);
+  for (const p of data.battle) expect(p.sides.map((k) => k.split('|')[0]).sort()).toEqual(['k2', 'qwen']);
   expect(data.before).toHaveLength(6);
-  expect(data.runs['qwen|media-player|off']).toMatchObject({ made: false, problems: null, time: true });
-  expect(data.runs['gemma|notification|on']).toMatchObject({ made: true, problems: 1, cards: ['your rules/rules', 'opus/widget'] });
+  expect(data.runs['k2|media-player|off']).toMatchObject({ made: false, problems: null, time: true });
+  expect(data.runs['qwen|notification|on']).toMatchObject({ made: true, problems: 1, cards: ['your rules/rules', 'opus/widget'] });
   // The page a model made rides along for "Try it live", and cannot close the data block early.
-  expect(data.runs['gemma|data-card|on'].html).toContain("<script>document.title='x'</script>");
+  expect(data.runs['qwen|data-card|on'].html).toContain("<script>document.title='x'</script>");
   expect(html.split('</script>')).toHaveLength(3);
   // Which side a model is on changes from request to request, and stays put from build to build.
   expect(buildBattlePage({ dirs: [g.dir, q.dir], date: '2026-09-30', requests: REQS, rule: RULE })).toBe(html);
@@ -125,7 +125,7 @@ test('the page: the verdict, the card pick, and a blind vote whose pictures name
   expect(body).toBe(true);
   // One model alone: the page says the battle needs the other.
   const one = buildBattlePage({ dirs: [q.dir], date: '2026-09-30', requests: REQS, rule: RULE });
-  expect(one).toContain('needs both models: run the test on Gemma too');
+  expect(one).toContain('needs both models: run the test on Qwen too');
   expect(JSON.parse(/id="data">(.*?)<\/script>/s.exec(one)[1]).battle).toEqual([]);
   expect(buildBattlePage({ dirs: [], date: '2026-09-30', requests: REQS, rule: RULE })).toBe(null);
   // No studio part ran: no studio tab, and the table keeps its two columns a model.
@@ -134,8 +134,8 @@ test('the page: the verdict, the card pick, and a blind vote whose pictures name
 });
 
 test('the page with the studio part: a column and a verdict line for it, and its own blind vote against the folder-on page', () => {
-  const g = saved('gemma', 'Gemma 4 12B QAT', { on: [0, 1, 0], off: [2, 1, 0], studio: [0, 0, 1] });
-  const q = saved('qwen', 'Qwen3.5 9B', { on: [0, 0, 0], off: [0, 3, 1], studio: [1, null, 0] });
+  const g = saved('qwen', 'Qwen3.5 9B', { on: [0, 1, 0], off: [2, 1, 0], studio: [0, 0, 1] });
+  const q = saved('k2', 'K2 Horizon 7B', { on: [0, 0, 0], off: [0, 3, 1], studio: [1, null, 0] });
   const picks = REQS.map((p) => cardPick(p));
   // The studio is no part of the folder's rule.
   expect(modelSummary({ picks, runs: g.runs, requests: REQS })).toMatchObject({ working: true, studio: { runs: 3, clean: 2, problems: 1, pieces: 3 }, studioPair: 3, studioBoth: 1, onStudioBoth: 1 });
@@ -149,19 +149,19 @@ test('the page with the studio part: a column and a verdict line for it, and its
   // a pair wherever a model ran both parts, a page made or not (as before and after does)
   expect(data.studio).toHaveLength(6);
   for (const p of data.studio) expect(p.sides.map((k) => k.split('|')[2]).sort()).toEqual(['on', 'studio']);
-  expect(data.runs['gemma|data-card|studio']).toMatchObject({ made: true, problems: 0, cards: ['your rules/rules', 'studio/cards/stat-card'] });
+  expect(data.runs['qwen|data-card|studio']).toMatchObject({ made: true, problems: 0, cards: ['your rules/rules', 'studio/cards/stat-card'] });
   expect(buildBattlePage({ dirs: [g.dir, q.dir], date: '2026-09-30', requests: REQS, rule: RULE })).toBe(html);
 });
 
 test('the hub can run it: one model a run, four lines a request, thinking as asked', () => {
-  const models = ['gemma', 'qwen'];
+  const models = ['qwen', 'k2'];
   const t = runTestById('components');
   expect(t).toMatchObject({ name: 'UI component battle', model: true, think: true });
   expect(componentLines()).toBe(REQS.length * 4);
-  const c = runCommand('components', { model: 'qwen', think: true, models });
-  expect(c.argv).toEqual(['models/evals/bench/design/components.mjs', '--model', 'qwen', '--think', 'on']);
+  const c = runCommand('components', { model: 'k2', think: true, models });
+  expect(c.argv).toEqual(['models/evals/bench/design/components.mjs', '--model', 'k2', '--think', 'on']);
   expect(c.total).toBe(12);
-  expect(runCommand('components', { model: 'gemma', models }).argv.slice(-2)).toEqual(['--think', 'off']);
+  expect(runCommand('components', { model: 'qwen', models }).argv.slice(-2)).toEqual(['--think', 'off']);
   expect(runCatalog(models).find((x) => x.id === 'components').total).toBe(12);
   expect(findRunTest('components')?.id).toBe('components');
   expect(findRunTest('ui component battle')?.id).toBe('components');
@@ -170,38 +170,38 @@ test('the hub can run it: one model a run, four lines a request, thinking as ask
 });
 
 test('--dry: the card pick, then the one run of the parts, the folder on first and the studio last', async () => {
-  const r = await run(['--model', 'qwen', '--think', 'on', '--dry']);
+  const r = await run(['--model', 'k2', '--think', 'on', '--dry']);
   expect(r.code).toBe(0);
   const lines = r.text.trim().split('\n');
-  expect(lines[0]).toBe('UI component battle on Qwen3.5 9B, thinking at High: 3 requests, four parts');
+  expect(lines[0]).toBe('UI component battle on K2 Horizon 7B, thinking at High: 3 requests, four parts');
   expect(lines.filter((l) => l.startsWith('PASS card pick · '))).toHaveLength(3);
   // part 1 also says which studio pieces each request gets
   expect(lines.find((l) => l.includes('· data-card ·'))).toMatch(/ · studio: cards\/stat-card$/);
-  expect(lines.at(-1)).toMatch(/^parts 2 to 4: .*models\/evals\/bench\/design\/run\.mjs --model qwen --set components --arms full,today,studio --pages data-card,notification,media-player --effort high --minutes 10 --out /);
-  const picked = await run(['--model', 'gemma', '--only', '2', '--order', 'off,on', '--minutes', '6', '--dry']);
+  expect(lines.at(-1)).toMatch(/^parts 2 to 4: .*models\/evals\/bench\/design\/run\.mjs --model k2 --set components --arms full,today,studio --pages data-card,notification,media-player --effort high --minutes 10 --out /);
+  const picked = await run(['--model', 'qwen', '--only', '2', '--order', 'off,on', '--minutes', '6', '--dry']);
   expect(picked.text).toContain('three parts');
   expect(picked.text).toMatch(/--arms today,full --pages notification --effort low --minutes 6 /);
   // No studio folder: the studio part refuses, and --order on,off runs without it.
-  const bare = await run(['--model', 'gemma', '--dry'], { AGENTIC_STUDIO_DIR: join(HOME, 'nowhere') });
+  const bare = await run(['--model', 'qwen', '--dry'], { AGENTIC_STUDIO_DIR: join(HOME, 'nowhere') });
   expect(bare.code).toBe(6); expect(bare.text).toContain('the "design studio" folder is missing or has no pieces');
-  expect((await run(['--model', 'gemma', '--order', 'on,off', '--dry'], { AGENTIC_STUDIO_DIR: join(HOME, 'nowhere') })).code).toBe(0);
-  expect((await run(['--model', 'gemma', '--order', 'on,off,cards', '--dry'])).code).toBe(2);
-  expect((await run(['--model', 'gemma', '--order', 'on,on', '--dry'])).code).toBe(2);
-  expect((await run(['--model', 'gemma', '--only', '9', '--dry'])).code).toBe(2);
+  expect((await run(['--model', 'qwen', '--order', 'on,off', '--dry'], { AGENTIC_STUDIO_DIR: join(HOME, 'nowhere') })).code).toBe(0);
+  expect((await run(['--model', 'qwen', '--order', 'on,off,cards', '--dry'])).code).toBe(2);
+  expect((await run(['--model', 'qwen', '--order', 'on,on', '--dry'])).code).toBe(2);
+  expect((await run(['--model', 'qwen', '--only', '9', '--dry'])).code).toBe(2);
   // No design folder: it refuses before anything else.
-  const none = await run(['--model', 'gemma', '--dry'], { AGENTIC_DESIGN_DIR: join(HOME, 'nowhere') });
+  const none = await run(['--model', 'qwen', '--dry'], { AGENTIC_DESIGN_DIR: join(HOME, 'nowhere') });
   expect(none.code).toBe(6); expect(none.text).toContain('the "design examples" folder is missing or empty');
 });
 
 test('--page-only: the page of a day again, in the DOCS folder', async () => {
   const home = join(HOME, 'repo');
-  const dir = join(home, 'models', 'qwen3.5-9b', 'results', RESULTS('2026-09-30'));
+  const dir = join(home, 'models', 'k23.5-9b', 'results', RESULTS('2026-09-30'));
   mkdirSync(dir, { recursive: true });
-  const q = saved('qwen', 'Qwen3.5 9B', { on: [0, 0, 0], off: [0, 3, 1] });
+  const q = saved('k2', 'K2 Horizon 7B', { on: [0, 0, 0], off: [0, 3, 1] });
   writeFileSync(join(dir, 'runs.json'), readFileSync(join(q.dir, 'runs.json')));
   writeFileSync(join(dir, 'pick.json'), readFileSync(join(q.dir, 'pick.json')));
   const r = await run(['--page-only', '--date', '2026-09-30'], { AGENTIC_REPO: home, AGENTIC_DOCS: DOCS });
   expect(r.text.trim()).toBe(`results page: ${PAGE('2026-09-30')}`);
-  expect(readFileSync(join(DOCS, PAGE('2026-09-30')), 'utf8')).toContain('<b>Qwen3.5 9B</b>: the folder is working.');
+  expect(readFileSync(join(DOCS, PAGE('2026-09-30')), 'utf8')).toContain('<b>K2 Horizon 7B</b>: the folder is working.');
   expect((await run(['--page-only', '--date', '2026-01-01'], { AGENTIC_REPO: home, AGENTIC_DOCS: DOCS })).text.trim()).toBe('nothing saved for that date yet');
 });

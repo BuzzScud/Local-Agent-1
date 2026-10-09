@@ -36,27 +36,27 @@ function runs(dir, { appPass, modelPass, appSecs = 100, modelSecs = 100 }) {
 }
 
 test('it runs the Practice 28 twice, the app deciding first, each unrecorded, thinking as the Arena says', async () => {
-  const r = await run(['--model', 'qwen', '--out', join(HOME, 'dry'), '--dry']);
+  const r = await run(['--model', 'k2', '--out', join(HOME, 'dry'), '--dry']);
   expect(r.code).toBe(0);
   const [app, model] = r.text.trim().split('\n');
   for (const [line, w] of [[app, 'app'], [model, 'model']]) {
     expect(line.startsWith(`${w}: `)).toBe(true);
-    expect(line).toContain('models/evals/bench/run.mjs --model qwen --think off --set 28');
+    expect(line).toContain('models/evals/bench/run.mjs --model k2 --think off --set 28');
     expect(line).toContain(`--way ${w} --no-record`);
     expect(line).toContain(join(HOME, 'dry', w));
   }
-  const high = await run(['--model', 'gemma', '--think', 'on', '--only', '7', '--order', 'model,app', '--dry']);
+  const high = await run(['--model', 'qwen', '--think', 'on', '--only', '7', '--order', 'model,app', '--dry']);
   expect(high.text.trim().split('\n')[0]).toMatch(/^model: .*--think on --effort high --only 7 .*--way model --no-record$/);
-  expect((await run(['--model', 'gemma', '--order', 'app,app', '--dry'])).code).toBe(2);
+  expect((await run(['--model', 'qwen', '--order', 'app,app', '--dry'])).code).toBe(2);
 });
 
 test('from two runs: as many passes in at most 25% more time holds; the page and the record line say so', async () => {
   const dir = runs(join(HOME, 'holds'), { appPass: (i) => i < 22, modelPass: (i) => i < 23, appSecs: 100, modelSecs: 120 });
-  const r = await run(['--model', 'qwen', '--from', dir]);
+  const r = await run(['--model', 'k2', '--from', dir]);
   expect(r.code).toBe(0);
-  expect(r.text).toContain('Who decides on Qwen3.5 9B: app 22 of 28, model 23 of 28 · HOLDS');
+  expect(r.text).toContain('Who decides on K2 Horizon 7B: app 22 of 28, model 23 of 28 · HOLDS');
   const line = lastLine();
-  expect(line).toMatchObject({ kind: 'tasks', name: 'Who decides: App vs Model', model: 'qwen', effort: 'low', passed: 23, total: 28, result: 'pass', bar: 'model passes ≥ app, ≤ 25% more time' });
+  expect(line).toMatchObject({ kind: 'tasks', name: 'Who decides: App vs Model', model: 'k2', effort: 'low', passed: 23, total: 28, result: 'pass', bar: 'model passes ≥ app, ≤ 25% more time' });
   expect(line.note).toContain('fixed: 23-task');
   expect(existsSync(join(DOCS, line.page))).toBe(true);
   const page = readFileSync(join(DOCS, line.page), 'utf8');
@@ -66,15 +66,15 @@ test('from two runs: as many passes in at most 25% more time holds; the page and
 });
 
 test('fewer passes, or more than 25% more time, does not hold', async () => {
-  const fewer = await run(['--model', 'qwen', '--no-record', '--from', runs(join(HOME, 'fewer'), { appPass: (i) => i < 22, modelPass: (i) => i < 21 })]);
+  const fewer = await run(['--model', 'k2', '--no-record', '--from', runs(join(HOME, 'fewer'), { appPass: (i) => i < 22, modelPass: (i) => i < 21 })]);
   expect(fewer.text).toContain('app 22 of 28, model 21 of 28 · DOES NOT HOLD');
-  const slow = await run(['--model', 'qwen', '--no-record', '--from', runs(join(HOME, 'slow'), { appPass: () => true, modelPass: () => true, appSecs: 100, modelSecs: 130 })]);
+  const slow = await run(['--model', 'k2', '--no-record', '--from', runs(join(HOME, 'slow'), { appPass: () => true, modelPass: () => true, appSecs: 100, modelSecs: 130 })]);
   expect(slow.text).toContain('· DOES NOT HOLD');
 });
 
 test('the Arena lists it, runs it with the Thinking switch, and its panel can set Who decides for any run', () => {
   const t = RUN_TESTS.find((x) => x.id === 'way');
   expect(t).toMatchObject({ name: 'Who decides: App vs Model', model: true, think: true, total: 56, script: 'models/evals/tools/way-ab.mjs', record: { kind: 'tasks', name: '^Who decides: App vs Model$', part: false } });
-  expect(runCommand('way', { model: 'gemma', models: ['gemma', 'qwen'], think: true }).argv).toEqual(['models/evals/tools/way-ab.mjs', '--model', 'gemma', '--think', 'on']);
+  expect(runCommand('way', { model: 'qwen', models: ['qwen', 'k2'], think: true }).argv).toEqual(['models/evals/tools/way-ab.mjs', '--model', 'qwen', '--think', 'on']);
   expect(cleanSettings({ way: 'model', tries: 4 })).toEqual({ way: 'model', tries: 4 });
 });

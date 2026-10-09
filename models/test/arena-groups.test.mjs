@@ -31,7 +31,7 @@ afterAll(() => { try { runner?.kill('SIGTERM'); } catch {} });
 test('a press of ▶ Run is one group: named, its runs carry it, and its results come back by it', async () => {
   const st = (await get('/api/state')).body;
   const [t1, t2] = st.tests.filter((t) => t.suite === 'practice').slice(0, 2);
-  const r = await post('/api/line', { name: 'Two practice tests and the unit tests', items: [{ kind: 'test', id: t1.id, who: 'gemma', think: true, settings: { tries: 4 } }, { kind: 'test', id: t2.id, who: 'gemma', think: true, settings: { tries: 4 } }, { kind: 'check', id: 'unit' }] });
+  const r = await post('/api/line', { name: 'Two practice tests and the unit tests', items: [{ kind: 'test', id: t1.id, who: 'qwen', think: true, settings: { tries: 4 } }, { kind: 'test', id: t2.id, who: 'qwen', think: true, settings: { tries: 4 } }, { kind: 'check', id: 'unit' }] });
   expect(r.body).toMatchObject({ ok: true, added: 3 });
   const id = r.body.batch;
   expect(id).toBeTruthy();
@@ -41,11 +41,11 @@ test('a press of ▶ Run is one group: named, its runs carry it, and its results
   expect(live.batch).toBe(id);
   await idle();
   const b = (await get(`/api/batch?id=${id}`)).body;
-  expect(b).toMatchObject({ id, name: 'Two practice tests and the unit tests', who: 'gemma', think: true, settings: { tries: 4 }, count: 3, done: 3, waiting: 0, status: 'done' });
+  expect(b).toMatchObject({ id, name: 'Two practice tests and the unit tests', who: 'qwen', think: true, settings: { tries: 4 }, count: 3, done: 3, waiting: 0, status: 'done' });
   expect(b.items.map((x) => [x.kind, x.test, x.state])).toEqual([['test', t1.id, 'done'], ['test', t2.id, 'done'], ['check', 'unit', 'done']]);
   // A run on one model is named; each test's run is the one this press made (its own folder, its group).
   const [a1, a2, c] = b.items;
-  expect(a1).toMatchObject({ mode: 'solo', order: { A: 'gemma' } });
+  expect(a1).toMatchObject({ mode: 'solo', order: { A: 'qwen' } });
   expect(typeof a1.runs.A.secs).toBe('number');
   expect(a1.match).not.toBe(a2.match);
   const m = (await get(`/api/match?id=${encodeURIComponent(a1.match)}`)).body;
@@ -58,7 +58,7 @@ test('a press of ▶ Run is one group: named, its runs carry it, and its results
   await idle();
   const list = (await get('/api/batches')).body.batches;
   expect(list.map((x) => x.id)).toEqual([second.body.batch, id]);
-  expect(list[0]).toMatchObject({ name: t1.title, who: 'both', vs: ['gemma', 'qwen'], count: 1, done: 1 });
+  expect(list[0]).toMatchObject({ name: t1.title, who: 'both', vs: ['qwen', 'k2'], count: 1, done: 1 });
   expect(list[0].items).toBeUndefined();
   // A battle in a group keeps its names hidden until the vote.
   const bat = (await get(`/api/batch?id=${second.body.batch}`)).body.items[0];
@@ -69,7 +69,7 @@ test('a press of ▶ Run is one group: named, its runs carry it, and its results
 test('a group cut short: what never ran shows as waiting while it waits, then left out; Clear all results clears the groups', async () => {
   await idle();
   const st = (await get('/api/state')).body;
-  const r = await post('/api/line', { name: 'Practice 28', items: [{ kind: 'set', id: 'practice', who: 'qwen' }] });
+  const r = await post('/api/line', { name: 'Practice 28', items: [{ kind: 'set', id: 'practice', who: 'k2' }] });
   expect(r.body.added).toBeGreaterThan(5);
   await until(async () => (await get('/api/state')).body.running?.batch === r.body.batch);
   expect((await post('/api/stop', {})).status).toBe(200);

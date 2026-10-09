@@ -12,7 +12,7 @@ import { createServer } from 'node:http';
 
 const repo = join(import.meta.dir, '..', '..');
 const SCRIPT = join(repo, 'models', 'evals', 'tools', 'edited-check.mjs');
-const COPY = 'gemma-4-12B-it-qat-UD-Q4_K_XL-edited.gguf';
+const COPY = 'Qwen3.5-9B-MTP-UD-Q5_K_XL-edited.gguf';
 
 // A GGUF with a word list and one tensor: all the check reads from the copy.
 function gguf(kv, tensors) {
@@ -29,8 +29,8 @@ function gguf(kv, tensors) {
 }
 function home({ edits }) {
   const h = mkdtempSync(join(tmpdir(), 'agentic-edited-check-')); const models = join(h, 'models'); mkdirSync(models, { recursive: true }); mkdirSync(join(h, 'docs', 'tests'), { recursive: true });
-  writeFileSync(join(models, COPY), gguf([['general.architecture', 8, 'gemma4'], ['tokenizer.ggml.model', 8, 'llama'], ['tokenizer.ggml.tokens', 9, { type: 8, items: ['<pad>', '▁king', '▁queen', '<start_of_turn>'] }], ['tokenizer.ggml.token_type', 9, { type: 5, items: [3, 1, 1, 3] }]], [{ name: 'token_embd.weight', dims: [4, 4], type: 0, data: Buffer.alloc(64) }]));
-  if (edits) writeFileSync(join(models, 'edited-gemma.json'), JSON.stringify({ base: 'gemma', file: COPY, saved: '2026-09-30T15:00:00.000Z', edits }));
+  writeFileSync(join(models, COPY), gguf([['general.architecture', 8, 'qwen4'], ['tokenizer.ggml.model', 8, 'llama'], ['tokenizer.ggml.tokens', 9, { type: 8, items: ['<pad>', '▁king', '▁queen', '<start_of_turn>'] }], ['tokenizer.ggml.token_type', 9, { type: 5, items: [3, 1, 1, 3] }]], [{ name: 'token_embd.weight', dims: [4, 4], type: 0, data: Buffer.alloc(64) }]));
+  if (edits) writeFileSync(join(models, 'edited-qwen.json'), JSON.stringify({ base: 'qwen', file: COPY, saved: '2026-09-30T15:00:00.000Z', edits }));
   return h;
 }
 // A stand-in llama-server: `answer(question)` is what it says.
@@ -45,7 +45,7 @@ function run(h, extra) {
     // under NO_COLOR, and this passed FORCE_COLOR: ''), node warns on stderr, which must stay empty.
     const env = { ...process.env, AGENTIC_HOME: h, AGENTIC_DOCS: join(h, 'docs'), AGENTIC_TEST_RECORD: join(h, 'record.jsonl') };
     for (const k of ['FORCE_COLOR', 'NO_COLOR']) delete env[k];
-    const c = spawn('node', [SCRIPT, '--model', 'gemma', '--out', join(h, 'raw'), ...extra], { env, cwd: repo });
+    const c = spawn('node', [SCRIPT, '--model', 'qwen', '--out', join(h, 'raw'), ...extra], { env, cwd: repo });
     let out = '', err = ''; c.stdout.on('data', (d) => { out += d; }); c.stderr.on('data', (d) => { err += d; }); c.on('exit', (code) => resolve({ code, out, err }));
   });
 }
@@ -67,9 +67,9 @@ test('the copy losing a fixed question fails the run; your words are asked and s
     const s = JSON.parse(readFileSync(join(h, 'raw', 'summary.json'), 'utf8'));
     expect([s.original, s.edited, s.lost, s.words, s.wordsOriginal, s.wordsEdited, s.pass, s.stopped]).toEqual([6, 5, 1, 3, 2, 1, false, false]);
     const rec = readFileSync(join(h, 'record.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).pop();
-    expect([rec.kind, rec.name, rec.model, rec.passed, rec.total, rec.result, rec.part]).toEqual(['other', 'Edited copy vs original', 'gemma', 5, 6, 'fail', false]);
+    expect([rec.kind, rec.name, rec.model, rec.passed, rec.total, rec.result, rec.part]).toEqual(['other', 'Edited copy vs original', 'qwen', 5, 6, 'fail', false]);
     expect(rec.note).toContain('Writing 40.0 → 39.5 tokens a second');
-    const pages = readdirSync(join(h, 'docs', 'tests')).filter((f) => f.startsWith('agentic-coder-edited-copy-check-gemma-'));
+    const pages = readdirSync(join(h, 'docs', 'tests')).filter((f) => f.startsWith('agentic-coder-edited-copy-check-qwen-'));
     expect(pages.length).toBe(1); expect(rec.page).toBe(`tests/${pages[0]}`);
     const html = readFileSync(join(h, 'docs', 'tests', pages[0]), 'utf8');
     for (const t of ['The copy lost 1 of the fixed questions', 'word table · “ king” off', 'word table · “ queen” ⇄ “&lt;start_of_turn&gt;”', 'ffn_up · layer 0 · row 0 ×2', '<meta charset="utf-8">', 'Kyoto']) expect(html).toContain(t);
@@ -85,5 +85,5 @@ test('the same answers pass; with no edited copy it says what to do and runs not
     expect(existsSync(join(h, 'record.jsonl'))).toBe(false); expect(readdirSync(join(h, 'docs', 'tests'))).toEqual([]);
   } finally { a.s.close(); b.s.close(); }
   const none = await run(home({ edits: null }), []);
-  expect(none.code).toBe(2); expect(none.err).toContain('Gemma 4 12B QAT has no edited copy on this Mac: make one on the Weights tab (Save the copy)');
+  expect(none.code).toBe(2); expect(none.err).toContain('Qwen3.5 9B has no edited copy on this Mac: make one on the Weights tab (Save the copy)');
 }, 30000);

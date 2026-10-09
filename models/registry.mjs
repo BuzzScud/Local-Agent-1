@@ -48,21 +48,17 @@ export const DEFAULT_PORT = 17600;
 
 // One entry per model folder. To add a model: make models/<name>/model.mjs
 // (copy this model's as a start), import it here, and add it to the list.
-// Bonsai 2 27B left the list on 28 Sep 2026 (its file removed to free the
-// disk) and came back on 1 Oct 2026; `coding setup --model bonsai` fetches it.
-import gemma4_12b from './gemma-4-12b/model.mjs';
+// Bonsai 2 27B, Bonsai 2 27B ConstantKV and Gemma 4 12B left the list on
+// 9 Oct 2026, their folders with them.
 import qwen35_9b from './qwen3.5-9b/model.mjs';
 import k2Horizon7b from './k2-horizon-7b/model.mjs';
-import bonsai2_27b from './bonsai-2-27b/model.mjs';
-// Bonsai 2 27B ConstantKV joined on 1 Oct 2026, beside Bonsai: the same weights on MLX, a memory that does not grow.
-import bonsai2_27bConstantKV from './bonsai-2-27b-constantkv/model.mjs';
 
-const ALL = [gemma4_12b, qwen35_9b, k2Horizon7b, bonsai2_27b, bonsai2_27bConstantKV];
+const ALL = [qwen35_9b, k2Horizon7b];
 export const MODELS = Object.fromEntries(ALL.map((m) => [m.id, m]));
 
 // Qwen3.5 9B since 30 Sep 2026: with thinking on it passed 24 of 24 practice
 // tasks in 1 h 53 m where Gemma passed 22 in 3 h 49 m, and it reads 190 tokens/s
-// to Gemma's 127 (the prompt test and the speed probe). Gemma stays in /model.
+// to Gemma's 127 (the prompt test and the speed probe).
 export const DEFAULT_MODEL = 'qwen';
 // The default model's engine and its server: what `coding setup`, the version
 // check and the dev tools use.
