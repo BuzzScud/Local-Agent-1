@@ -12,7 +12,7 @@ import { filesMade, madeNote } from './made.mjs';
 import { commandWithScripts, inScripts } from './scripts.mjs';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { isCodeProject, runKind } from '../flows/index.mjs';
-import { changedNote, changesText } from './seen.mjs';
+import { changedNote, changesText, printedFiles } from './seen.mjs';
 import { toolInput } from './user-hooks.mjs';
 import { copyNote, keepOwnCopy } from './self.mjs';
 import { readResults, testsFailed } from '../flows/results.mjs';
@@ -620,6 +620,8 @@ export class StepPart {
     if (this.turn && call.name === 'Bash') this.turn.ranCommand = true;
     // A long script it typed in is saved as SCRIPTS/… (scripts.mjs): it has seen it, so Edit may change it.
     if (call.name === 'Bash' && out.saved?.abs) this.readFiles.add(out.saved.abs);
+    // A file it printed with cat, sed -n, head… it has seen too (seen.mjs printedFiles).
+    if (call.name === 'Bash' && !out.error && out.view?.kind === 'bash' && !out.view.timedOut) for (const abs of printedFiles(args.command, this.cwd)) this.readFiles.add(abs);
     // The files a command wrote (made.mjs): said in its result, kept for the page checks and the second look.
     if (this.turn && call.name === 'Bash' && out.view?.kind === 'bash' && !out.view.timedOut && !isReadOnly(args.command)) {
       let made = [];

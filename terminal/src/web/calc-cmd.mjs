@@ -112,8 +112,10 @@ export async function calcCommand(argv, { out = (s) => process.stdout.write(`${s
   const leave = () => setTimeout(() => { out('calc link: the settings say it runs inside the web now, so the service stops'); host?.stop(); process.exit(0); }, 0);
   host = linkHost({ where: 'service', log: (s) => out(`${new Date().toISOString()} ${s}`), onLeave: leave });
   out(`${new Date().toISOString()} calc link: the background service started (pid ${process.pid})`);
-  const stop = () => { host.stop(); process.exit(0); };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
+  // Said in the log, so a start and a stop a second apart read as the service switched off (setWhere's
+  // bootout sends SIGTERM), not as a crash (9 Oct 2026: two "Stopped (stopped)" lines looked like one).
+  const stop = (sig) => { out(`${new Date().toISOString()} calc link: the service was told to stop (${sig}: /calc off, coding calc off or launchctl)`); host.stop(); process.exit(0); };
+  process.on('SIGINT', () => stop('SIGINT'));
+  process.on('SIGTERM', () => stop('SIGTERM'));
   await new Promise(() => {});
 }

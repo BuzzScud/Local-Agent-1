@@ -3,7 +3,7 @@
 // notes and the code search each look the same words up).
 import { test, expect } from 'bun:test';
 import { createServer } from 'node:http';
-import { Embedder } from '../index.mjs';
+import { Embedder, EMBEDDERS, DEFAULT_EMBEDDER } from '../index.mjs';
 
 function fakeEmbeddings() {
   const asked = [];
@@ -32,4 +32,10 @@ test('a text asked for again comes from the cache: only new texts go to the serv
   await e.embed(Array.from({ length: 20 }, (_, i) => `text ${i}`));
   expect(fake.asked.slice(2).map((x) => x.length)).toEqual([16, 4]);
   await fake.close();
+});
+
+test('with too little memory free the embedder does not start and says why', async () => {
+  // A file name no running server has, so one loaded by another window is not shared.
+  const m = { ...EMBEDDERS[DEFAULT_EMBEDDER], file: 'not-loaded-anywhere.gguf' };
+  await expect(new Embedder(m).start({ free: () => 0.5e9 })).rejects.toThrow('only 0.5 GB of memory is free and it needs about 1.1 GB');
 });

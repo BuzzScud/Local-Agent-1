@@ -374,7 +374,17 @@ export class WorkPart {
     let leakBacks = 0; // a reply that was only thinking written out as text, sent back (twice at most)
     let mcpBacks = 0; // a request about an MCP server's data, answered with no MCP tool tried (MCP_BACKS)
     try {
-      for (let step = 0; step < this.maxSteps; step++) {
+      // The step limit (/effort's Steps): reached with the work not done, it asks you whether to keep
+      // going (as many steps again) when someone can answer; else it stops, as before.
+      let stepLimit = this.maxSteps || Infinity; // 0: no limit, as /effort's Steps
+      for (let step = 0; ; step++) {
+        if (step >= stepLimit) {
+          const more = this.checkIns && typeof this.ask === 'function' && !this.isHelper ? await this.limitAsk(step, signal) : null;
+          if (more?.stop === 'interrupted') { reason = 'interrupted'; break; }
+          if (!more?.more) { reason = 'limit'; this.emit('note', { text: `Stopped after ${step} steps (/effort moves this).`, tone: 'warn' }); break; }
+          stepLimit += this.maxSteps || Infinity;
+          if (more.text) this.messages.push({ role: 'user', content: more.text });
+        }
         if (signal?.aborted) { reason = 'interrupted'; break; }
         // Its profile first (profile-router.mjs): a change made since the last step moves it here.
         await this.followProfile();
@@ -1031,7 +1041,6 @@ export class WorkPart {
           if (s2?.text) { repeats = 0; repeatKey = null; errorsInRow = 0; }
         }
         if (repeats === askAt) this.messages.push({ role: 'user', content: auto(SAME_STEP) });
-        if (step === this.maxSteps - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${this.maxSteps} steps (/effort moves this).`, tone: 'warn' }); }
       }
     } catch (e) {
       if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
