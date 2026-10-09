@@ -6,8 +6,8 @@
 // longer read as rules (30 Sep 2026: only AGENTS.md and CLAUDE.md are, in
 // projectNotes in prompt.mjs), and nothing writes it any more: with the memory
 // off, nothing is saved. memoryFile still names it: the memory's folders sit beside it.
-import { existsSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join, dirname, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 
 // A message that asks to save to memory. Only whole requests count, so "update
@@ -20,13 +20,29 @@ const ASKS = [
 ];
 export const isMemoryRequest = (text) => ASKS.some((re) => re.test(String(text).trim()));
 
+// A git worktree's .git is a file ("gitdir: <main>/.git/worktrees/<name>")
+// whose folder has a commondir file pointing at the main .git: the worktree
+// shares the main folder's memory, as Claude Code's does. A submodule's gitdir
+// has no commondir and stays its own project; anything unreadable stays here.
+function mainFolder(dir) {
+  const git = join(dir, '.git');
+  try {
+    if (!statSync(git).isFile()) return dir;
+    const line = readFileSync(git, 'utf8').match(/^gitdir:\s*(.+?)\s*$/m);
+    if (!line) return dir;
+    const gitdir = resolve(dir, line[1]);
+    const common = resolve(gitdir, readFileSync(join(gitdir, 'commondir'), 'utf8').trim());
+    return basename(common) === '.git' && existsSync(common) ? dirname(common) : dir;
+  } catch { return dir; }
+}
+
 // Where the memory lives for a folder.
 export function memoryFile(cwd, home = homedir()) {
   const at = resolve(cwd);
   if (at === resolve(home)) return join(home, '.agentic', 'notes.md');
   let dir = at;
   for (let i = 0; i < 12; i++) {
-    if (existsSync(join(dir, '.git'))) return join(dir, '.agentic', 'notes.md');
+    if (existsSync(join(dir, '.git'))) return join(mainFolder(dir), '.agentic', 'notes.md');
     const up = dirname(dir);
     if (up === dir || dir === resolve(home)) break;
     dir = up;

@@ -27,6 +27,25 @@ test('the right file: the home folder\'s, the git repo\'s top, or the folder its
   expect(memoryFile(plain, home)).toBe(join(plain, '.agentic', 'notes.md'));
 });
 
+test('a git worktree shares the main folder\'s memory; a submodule keeps its own', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-mem-wt-'));
+  const main = join(home, 'main'); const wtGit = join(main, '.git', 'worktrees', 'feature');
+  mkdirSync(wtGit, { recursive: true }); writeFileSync(join(wtGit, 'commondir'), '../..\n');
+  const wt = join(home, 'worktrees', 'feature'); mkdirSync(join(wt, 'src'), { recursive: true });
+  writeFileSync(join(wt, '.git'), `gitdir: ${wtGit}\n`);
+  expect(memoryFile(join(wt, 'src'), home)).toBe(join(main, '.agentic', 'notes.md'));
+  // a relative gitdir line, as git writes with worktree.useRelativePaths
+  writeFileSync(join(wt, '.git'), 'gitdir: ../../main/.git/worktrees/feature\n');
+  expect(memoryFile(wt, home)).toBe(join(main, '.agentic', 'notes.md'));
+  // the main folder gone (pointer left behind): the worktree's own folder
+  writeFileSync(join(wt, '.git'), `gitdir: ${join(home, 'gone', '.git', 'worktrees', 'feature')}\n`);
+  expect(memoryFile(wt, home)).toBe(join(wt, '.agentic', 'notes.md'));
+  // a submodule: gitdir in the parent's .git/modules, no commondir
+  const modGit = join(main, '.git', 'modules', 'lib'); mkdirSync(modGit, { recursive: true });
+  const sub = join(main, 'lib'); mkdirSync(sub); writeFileSync(join(sub, '.git'), 'gitdir: ../.git/modules/lib\n');
+  expect(memoryFile(sub, home)).toBe(join(sub, '.agentic', 'notes.md'));
+});
+
 test('the digest: what was said, without tool output', () => {
   expect(digest([{ role: 'user', content: 'hi' }, { role: 'tool', content: 'x' }, { role: 'assistant', content: 'Hello' }])).toBe('User: hi\nAgentic Coder: Hello');
 });
