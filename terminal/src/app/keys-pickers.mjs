@@ -234,6 +234,8 @@ export function pickerKeysPart(self) {
       self.setPicker(null);
       if (pk.id === 'memory-save') { self.applyChoice('memory-save', 'skip'); return; }
       if (pk.id === 'remote-saved') { self.applyChoice('remote-saved', 'later'); return; }
+      if (pk.id === 'remote-scope') { self.applyChoice('remote-scope', 'later'); return; }
+      if (pk.id === 'start-where') { self.applyChoice('start-where', 'main'); return; }
       // The message with the picture was not sent: it goes back into the prompt.
       if (pk.id === 'vision-switch') {
         const wait = self.visionWaitRef.current;

@@ -121,6 +121,20 @@ export function panelsSettings(self, own) {
       else self.remoteTo(a.source);
       return;
     }
+    if (id === 'remote-scope') {
+      const r = self.remoteRef.current.pendingScope;
+      self.remoteRef.current.pendingScope = null;
+      if (!r) return;
+      if (value !== 'window' && value !== 'all') { self.push({ type: 'note', text: `Not connected: still on ${self.model.remote?.model ?? self.model.name}. /remote connects it any time.`, tone: 'dim' }); return; }
+      self.useRemote(r, { scope: value });
+      return;
+    }
+    if (id === 'start-where') {
+      self.remoteRef.current.pendingStart = false;
+      const main = value === 'main' ? self.mainNow()?.r : null;
+      self.useRemote(main ?? self.settings.remote, { atStart: true, scope: value === 'window' ? 'window' : 'all' });
+      return;
+    }
     if (id === 'remote-down') {
       if (value === 'retry') self.useRemote(self.settings.remote);
       else if (value === 'local') self.useLocal({ note: 'This window uses the model on this Mac for now; /remote is still on for the next start.', load: true });

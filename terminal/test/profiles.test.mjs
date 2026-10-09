@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.AGENTIC_MEMORY_SAVE = 'off';
-const { profileFor, inheritedOf, seedProfiles, readProfiles, writeProfiles, profilesSaved, PROFILES_FILE, rowsOf, groupsNow, GROUPS, stepUse, openProfiles, listRows, cannotDo, usersOf, withMain, helpersAway, remoteOfMain } = await import('../src/app/profiles.mjs');
+const { profileFor, inheritedOf, seedProfiles, readProfiles, writeProfiles, profilesSaved, PROFILES_FILE, rowsOf, groupsNow, GROUPS, stepUse, openProfiles, listRows, cannotDo, usersOf, withMain, helpersAway, remoteOfMain, windowView } = await import('../src/app/profiles.mjs');
 const { ProfileRouter, serverKey } = await import('../src/app/profile-router.mjs');
 const { noteServed, noteSpill, readMeters, flushMeters, meterWords } = await import('../src/agent/profile-meters.mjs');
 const { streamChat, routeCalls } = await import('../src/agent/client.mjs');
@@ -444,5 +444,46 @@ test('Main changed in /profiles, the hub or by a route: /remote\'s saved set-up 
   await at('/profiles/use', { key: 'ai:btw', profile: 'Main' });
   expect(loadSettings().remote.model).toBe('claude-opus-5-5');
   saveSettings({ remote: null, remotes: {} });
+  fresh();
+});
+
+test('"Just this window": every job of the window follows its service, the file and the other windows stay on Main', async () => {
+  fresh();
+  const OWN = { server: SVC, model: 'qwen3.6' };
+  const d = { profiles: { Main: P(CLAUDE, 'claude-opus-5-5', { backup: 'Spare', level: 'high' }), Spare: P(SVC, 'qwen3.6'), Fast: P(SVC, 'llama3.2:3b', { backup: 'Main' }), Review: P(CLAUDE, 'claude-sonnet-5-5') },
+    uses: { 'ai:main': 'Main', 'ai:btw': 'Fast', 'ai:review': 'Review' } };
+  const v = windowView(d, OWN);
+  // the conversation's profile is the window's model, without Claude's thinking level; a backup on the service stays
+  expect(v.profiles.Main).toMatchObject({ server: { address: SVC.address }, model: 'qwen3.6', backup: 'Spare' });
+  expect(v.profiles.Main.level).toBeUndefined();
+  // a profile on the service keeps its model; its backup Main (Claude in the file) is none here
+  expect(v.profiles.Fast).toMatchObject({ model: 'llama3.2:3b', backup: null });
+  // one on the Claude API runs on the window's model too
+  expect(v.profiles.Review).toMatchObject({ server: { address: SVC.address }, model: 'qwen3.6' });
+  expect(helpersAway(v)).toEqual([]);
+  expect(d.profiles.Main.model).toBe('claude-opus-5-5');
+  expect(windowView(d, null)).toBe(d);
+  expect(windowView({ profiles: {}, uses: {} }, OWN).profiles.Main).toMatchObject({ model: 'qwen3.6' });
+  // the router: this window on its own service, another window on Main, the file untouched
+  writeProfiles(d);
+  const settings = () => ({ remote: { ...SVC, model: 'qwen3.6', use: true }, remotes: { claude: { ...CLAUDE, model: 'claude-opus-5-5' } } });
+  const mine = new ProfileRouter({ settings, connect: fakeConnect() });
+  const other = new ProfileRouter({ settings, connect: fakeConnect() });
+  mine.setOwn(OWN);
+  expect(mine.data().profiles.Main.model).toBe('qwen3.6');
+  expect(other.data().profiles.Main.model).toBe('claude-opus-5-5');
+  expect(readProfiles({}, []).profiles.Main.model).toBe('claude-opus-5-5');
+  mine.lend(SVC, { url: SVC.address });
+  setEndpoint(SVC.address, { remote: true, kind: 'openai', model: 'qwen3.6', label: SVC.address });
+  expect(await mine.route({ ai: 'main' }, { url: SVC.address, model: 'qwen3.6' })).toEqual({ name: 'Main', same: true });
+  // a change to the file elsewhere still reaches the window's view; Connect for every window ends its own
+  await Bun.sleep(5);
+  writeProfiles({ ...d, profiles: { ...d.profiles, Fast: P(SVC, 'llama3.2:1b') } });
+  expect(mine.data().profiles.Fast.model).toBe('llama3.2:1b');
+  expect(mine.data().profiles.Main.model).toBe('qwen3.6');
+  mine.setOwn(null);
+  expect(mine.data().profiles.Main.model).toBe('claude-opus-5-5');
+  mine.stop(); other.stop();
+  dropEndpoint(SVC.address);
   fresh();
 });

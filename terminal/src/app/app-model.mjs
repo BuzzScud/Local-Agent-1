@@ -208,6 +208,26 @@ export function modelPart(self) {
         { id: 'later', label: 'Not now', note: `it stays saved: /remote ${self.remoteWord(a.source)} connects it any time` },
       ] };
     }
+    // A connect that would move Main (9 Oct 2026, the owner's pick): this window only, or every window.
+    if (id === 'remote-scope') {
+      const r = self.remoteRef.current.pendingScope ?? {};
+      const there = `${r.model || 'its model'} · ${remoteLabel(r)}`;
+      const main = self.mainNow()?.label ?? 'Main';
+      return { ask: true, title: `Use ${there} in which windows?`, blurb: '', what: 'the remote', current: null, escWord: 'not now', options: [
+        { id: 'window', label: 'Just this window', recommended: true, note: `this window and all its jobs run there; other windows stay on ${main}` },
+        { id: 'all', label: 'Every window', note: 'it becomes Main: every window on this Mac moves there from its next step' },
+      ] };
+    }
+    // A new window whose saved set-up is not where Main is: where it starts.
+    if (id === 'start-where') {
+      const r = self.settings.remote ?? {};
+      const main = self.mainNow();
+      return { ask: true, title: 'Where should this window start?', blurb: '', what: 'the start', current: null, escWord: 'Main', options: [
+        { id: 'main', label: `On Main: ${main?.label ?? 'Main'}`, recommended: true, note: 'where the other windows are' },
+        { id: 'window', label: `Just this window on ${r.model || 'the model'} · ${remoteLabel(r)}`, note: 'where the last connect went; other windows stay on Main' },
+        { id: 'all', label: `Every window on ${r.model || 'the model'} · ${remoteLabel(r)}`, note: 'it becomes Main: every window on this Mac moves there from its next step' },
+      ] };
+    }
     if (id === 'remote-down') {
       const local = self.localModelRef.current ?? modelById(self.settings.model) ?? MODELS[DEFAULT_MODEL];
       const why = self.remoteRef.current.why ?? 'it did not answer';

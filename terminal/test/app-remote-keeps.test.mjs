@@ -47,11 +47,17 @@ test('their case: started on the Claude API it stays there; /remote service and 
   theirHome(base, { svcUrl: svc.url, claudeUrl: claude.url, on: 'claude' });
   const mains = [];
   const r = await runInPty({ cwd, env: { ...env, ...ENV }, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 120_000, steps: [
+    // its saved set-up is not Main: it asks where to start (9 Oct 2026, "Just this window"); every window, as before
+    { wait: 'Where should this window start?', ms: 25_000 }, { sleep: 300 }, { snapshot: 'ask' }, { type: '3' },
     // past the window's 2 s look at the file, which is when the old code moved it back
     { wait: ON_REMOTE, ms: 25_000 }, { sleep: 4500 }, { snapshot: 'start' }, { fn: () => mains.push(mainOf(base).model) },
-    // before your first message the start page's line says where it runs now (start-notes.jsx)
-    { type: '/remote service' }, { key: 'enter' }, { wait: /coder:30b on \S+, \d+ ms/, ms: 20_000 }, { sleep: 3000 }, { snapshot: 'service' }, { fn: () => mains.push(mainOf(base).model) },
-    { type: '/remote claude' }, { key: 'enter' }, { wait: 'Main → claude-opus-5-5 · Claude API (was coder:30b', ms: 20_000 }, { sleep: 3000 }, { fn: () => mains.push(mainOf(base).model) },
+    // before your first message the start page's line says where it runs now (start-notes.jsx); a Connect
+    // that moves Main asks first: every window
+    { type: '/remote service' }, { key: 'enter' }, { wait: 'in which windows?', ms: 20_000 }, { sleep: 300 }, { type: '2' },
+    // (after the start question the start page is printed, so the line is a note: start-notes.jsx remoteNote)
+    { wait: /coder:30b on \S+, \d+ ms|On the remote: coder:30b · \S+ · OpenAI-compatible · answered in \d+ ms/, ms: 20_000 }, { sleep: 3000 }, { snapshot: 'service' }, { fn: () => mains.push(mainOf(base).model) },
+    { type: '/remote claude' }, { key: 'enter' }, { wait: 'in which windows?', ms: 20_000 }, { sleep: 300 }, { type: '2' },
+    { wait: 'Main → claude-opus-5-5 · Claude API (was coder:30b', ms: 20_000 }, { sleep: 3000 }, { fn: () => mains.push(mainOf(base).model) },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Answered by the Claude API.', ms: 30_000 }, { sleep: 800 }, { snapshot: 'hello' },
     ...quit,
   ] });
@@ -59,10 +65,13 @@ test('their case: started on the Claude API it stays there; /remote service and 
   const hello = [...svc.chats().filter((b) => JSON.stringify(b.messages ?? '').includes('hello')).map((b) => `service:${b.model}`),
     ...claude.seen.filter((x) => x.body?.stream && JSON.stringify(x.body.messages ?? '').includes('hello')).map((x) => `claude:${x.body.model}`)];
   await svc.close(); await claude.close();
+  // the start question: Main first, then this window alone, then every window; nothing moved while it waits
+  expect(flat(s.ask)).toMatch(/1\. On Main: coder:30b · service.*2\. Just this window on claude-opus-5-5.*3\. Every window on claude-opus-5-5/);
+  expect(s.ask).not.toMatch(/Main: claude-opus-5-5 → coder:30b/);
   // started on the Claude API and still there after the window looked at the file: Main moved with it, said once
   expect(flat(s.start)).toContain('Main → claude-opus-5-5 · Claude API (was coder:30b · service): your conversation, and every other window on this Mac from its next step.');
   // the helpers left on the service: counted in the start page's one line (start-notes.jsx), no paragraph
-  expect(flat(s.start)).toContain('4 helper models on the service');
+  expect(flat(s.start)).toMatch(/4 helper models on the service|4 helpers stay on the service/);
   expect(flat(s.start)).not.toContain('The helpers keep their own profiles');
   expect(s.start).not.toMatch(/Main: claude-opus-5-5 → coder:30b/);
   expect(footerOf(s.start)).toContain('● Main · claude-opus-5-5');
@@ -76,6 +85,33 @@ test('their case: started on the Claude API it stays there; /remote service and 
   expect(footerOf(s.hello)).toContain('● Main · claude-opus-5-5');
   // /remote's own set-up is the Claude API, as Main is
   expect(fileOf(base, 'settings.json').remote).toMatchObject({ kind: 'claude', model: 'claude-opus-5-5', use: true });
+}, T * 2);
+
+test('/remote\'s "Just this window": this window and its jobs go to the service, Main stays on the Claude API for the others', async () => {
+  const { cwd, env, base } = setup();
+  const svc = await fakeOllama();
+  const claude = await startFakeAnthropic([], { key: KEY });
+  theirHome(base, { svcUrl: svc.url, claudeUrl: claude.url, on: 'claude' });
+  const r = await runInPty({ cwd, env: { ...env, ...ENV }, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 120_000, steps: [
+    { wait: 'Where should this window start?', ms: 25_000 }, { sleep: 300 }, { type: '3' },
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 3000 },
+    { type: '/remote service' }, { key: 'enter' }, { wait: 'in which windows?', ms: 20_000 }, { sleep: 300 }, { snapshot: 'ask' }, { type: '1' },
+    { wait: 'This window → coder:30b', ms: 20_000 }, { sleep: 3500 }, { snapshot: 'switched' },
+    { type: 'hello' }, { key: 'enter' }, { wait: 'From coder:30b.', ms: 30_000 }, { sleep: 800 }, { snapshot: 'hello' },
+    ...quit,
+  ] });
+  const s = r.snapshots;
+  const asked = svc.chats().filter((b) => JSON.stringify(b.messages ?? '').includes('hello')).map((b) => b.model);
+  const toClaude = claude.seen.filter((x) => x.body?.stream && JSON.stringify(x.body.messages ?? '').includes('hello'));
+  await svc.close(); await claude.close();
+  expect(flat(s.ask)).toMatch(/1\. Just this window.*2\. Every window.*other windows stay on claude-opus-5-5 · Claude API/);
+  expect(footerOf(s.switched)).toMatch(/● this window · coder:30b on /);
+  expect(asked.length).toBeGreaterThanOrEqual(1);
+  expect(asked.every((m) => m === 'coder:30b')).toBe(true);
+  expect(toClaude).toEqual([]);
+  expect(footerOf(s.hello)).toMatch(/● this window · coder:30b on /);
+  // the file every other window reads still has Main on the Claude API
+  expect(mainOf(base).model).toBe('claude-opus-5-5');
 }, T * 2);
 
 test('/model\'s "Just this window" holds: the window stays on the model picked over two messages, Main stays as it was, and the footer says so', async () => {

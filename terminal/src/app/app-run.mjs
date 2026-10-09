@@ -347,6 +347,8 @@ export function runPart(self) {
         return;
       }
       // /remote on: the model on another machine; nothing loads here.
+      // Its saved set-up is not where Main is (the last connect was "Just this window"): it asks where to start.
+      if (self.remoteAtStart && self.mainMoves(self.settings.remote) && self.mainNow()?.r) { self.remoteRef.current.pendingStart = true; self.setStarting(false); self.openChoice('start-where'); return; }
       if (self.remoteAtStart) { await self.remoteFnRef.current.useRemote(self.settings.remote, { atStart: true }); return; }
       if (self.wantRef.current) { await self.loadFnRef.current(); return; }
       // The model is off: what the last window's second look would save is still asked about (no model needed).
