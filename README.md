@@ -82,7 +82,10 @@ answer takes a little longer while the model loads.
 | The model is slow or won't start | Close other big apps: the model needs most of a 16 GB Mac's memory. |
 </details>
 
-**Update:** `cd ~/agentic-coder && git pull`. The next `coding` rebuilds itself.
+**Update:** just start `coding`. Each start takes GitHub's newest version (a fast-forward
+only, never over files you changed; with no internet it starts the version it has), installs
+new packages, rebuilds itself, and the door restarts on the new version. `AGENTIC_NO_PULL=1
+coding` skips the pull. A launcher from before this needs one last `bun run install-cli`.
 **Uninstall:** delete `~/.local/bin/coding`, `~/.agentic-coder` (the model files and
 settings) and `~/agentic-coder`.
 
