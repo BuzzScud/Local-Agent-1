@@ -162,6 +162,8 @@ export function tierOf(model, requestsLimit) {
   return TIERS.find((t) => (fable ? t.fable : t.other) === requestsLimit) ?? null;
 }
 
+export const TYPED_STALE_DAYS = 3;
+
 // Everything /usage and the footer show, as of `now`. model: the window's Claude model.
 //   cap: your limit, else the tier's (tierCap); left: null with neither (a Custom tier has no cap)
 //   spent: the month's dollars, from source { kind: 'bill' | 'typed' | 'meter', at, usd, error }:
@@ -198,6 +200,9 @@ export function usageNow({ model, now = Date.now(), admin = false } = {}) {
   const base = billed && (!typed || billed.at >= typed.at) ? { kind: 'bill', usd: billed.usd, at: billed.at } : typed ? { kind: 'typed', usd: typed.usd, at: typed.at } : null;
   const source = base ? { ...base, since: claudeSince(base.at, { now: d }) } : { kind: 'meter' };
   if (base) spent = base.usd + source.since;
+  // A typed figure TYPED_STALE_DAYS whole days old or more is stale: the footer and the card ask for it again
+  // (9 Oct 2026, the owner's pick "nudge me to re-type the figure"). The bill reads itself, so it never is.
+  if (base?.kind === 'typed') { source.days = Math.floor((now - base.at) / 86_400_000); source.stale = source.days >= TYPED_STALE_DAYS; }
   if (bill.error && admin) source.error = bill.error;
   const tierCap = tier?.cap ?? null;
   const cap = own.limit > 0 ? own.limit : tierCap;
