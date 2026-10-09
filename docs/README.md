@@ -8,7 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 570 KB | 2026-10-09 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 586 KB | 2026-10-09 |
 | [older versions/agentic-coder-home-screen-3-designs-2026-10-08.html](older%20versions/agentic-coder-home-screen-3-designs-2026-10-08.html) | page | Home Screen Looks | 324 KB | 2026-10-09 |
 | [design rounds/agentic-coder-home-screen-round-2-3-designs-2026-10-08.html](design%20rounds/agentic-coder-home-screen-round-2-3-designs-2026-10-08.html) | page | Home Screens Round 2 | 503 KB | 2026-10-09 |
 | [design rounds/agentic-coder-panel-footer-2026-10-08.html](design%20rounds/agentic-coder-panel-footer-2026-10-08.html) | page | Panel Footer | 13 KB | 2026-10-08 |
