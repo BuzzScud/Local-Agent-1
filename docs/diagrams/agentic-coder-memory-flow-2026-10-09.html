@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Agentic Coder's memory works</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f7f6f2; --card: #ffffff; --text: #1c1b18; --muted: #6b675e; --line: #e3dfd5;
+  --soft: #f1efe9; --accent: #1f66bd; --on-accent: #ffffff; --accent-soft: #e6eef9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15161a; --card: #1d1f24; --text: #ecebe6; --muted: #a4a19a; --line: #34363e;
+    --soft: #24262c; --accent: #6aa5ec; --on-accent: #0e1726; --accent-soft: #1f2c3f;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 4px; }
+h1 { font-size: 28px; font-weight: 650; margin: 0; }
+.dateline { color: var(--muted); font-size: 13px; }
+.lead { font-size: 17px; margin: 4px 0 24px; max-width: 75ch; }
+
+.flow {
+  display: grid; gap: 0;
+  grid-template-columns: minmax(0, 1.1fr) 40px minmax(0, 1fr) 40px minmax(0, 1fr) 40px minmax(0, 1fr);
+  grid-template-rows: auto 48px auto;
+}
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+}
+.card h3 { margin: 0; font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 10px; }
+.card p { margin: 0; }
+.num {
+  flex: none; width: 26px; height: 26px; border-radius: 999px; display: grid; place-items: center;
+  font-size: 13px; font-weight: 650; background: var(--accent); color: var(--on-accent);
+}
+.tag {
+  align-self: flex-start; font-size: 13px; padding: 2px 10px; border-radius: 999px;
+  background: var(--soft); color: var(--muted);
+}
+.tag.reads { background: var(--accent-soft); color: var(--accent); }
+.tag.saves { background: var(--soft); color: var(--text); }
+
+.memory { grid-column: 1; grid-row: 1 / 4; background: var(--soft); justify-content: center; }
+.memory h3 { font-size: 20px; }
+.folder { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.folder b { display: block; font-size: 15px; }
+.folder code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); overflow-wrap: anywhere; }
+
+.arrow { display: grid; place-items: center; color: var(--accent); }
+.arrow svg { width: 28px; height: 28px; }
+.left svg { transform: rotate(180deg); }
+.down svg { transform: rotate(90deg); }
+
+.s1 { grid-column: 3; grid-row: 1; } .a1 { grid-column: 2; grid-row: 1; }
+.s2 { grid-column: 5; grid-row: 1; } .a2 { grid-column: 4; grid-row: 1; }
+.s3 { grid-column: 7; grid-row: 1; } .a3 { grid-column: 6; grid-row: 1; }
+.a4 { grid-column: 7; grid-row: 2; }
+.s4 { grid-column: 7; grid-row: 3; }
+.s5 { grid-column: 5; grid-row: 3; } .a5 { grid-column: 6; grid-row: 3; }
+.s6 { grid-column: 3; grid-row: 3; } .a6 { grid-column: 4; grid-row: 3; }
+.a7 { grid-column: 2; grid-row: 3; }
+
+h2 { font-size: 20px; font-weight: 650; margin: 32px 0 12px; }
+.tidy { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.tidy .card { gap: 4px; }
+.tidy b { font-size: 15px; }
+
+@media (max-width: 900px) {
+  .flow { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .flow > * { grid-column: 1 !important; grid-row: auto !important; }
+  .memory { order: 0; } .a1 { order: 1; } .s1 { order: 2; } .a2 { order: 3; } .s2 { order: 4; }
+  .a3 { order: 5; } .s3 { order: 6; } .a4 { order: 7; } .s4 { order: 8; } .a5 { order: 9; }
+  .s5 { order: 10; } .a6 { order: 11; } .s6 { order: 12; } .a7 { order: 13; }
+  .arrow { height: 40px; }
+  .arrow svg, .left svg { transform: rotate(90deg); }
+  .a7 svg { transform: rotate(-90deg); }
+  .tidy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) { .tidy { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>How Agentic Coder's memory works</h1>
+    <span class="dateline">9 Oct 2026 · from the code in terminal/src/agent</span>
+  </header>
+  <p class="lead">A loop: the model reads the memory when it starts and with each request, then saves what it learned for next time.</p>
+
+  <div class="flow">
+    <div class="card memory">
+      <h3>The memory</h3>
+      <p>One small text file per fact, kept only on your Mac.</p>
+      <div class="folder"><b>About you</b><code>~/.agentic/memory</code></div>
+      <div class="folder"><b>About this project</b><code>&lt;project&gt;/.agentic/memory</code></div>
+      <p>Nothing is ever deleted: an old fact is retired.</p>
+    </div>
+
+    <div class="arrow a1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="card s1">
+      <h3><span class="num">1</span>A window opens</h3>
+      <p>The model reads your Always rules (up to 20) and one short line per fact (up to 1,600 characters).</p>
+      <span class="tag reads">reads memory</span>
+    </div>
+
+    <div class="arrow a2" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="card s2">
+      <h3><span class="num">2</span>You send a request</h3>
+      <p>A small local model finds the 5 facts closest in meaning and adds them to your request.</p>
+      <span class="tag reads">reads memory</span>
+    </div>
+
+    <div class="arrow a3" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="card s3">
+      <h3><span class="num">3</span>The model does the work</h3>
+      <p>It uses the facts that fit. Where a memory and a file disagree, the file wins.</p>
+      <span class="tag reads">uses memory</span>
+    </div>
+
+    <div class="arrow down a4" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="card s4">
+      <h3><span class="num">4</span>It can save as it works</h3>
+      <p>With its Remember tool: one short sentence about you or about the project.</p>
+      <span class="tag saves">saves memory</span>
+    </div>
+
+    <div class="arrow left a5" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="card s5">
+      <h3><span class="num">5</span>The round ends</h3>
+      <p>About 10 seconds later, a second look reads what happened and saves up to 5 new facts.</p>
+      <span class="tag saves">saves memory</span>
+    </div>
+
+    <div class="arrow left a6" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="card s6">
+      <h3><span class="num">6</span>The window closes</h3>
+      <p>The whole conversation is read once more, and anything new is saved for the next start.</p>
+      <span class="tag saves">saves memory</span>
+    </div>
+
+    <div class="arrow left a7" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+  </div>
+
+  <h2>How it keeps itself tidy</h2>
+  <div class="tidy">
+    <div class="card"><b>A fact helped</b><p>The check passed, so its trust goes up.</p></div>
+    <div class="card"><b>A fact misled</b><p>The check failed, so trust goes down. At −3 it is retired.</p></div>
+    <div class="card"><b>A fact went unused</b><p>Not brought up for 30 days, so it is retired.</p></div>
+    <div class="card"><b>Never saved</b><p>Keys, tokens, passwords, repeats, and practice runs.</p></div>
+  </div>
+</main>
+</body>
+</html>
