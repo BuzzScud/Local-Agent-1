@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Agentic Coder</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --accent-ink: #fff;
+  --good: #1f8a4c; --warn: #b26b00; --bad: #c8372d; --good-bg: #e7f4ec; --warn-bg: #fbf0dc; --bad-bg: #fbe7e5; --accent-bg: #e6effa;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5;
+    --good: #4cc27c; --warn: #e3a33b; --bad: #ef6b60; --good-bg: #13291c; --warn-bg: #2d220f; --bad-bg: #2f1513; --accent-bg: #142538; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5;
+  --good: #4cc27c; --warn: #e3a33b; --bad: #ef6b60; --good-bg: #13291c; --warn-bg: #2d220f; --bad-bg: #2f1513; --accent-bg: #142538; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: grid; grid-template-rows: 34px minmax(0, 1fr); height: 100vh; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+[hidden] { display: none !important; }
+*::-webkit-scrollbar { width: 8px; height: 8px; } *::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; } *::-webkit-scrollbar-track { background: transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink3); vertical-align: 0; margin-right: 5px; }
+.dot.ok { background: var(--good); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+.linkbtn { border: none; background: none; color: var(--accent); padding: 2px 4px; }
+
+/* Sign-in and invite */
+.gate { display: grid; place-items: center; padding: 16px; overflow: auto; }
+.card { width: min(400px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 26px 26px 20px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; }
+.brand svg { width: 26px; height: 26px; }
+.card h2 { font-size: 21px; margin: 18px 0 4px; }
+.card p.sub { color: var(--ink2); margin: 0 0 18px; }
+label.f { display: block; font-size: 12.5px; color: var(--ink2); margin: 0 0 12px; }
+label.f input, label.f select { display: block; width: 100%; margin-top: 4px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--page); }
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 7px 13px; color: var(--ink); white-space: nowrap; }
+.btn:hover { background: var(--panel); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.danger { color: var(--bad); }
+.btn.wide { width: 100%; padding: 10px; font-weight: 600; }
+.btn:disabled { background: var(--panel); color: var(--ink3); border-color: var(--line); cursor: default; filter: none; }
+.fine { color: var(--ink3); font-size: 12px; margin: 14px 0 0; }
+.addr { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; color: var(--ink2); background: var(--panel); border-radius: 7px; padding: 3px 8px; }
+.notice { background: var(--warn-bg); color: var(--ink); border-radius: 9px; padding: 9px 11px; font-size: 12.5px; margin: 0 0 14px; }
+.notice b { color: var(--warn); }
+
+/* The app */
+.app { display: grid; grid-template-rows: 48px minmax(0, 1fr); min-height: 0; }
+.top { display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.top .sp { flex: 1; min-width: 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; color: var(--ink2); background: var(--surface); white-space: nowrap; }
+.chip.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, var(--line)); }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+.who { display: flex; align-items: center; gap: 8px; font-size: 13px; white-space: nowrap; }
+.av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 650; font-size: 12px; flex: none; }
+.role { font-size: 11px; color: var(--ink3); }
+.body { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 0; }
+.rail { border-right: 1px solid var(--line); background: var(--surface); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; padding: 10px 8px; gap: 6px; }
+.nav button { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: none; text-align: left; padding: 8px 10px; border-radius: 8px; color: var(--ink2); }
+.nav button svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.nav button:hover { background: var(--panel); color: var(--ink); }
+.nav button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.nav kbd { margin-left: auto; font: 11px var(--mono); color: var(--ink3); }
+.rail h4 { margin: 10px 10px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; }
+.chats { overflow: auto; min-height: 0; }
+.chats button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 7px 10px; border-radius: 8px; color: var(--ink2); }
+.chats button:hover { background: var(--panel); }
+.chats button.on { background: var(--panel); color: var(--ink); }
+.chats button b { display: block; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chats button small { color: var(--ink3); font-size: 11.5px; }
+.view { min-height: 0; min-width: 0; display: none; }
+.view.on { display: grid; }
+
+/* Chat */
+#v-chat { grid-template-columns: minmax(0, 1fr) 300px; }
+.conv { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; min-width: 0; }
+.chead { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--line); min-width: 0; flex-wrap: wrap; }
+.chead h2 { margin: 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 160px; }
+.chead select { max-width: 340px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.mwarn { margin: 0; padding: 8px 18px; background: var(--warn-bg); font-size: 12.5px; border-bottom: 1px solid var(--line); }
+.msgs { overflow: auto; padding: 18px 18px 8px; min-height: 0; }
+.msgs .inner { max-width: 860px; margin: 0 auto; }
+.u { background: var(--panel); border-radius: 12px; padding: 10px 14px; margin: 0 0 14px auto; max-width: 80%; width: fit-content; white-space: pre-wrap; }
+.step { font-family: var(--mono); font-size: 12.5px; display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 6px; margin: 4px 0; color: var(--ink); }
+.step .i { color: var(--good); } .step.err .i { color: var(--bad); } .step.run .i { color: var(--accent); animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+.step .arg { color: var(--ink2); overflow-wrap: anywhere; }
+.step .tag { font-family: -apple-system, sans-serif; font-size: 10.5px; color: var(--ink3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+.step .res { grid-column: 2; color: var(--ink3); white-space: pre-wrap; overflow-wrap: anywhere; }
+.step .res b { color: var(--good); font-weight: 600; } .step.err .res { color: var(--bad); }
+.note { color: var(--ink3); font-size: 12.5px; margin: 4px 0 4px 22px; }
+.a { margin: 10px 0 16px; line-height: 1.55; overflow-wrap: anywhere; }
+.a p { margin: 0 0 8px; } .a pre { background: var(--panel); border-radius: 8px; padding: 10px 12px; overflow: auto; margin: 0 0 8px; }
+.a code { background: var(--panel); border-radius: 4px; padding: 0 4px; } .a pre code { background: none; padding: 0; }
+.ask { border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin: 10px 0 12px; background: var(--accent-bg); }
+.ask .q { font-weight: 600; margin-bottom: 4px; } .ask .cmd { font-family: var(--mono); font-size: 12.5px; background: var(--surface); border-radius: 7px; padding: 7px 9px; margin: 6px 0 10px; overflow-wrap: anywhere; }
+.ask .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ask .done { color: var(--ink2); font-size: 12.5px; }
+.endrow { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink3); border-top: 1px solid var(--line); padding-top: 8px; margin: 8px 0 18px; }
+.status { color: var(--ink3); font-size: 12.5px; margin: 6px 0 10px 22px; }
+.status.live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 7px; animation: blink 1s infinite; }
+.compose { border-top: 1px solid var(--line); padding: 10px 18px 12px; background: var(--surface); }
+.compose .box { max-width: 860px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.compose textarea { resize: none; height: 64px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--page); width: 100%; }
+.compose .btns { display: flex; flex-direction: column; gap: 6px; }
+.compose .hint { max-width: 860px; margin: 5px auto 0; font-size: 11.5px; color: var(--ink3); display: flex; gap: 12px; flex-wrap: wrap; }
+.side { border-left: 1px solid var(--line); background: var(--surface); overflow: auto; padding: 14px 16px; min-height: 0; }
+.side h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); margin: 0 0 8px; font-weight: 600; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; font-size: 13px; margin: 0 0 18px; }
+.kv dt { color: var(--ink3); } .kv dd { margin: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flist { list-style: none; margin: 0 0 18px; padding: 0; font-size: 13px; }
+.flist li { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.flist li span:last-child { margin-left: auto; color: var(--ink3); font-size: 12px; }
+
+/* Files */
+#v-files { grid-template-rows: auto minmax(0, 1fr); }
+.vhead { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.vhead h2 { margin: 0; font-size: 15px; font-weight: 600; margin-right: auto; }
+.fgrid { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
+.ftree { border-right: 1px solid var(--line); overflow: auto; padding: 10px; min-height: 0; }
+.ftree button { display: flex; width: 100%; gap: 8px; border: none; background: none; text-align: left; padding: 6px 8px; border-radius: 7px; font-size: 13px; }
+.ftree button:hover { background: var(--panel); } .ftree button.on { background: var(--accent-bg); color: var(--accent); }
+.ftree button span:last-child { margin-left: auto; color: var(--ink3); font-size: 11.5px; }
+.drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--ink3); font-size: 12.5px; margin-top: 10px; }
+.drop.over { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.fview { overflow: auto; padding: 16px 20px; min-height: 0; }
+.fview pre { margin: 0; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.empty { color: var(--ink3); padding: 30px; text-align: center; }
+
+/* Calculator */
+#v-calc { grid-template-columns: minmax(0, 1fr) 340px; }
+.cmain { overflow: auto; padding: 18px 22px; min-height: 0; }
+.cmain .inner { max-width: 760px; }
+.cmain h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.expr { width: 100%; height: 76px; resize: none; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font: 15px var(--mono); }
+.vars { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
+.var { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.var input { border: none; background: none; padding: 6px 8px; width: 64px; font: 13px var(--mono); }
+.var input.n { width: 92px; border-left: 1px solid var(--line); }
+.var button { border: none; background: none; color: var(--ink3); padding: 0 8px; }
+.result { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 14px 0; background: var(--surface); min-height: 76px; }
+.result .big { font: 600 26px var(--mono); overflow-wrap: anywhere; }
+.result.err { border-color: var(--bad); background: var(--bad-bg); } .result.err .big { color: var(--bad); font-size: 15px; }
+.result .meta { color: var(--ink3); font-size: 12px; margin-top: 4px; font-family: var(--mono); overflow-wrap: anywhere; }
+.hist { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+.hist li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.hist li code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist li.err span { color: var(--bad); }
+.fns { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+.fns button { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 2px 7px; font: 12px var(--mono); }
+.fns button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* API keys + Admin: shared table look */
+.scroll { overflow: auto; min-height: 0; padding: 16px 20px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 18px; }
+.tbl th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink3); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tbl td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl td.r, .tbl th.r { text-align: right; }
+.tbl .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.tbl .acts .btn { padding: 3px 9px; font-size: 12px; }
+.pill { font-size: 11.5px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.pill.good { background: var(--good-bg); color: var(--good); } .pill.warn { background: var(--warn-bg); color: var(--warn); } .pill.mute { background: var(--panel); color: var(--ink2); } .pill.acc { background: var(--accent-bg); color: var(--accent); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; }
+.sec h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.code { position: relative; background: var(--panel); border-radius: 10px; padding: 12px 14px; font: 12px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; }
+.code .cp { position: absolute; top: 6px; right: 6px; font: 11.5px -apple-system, sans-serif; padding: 2px 8px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 12px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { border: none; background: none; padding: 7px 11px; color: var(--ink2); border-radius: 8px 8px 0 0; white-space: nowrap; }
+.tabs button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+.newkey { background: var(--good-bg); border-radius: 10px; padding: 10px 12px; margin: 0 0 14px; font-size: 12.5px; }
+.newkey code { display: block; margin-top: 6px; font-size: 13px; overflow-wrap: anywhere; }
+#v-admin, #v-keys { grid-template-rows: auto minmax(0, 1fr); }
+.meter { display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--panel); overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+.qcard { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; background: var(--surface); }
+.qrow { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.qrow:last-child { border-bottom: none; }
+.qrow .n { font: 600 12px var(--mono); color: var(--ink3); text-align: center; }
+.set { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 10px 18px; align-items: center; max-width: 760px; font-size: 13px; margin: 0 0 18px; }
+.set input, .set select { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); width: 100%; max-width: 300px; }
+.set .h { color: var(--ink3); font-size: 12px; grid-column: 2; margin-top: -6px; }
+.toggle { appearance: none; width: 32px; height: 18px; border-radius: 9px; background: var(--line); position: relative; cursor: pointer; vertical-align: middle; flex: none; }
+.toggle::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s; }
+.toggle:checked { background: var(--accent); } .toggle:checked::after { left: 16px; }
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 60; padding: 16px; }
+.modal { width: min(440px, 100%); background: var(--surface); border-radius: 14px; padding: 20px; border: 1px solid var(--line); }
+.modal h3 { margin: 0 0 12px; font-size: 16px; }
+.modal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+
+/* Narrower windows */
+@media (max-width: 1180px) { #v-chat { grid-template-columns: minmax(0, 1fr); } #v-chat .side { display: none; } #v-calc { grid-template-columns: minmax(0, 1fr); } #v-calc .side { display: none; } .two { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .rail { border-right: none; border-bottom: 1px solid var(--line); grid-template-rows: auto; padding: 6px; }
+  .rail .nav { display: flex; overflow-x: auto; gap: 2px; scrollbar-width: none; } .rail .nav::-webkit-scrollbar { display: none; }
+  .rail .nav button { width: auto; flex: none; padding: 6px 10px; } .rail .nav kbd { display: none; }
+  .rail h4, .rail .chats, .rail .newchat { display: none; }
+  .top .addr, .top .role, .top .who .name, .top .bname { display: none; }
+  .fgrid { grid-template-columns: minmax(0, 1fr); grid-template-rows: 180px minmax(0, 1fr); } .ftree { border-right: none; border-bottom: 1px solid var(--line); }
+  .set { grid-template-columns: minmax(0, 1fr); } .set .h { grid-column: 1; }
+  .tbl .hide-s { display: none; }
+  .msgs, .compose, .cmain, .scroll { padding-left: 12px; padding-right: 12px; }
+  .u { max-width: 92%; }
+}
+/* The real page (no preview bar) */
+body { grid-template-rows: minmax(0, 1fr); }
+.top .health { display: flex; gap: 10px; font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; }
+.top .health span { display: inline-flex; align-items: center; }
+.viewing { padding: 7px 18px; background: var(--accent-bg); color: var(--accent); font-size: 12.5px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+.ask textarea { width: 100%; min-height: 56px; resize: vertical; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 4px 0 8px; }
+.err-line { color: var(--bad); }
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 9px 14px; border-radius: 10px; font-size: 13px; z-index: 80; max-width: calc(100vw - 32px); }
+.menu-pop { position: fixed; top: 52px; right: 12px; z-index: 70; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.25); padding: 6px; min-width: 200px; }
+.menu-pop button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 8px 10px; border-radius: 8px; }
+.menu-pop button:hover { background: var(--panel); }
+.who { cursor: pointer; border: none; background: none; padding: 4px 6px; border-radius: 8px; }
+.who:hover { background: var(--panel); }
+.fileacts { display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; align-items: center; }
+.ftree button.dir { color: var(--ink2); font-weight: 500; }
+.chip.click { cursor: pointer; }
+.set textarea { width: 100%; max-width: 420px; min-height: 60px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: 12.5px var(--mono); }
+.link-box { font: 12.5px var(--mono); background: var(--panel); border-radius: 8px; padding: 9px 11px; overflow-wrap: anywhere; margin: 8px 0; user-select: all; }
+.chats .del { float: right; visibility: hidden; border: none; background: none; color: var(--ink3); padding: 0 4px; }
+.chats button:hover .del { visibility: visible; }
+.empty-chat { color: var(--ink3); text-align: center; padding: 60px 20px; }
+.empty-chat h3 { color: var(--ink); font-size: 16px; margin: 0 0 6px; }
+.partial { opacity: .85; }
+.mhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; }
+.mhead .btn { margin-left: auto; }
+.roles .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 28px; }
+.roles .role { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 4px 14px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.roles .role:nth-child(-n+2) { border-top: none; }
+.roles select, .mtable select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 100%; }
+.roles select { min-width: min(420px, 100%); }
+.mtools { display: flex; gap: 12px; align-items: center; margin: 14px 0 6px; flex-wrap: wrap; }
+.mtools input#m-q { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); width: 240px; max-width: 100%; }
+.mtable td { vertical-align: top; }
+.mtable .acts { flex-wrap: nowrap; }
+@media (max-width: 1400px) { .roles .grid { grid-template-columns: minmax(0, 1fr); } .roles .role:nth-child(2) { border-top: 1px solid var(--line); } }
+@media (max-width: 900px) { .roles .role { grid-template-columns: minmax(0, 1fr); } .mtable .acts { flex-wrap: wrap; } }
+@media (max-width: 760px) {
+  .mtable thead { display: none; }
+  .mtable, .mtable tbody, .mtable tr, .mtable td { display: block; width: 100%; }
+  .mtable tr { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 0 0 8px; }
+  .mtable td { border: none; padding: 3px 0; text-align: left; }
+  .mtable td.r { text-align: left; } .mtable .acts { justify-content: flex-start; }
+}
+.phone-only { display: none; }
+@media (max-width: 760px) { .phone-only { display: inline-flex; } }
+.pick-list { max-height: 60vh; overflow: auto; margin: 0 -6px; }
+.pick-list button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 9px 10px; border-radius: 8px; }
+.pick-list button:hover, .pick-list button.on { background: var(--panel); }
+.pick-list small { display: block; color: var(--ink3); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- Sign in -->
+<section id="s-signin" class="gate" hidden>
+  <form class="card" id="signin-form" autocomplete="on">
+    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="8" fill="var(--accent)"/><path d="M10 12l5 4-5 4M17 21h6" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Agentic Coder</div>
+    <h2>Sign in</h2>
+    <p class="sub">Your chats, your folder and your own API keys.</p>
+    <span class="addr" id="signin-addr"></span>
+    <label class="f" style="margin-top:12px">Username<input name="name" autocomplete="username" required></label>
+    <label class="f">Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <div id="signin-err" class="notice" hidden></div>
+    <button class="btn primary wide" type="submit">Sign in</button>
+    <p class="fine">No account? Ask the admin for an invite link. Forgot your password? The admin can make you a reset link.</p>
+  </form>
+</section>
+
+<!-- Invite, the first account, a password reset -->
+<section id="s-link" class="gate" hidden>
+  <form class="card" id="link-form" autocomplete="on">
+    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="8" fill="var(--accent)"/><path d="M10 12l5 4-5 4M17 21h6" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Agentic Coder</div>
+    <h2 id="link-title">You're invited</h2>
+    <p class="sub" id="link-sub"></p>
+    <div class="notice" id="link-notice"><b>Good to know:</b> the admin can open your chats and files. Your password and API keys stay yours.</div>
+    <label class="f" id="link-name-row">Username<input name="name" id="link-name" autocomplete="username"></label>
+    <label class="f"><span id="link-pass-label">Password</span><input name="password" type="password" autocomplete="new-password" required></label>
+    <div id="link-err" class="notice" hidden></div>
+    <button class="btn primary wide" type="submit" id="link-go">Create my account</button>
+    <p class="fine" id="link-fine"></p>
+  </form>
+</section>
+
+<!-- The app -->
+<section id="s-app" class="app" hidden>
+  <div class="top">
+    <div class="brand" style="font-size:14px"><svg viewBox="0 0 32 32" aria-hidden="true" style="width:22px;height:22px"><rect x="2" y="2" width="28" height="28" rx="8" fill="var(--accent)"/><path d="M10 12l5 4-5 4M17 21h6" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="bname">Agentic Coder</span></div>
+    <span class="addr" id="top-addr"></span>
+    <span class="sp"></span>
+    <div class="health" id="health"></div>
+    <span class="chip" id="qchip" title="Your place in the line for your AI"><span class="dot ok"></span>No wait</span>
+    <button class="who" id="who" type="button"><div class="av" id="av">?</div><div style="text-align:left"><div class="name" id="who-name"></div><div class="role" id="who-role"></div></div></button>
+  </div>
+  <div class="body">
+    <aside class="rail">
+      <div class="nav" id="nav">
+        <button data-v="chat" class="on" type="button"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chat<kbd>1</kbd></button>
+        <button data-v="files" id="nav-files" type="button"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></svg>Files<kbd>2</kbd></button>
+        <button data-v="calc" type="button"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/></svg>Calculator<kbd>3</kbd></button>
+        <button data-v="keys" type="button"><svg viewBox="0 0 24 24"><circle cx="8" cy="14" r="4"/><path d="M11 11l8-8M16 6l2 2M14 8l2 2"/></svg>API keys<kbd>4</kbd></button>
+        <button data-v="admin" id="nav-admin" type="button"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg>Admin<kbd>5</kbd></button>
+      </div>
+      <h4 id="chats-h">Chats</h4>
+      <div class="chats" id="chats"></div>
+      <button class="btn newchat" id="newchat" type="button">+ New chat</button>
+    </aside>
+
+    <main style="min-height:0;min-width:0;display:grid">
+      <!-- Chat -->
+      <div class="view on" id="v-chat">
+        <div class="conv">
+          <div class="chead">
+            <button class="btn phone-only" id="chat-pick" type="button">Chats ▾</button>
+            <h2 id="ctitle">New chat</h2>
+            <span class="chip mac" title="Everything the agent does stays in this folder">📁 your folder</span>
+            <select id="model" aria-label="Model"></select>
+          </div>
+          <div>
+            <div class="viewing" id="viewing" hidden></div>
+            <p class="mwarn" id="mwarn" hidden></p>
+          </div>
+          <div class="msgs" id="msgs"><div class="inner" id="msgs-in"></div></div>
+          <div class="compose" id="compose">
+            <div class="box">
+              <textarea id="input" placeholder="Ask anything. Math goes through your calculator."></textarea>
+              <div class="btns"><button class="btn primary" id="send" type="button">Send</button><button class="btn" id="stop" type="button" disabled>Stop</button></div>
+            </div>
+            <div class="hint"><span>Enter sends · Shift+Enter new line</span><span id="hint-mode"></span></div>
+          </div>
+        </div>
+        <aside class="side" id="cside"></aside>
+      </div>
+
+      <!-- Files -->
+      <div class="view" id="v-files">
+        <div class="vhead"><h2 id="files-title">Your folder</h2><span class="chip" id="files-chip">only you (and the admin) can see it</span><button class="btn" id="upload-btn" type="button">Upload files…</button><button class="btn" id="zip-btn" type="button">Download all (.zip)</button><input type="file" id="upload" multiple hidden></div>
+        <div class="fgrid">
+          <div class="ftree"><div id="ftree"></div><div class="drop" id="drop">Drop files or a .zip here<br><small>a .zip is unpacked into your folder</small></div></div>
+          <div class="fview" id="fview"><div class="empty">Pick a file to see it.</div></div>
+        </div>
+      </div>
+
+      <!-- Calculator -->
+      <div class="view" id="v-calc">
+        <div class="cmain"><div class="inner">
+          <h2>Calculator</h2>
+          <textarea class="expr" id="expr" spellcheck="false" placeholder="e.g. P*r/(1-(1+r)^-n)"></textarea>
+          <div class="vars" id="vars"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="eval" type="button">Evaluate</button><button class="btn" id="addvar" type="button">+ Letter</button><span class="fine" style="margin:6px 0 0">⌘/Ctrl+Enter evaluates</span></div>
+          <div class="result" id="result"><div class="meta">The answer shows here.</div></div>
+          <h3 style="font-size:13px;margin:16px 0 6px">This session</h3>
+          <ul class="hist" id="hist"></ul>
+        </div></div>
+        <aside class="side">
+          <h3>Functions and constants</h3>
+          <div class="fns" id="fns"><span class="fine">Asking the calculator…</span></div>
+          <h3>How it reads things</h3>
+          <ul style="padding-left:18px;margin:0 0 14px;font-size:12.5px;color:var(--ink2)">
+            <li><code>^</code> is a power: <code>2^10</code> = 1024.</li>
+            <li><code>log</code> and <code>ln</code> are both the natural log. For base 10: <code>ln(x)/ln(10)</code>.</li>
+            <li><code>phi</code> works here.</li>
+            <li>A sum it cannot do shows as an error, never as a number.</li>
+            <li>A letter's value may be plain arithmetic, like <code>0.06/12</code>.</li>
+          </ul>
+        </aside>
+      </div>
+
+      <!-- API keys -->
+      <div class="view" id="v-keys">
+        <div class="vhead"><h2>API keys</h2><span class="chip">a key acts as you: your folder, your place in the line</span><button class="btn primary" id="newkey" type="button">New key</button></div>
+        <div class="scroll">
+          <div id="newkey-box"></div>
+          <div class="two">
+            <div class="sec">
+              <h3>Your keys</h3>
+              <table class="tbl"><thead><tr><th>Name</th><th>Key</th><th class="hide-s">Last used</th><th></th></tr></thead><tbody id="keys"></tbody></table>
+              <h3>What a key can reach</h3>
+              <table class="tbl"><thead><tr><th>Call</th><th>What it does</th></tr></thead><tbody id="routes"></tbody></table>
+            </div>
+            <div class="sec">
+              <h3>Examples</h3>
+              <div class="tabs" id="extabs"></div>
+              <div id="exbody"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin -->
+      <div class="view" id="v-admin">
+        <div class="vhead" style="padding-bottom:0;border-bottom:none"><h2>Admin</h2><button class="btn primary" id="invite-btn" type="button">Invite someone</button></div>
+        <div style="display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0">
+          <div class="tabs" id="atabs" style="padding:0 18px;margin:0"></div>
+          <div class="scroll" id="abody"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } } };
+const fmtN = (n) => (Number.isInteger(n) ? n.toLocaleString('en-US') : Number(n).toLocaleString('en-US', { maximumFractionDigits: 10 }));
+const ago = (t) => { if (!t) return '—'; const m = (Date.now() - t) / 60000; return m < 1 ? 'just now' : m < 60 ? `${Math.round(m)} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+const bytes = (b) => (b < 1024 ? `${b} B` : b < 1048576 ? `${Math.round(b / 102.4) / 10} KB` : `${Math.round(b / 104857.6) / 10} MB`);
+
+async function api(path, { method = 'GET', body, raw } = {}) {
+  const res = await fetch(path, { method, headers: body !== undefined && !raw ? { 'content-type': 'application/json' } : {}, body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined), credentials: 'same-origin' });
+  let j = null;
+  try { j = await res.json(); } catch { /* not JSON */ }
+  if (res.status === 401 && path !== '/api/signin') { showSignin(); throw new Error('Signed out'); }
+  if (!res.ok || j?.ok === false) throw new Error(j?.error ?? `HTTP ${res.status}`);
+  return j;
+}
+function toast(text) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = text; document.body.append(t); setTimeout(() => t.remove(), 3200); }
+
+// Markdown, the small part a model's answer uses.
+function md(text) {
+  const parts = String(text ?? '').split(/```[a-z0-9]*\n?/i);
+  return parts.map((p, i) => {
+    if (i % 2) return `<pre><code>${esc(p.replace(/\n$/, ''))}</code></pre>`;
+    return p.split(/\n{2,}/).filter((b) => b.trim()).map((b) => {
+      const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+      const lines = b.split('\n');
+      if (lines.every((l) => /^\s*([-*]|\d+\.)\s/.test(l) || !l.trim())) return `<ul>${lines.filter((l) => l.trim()).map((l) => `<li>${inline(l.replace(/^\s*([-*]|\d+\.)\s/, ''))}</li>`).join('')}</ul>`;
+      if (/^#{1,4}\s/.test(b)) return `<p><b>${inline(b.replace(/^#{1,4}\s/, ''))}</b></p>`;
+      return `<p>${inline(b).replace(/\n/g, '<br>')}</p>`;
+    }).join('');
+  }).join('');
+}
+
+const S = { me: null, mode: 'mac', hosts: {}, view: 'chat', chats: [], chat: null, events: [], live: null, partial: '', status: '', es: null, models: [], services: [], room: 100000, defaultModel: '', viewingUser: null, files: [], fileOpen: null, calcHist: [], vars: [['x', '']], adminTab: 'users', exTab: 'calc', health: null, laguna: [] };
+const isMac = () => S.mode !== 'server';
+
+// ---------- screens ----------
+function screen(name) { for (const id of ['signin', 'link', 'app']) $(`#s-${id}`).hidden = id !== name; }
+function showSignin() { closeStream(); S.me = null; screen('signin'); $('#signin-addr').textContent = location.host; setTimeout(() => $('#signin-form [name=name]').focus(), 50); }
+
+async function boot() {
+  const linkMatch = /^\/(invite|reset)\/([A-Za-z0-9]+)$/.exec(location.pathname);
+  let me;
+  try { me = await (await fetch('/api/me', { credentials: 'same-origin' })).json(); } catch { me = { mode: 'mac' }; }
+  S.mode = me.mode ?? 'mac'; S.hosts = me.hosts ?? {};
+  document.body.dataset.copy = S.mode;
+  if (linkMatch) return openLink(linkMatch[1], linkMatch[2], me);
+  if (!me.user) return showSignin();
+  enter(me.user);
+}
+
+$('#signin-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  $('#signin-err').hidden = true;
+  try { const r = await api('/api/signin', { method: 'POST', body: { name: f.name.value.trim(), password: f.password.value } }); f.password.value = ''; enter(r.user); } catch (err) { $('#signin-err').hidden = false; $('#signin-err').textContent = err.message; }
+};
+
+async function openLink(kind, token, me) {
+  screen('link');
+  const err = (t) => { $('#link-err').hidden = !t; $('#link-err').textContent = t ?? ''; };
+  if (kind === 'invite') {
+    let info;
+    try { info = await api(`/api/invite/${token}`); } catch (e) { $('#link-title').textContent = 'This link does not work'; $('#link-sub').textContent = e.message; $('#link-form').querySelectorAll('label, button, #link-notice').forEach((x) => { x.hidden = true; }); return; }
+    const first = me.setup;
+    $('#link-title').textContent = first ? 'Make the first admin' : "You're invited";
+    $('#link-sub').innerHTML = first ? 'Nobody has an account yet. This account will be the admin: it makes invites for everyone else.' : `<b>${esc(info.by ?? 'The admin')}</b> invited you to Agentic Coder${info.role === 'admin' ? ' as an admin' : ''}. Pick a username and a password.`;
+    $('#link-notice').hidden = first;
+    $('#link-name').value = first ? '' : info.name;
+    $('#link-name').placeholder = info.name;
+    $('#link-fine').textContent = `This link works once and expires on ${new Date(info.expires).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. A password needs at least 10 characters.`;
+    $('#link-form').onsubmit = async (e) => {
+      e.preventDefault(); err(null);
+      try { const r = await api(`/api/invite/${token}`, { method: 'POST', body: { name: $('#link-name').value.trim() || info.name, password: e.target.password.value } }); history.replaceState(null, '', '/'); enter(r.user); } catch (x) { err(x.message); }
+    };
+  } else {
+    let info;
+    try { info = await api(`/api/reset/${token}`); } catch (e) { $('#link-title').textContent = 'This link does not work'; $('#link-sub').textContent = e.message; $('#link-form').querySelectorAll('label, button, #link-notice').forEach((x) => { x.hidden = true; }); return; }
+    $('#link-title').textContent = 'Set a new password';
+    $('#link-sub').innerHTML = `For <b>${esc(info.name)}</b>. Your API keys keep working; you are signed out everywhere else.`;
+    $('#link-notice').hidden = true; $('#link-name-row').hidden = true;
+    $('#link-pass-label').textContent = 'New password (at least 10 characters)';
+    $('#link-go').textContent = 'Save and sign in';
+    $('#link-form').onsubmit = async (e) => {
+      e.preventDefault(); err(null);
+      try { const r = await api(`/api/reset/${token}`, { method: 'POST', body: { password: e.target.password.value } }); history.replaceState(null, '', '/'); enter(r.user); } catch (x) { err(x.message); }
+    };
+  }
+}
+
+function enter(user) {
+  S.me = user;
+  screen('app');
+  $('#who-name').textContent = user.name; $('#who-role').textContent = user.role; $('#av').textContent = user.name[0].toUpperCase();
+  $('#nav-admin').hidden = user.role !== 'admin';
+  $('#nav-files').hidden = !isMac();
+  $$('.mac').forEach((x) => { x.hidden = !isMac(); });
+  $('#top-addr').textContent = location.host;
+  $('#hint-mode').textContent = isMac() ? 'Edits in your folder go straight through · commands ask you first' : 'Chat and the calculator on this copy';
+  const v = store.get('acw-view');
+  show(['chat', 'calc', 'keys', ...(isMac() ? ['files'] : []), ...(user.role === 'admin' ? ['admin'] : [])].includes(v) ? v : 'chat');
+  loadModels(); loadChats(true); health(); loadFns();
+}
+
+$('#who').onclick = (e) => {
+  e.stopPropagation();
+  $('.menu-pop')?.remove();
+  const m = document.createElement('div'); m.className = 'menu-pop';
+  m.innerHTML = '<button type="button" data-a="pass">Change password</button><button type="button" data-a="out">Sign out</button>';
+  document.body.append(m);
+  m.onclick = async (ev) => {
+    const a = ev.target.dataset.a; m.remove();
+    if (a === 'out') { try { await api('/api/signout', { method: 'POST' }); } catch {} showSignin(); }
+    if (a === 'pass') modal('Change your password', '<label class="f">Current password<input type="password" id="pw-old" autocomplete="current-password"></label><label class="f">New password (at least 10 characters)<input type="password" id="pw-new" autocomplete="new-password"></label>', 'Save', async () => { await api('/api/password', { method: 'POST', body: { old: $('#pw-old').value, next: $('#pw-new').value } }); toast('Password changed.'); });
+  };
+  setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 0);
+};
+
+function show(v) {
+  if (v === 'admin' && S.me?.role !== 'admin') v = 'chat';
+  if (v === 'files' && !isMac()) v = 'chat';
+  S.view = v;
+  $$('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  $$('.view').forEach((el) => el.classList.toggle('on', el.id === `v-${v}`));
+  if (v === 'files') loadFiles();
+  if (v === 'keys') loadKeys();
+  if (v === 'admin') renderAdmin();
+  if (v === 'calc') renderVars();
+  store.set('acw-view', v);
+}
+$$('#nav button').forEach((b) => { b.onclick = () => show(b.dataset.v); });
+document.addEventListener('keydown', (e) => {
+  if ($('#s-app').hidden || e.metaKey || e.ctrlKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) || $('.modal-bg')) return;
+  const v = { 1: 'chat', 2: 'files', 3: 'calc', 4: 'keys', 5: 'admin' }[e.key];
+  if (v) show(v);
+});
+
+async function health() {
+  try {
+    const h = await api('/api/health');
+    S.health = h;
+    $('#health').innerHTML = [...h.services.map((x) => { const b = x.busy?.[0]; return `<span title="${esc(x.label)}${b ? `: ${esc(b.name)} working on a request for ${b.mins} min` : ''}"><span class="dot ${!x.ok ? 'bad' : b ? 'warn' : 'ok'}"></span>${esc(x.label)}${!x.ok ? ' down' : b ? ' busy' : ''}</span>`; }), `<span><span class="dot ${h.calc.ok ? 'ok' : 'bad'}"></span>Calculator${h.calc.ok ? '' : ' down'}</span>`].join('');
+    modelWarn();
+  } catch { /* shown next time */ }
+}
+setInterval(() => { if (S.me) health(); }, 30000);
+
+// ---------- models ----------
+const keyOf = (m) => `${m.service}|${m.name}`;
+const picked = () => S.models.find((m) => keyOf(m) === $('#model').value);
+async function loadModels() {
+  try {
+    const r = await api('/api/models');
+    S.models = r.models; S.services = r.services; S.defaultModel = r.default; S.defaultService = r.defaultService ?? null; S.room = r.room;
+    fillModels();
+  } catch (e) { $('#model').innerHTML = `<option>${esc(e.message)}</option>`; }
+}
+function fillModels(prefer) {
+  const sel = $('#model');
+  sel.innerHTML = S.services.map((sv) => {
+    const list = S.models.filter((m) => m.service === sv.id);
+    return `<optgroup label="${esc(sv.label)}${sv.ok ? ` · ${list.length} models` : ' · not answering'}">${list.map((m) => `<option value="${esc(keyOf(m))}">${m.loaded ? '● ' : '○ '}${esc(m.name)} · ${m.gb} GB${m.lastResort ? ' · last resort' : m.busy ? ' · busy' : m.loaded ? ' · loaded' : ''}${m.warnings?.length ? ' · ⚠' : ''}${m.name === S.defaultModel && (S.defaultService == null || m.service === S.defaultService) ? ' · default' : ''}</option>`).join('')}</optgroup>`;
+  }).join('') || '<option>Your AI did not answer</option>';
+  const want = prefer ?? store.get('acw-model');
+  const def = S.models.find((m) => m.name === S.defaultModel && (S.defaultService == null || m.service === S.defaultService)) ?? S.models.find((m) => m.name === S.defaultModel) ?? S.models.find((m) => !m.lastResort && !m.warnings?.length);
+  sel.value = [...sel.options].some((o) => o.value === want) ? want : def ? keyOf(def) : '';
+  modelWarn();
+}
+function modelWarn() {
+  const m = picked(); const w = $('#mwarn');
+  const say = (h) => { w.hidden = !h; w.innerHTML = h ?? ''; };
+  if (!m) return say(null);
+  if (m.warnings?.length) return say(`<b>⚠ ${esc(m.name)}: ${esc(m.warnings[0])}.</b> ${m.caps && !m.caps.chat ? 'It is an embedding model: pick another to talk to.' : isMac() ? 'Agentic Coder needs tools to read, edit and run things; with this model a task will most likely stop at its first step.' : 'It answers in words only, without using the calculator.'}`);
+  if (m.lastResort) return say(`<b>${esc(m.name)} is the last resort.</b> It is several times slower and holds your AI while it works, so everyone else waits. Admins only.`);
+  const sv = S.health?.services?.find((x) => x.id === m.service);
+  const b = sv?.busy?.[0];
+  if (b) return say(`<b>${esc(sv.label)} is busy:</b> ${esc(b.name)} has been working on a request for ${b.mins} min. Yours waits behind it; after 60 s with no first word it moves to the stand-in, if one is set.`);
+  if (!m.loaded) { const big = S.models.filter((x) => x.loaded && x.gb > 5 && x.service === m.service).map((x) => x.name); return say(`<b>${esc(m.name)} isn't loaded.</b> Its first answer waits while your AI loads ${m.gb} GB, and it may push ${big.length ? esc(big.join(' or ')) : 'a loaded model'} out of memory for everyone.`); }
+  say(null);
+}
+$('#model').onchange = () => { store.set('acw-model', $('#model').value); modelWarn(); renderSide(); };
+
+// ---------- chats ----------
+async function loadChats(openLast) {
+  const q = S.viewingUser ? `?user=${encodeURIComponent(S.viewingUser)}` : '';
+  try { S.chats = (await api(`/api/chats${q}`)).chats; } catch { return; }
+  renderChats();
+  if (openLast && !S.chat) { const last = store.get('acw-chat'); const c = S.chats.find((x) => x.id === last) ?? null; if (c) openChat(c.id); else renderChat(); }
+}
+function renderChats() {
+  $('#chats-h').textContent = S.viewingUser ? `${S.viewingUser}'s chats` : 'Chats';
+  $('#newchat').hidden = Boolean(S.viewingUser);
+  $('#chats').innerHTML = S.chats.map((c) => `<button type="button" data-c="${esc(c.id)}" class="${S.chat?.id === c.id ? 'on' : ''}">${S.viewingUser ? '' : `<span class="del" data-del="${esc(c.id)}" title="Delete this chat">×</span>`}<b>${esc(c.title)}</b><small>${c.live ? (c.live.state === 'waiting' ? `waiting · ${c.live.place} in line` : c.live.state === 'asking' ? 'asks you' : 'running') : ago(c.updated)}${c.model ? ` · ${esc(c.model)}` : ''}</small></button>`).join('') || `<div class="fine" style="padding:6px 10px">${S.viewingUser ? 'No chats.' : 'No chats yet.'}</div>`;
+  $$('#chats [data-c]').forEach((b) => { b.onclick = (e) => { if (e.target.dataset.del) return; openChat(b.dataset.c); show('chat'); }; });
+  $$('#chats [data-del]').forEach((x) => { x.onclick = (e) => { e.stopPropagation(); const c = S.chats.find((y) => y.id === x.dataset.del); modal('Delete this chat?', `<p>“${esc(c?.title)}” and its steps go for good. Files it made stay in your folder.</p>`, 'Delete', async () => { await api(`/api/chats/${x.dataset.del}`, { method: 'DELETE' }); if (S.chat?.id === x.dataset.del) newChat(); loadChats(); }, true); }; });
+}
+function closeStream() { if (S.es) { S.es.close(); S.es = null; } }
+async function openChat(id) {
+  closeStream();
+  let r;
+  try { r = await api(`/api/chats/${id}`); } catch (e) { toast(e.message); return; }
+  S.chat = r.chat; S.events = r.events; S.live = r.state; S.partial = ''; S.status = '';
+  if (!S.viewingUser) store.set('acw-chat', id);
+  if (r.chat.model) { const m = S.models.find((x) => x.name === r.chat.model && x.service === r.chat.service) ?? S.models.find((x) => x.name === r.chat.model); if (m) fillModels(keyOf(m)); }
+  renderChats(); renderChat();
+  const after = S.events.at(-1)?.n ?? 0;
+  const es = new EventSource(`/api/chats/${id}/stream?after=${after}`);
+  S.es = es;
+  es.onmessage = (m) => {
+    const e = JSON.parse(m.data);
+    if (S.chat?.id !== id) return;
+    if (e.n === 0) {
+      if (e.t === 'state') S.live = e.state;
+      if (e.t === 'partial') S.partial = e.text;
+      if (e.t === 'status') S.status = e.text;
+      renderChat(); return;
+    }
+    if (S.events.some((x) => x.n === e.n)) return;
+    S.events.push(e);
+    if (e.t === 'run') S.live = { ...(S.live ?? {}), run: e.run, state: e.state, place: e.place ?? 0, model: e.model ?? S.live?.model };
+    if (e.t === 'ask') S.live = { ...(S.live ?? { state: 'asking' }), asking: [...(S.live?.asking ?? []), e.id] };
+    if (e.t === 'answered') S.live = S.live ? { ...S.live, asking: (S.live.asking ?? []).filter((x) => String(x) !== String(e.id)) } : S.live;
+    if (e.t === 'end') { S.live = null; S.partial = ''; S.status = ''; loadChats(); }
+    if (e.t === 'text' || e.t === 'tool') S.status = '';
+    renderChat();
+  };
+}
+function newChat() { closeStream(); S.chat = null; S.events = []; S.live = null; S.partial = ''; S.status = ''; store.set('acw-chat', ''); renderChats(); renderChat(); $('#input').focus(); }
+$('#newchat').onclick = () => { S.viewingUser = null; newChat(); show('chat'); };
+// On a phone the list of chats is a sheet.
+$('#chat-pick').onclick = () => {
+  modal(S.viewingUser ? `${S.viewingUser}'s chats` : 'Your chats', `<div class="pick-list">${S.viewingUser ? '' : '<button type="button" data-pick="">+ New chat</button>'}${S.chats.map((c) => `<button type="button" data-pick="${esc(c.id)}" class="${S.chat?.id === c.id ? 'on' : ''}"><b>${esc(c.title)}</b><small>${c.live ? esc(c.live.state) : ago(c.updated)}</small></button>`).join('') || '<p class="fine">No chats yet.</p>'}</div>`, 'Close');
+  $$('.pick-list [data-pick]').forEach((b) => { b.onclick = () => { document.querySelector('.modal-bg')?.remove(); if (b.dataset.pick) openChat(b.dataset.pick); else newChat(); }; });
+};
+
+function stepHtml(e) {
+  const err = e.error;
+  const res = e.result != null ? (err ? esc(e.result) : `= <b>${esc(typeof e.result === 'number' ? fmtN(e.result) : e.result)}</b>`) : '';
+  const arg = String(e.arg ?? '');
+  return `<div class="step ${err ? 'err' : ''}"><span class="i">${err ? '✗' : '⏺'}</span><span>${esc(e.label)}<span class="arg">(${esc(arg.length > 260 ? `${arg.slice(0, 259)}…` : arg)})</span>${e.given ? '<span class="tag">Agentic Coder</span>' : ''}</span>${res ? `<span class="res">${res}</span>` : ''}</div>`;
+}
+function askHtml(e, answered, mine) {
+  const open = !answered && mine && S.live;
+  const done = answered ? `<div class="done">${answered.choice === 'no' || answered.choice === 'stop' ? '✗' : '✓'} ${esc(answered.by ?? 'You')} ${{ yes: 'allowed it', always: 'allowed it from now on in this chat', no: 'said no', laguna: 'switched this run to Laguna q8', parts: 'kept it on the usual model, reading in parts', stop: 'stopped it' }[answered.choice] ?? 'answered'}${answered.text ? `: “${esc(answered.text)}”` : ''}</div>` : '';
+  if (e.kind === 'switch') {
+    return `<div class="ask"><div class="q">This is too big for the usual model</div><div style="font-size:13px;margin:4px 0 10px">${esc(e.text)}</div>${open ? `<div class="row"><button class="btn primary" data-ans="${esc(e.id)}" data-ch="laguna" type="button">Switch this run to ${esc(e.to)}</button><button class="btn" data-ans="${esc(e.id)}" data-ch="parts" type="button">Stay, read it in parts</button><button class="btn" data-ans="${esc(e.id)}" data-ch="stop" type="button">Stop</button></div>` : done || '<div class="done">Not answered.</div>'}</div>`;
+  }
+  if (e.name === 'Ask') {
+    const opts = Array.isArray(e.options) ? e.options : [];
+    return `<div class="ask"><div class="q">Agentic Coder asks</div><div style="font-size:13px;margin:4px 0 8px;white-space:pre-wrap">${esc(e.text)}</div>${open ? `${opts.length ? `<div class="row" style="margin-bottom:8px">${opts.map((o) => `<button class="btn" data-ans="${esc(e.id)}" data-ch="yes" data-text="${esc(o)}" type="button">${esc(o)}</button>`).join('')}</div>` : ''}<textarea data-ans-text="${esc(e.id)}" placeholder="Your answer"></textarea><div class="row"><button class="btn primary" data-ans="${esc(e.id)}" data-ch="yes" data-take="1" type="button">Send answer</button><button class="btn" data-ans="${esc(e.id)}" data-ch="no" type="button">Don't answer</button></div>` : done || '<div class="done">Not answered.</div>'}</div>`;
+  }
+  const title = e.name === 'Bash' ? 'Run this command in your folder?' : e.name === 'Mcp' || /^mcp__/.test(e.name) ? 'Use this tool?' : e.name === 'WebFetch' ? 'Read this page?' : `Allow ${esc(e.name)}?`;
+  return `<div class="ask"><div class="q">${title}</div><div class="cmd">${esc(String(e.text ?? '').replace(/^May it (run|use): /, ''))}</div>${open ? `<div class="row"><button class="btn primary" data-ans="${esc(e.id)}" data-ch="yes" type="button">Allow</button>${e.always ? `<button class="btn" data-ans="${esc(e.id)}" data-ch="always" type="button">Always allow ${esc(e.always)}</button>` : ''}<button class="btn" data-ans="${esc(e.id)}" data-ch="no" type="button">Deny</button><span class="fine" style="margin:0">waits up to 30 min, then the run stops</span></div>` : done || '<div class="done">Not answered.</div>'}</div>`;
+}
+function renderChat() {
+  const c = S.chat;
+  const mine = !c || c.user === S.me?.id;
+  $('#ctitle').textContent = c ? c.title : 'New chat';
+  $('#viewing').hidden = !S.viewingUser;
+  if (S.viewingUser) $('#viewing').innerHTML = `Viewing <b>${esc(S.viewingUser)}</b>'s chats and folder (read only). <button class="linkbtn" id="back-mine" type="button">Back to yours</button>`;
+  const back = $('#back-mine'); if (back) back.onclick = () => { S.viewingUser = null; newChat(); loadChats(); };
+  $('#compose').hidden = !mine;
+  let html = '';
+  if (!c) {
+    html = `<div class="empty-chat"><h3>${isMac() ? 'Ask Agentic Coder to do something in your folder' : 'Ask your AI anything'}</h3><p>${isMac() ? 'It reads, edits and runs things in your own folder (Files). Edits go straight through; every command asks you first.' : 'Math goes through your calculator.'}</p></div>`;
+  } else {
+    const answers = new Map(S.events.filter((e) => e.t === 'answered').map((e) => [String(e.id), e]));
+    let sinceUserFinal = false;
+    for (const e of S.events) {
+      if (e.t === 'user') { sinceUserFinal = false; html += e.note ? `<div class="u" style="opacity:.8"><span class="fine" style="margin:0">note to the run · </span>${esc(e.text)}</div>` : `<div class="u">${esc(e.text)}</div>`; }
+      else if (e.t === 'run') html += e.state === 'waiting' ? `<div class="note">· Waiting for its turn (${e.place} in line)</div>` : `<div class="note">· Started on ${esc(e.model ?? '')}${e.laguna ? ' (the last resort, after your yes)' : ''}</div>`;
+      else if (e.t === 'tool') html += stepHtml(e);
+      else if (e.t === 'note') html += `<div class="note">· ${esc(e.text)}</div>`;
+      else if (e.t === 'heard') html += `<div class="note">· It read your note: “${esc(e.text)}”</div>`;
+      else if (e.t === 'text') { if (e.final) sinceUserFinal = true; html += `<div class="a">${md(e.text)}</div>`; }
+      else if (e.t === 'ask') html += askHtml(e, answers.get(String(e.id)), mine);
+      else if (e.t === 'end') {
+        if (e.final && !sinceUserFinal) html += `<div class="a ${e.reason === 'error' ? 'err-line' : ''}">${md(e.final)}</div>`;
+        const bits = [e.reason === 'done' ? `Done${e.secs ? ` in ${Math.round(e.secs)} s` : ''}` : e.reason === 'stopped' ? 'Stopped' : e.reason === 'unanswered' ? 'Stopped: nobody answered' : `Ended (${esc(e.reason)})`, e.steps ? `${e.steps} steps` : '', e.files?.length ? `changed: ${esc(e.files.map((f) => f.path ?? f).join(', '))}` : '', e.tests ? `tests: ${e.tests.ok ? 'pass' : 'fail'}` : ''].filter(Boolean);
+        html += `<div class="endrow">${bits.map((b) => `<span>${b}</span>`).join('')}</div>`;
+      }
+    }
+    if (S.partial) html += `<div class="a partial">${md(S.partial)}</div>`;
+    if (S.live && S.live.state !== 'asking') html += `<div class="status live">${esc(S.status || (S.live.state === 'waiting' ? `Waiting for its turn · ${S.live.place || 1} in line` : 'Working…'))}</div>`;
+  }
+  $('#msgs-in').innerHTML = html;
+  $$('#msgs-in [data-ans]').forEach((b) => { b.onclick = async () => {
+    const id = b.dataset.ans;
+    const text = b.dataset.take ? $(`#msgs-in [data-ans-text="${CSS.escape(id)}"]`)?.value ?? '' : b.dataset.text ?? undefined;
+    try { await api(`/api/chats/${S.chat.id}/answer`, { method: 'POST', body: { id: /^\d+$/.test(id) ? Number(id) : id, choice: b.dataset.ch, text } }); } catch (e) { toast(e.message); }
+  }; });
+  const box = $('#msgs'); box.scrollTop = box.scrollHeight;
+  $('#send').disabled = Boolean(S.live && S.live.state !== 'running') || !$('#model').value;
+  $('#stop').disabled = !S.live;
+  $('#input').placeholder = S.live?.state === 'running' && isMac() ? 'A note for the run: it reads it with its next step.' : 'Ask anything. Math goes through your calculator.';
+  setQueue(); renderSide();
+}
+function setQueue() {
+  const c = $('#qchip');
+  const l = S.live;
+  if (l?.state === 'waiting') { c.className = 'chip warn'; c.innerHTML = `<span class="dot warn"></span>${l.place || 1} in line`; }
+  else if (l?.state === 'asking') { c.className = 'chip warn'; c.innerHTML = '<span class="dot warn"></span>Waiting for your answer'; }
+  else if (l) { c.className = 'chip good'; c.innerHTML = '<span class="dot ok"></span>Your turn: running'; }
+  else { c.className = 'chip'; c.innerHTML = '<span class="dot ok"></span>No wait'; }
+}
+async function send() {
+  const text = $('#input').value.trim();
+  if (!text || S.viewingUser) return;
+  const m = picked();
+  $('#send').disabled = true;
+  try {
+    if (!S.chat) {
+      const r = await api('/api/chats', { method: 'POST', body: { text, model: m?.name, service: m?.service } });
+      $('#input').value = '';
+      await openChat(r.id); loadChats();
+    } else {
+      await api(`/api/chats/${S.chat.id}/send`, { method: 'POST', body: { text, model: m?.name, service: m?.service } });
+      $('#input').value = '';
+    }
+  } catch (e) { toast(e.message); }
+  $('#send').disabled = false;
+}
+$('#send').onclick = send;
+$('#stop').onclick = async () => { if (!S.chat) return; try { await api(`/api/chats/${S.chat.id}/stop`, { method: 'POST' }); } catch (e) { toast(e.message); } };
+$('#input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+
+const RULES = () => `<h3>Which model answers</h3><ul style="padding-left:16px;margin:0 0 14px;font-size:12.5px;color:var(--ink2)"><li>The one you pick above (${esc(S.defaultModel)} unless you change it).</li><li>When your AI gives no first word in 60 s, that step moves to the stand-in on the other service, and a line says so.</li><li><b>Laguna q8</b> only after a yes: you are asked when a request will not fit (about ${Math.round(S.room / 1000)}k tokens). Never by itself.</li></ul>`;
+function renderSide() {
+  const side = $('#cside');
+  const ev = S.events;
+  const steps = ev.filter((e) => e.t === 'tool');
+  const end = [...ev].reverse().find((e) => e.t === 'end');
+  // What the runs wrote: their Write, Edit and Rename steps (and what an end says it changed).
+  const files = [...new Set([...ev.filter((e) => e.t === 'tool' && !e.error && /^(Write|Edit|Rename)$/.test(e.label)).map((e) => String(e.arg ?? '').split(' ')[0]), ...ev.filter((e) => e.t === 'end').flatMap((e) => (e.files ?? []).map((f) => f.path ?? f))].filter(Boolean))];
+  side.innerHTML = `<h3>This chat</h3><dl class="kv"><dt>Status</dt><dd>${S.live ? esc({ waiting: `waiting · ${S.live.place || 1} in line`, running: 'running', asking: 'asks you', checking: 'starting' }[S.live.state] ?? S.live.state) : end ? esc(end.reason === 'done' ? 'done' : end.reason) : 'ready'}</dd><dt>Model</dt><dd>${esc(S.live?.model ?? picked()?.name ?? '')}</dd><dt>Steps</dt><dd>${steps.length}</dd><dt>Calculator calls</dt><dd>${steps.filter((e) => /calculat/i.test(e.label)).length}</dd><dt>Asked you</dt><dd>${ev.filter((e) => e.t === 'ask').length}</dd></dl>
+    ${isMac() ? `<h3>Files it changed</h3><ul class="flist">${files.map((f) => `<li><span>📄</span><button class="linkbtn" data-f="${esc(f)}" type="button">${esc(f)}</button></li>`).join('') || '<li><span class="fine" style="margin:0">none yet</span></li>'}</ul>` : ''}
+    <h3>Your place in line</h3><p class="fine" style="margin:0 0 14px">Runs take turns on your AI: one per person at a time, a few at once overall. Stop takes yours out of the line.</p>${RULES()}`;
+  $$('#cside [data-f]').forEach((b) => { b.onclick = () => { S.fileOpen = b.dataset.f; show('files'); }; });
+}
+
+// ---------- files ----------
+const fq = () => (S.viewingUser ? `&user=${encodeURIComponent(S.viewingUser)}` : '');
+async function loadFiles() {
+  $('#files-title').textContent = S.viewingUser ? `${S.viewingUser}'s folder` : 'Your folder';
+  $('#upload-btn').hidden = $('#drop').hidden = Boolean(S.viewingUser);
+  try { S.files = (await api(`/api/files?x=1${fq()}`)).files; } catch (e) { $('#ftree').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  renderFiles();
+}
+function renderFiles() {
+  const list = S.files.filter((f) => !f.dir);
+  $('#ftree').innerHTML = list.length ? list.map((f) => `<button type="button" data-f="${esc(f.path)}" class="${S.fileOpen === f.path ? 'on' : ''}"><span>📄</span><span style="overflow-wrap:anywhere">${esc(f.path)}</span><span>${bytes(f.bytes)}</span></button>`).join('') : '<div class="empty">Empty. Upload files, or ask the agent to make some.</div>';
+  $$('#ftree [data-f]').forEach((b) => { b.onclick = () => { S.fileOpen = b.dataset.f; renderFiles(); }; });
+  showFileView();
+}
+async function showFileView() {
+  const f = S.files.find((x) => x.path === S.fileOpen && !x.dir);
+  if (!f) { $('#fview').innerHTML = '<div class="empty">Pick a file to see it.</div>'; return; }
+  const dl = `/api/files/get?path=${encodeURIComponent(f.path)}${fq()}`;
+  $('#fview').innerHTML = `<div class="fileacts"><b style="overflow-wrap:anywhere">${esc(f.path)}</b><span class="fine" style="margin:0">${bytes(f.bytes)} · ${ago(f.at)}</span><a class="btn" href="${dl}" download>Download</a>${S.viewingUser ? '' : '<button class="btn danger" id="f-del" type="button">Delete</button>'}</div><div class="fine">Loading…</div>`;
+  try {
+    const r = await api(`/api/files/show?path=${encodeURIComponent(f.path)}${fq()}`);
+    $('#fview .fine:last-child').outerHTML = r.text != null ? `<pre>${esc(r.text)}</pre>` : `<div class="empty">${esc(r.why)}</div>`;
+  } catch (e) { $('#fview .fine:last-child').textContent = e.message; }
+  const del = $('#f-del'); if (del) del.onclick = () => modal(`Delete ${f.path}?`, '<p>It goes for good.</p>', 'Delete', async () => { await api(`/api/files?path=${encodeURIComponent(f.path)}`, { method: 'DELETE' }); S.fileOpen = null; loadFiles(); }, true);
+}
+async function upload(list) {
+  for (const file of list) {
+    const zip = /\.zip$/i.test(file.name);
+    try { const r = await api(`/api/files/upload?path=${encodeURIComponent(file.name)}${zip ? '&unzip=1' : ''}`, { method: 'PUT', raw: file }); toast(zip ? `Unpacked ${r.unpacked} files from ${file.name}.` : `Uploaded ${file.name}.`); if (!zip) S.fileOpen = r.path; } catch (e) { toast(`${file.name}: ${e.message}`); }
+  }
+  loadFiles();
+}
+$('#upload-btn').onclick = () => $('#upload').click();
+$('#upload').onchange = (e) => { upload([...e.target.files]); e.target.value = ''; };
+const drop = $('#drop');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); upload([...e.dataTransfer.files]); });
+$('#zip-btn').onclick = () => { location.href = `/api/files/zip?x=1${fq()}`; };
+
+// ---------- calculator ----------
+function renderVars() {
+  $('#vars').innerHTML = S.vars.map(([k, v], i) => `<span class="var"><input value="${esc(k)}" data-i="${i}" data-k="k" aria-label="letter" spellcheck="false"><input class="n" value="${esc(v)}" data-i="${i}" data-k="v" aria-label="value"><button type="button" data-rm="${i}" aria-label="Remove">×</button></span>`).join('');
+  $$('#vars input').forEach((inp) => { inp.oninput = () => { S.vars[inp.dataset.i][inp.dataset.k === 'k' ? 0 : 1] = inp.value; }; });
+  $$('#vars [data-rm]').forEach((b) => { b.onclick = () => { S.vars.splice(Number(b.dataset.rm), 1); renderVars(); }; });
+}
+$('#addvar').onclick = () => { S.vars.push(['', '']); renderVars(); $$('#vars input')[S.vars.length * 2 - 2]?.focus(); };
+async function evaluate() {
+  const expression = $('#expr').value.trim();
+  if (!expression) return;
+  const variables = Object.fromEntries(S.vars.filter(([k, v]) => k.trim() && String(v).trim() !== '' && new RegExp(`\\b${k.trim().replace(/[^\w]/g, '')}\\b`).test(expression)).map(([k, v]) => [k.trim(), /^-?[\d.]+(e-?\d+)?$/i.test(String(v).trim()) ? Number(v) : String(v).trim()]));
+  const box = $('#result'); box.className = 'result'; box.innerHTML = '<div class="meta">Asking your calculator…</div>';
+  let r;
+  try { r = await api('/api/calc', { method: 'POST', body: { expression, variables } }); } catch (e) { r = { ok: false, error: e.message }; }
+  box.className = `result ${r.ok ? '' : 'err'}`;
+  box.innerHTML = r.ok ? `<div class="big">${esc(fmtN(r.value))}</div><div class="meta">${esc(r.normalized ?? '')}${Object.keys(r.variables ?? {}).length ? ` · ${esc(Object.entries(r.variables).map(([k, v]) => `${k}=${v}`).join(', '))}` : ''} · ${r.ms} ms</div>` : `<div class="big">${esc(r.error)}</div>${r.suggestions ? `<div class="meta">Did you mean: ${esc(Object.values(r.suggestions).flat().join(', '))}</div>` : ''}`;
+  S.calcHist.unshift({ expression, variables, r });
+  $('#hist').innerHTML = S.calcHist.slice(0, 40).map((h, i) => `<li class="${h.r.ok ? '' : 'err'}" data-h="${i}"><code>${esc(h.expression)}</code><span>${h.r.ok ? esc(fmtN(h.r.value)) : 'error'}</span></li>`).join('');
+  $$('#hist [data-h]').forEach((li) => { li.onclick = () => { const h = S.calcHist[li.dataset.h]; $('#expr').value = h.expression; S.vars = Object.entries(h.variables).map(([k, v]) => [k, String(v)]); if (!S.vars.length) S.vars = [['x', '']]; renderVars(); }; });
+}
+$('#eval').onclick = evaluate;
+$('#expr').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); evaluate(); } });
+async function loadFns() {
+  try {
+    const r = await api('/api/calc/functions');
+    $('#fns').innerHTML = [...r.functions.map((f) => [f, `${f}(`]), ...r.constants.map((c) => [c, c])].map(([l, ins]) => `<button type="button" data-ins="${esc(ins)}">${esc(l)}</button>`).join('');
+    $$('#fns [data-ins]').forEach((b) => { b.onclick = () => { const t = $('#expr'); const s = t.selectionStart ?? t.value.length; t.value = t.value.slice(0, s) + b.dataset.ins + t.value.slice(t.selectionEnd ?? s); t.focus(); t.selectionStart = t.selectionEnd = s + b.dataset.ins.length; }; });
+  } catch (e) { $('#fns').innerHTML = `<span class="fine">${esc(e.message)}</span>`; }
+}
+
+// ---------- API keys ----------
+const ROUTES = () => [
+  ['POST /api/v1/calc', 'Work out an expression on your calculator', 1],
+  ['GET /api/v1/formulas', 'Search the calculator\'s formulas', 1],
+  ['GET /api/v1/models', 'Your AI\'s models, which are loaded or busy', 1],
+  ['POST /api/v1/chat', 'Chat with your AI, the calculator as its tool (JSON lines)', 1],
+  ['POST /v1/chat/completions', 'Your AI in the OpenAI shape, for other apps', 1],
+  ['POST /api/chat · /api/generate', 'Your AI in Ollama\'s own shape', 1],
+  ['POST /api/v1/tasks', 'Start an Agentic Coder run in your folder', isMac()],
+  ['GET /api/v1/tasks/:id/events', 'Its steps as they happen (server-sent events)', isMac()],
+  ['POST /api/v1/tasks/:id/answer', 'Allow or deny what it asks', isMac()],
+  ['POST /api/v1/tasks/:id/stop', 'Stop it', isMac()],
+  ['GET · PUT · DELETE /api/v1/files/…', 'Your folder; GET /api/v1/files.zip for all of it', isMac()],
+  ['POST /mcp', 'The calculator\'s tools for Agentic Coder, Claude Code or any MCP app', 1],
+].filter((r) => r[2]);
+const EX = {
+  calc: ['Calculator', (b) => `curl ${b}/api/v1/calc \\\n  -H "Authorization: Bearer acw_…" \\\n  -d '{"expression": "P*r/(1-(1+r)^-n)",\n       "variables": {"P": 250000, "r": 0.005, "n": 360}}'`],
+  chat: ['Chat', (b) => `curl -N ${b}/api/v1/chat \\\n  -H "Authorization: Bearer acw_…" \\\n  -d '{"model": "${S.defaultModel}",\n       "messages": [{"role": "user", "content": "What is phi^10?"}]}'\n\n→ one JSON line per piece: status, text, tool, done`],
+  task: ['Run a task', (b) => `curl ${b}/api/v1/tasks \\\n  -H "Authorization: Bearer acw_…" \\\n  -d '{"prompt": "Add tests for parse.js"}'\n\n→ {"id": "c_…", "run": "r_…", "place": 0}\n\ncurl -N ${b}/api/v1/tasks/c_…/events \\\n  -H "Authorization: Bearer acw_…"`],
+  mcp: ['MCP', (b) => `Agentic Coder (/mcp, or ~/.agentic-coder/mcp.json):\n{ "servers": { "acw": { "url": "${b}/mcp", "auth": "key" } } }\n\nClaude Code:\nclaude mcp add --transport http acw ${b}/mcp \\\n  --header "Authorization: Bearer acw_…"`],
+  openai: ['OpenAI-style apps', (b) => `Base URL:  ${b}/v1\nAPI key:   acw_…\nModel:     any of your AI's models, e.g. ${S.defaultModel}\n\nRequests wait their turn and move to the stand-in like the page's.`],
+};
+async function loadKeys() {
+  let keys = [];
+  try { keys = (await api('/api/keys')).keys; } catch (e) { toast(e.message); }
+  $('#keys').innerHTML = keys.map((k) => `<tr><td>${esc(k.name)}</td><td><code>acw_…${esc(k.tail)}</code></td><td class="hide-s">${ago(k.used)}</td><td><div class="acts"><button class="btn danger" data-del="${k.id}" type="button">Delete</button></div></td></tr>`).join('') || '<tr><td colspan="4" class="fine">No keys yet.</td></tr>';
+  $$('#keys [data-del]').forEach((b) => { b.onclick = () => modal('Delete this key?', '<p>Anything using it stops working at once.</p>', 'Delete', async () => { await api(`/api/keys/${b.dataset.del}`, { method: 'DELETE' }); loadKeys(); }, true); });
+  $('#routes').innerHTML = ROUTES().map((r) => `<tr><td><code>${esc(r[0])}</code></td><td>${esc(r[1])}</td></tr>`).join('');
+  const tabs = Object.entries(EX).filter(([id]) => isMac() || id !== 'task');
+  if (!tabs.some(([id]) => id === S.exTab)) S.exTab = 'calc';
+  $('#extabs').innerHTML = tabs.map(([id, [t]]) => `<button type="button" data-x="${id}" class="${S.exTab === id ? 'on' : ''}">${esc(t)}</button>`).join('');
+  $$('#extabs button').forEach((b) => { b.onclick = () => { S.exTab = b.dataset.x; loadKeys(); }; });
+  const text = EX[S.exTab][1](location.origin);
+  $('#exbody').innerHTML = `<div class="code"><button class="btn cp" type="button">Copy</button>${esc(text)}</div><p class="fine" style="margin:0">A key works only on the copy that made it, and acts as you. It is shown once: lost means make a new one.</p>`;
+  $('#exbody .cp').onclick = (e) => { navigator.clipboard?.writeText(text).catch(() => {}); e.target.textContent = 'Copied'; };
+}
+$('#newkey').onclick = () => modal('New API key', '<label class="f">What is it for?<input id="key-name" placeholder="e.g. laptop scripts"></label>', 'Make the key', async () => {
+  const r = await api('/api/keys', { method: 'POST', body: { name: $('#key-name').value.trim() || 'key' } });
+  $('#newkey-box').innerHTML = `<div class="newkey"><b>Copy it now: it is shown only once.</b><code>${esc(r.key)}</code></div>`;
+  loadKeys();
+});
+
+// ---------- admin ----------
+const ATABS = [['users', 'Users'], ['queue', 'Queue'], ['usage', 'Usage'], ['models', 'Models'], ['settings', 'Settings']];
+let qTimer = null;
+async function renderAdmin() {
+  clearInterval(qTimer);
+  $('#atabs').innerHTML = ATABS.map(([id, t]) => `<button type="button" data-t="${id}" class="${S.adminTab === id ? 'on' : ''}">${t}</button>`).join('');
+  $$('#atabs button').forEach((b) => { b.onclick = () => { S.adminTab = b.dataset.t; renderAdmin(); }; });
+  const body = $('#abody');
+  const t = S.adminTab;
+  try {
+    if (t === 'users') {
+      const r = await api('/api/admin/users');
+      body.innerHTML = `<div class="notice"><b>You can open everyone's chats and files.</b> Every invite says so.</div>
+        <table class="tbl"><thead><tr><th>User</th><th>Role</th><th class="hide-s">Last seen</th><th class="r hide-s">Runs this week</th><th class="r hide-s">Keys</th><th></th></tr></thead><tbody>${r.users.map((u) => `<tr><td><b>${esc(u.name)}</b>${u.id === S.me.id ? ' <span class="pill acc">you</span>' : ''}</td><td>${esc(u.role)}</td><td class="hide-s">${ago(u.seen)}</td><td class="r hide-s">${u.runs}</td><td class="r hide-s">${u.keys}</td><td><div class="acts"><button class="btn" data-open="${esc(u.name)}" type="button">Open chats &amp; files</button><button class="btn" data-reset="${u.id}" data-name="${esc(u.name)}" type="button">Reset link</button><button class="btn" data-role="${u.id}" data-to="${u.role === 'admin' ? 'user' : 'admin'}" type="button">Make ${u.role === 'admin' ? 'user' : 'admin'}</button>${u.id !== S.me.id ? `<button class="btn danger" data-del="${u.id}" data-name="${esc(u.name)}" type="button">Delete</button>` : ''}</div></td></tr>`).join('')}
+        ${r.invites.map((i) => `<tr><td>${esc(i.name)}</td><td>${esc(i.role)}</td><td colspan="4"><span class="pill warn">invited · expires ${ago(Date.now() - (i.expires - Date.now())).replace(' ago', '')}</span></td></tr>`).join('')}</tbody></table>`;
+      $$('#abody [data-open]').forEach((b) => { b.onclick = () => { S.viewingUser = b.dataset.open === S.me.name ? null : b.dataset.open; newChat(); loadChats(); show('chat'); }; });
+      $$('#abody [data-reset]').forEach((b) => { b.onclick = async () => { const r2 = await api(`/api/admin/users/${b.dataset.reset}/reset`, { method: 'POST' }); modal(`Reset link for ${b.dataset.name}`, `<p>Send them this link. It works once, for 24 hours; their API keys keep working.</p><div class="link-box">${esc(location.origin + r2.path)}</div>`, 'Done', null); }; });
+      $$('#abody [data-role]').forEach((b) => { b.onclick = async () => { try { await api(`/api/admin/users/${b.dataset.role}/role`, { method: 'POST', body: { role: b.dataset.to } }); renderAdmin(); } catch (e) { toast(e.message); } }; });
+      $$('#abody [data-del]').forEach((b) => { b.onclick = () => modal(`Delete ${b.dataset.name}?`, '<p>Their account, chats, folder and API keys go for good.</p>', 'Delete for good', async () => { await api(`/api/admin/users/${b.dataset.del}`, { method: 'DELETE' }); renderAdmin(); }, true); });
+    } else if (t === 'queue') {
+      const draw = async () => {
+        const r = await api('/api/admin/queue');
+        if (S.view !== 'admin' || S.adminTab !== 'queue') return;
+        body.innerHTML = `<div class="two"><div>
+          <div class="qcard"><h3 style="margin:0 0 6px;font-size:13px">Runs</h3>${r.runs.map((x) => `<div class="qrow"><span class="n">${x.state === 'waiting' ? x.place : '▶'}</span><span><b>${esc(x.user)}</b> · ${esc(x.model)} · “${esc(x.title ?? '')}”${x.laguna ? ' <span class="pill warn">Laguna</span>' : ''}</span><span class="pill ${x.state === 'running' ? 'acc' : 'warn'}">${esc(x.state)}</span></div>`).join('') || '<p class="fine" style="margin:0">Nothing running or waiting.</p>'}</div>
+          <div class="qcard"><h3 style="margin:0 0 6px;font-size:13px">Requests at your AI now</h3>${r.requests.map((x) => `<div class="qrow"><span class="n">${x.waiting ? '…' : '▶'}</span><span><b>${esc(x.name ?? '')}</b> · ${esc(x.model)}</span><span class="pill ${x.waiting ? 'warn' : 'acc'}">${x.waiting ? `no first word · ${x.secs} s` : `${x.secs} s`}</span></div>`).join('') || '<p class="fine" style="margin:0">None.</p>'}</div>
+          <p class="fine">Limits: ${r.limits.perUser} run per person, ${r.limits.total} at once, ${r.limits.runMins} min per run. Turns go round the people waiting.</p></div>
+          <div>${r.services.map((s) => `<div class="qcard"><h3 style="margin:0 0 6px;font-size:13px">${esc(s.label)} ${s.ok ? '' : '<span class="pill warn">not answering</span>'}</h3>${s.loaded.map((m) => { const b = s.busy.find((x) => x.name === m.name); return `<div class="qrow"><span class="n">●</span><span>${esc(m.name)}</span><span class="pill ${b ? 'warn' : 'mute'}">${b ? `busy ${b.mins} min` : `${m.gb} GB${m.pinned ? ' · kept' : ''}`}</span></div>`; }).join('') || '<p class="fine" style="margin:0">Nothing loaded.</p>'}</div>`).join('')}</div></div>`;
+      };
+      await draw(); qTimer = setInterval(() => draw().catch(() => {}), 3000);
+    } else if (t === 'usage') {
+      const r = await api('/api/admin/usage?days=7');
+      const max = Math.max(1, ...r.rows.map((x) => x.busyMs));
+      body.innerHTML = `<table class="tbl"><thead><tr><th>User</th><th class="r">Runs</th><th class="r">Requests</th><th>Time on your AI</th><th class="hide-s">Mostly</th><th class="r hide-s">Tokens out</th><th class="r hide-s">Moved to stand-in</th><th class="r hide-s">Laguna</th></tr></thead><tbody>${r.rows.map((x) => `<tr><td>${esc(x.name)}</td><td class="r">${x.runs}</td><td class="r">${x.requests}</td><td><span class="meter"><i style="width:${(x.busyMs / max) * 100}%"></i></span>${Math.round(x.busyMs / 60000)} min</td><td class="hide-s">${esc(x.model ?? '')}</td><td class="r hide-s">${fmtN(x.tokensOut)}</td><td class="r hide-s">${x.spills}</td><td class="r hide-s">${x.laguna}</td></tr>`).join('') || '<tr><td colspan="8" class="fine">Nothing yet this week.</td></tr>'}</tbody></table><p class="fine">Since ${esc(r.from)}.</p>`;
+    } else if (t === 'models') {
+      await renderModelsTab(body);
+    } else {
+      const set = (await api('/api/admin/settings')).settings;
+      body.innerHTML = `<div class="set">
+        <label>Runs at once, per person</label><input id="s-per" type="number" min="1" max="5" value="${set.limits.perUser}">
+        <label>Runs at once, everyone</label><input id="s-total" type="number" min="1" max="8" value="${set.limits.total}">
+        <span class="h">Your AI answers one request per model at a time; more just wait inside it.</span>
+        <label>Longest run (minutes)</label><input id="s-mins" type="number" min="5" max="240" value="${set.limits.runMins}">
+        <label>Unanswered question stops a run after (minutes)</label><input id="s-ask" type="number" min="1" max="240" value="${set.limits.askMins}">
+        <label>Invite links last (days)</label><input id="s-inv" type="number" min="1" max="30" value="${set.limits.inviteDays}">
+        <label>Your AI services</label><textarea id="s-svc" spellcheck="false">${esc(set.services.map((x) => x.url).join('\n'))}</textarea>
+        <span class="h">One address a line; the first is AI 1.</span>
+        <label>Calculator</label><input id="s-calc" value="${esc(set.calc.url ?? '')}" spellcheck="false">
+        <label>Calculator login (for formulas)</label><input id="s-cuser" value="${esc(set.calc.user ?? '')}" placeholder="username" autocomplete="off"><span></span><input id="s-cpass" type="password" placeholder="${set.calc.hasPass ? 'saved: type to replace' : 'password'}" autocomplete="new-password">
+        <span class="h">Kept on this copy only, never sent to a page. The calculator link signs in with it, keeps the connection open and shares the one session: formulas for everyone, and the problem reports.</span>
+        <label>Calculator link</label><span id="s-calclink" style="color:var(--ink2)">Asking…</span>
+        <span class="h"><button class="btn" id="s-calcre" type="button">Reconnect now</button> <button class="btn" id="s-calcsign" type="button">Sign in again</button> Where it runs: the hub's Calculator tab, or /calc on and /calc off.</span>
+        ${isMac() ? `<label>Runs may read web pages</label><span><input type="checkbox" class="toggle" id="s-web" ${set.runs?.webFetch ? 'checked' : ''}></span><span class="h">Off: runs cannot fetch pages. On: each page still asks the user, and a run could reach addresses on this Mac's network.</span>` : ''}
+        <label>Claude API</label><span style="color:var(--ink2)">Off for web users</span>
+      </div><button class="btn primary" id="s-save" type="button">Save</button>`;
+      const linkLine = (l) => !l ? 'Not running: save a calculator login, or switch its background service on (/calc on).' : `<span class="dot ${l.state === 'live' ? 'ok' : l.state === 'login-wrong' || l.state === 'no-login' ? 'bad' : 'warn'}"></span> ${esc(l.words)} · since ${new Date(l.since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${l.where === 'service' ? 'its own background service' : 'inside this web'} · drops today ${l.counts?.drops ?? 0} · reports filed ${l.reports.filter((r) => r.status === 'filed').length}`;
+      const showLink = async (p) => { try { const r = p ? await api(`/api/admin/calc-link/${p}`, { method: 'POST' }) : await api('/api/admin/calc-link'); $('#s-calclink').innerHTML = linkLine(r.link); } catch (e) { $('#s-calclink').textContent = e.message; } };
+      showLink();
+      $('#s-calcre').onclick = () => showLink('reconnect');
+      $('#s-calcsign').onclick = () => showLink('signin');
+      $('#s-save').onclick = async () => {
+        const patch = { limits: { perUser: $('#s-per').value, total: $('#s-total').value, runMins: $('#s-mins').value, askMins: $('#s-ask').value, inviteDays: $('#s-inv').value }, services: $('#s-svc').value.split('\n').map((x) => x.trim()).filter(Boolean), calc: { url: $('#s-calc').value.trim(), user: $('#s-cuser').value.trim(), ...($('#s-cpass').value ? { pass: $('#s-cpass').value } : {}) } };
+        if ($('#s-web')) patch.runs = { webFetch: $('#s-web').checked };
+        try { await api('/api/admin/settings', { method: 'PUT', body: patch }); toast('Saved.'); loadModels(); health(); renderAdmin(); } catch (e) { toast(e.message); }
+      };
+    }
+  } catch (e) { body.innerHTML = `<div class="notice">${esc(e.message)}</div>`; }
+}
+// ---------- Admin › Models: the jobs, every model on your services, who may pick it, Test, keep / let go ----
+let MB = null; // the last board
+const TESTS = {}; // "service|model" → last test result
+const caps = (m) => {
+  if (!m.caps) return '<span class="pill mute">not known</span>';
+  if (!m.caps.chat) return '<span class="pill warn">embeddings: can\'t chat</span>';
+  return [m.caps.tools ? '<span class="pill good">tools</span>' : '<span class="pill warn">no tools</span>', m.caps.thinking ? '<span class="pill mute">think</span>' : '', m.caps.vision ? '<span class="pill mute">pictures</span>' : ''].join(' ');
+};
+// Token counts as people say them: 32768 is "32k", 120000 is "120k".
+const kTok = (n) => (n ? (n >= 1048576 ? `${Math.round(n / (n % 1048576 ? 1e6 : 1048576))}M` : `${Math.round(n / (n % 1024 ? 1000 : 1024))}k`) : '—');
+const ago2 = (t) => { const s2 = Math.round((Date.now() - t) / 1000); return s2 < 60 ? `${s2} s ago` : `${Math.round(s2 / 60)} min ago`; };
+async function renderModelsTab(body, { refresh = false } = {}) {
+  if (!MB || refresh) body.innerHTML = `<p class="fine">${refresh ? 'Asking your AI services…' : 'Loading…'}</p>`;
+  try { MB = await api(`/api/admin/models${refresh ? '?refresh=1' : ''}`); } catch (e) { body.innerHTML = `<div class="notice">${esc(e.message)}</div>`; return; }
+  drawModels(body);
+}
+function drawModels(body) {
+  const b = MB;
+  const svc = (id) => b.services.find((x) => x.id === id)?.label ?? `AI ${id + 1}`;
+  const q = (S.modelsQ ?? '').toLowerCase();
+  const rows = b.models.filter((m) => (!q || m.name.toLowerCase().includes(q)) && (!S.modelsLoaded || m.loaded));
+  const roleRow = (r) => {
+    const val = r.pick ? `${r.pick.service}|${r.pick.model}` : '';
+    const opts = b.services.map((sv) => `<optgroup label="${esc(sv.label)}${sv.ok ? '' : ' · not answering'}">${r.choices.filter((c) => c.service === sv.id).map((c) => `<option value="${c.service}|${esc(c.model)}" ${`${c.service}|${c.model}` === val ? 'selected' : ''} ${c.fit === 'no' ? 'disabled' : ''}>${c.fit === 'warn' ? '⚠ ' : c.fit === 'no' ? '✕ ' : ''}${esc(c.model)}</option>`).join('')}</optgroup>`).join('');
+    const none = r.id === 'standIn' ? '<option value="">none: wait in line</option>' : r.id === 'helper' ? '<option value="">none: the main model does them</option>' : '';
+    const m = r.pick ? b.models.find((x) => x.name === r.pick.model && x.service === r.pick.service) : null;
+    const facts = m ? [`${kTok(m.maxCtx)} max`, m.loaded ? `loaded at ${kTok(m.ctx)}${m.pinned ? ', kept' : ''}` : 'not loaded', m.caps?.tools ? 'tools ✓' : m.caps ? 'no tools' : '', m.caps?.thinking ? 'think ✓' : ''].filter(Boolean).join(' · ') : r.pick ? `${esc(r.pick.model)} is not on your services now` : '';
+    const fit = r.fit && r.fit.level !== 'ok' ? `<div class="${r.fit.level === 'no' ? 'err-line' : ''}" style="color:${r.fit.level === 'warn' ? 'var(--warn)' : ''};font-size:12px">⚠ ${esc(r.fit.why.join('; '))}</div>` : r.pick ? '<div style="color:var(--good);font-size:12px">✓ fits this job</div>' : '';
+    return `<div class="role"><div><b>${esc(r.label)}</b><div class="fine" style="margin:2px 0 0">${esc(r.what)}</div></div>
+      <div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select data-role="${r.id}">${none}${opts}</select>${r.id === 'standIn' ? `<span style="white-space:nowrap"><span class="fine">after</span> <input type="number" id="role-after" min="10" max="600" value="${r.after}" style="width:64px"> <span class="fine">s</span></span>` : ''}</div><div class="fine" style="margin:3px 0 0">${facts}</div>${fit}</div></div>`;
+  };
+  const testCell = (m) => { const t = TESTS[`${m.service}|${m.name}`]; if (!t) return ''; if (t.running) return '<div class="fine">testing…</div>'; return t.ok ? `<div class="fine" style="color:var(--good)">✓ “${esc(t.text)}” · first word ${(t.firstMs / 1000).toFixed(1)} s${t.loadMs > 500 ? ` (loading ${(t.loadMs / 1000).toFixed(1)} s)` : ''}${t.tps ? ` · ${t.tps} tok/s` : ''}</div>` : `<div class="fine err-line">✕ ${esc(t.error)}</div>`; };
+  body.innerHTML = `<div class="mhead">${b.services.map((sv) => `<span class="chip ${sv.ok ? '' : 'warn'}"><span class="dot ${sv.ok ? 'ok' : 'bad'}"></span>${esc(sv.label)} · ${sv.ok ? `${sv.count} models · ${sv.loadedGb} GB loaded` : esc(sv.error ?? 'not answering')}</span>`).join('')}<span class="fine" style="margin:0">checked ${ago2(Math.min(...b.services.map((x) => x.at)))}</span><button class="btn" id="m-refresh" type="button">↻ Refresh</button></div>
+    <div class="qcard roles"><h3 style="margin:0 0 8px;font-size:13px">Which model does which job</h3><div class="grid">${b.roles.map(roleRow).join('')}</div><p class="fine" style="margin:6px 0 0">A change counts from the next message; a step already running finishes on its model. ⚠ fits with a warning · ✕ cannot do the job.</p></div>
+    <div class="mtools"><input id="m-q" placeholder="Find a model" value="${esc(S.modelsQ ?? '')}" spellcheck="false"><label class="fine" style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="m-loaded" ${S.modelsLoaded ? 'checked' : ''}> only loaded</label><span class="fine" style="margin:0">${rows.length} of ${b.models.length}</span></div>
+    <table class="tbl mtable"><thead><tr><th>Model</th><th class="hide-s">AI</th><th>Can do</th><th class="r hide-s">Reads</th><th class="r hide-s">Size</th><th>Now</th><th>Who may pick</th><th class="r">Your AI</th></tr></thead><tbody>${rows.map((m) => `<tr>
+      <td><code>${esc(m.name)}</code>${m.roles.length ? ` ${m.roles.map((r) => `<span class="pill acc">${esc(b.roles.find((x) => x.id === r)?.label ?? r)}</span>`).join(' ')}` : ''}${m.sameAs?.length ? `<div class="fine" style="margin:0">same weights as ${esc(m.sameAs.join(', '))}</div>` : ''}${testCell(m)}</td>
+      <td class="hide-s">${esc(svc(m.service))}</td><td>${caps(m)}</td>
+      <td class="r hide-s">${kTok(m.maxCtx)}${m.loaded ? `<div class="fine" style="margin:0">loaded ${kTok(m.ctx)}</div>` : ''}</td><td class="r hide-s">${m.gb} GB</td>
+      <td>${m.busy ? '<span class="pill warn">busy</span>' : m.loaded ? `<span class="pill good">loaded${m.pinned ? ', kept' : ''}</span>` : '<span class="pill mute">not loaded</span>'}${m.inUse || m.runs ? `<div class="fine" style="margin:0">${m.runs ? `${m.runs} run${m.runs > 1 ? 's' : ''}` : ''}${m.inUse ? ` ${m.inUse} request${m.inUse > 1 ? 's' : ''}` : ''}</div>` : ''}</td>
+      <td><select data-access="${m.service}|${esc(m.name)}"><option value="all" ${m.access === 'all' ? 'selected' : ''}>everyone</option><option value="admin" ${m.access === 'admin' ? 'selected' : ''}>admins</option><option value="off" ${m.access === 'off' ? 'selected' : ''}>nobody</option></select>${m.warnings?.length && m.access !== 'off' ? `<div class="fine" style="margin:0;color:var(--warn)">users see: ⚠ ${esc(m.warnings[0])}</div>` : ''}</td>
+      <td class="r"><div class="acts">${m.caps && !m.caps.chat ? '' : `<button class="btn" data-test="${m.service}|${esc(m.name)}" type="button">Test</button>`}${m.pinned ? '' : `<button class="btn" data-keep="${m.service}|${esc(m.name)}" type="button">${m.loaded ? 'Keep' : 'Load + keep'}</button>`}${m.loaded ? `<button class="btn danger" data-letgo="${m.service}|${esc(m.name)}" type="button">Let go</button>` : ''}</div></td></tr>`).join('')}</tbody></table>
+    <details class="qcard" ${b.log.length ? '' : 'hidden'}><summary style="cursor:pointer;font-size:13px;font-weight:600">Change log (${b.log.length})</summary><table class="tbl" style="margin:8px 0 0">${b.log.map((l) => `<tr><td class="fine" style="white-space:nowrap">${new Date(l.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td><td>${esc(l.user)}</td><td>${esc(l.what)}</td><td>${esc(l.detail)}</td></tr>`).join('')}</table></details>`;
+  const split = (v) => { const i = v.indexOf('|'); return { service: Number(v.slice(0, i)), model: v.slice(i + 1) }; };
+  const find = (v) => { const { service, model } = split(v); return b.models.find((m) => m.service === service && m.name === model); };
+  const pushOut = (m) => { const big = b.models.filter((x) => x.service === m.service && x.loaded && x.name !== m.name && (x.loadedGb ?? x.gb) > 5).map((x) => x.name); return big.length ? ` It may push ${esc(big.join(' or '))} out of memory for everyone, your own windows included.` : ''; };
+  $('#m-refresh').onclick = () => renderModelsTab(body, { refresh: true });
+  $('#m-q').oninput = (e) => { S.modelsQ = e.target.value; const pos = e.target.selectionStart; drawModels(body); const q2 = $('#m-q'); q2.focus(); q2.selectionStart = q2.selectionEnd = pos; };
+  $('#m-loaded').onchange = (e) => { S.modelsLoaded = e.target.checked; drawModels(body); };
+  const saveRole = async (role, v) => {
+    const p2 = v ? split(v) : { service: null, model: null };
+    try { MB = await api('/api/admin/models/role', { method: 'PUT', body: { role, ...p2, ...(role === 'standIn' ? { after: Number($('#role-after')?.value) } : {}) } }); toast('Saved: counts from the next message.'); loadModels(); } catch (e) { toast(e.message); }
+    drawModels(body);
+  };
+  $$('#abody [data-role]').forEach((sel) => { sel.onchange = () => saveRole(sel.dataset.role, sel.value); });
+  const after = $('#role-after'); if (after) after.onchange = () => saveRole('standIn', $('[data-role="standIn"]').value);
+  $$('#abody [data-access]').forEach((sel) => { sel.onchange = async () => { try { await api('/api/admin/models/access', { method: 'PUT', body: { ...split(sel.dataset.access), access: sel.value } }); toast('Saved.'); } catch (e) { toast(e.message); } renderModelsTab(body); loadModels(); }; });
+  $$('#abody [data-test]').forEach((btn) => { btn.onclick = () => {
+    const m = find(btn.dataset.test);
+    const go = async () => { TESTS[btn.dataset.test] = { running: true }; drawModels(body); TESTS[btn.dataset.test] = await api('/api/admin/models/test', { method: 'POST', body: split(btn.dataset.test) }).catch((e) => ({ ok: false, error: e.message })); await renderModelsTab(body); };
+    if (m.loaded) return go();
+    modal(`Test ${m.name}?`, `<p>It is not loaded, so the test loads it on ${esc(svc(m.service))} (${m.gb} GB) and keeps it for a few minutes.${pushOut(m)}</p>`, 'Load and test', async () => { go(); });
+  }; });
+  $$('#abody [data-keep]').forEach((btn) => { btn.onclick = () => {
+    const m = find(btn.dataset.keep);
+    modal(`Keep ${m.name} loaded?`, `<p>${m.loaded ? 'It stays' : `It loads on ${esc(svc(m.service))} (${m.gb} GB) and stays`} in memory until someone lets it go.${m.loaded ? '' : pushOut(m)}</p>`, m.loaded ? 'Keep it loaded' : 'Load and keep', async () => { MB = await api('/api/admin/models/keep', { method: 'POST', body: { ...split(btn.dataset.keep), keep: true } }); drawModels(body); toast(`${m.name} is kept loaded.`); });
+  }; });
+  $$('#abody [data-letgo]').forEach((btn) => { btn.onclick = () => {
+    const m = find(btn.dataset.letgo);
+    const jobs = m.roles.map((r) => b.roles.find((x) => x.id === r)?.label).filter(Boolean);
+    modal(`Let ${m.name} go?`, `<p>It leaves ${esc(svc(m.service))}'s memory for everyone, your own Agentic Coder windows included. The next request for it waits while it loads again (${m.gb} GB).</p>${jobs.length ? `<div class="notice"><b>It is the ${esc(jobs.join(' and the '))}.</b> Their next request loads it again.</div>` : ''}${m.inUse || m.runs ? '<div class="notice"><b>It is working right now:</b> it can be let go when that finishes.</div>' : ''}`, 'Let it go', async () => { MB = await api('/api/admin/models/letgo', { method: 'POST', body: split(btn.dataset.letgo) }); drawModels(body); toast(`${m.name} was let go.`); }, true);
+  }; });
+}
+
+$('#invite-btn').onclick = () => {
+  modal('Invite someone', '<label class="f">Name they\'ll sign in with<input id="m-name" placeholder="e.g. sam"></label><label class="f">Role<select id="m-role"><option value="user">user</option><option value="admin">admin</option></select></label><p class="fine" style="margin:0">You get a link to send them. It works once. They are told the admin can open their chats and files.</p><div id="m-link"></div>', 'Make the link', async () => {
+    const r = await api('/api/admin/invite', { method: 'POST', body: { name: $('#m-name').value.trim(), role: $('#m-role').value } });
+    $('#m-link').innerHTML = `<div class="link-box">${esc(location.origin + r.path)}</div>`;
+    navigator.clipboard?.writeText(location.origin + r.path).catch(() => {});
+    toast('Copied the link.');
+    if (S.adminTab === 'users') renderAdmin();
+    return 'keep';
+  });
+};
+
+function modal(title, body, ok = 'OK', action = null, danger = false) {
+  const bg = document.createElement('div'); bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><h3>${esc(title)}</h3>${body}<div class="notice" data-err hidden></div><div class="row">${action ? '<button class="btn" data-x type="button">Cancel</button>' : ''}<button class="btn ${danger ? 'danger' : 'primary'}" data-ok type="button">${esc(ok)}</button></div></div>`;
+  const close = () => bg.remove();
+  bg.onclick = (e) => { if (e.target === bg) close(); };
+  bg.querySelector('[data-x]')?.addEventListener('click', close);
+  bg.querySelector('[data-ok]').onclick = async () => {
+    if (!action) return close();
+    try { const r = await action(); if (r === 'keep') { bg.querySelector('[data-ok]').textContent = 'Done'; bg.querySelector('[data-ok]').onclick = close; bg.querySelector('[data-x]')?.remove(); return; } close(); } catch (e) { const er = bg.querySelector('[data-err]'); er.hidden = false; er.textContent = e.message; }
+  };
+  document.body.append(bg);
+  bg.querySelector('input, select, textarea')?.focus();
+}
+
+boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# https for the web copy: Caddy asks Let's Encrypt for WEB_HOST's certificate and renews it.
+{$WEB_HOST} {
+	encode gzip
+	reverse_proxy web:8080 {
+		flush_interval -1
+	}
+}

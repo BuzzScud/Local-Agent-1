@@ -225,6 +225,16 @@ if (process.argv[2] === 'morning') {
 // coding serve: this machine's model for another machine's /remote (models/runtime/serve.mjs).
 // --port N (8080) · --local (this machine only, for an SSH tunnel) · --ctx 32k ·
 // --model gemma|qwen · --https cert.pem key.pem · --new-key
+// coding web …: Agentic Coder Web, the page, the backend and the tools server (terminal/src/web/main.mjs).
+if (process.argv[2] === 'web') {
+  const { webCommand } = await import('./web/main.mjs');
+  await webCommand(process.argv.slice(3));
+}
+// coding calc …: the calculator link, and where it runs (terminal/src/web/calc-cmd.mjs).
+if (process.argv[2] === 'calc') {
+  const { calcCommand } = await import('./web/calc-cmd.mjs');
+  await calcCommand(process.argv.slice(3));
+}
 if (process.argv[2] === 'serve') {
   const a = process.argv.slice(3);
   const at = (f) => a.indexOf(f);
@@ -365,7 +375,9 @@ if (opts.print) {
     opts.prompt = spec.prompt;
     const { modeOf } = await import('./agent/permissions.mjs');
     const mode = modeOf(opts.mode) ?? 'ask';
-    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode, steps: Number(spec.steps) || null, rewind: null, points: [] };
+    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode, steps: Number(spec.steps) || null, rewind: null, points: [], resume: null };
+    // A follow-up (the web, terminal/src/web/runner.mjs): the conversation of the run before it, from its transcript.
+    if (spec.resume) { try { loop.resume = JSON.parse((await import('node:fs')).readFileSync(spec.resume, 'utf8')).messages ?? null; } catch { /* starts fresh: said by the run's first note */ } }
     // Its copies for undo (rewind.mjs): one session a loop, kept apart from the window's own. Each message
     // of the run is a point; the window puts back from the first to the last (loops.mjs undo).
     if (spec.rewind && process.env.AGENTIC_REWIND !== 'off') {
@@ -400,6 +412,7 @@ if (opts.print) {
   const picPaths = [...new Set([...droppedFiles(opts.prompt, opts.cwd).filter((d) => d.kind === 'image').map((d) => d.path), ...[...opts.prompt.matchAll(/(^|\s)@(\S+)/g)].map((m) => resolvePath(opts.cwd, m[2])).filter((p) => media.isImage(p) && existsSync(p))])];
   const images = picPaths.map((p) => media.preparedImage(p));
   let canSee = false;
+  let helperJobs = null;
   if (!url && !opts.local && settings.remote?.use) {
     try { remote = await connectRemote(settings.remote); } catch (e) { process.stderr.write(`coding: the remote model at ${remoteLabel(settings.remote)} did not answer: ${e.message}. coding -p --local runs on this Mac.\n`); process.exit(1); }
     const risk = remoteRisk(settings.remote);
@@ -419,6 +432,15 @@ if (opts.print) {
     runModel = modelWithLimits(remote.model, limits);
     canSee = Boolean(remote.vision);
     if (remote.slots > 1) slots = { main: 0, side: 1 };
+    // A web run (terminal/src/web/runner.mjs): its side jobs (summaries, the second look, Stays on task) go to
+    // the admin's Helper model through the same gateway. A window sets its helpers from /subagents instead
+    // (app-panels.mjs); other runs of coding -p keep doing them on the main model.
+    if (process.env.AGENTIC_WEB_RUN === '1' && settings.webHelper?.model && remote.model.remote?.ollama) {
+      const { ollamaModel } = await import('../../models/index.mjs');
+      const entry = await ollamaModel({ url: remote.url, model: settings.webHelper.model }).catch(() => null);
+      helperJobs = { side: { on: true, model: settings.webHelper.model, entry } };
+      process.stderr.write(`· Side jobs on ${settings.webHelper.model}\n`);
+    }
   }
   // A llama.cpp server given with --url says whether it can look at pictures.
   if (url && !remote && images.length) { try { canSee = Boolean((await (await fetch(`${url.replace(/\/+$/, '')}/props`, { signal: AbortSignal.timeout(3000) })).json())?.modalities?.vision); } catch { canSee = false; } }
@@ -490,7 +512,8 @@ if (opts.print) {
       answers: process.stdin.isTTY && !loop ? askOnTerminal : null,
       // A loop's run: its window's mode, its questions answered on the loop board, a note typed there sent
       // when the turn ends, and a half-fix kept when fewer tests fail (agent.mjs madeProgress).
-      ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, steering: loop.io.steering, signal: loop.io.signal, keepProgress: true, maxSteps: loop.steps, rewind: loop.rewind } : {}),
+      ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, steering: loop.io.steering, signal: loop.io.signal, keepProgress: true, maxSteps: loop.steps, rewind: loop.rewind, resume: loop.resume } : {}),
+      helperJobs,
       // What the app read for it before its first step (the project map, the files a question names) ends " [app]".
       onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
     });

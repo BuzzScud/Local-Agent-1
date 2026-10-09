@@ -278,13 +278,14 @@ export function sendCommand(home, pid, cmd) {
 }
 
 // ---- one run, as a process -----------------------------------------------------------------------
-// spec: { folder, prompt, mode, url, slots, local, flows, allow, owner, steps, rewind }. Answers { send, kill, on, pid }.
+// spec: { folder, prompt, mode, url, slots, local, flows, allow, owner, steps, rewind, resume }. Answers { send, kill, on, pid }.
+// resume: a transcript file (AGENTIC_TRANSCRIPT's) whose conversation the run carries on (the web's follow-ups).
 export function startRun(spec, { self = selfCommand(), env = process.env } = {}) {
   const args = ['-p', '--loop-events', '--mode', spec.mode ?? 'ask', ...(spec.url ? ['--url', spec.url, ...(spec.slots > 1 ? ['--slots', String(spec.slots)] : [])] : spec.local ? ['--local'] : []), ...(spec.flows === false ? ['--no-flows'] : [])];
   const child = spawn(self[0], [...self.slice(1), ...args], {
     cwd: spec.folder, stdio: ['pipe', 'pipe', 'pipe'],
     // The memory is read, never saved to, by a run nobody watches; what it costs counts under its window.
-    env: { ...env, AGENTIC_LOOP_SPEC: JSON.stringify({ prompt: spec.prompt, allow: spec.allow ?? [], steps: spec.steps ?? null, rewind: spec.rewind ?? null }), AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_SPEND_PID: String(spec.owner ?? process.pid), AGENTIC_OPEN: 'off' },
+    env: { ...env, AGENTIC_LOOP_SPEC: JSON.stringify({ prompt: spec.prompt, allow: spec.allow ?? [], steps: spec.steps ?? null, rewind: spec.rewind ?? null, ...(spec.resume ? { resume: spec.resume } : {}) }), AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_SPEND_PID: String(spec.owner ?? process.pid), AGENTIC_OPEN: 'off' },
   });
   const fns = [];
   let carry = '', err = '', ended = false;
