@@ -436,7 +436,7 @@ export const templateOf = (su) => { const i = TEMPLATES.findIndex((t) => t.text 
 export function setupChoices(row, su, state = {}, now = Date.now()) {
   const kind = kindOfSetup(su);
   if (row === 'often') return [
-    ...(kind === 'debug' ? [['until done', 'until the tests pass', 'again 15 s after a miss']] : []),
+    ...(kind === 'debug' ? [['until done', su.f.check ? 'until the page is clean' : 'until the tests pass', 'again 15 s after a miss']] : []),
     ['1m', 'every minute'], ['5m', 'every 5 minutes'], ['10m', 'every 10 minutes'], ['30m', 'every 30 minutes'], ['1h', 'every hour'],
     ['own pace', 'at its own pace', 'it decides, about every 10 minutes'],
   ];
@@ -477,7 +477,9 @@ export function setupFields(su, state = {}) {
   const t = su.custom.stop?.trim();
   if (t) { if (/^\d+$/.test(t.replace(/\s*runs?$/i, ''))) { runs = t.replace(/\s*runs?$/i, ''); stopAt = 'none'; } else { runs = 'no limit'; stopAt = t.replace(/^(at|in)\s+/i, ''); } }
   const name = su.id ? su.name : (su.save?.name ?? '').trim() || su.loaded?.name || '';
-  return { message: (su.text ?? '').trim(), kind: kindOfSetup(su), every, runs, stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst, folder: f.folder ?? state.places?.[0]?.path ?? null, name, picture: su.picture ?? null };
+  return { message: (su.text ?? '').trim(), kind: kindOfSetup(su), every, runs, stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst, folder: f.folder ?? state.places?.[0]?.path ?? null, name, picture: su.picture ?? null,
+    // Its page check (a loaded loop's "- Page check: {page}"), with the blank as answered.
+    ...(f.check ? { check: String(f.check).replace(/\{([a-z][a-z0-9_-]{0,30})\}/gi, (all, k) => (su.fills ?? []).find((x) => x.key === k)?.value?.trim() || all) } : {}) };
 }
 const placeOf = (su, state) => (state.places ?? []).find((x) => x.path === setupFields(su, state).folder) ?? { shown: state.folder ?? '', tests: false };
 // What to look at before Start: [mark, words, style]; warnings only (the picture says the rest).
@@ -504,12 +506,13 @@ export const CYCLE = {
 // When the runs fall, as the wizard has it now: [{ when, label }], whether more come, and the end.
 export function runsAhead(su, state = {}, now = Date.now(), most = 5) {
   const f = setupFields(su, state);
+  const goal = f.check ? 'clean' : 'all pass';
   const kind = kindOfSetup(su);
   const ev = readEvery(f.every, { kind });
   const runs = readRuns(f.runs).maxRuns ?? null;
   const stop = readStopAt(f.stopAt, now).stopAt ?? null;
   const first = state.model?.on ? 'now' : 'once on';
-  if (ev.until) return { slots: [{ when: first, label: 'run 1' }, { when: '15 s on', label: 'not yet?' }, { when: '15 s on', label: 'again' }].slice(0, Math.min(3, runs ?? 3)), more: !runs || runs > 3, end: runs ? `ends when all pass, or after run ${runs}` : 'ends when all pass', ok: true };
+  if (ev.until) return { slots: [{ when: first, label: 'run 1' }, { when: '15 s on', label: 'not yet?' }, { when: '15 s on', label: 'again' }].slice(0, Math.min(3, runs ?? 3)), more: !runs || runs > 3, end: runs ? `ends when ${goal}, or after run ${runs}` : `ends when ${goal}`, ok: true };
   const gap = (ev.every ?? 600) * 1000;
   const slots = [];
   for (let i = 0, t = now; i < Math.min(most, runs ?? most); i++, t += gap) {
@@ -553,7 +556,7 @@ export function loopPicture(su, state, w, now) {
   const ev = readEvery(f.every, { kind });
   const known = seen('often');
   const waitFor = (secs) => (secs === 3600 ? 'an hour' : secs === 86_400 ? 'a day' : spokenEvery(secs));
-  const back = !known ? ' then the next run ' : ev.until ? ' not all pass? again 15 s later ' : ev.every ? ` wait ${waitFor(ev.every)}, then again ` : ' it picks when, about 10 min ';
+  const back = !known ? ' then the next run ' : ev.until ? (f.check ? ' still broken? again 15 s later ' : ' not all pass? again 15 s later ') : ev.every ? ` wait ${waitFor(ev.every)}, then again ` : ' it picks when, about 10 min ';
   rows.push(fit([p(' '.repeat(c1)), p('▲', bs), p(' '.repeat(Math.max(0, c3 - c1 - 1))), p('│', bs)], w));
   const room = c3 - c1 - 1;
   const lab = cut(back, room - 2);
@@ -698,7 +701,7 @@ function drawSetup(state, ui, { cols, rows, now }) {
     const f = setupFields(pic, state);
     const ev = readEvery(f.every, { kind });
     const cyc = (pic.picture ?? CYCLE[kind] ?? CYCLE.task).flatMap(([v, w], i) => [...(i ? [p(' ─▶ ', 'accent')] : []), p(v, 'accent b'), p(` ${w}`, 'text')]);
-    add(fit([p(' '.repeat(X + 2)), p('Your loop  ', 'white b'), ...cyc, p(` ─▶ ${ev.until ? 'again until they pass' : ev.every ? `wait ${spokenEvery(ev.every)}` : 'its own pace'} ↺`, 'dim')], cols));
+    add(fit([p(' '.repeat(X + 2)), p('Your loop  ', 'white b'), ...cyc, p(` ─▶ ${ev.until ? (f.check ? 'again until clean' : 'again until they pass') : ev.every ? `wait ${spokenEvery(ev.every)}` : 'its own pace'} ↺`, 'dim')], cols));
     for (const r of drawn.slice(-9, -5)) add(fit([p(' '.repeat(X)), ...r], cols));
   }
   add(blank(cols), true);

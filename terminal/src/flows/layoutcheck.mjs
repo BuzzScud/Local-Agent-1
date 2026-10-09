@@ -77,6 +77,7 @@ const PROBE = String.raw`(function () {
   var ce = console.error;
   console.error = function () { try { errs.push([].slice.call(arguments).map(String).join(' ')); } catch (x) {} return ce.apply(console, arguments); };
   var CLICKS = false;
+  var ACCESS = false;
   // What a click did that the page itself may not show: a message box, a new
   // window, a copy, a download, a sound, a save, a form sent.
   var acted = 0;
@@ -191,7 +192,43 @@ const PROBE = String.raw`(function () {
     out.contrast.sort(function (x, y) { return x.ratio - y.ratio; }); out.contrast = out.contrast.slice(0, 3);
     var media = [].slice.call(body.querySelectorAll('img,svg,canvas,video,iframe')).some(function (m) { var r = m.getBoundingClientRect(); return r.width * r.height > 1000; });
     out.blank = (body.innerText || '').trim().length < 2 && !media;
+    if (ACCESS) out.access = accessLook();
     report(out);
+  }
+  // Who can use it (a loop's page check asks for it: rules/loops/accessibility-pass.md): what a keyboard
+  // or a screen reader cannot use. A name counts from its words, aria-label, aria-labelledby, a title, or
+  // a picture's alt inside it; a placeholder is not a label.
+  function accessLook() {
+    var a = { lang: Boolean((document.documentElement.getAttribute('lang') || '').trim()), noAlt: [], noName: [], noLabel: [], skips: [], alts: 0, names: 0, labels: 0 };
+    function by(el) { var ids = (el.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean); return ids.some(function (id) { var x = document.getElementById(id); return x && said(x); }); }
+    function named(el) {
+      if ((el.getAttribute('aria-label') || '').trim() || (el.getAttribute('title') || '').trim() || by(el) || said(el)) return true;
+      return [].slice.call(el.querySelectorAll('img[alt], [aria-label], svg title')).some(function (x) { return (x.getAttribute('alt') || x.getAttribute('aria-label') || x.textContent || '').trim(); });
+    }
+    [].slice.call(document.querySelectorAll('img')).forEach(function (im) {
+      if (!shown(im) || im.hasAttribute('alt') || im.getAttribute('role') === 'presentation' || im.getAttribute('aria-hidden') === 'true') return;
+      a.alts++; if (a.noAlt.length < 3) a.noAlt.push(tag(im) + ' (' + ((im.getAttribute('src') || '').split('/').pop().slice(0, 40) || 'no src') + ')');
+    });
+    [].slice.call(document.querySelectorAll('button, a[href], [role=button], [role=link]')).forEach(function (el) {
+      if (!shown(el) || named(el)) return;
+      a.names++; if (a.noName.length < 3) a.noName.push(tag(el));
+    });
+    [].slice.call(document.querySelectorAll('input, select, textarea')).forEach(function (f) {
+      var t = (f.getAttribute('type') || 'text').toLowerCase();
+      if (!shown(f) || /^(hidden|submit|button|reset|image)$/.test(t)) return;
+      if ((f.getAttribute('aria-label') || '').trim() || (f.getAttribute('title') || '').trim() || by(f)) return;
+      if (f.id) { var l = document.querySelector('label[for="' + f.id.replace(/"/g, '\\"') + '"]'); if (l && said(l)) return; }
+      var w = f.closest('label'); if (w && said(w)) return;
+      a.labels++; if (a.noLabel.length < 3) a.noLabel.push({ el: tag(f), hint: (f.getAttribute('placeholder') || '').trim().slice(0, 30) });
+    });
+    var last = 0;
+    [].slice.call(document.querySelectorAll('h1, h2, h3, h4, h5, h6')).forEach(function (h) {
+      if (!shown(h)) return;
+      var n = Number(h.tagName[1]);
+      if (last && n > last + 1 && a.skips.length < 3) a.skips.push({ from: 'h' + last, to: name(h) });
+      last = n;
+    });
+    return a;
   }
   function report(out) {
     var pre = document.createElement('pre'); pre.id = '__agentic_layout';
@@ -263,6 +300,8 @@ const PROBE = String.raw`(function () {
 
 // The same probe for the click pass.
 const CLICK_PROBE = PROBE.replace('var CLICKS = false;', 'var CLICKS = true;');
+// The same probe, also looking at who can use the page (accessLook).
+const ACCESS_PROBE = PROBE.replace('var ACCESS = false;', 'var ACCESS = true;');
 const CLICK_PASS = { name: 'clicks', width: 1440, height: 900, clicks: true };
 
 // The page with the probe and a <base> put first in <head>, on its first line.
@@ -302,7 +341,8 @@ async function pass(chrome, copyUrl, scratch, p) {
 
 // Checks one page: { page, problems: [text], secs } or { skipped: why }.
 // clicks: also the click pass (CLICK_PASS), which presses every button.
-export async function layoutCheck(pageAbs, { chrome = findChrome(), passes = PASSES, clicks = true } = {}) {
+// access: also who can use it (accessLook), for a loop's page check.
+export async function layoutCheck(pageAbs, { chrome = findChrome(), passes = PASSES, clicks = true, access = false } = {}) {
   if (!chrome) return { skipped: 'no headless Chrome on this machine' };
   if (!existsSync(pageAbs)) return { skipped: `${pageAbs} is missing` };
   const t0 = Date.now();
@@ -314,7 +354,7 @@ export async function layoutCheck(pageAbs, { chrome = findChrome(), passes = PAS
       writeFileSync(join(scratch, `${file}.html`), withProbe(html, dirname(pageAbs), pathToFileURL(join(scratch, `${file}.js`)).href));
       return pathToFileURL(join(scratch, `${file}.html`)).href;
     };
-    const page = copy(PROBE, 'page');
+    const page = copy(access ? ACCESS_PROBE : PROBE, 'page');
     const clickPage = clicks ? copy(CLICK_PROBE, 'page-clicks') : null;
     const results = await Promise.all([...passes.map((p) => pass(chrome, page, scratch, p)), ...(clickPage ? [pass(chrome, clickPage, scratch, CLICK_PASS)] : [])]);
     // A click pass that did not report (a button left the page, say) adds nothing.
@@ -414,6 +454,7 @@ export function problemsOf(html, results) {
     // in dark mode was dropped, as its 3.9:1 at 1440 px came first (30 Sep).
     // A page with no dark colours of its own shows the same pair: told once.
     for (const c of f.contrast ?? []) add(`con:${c.el}|${c.fg}|${c.bg}`, `Text is too faint to read ${at}: ${c.el} is ${c.fg} on ${c.bg} (${c.ratio}:1; needs ${c.need}:1)${f.faint > 3 ? `, one of ${f.faint} such pieces` : ''}.${passingHint(c.fg, c.bg, c.need)}`);
+    if (f.access) for (const [key, text] of accessProblems(f.access)) add(key, text);
     if (f.tiny && f.tinyEx) add('tiny', `Some text is too small to read (${f.tiny} piece${f.tiny === 1 ? '' : 's'} under 11 px, e.g. ${f.tinyEx.el} at ${f.tinyEx.size} px).`);
   }
   return out;
@@ -425,6 +466,146 @@ export function layoutNote(rel, problems, again = false) {
   const list = problems.slice(0, 8).map((p, i) => `${i + 1}. ${p}`).join('\n');
   if (again) return `The layout check looked at ${rel} again after your fix, and it still finds:\n${list}\nYour last change did not fix ${problems.length === 1 ? 'it' : 'these'}. Fix ${problems.length === 1 ? 'it' : 'them'} with Edit (small edits, not a rewrite); where a colour is given, use it. Then say in one sentence what you changed.`;
   return `The layout check opened ${rel} in a browser (1440×900, a 390-wide phone, and dark mode), clicked its buttons, and found:\n${list}\nFix these in the page with Edit (small edits, not a rewrite), then say in one sentence what you changed.`;
+}
+
+// Who can use it, in plain sentences: [key, text] (problemsOf keeps each once).
+function accessProblems(a) {
+  const out = [];
+  const more = (n, shown) => (n > shown ? `, one of ${n}` : '');
+  if (!a.lang) out.push(['a:lang', 'The page does not say its language: add lang="en" (or its own) to <html>, so a screen reader reads it in the right voice.']);
+  if (a.noAlt?.length) out.push(['a:alt', `A picture has no alt text: ${a.noAlt.join(', ')}${more(a.alts, a.noAlt.length)}. Add alt="what it shows", or alt="" when it is only decoration.`]);
+  for (const el of a.noName ?? []) out.push([`a:name:${el}`, `${el} has no name a screen reader can say${a.names > a.noName.length ? ` (one of ${a.names})` : ''}: give it words, an aria-label or a title.`]);
+  for (const f of a.noLabel ?? []) out.push([`a:label:${f.el}`, `The box ${f.el} has no label${f.hint ? ` (its placeholder "${f.hint}" is not one)` : ''}: add a <label for> or an aria-label.`]);
+  for (const k of a.skips ?? []) out.push([`a:skip:${k.to}`, `The headings skip a level: an ${k.from} is followed by ${k.to}. Use the next level down, so the outline reads in order.`]);
+  return out;
+}
+
+// ---- a loop's page check (rules/loops: "- Page check: {page}"), before each run ----
+// A file in the project, or an address: a dev server on this Mac or your own network. An address is
+// opened in Chrome over its debugging connection (the page cannot be copied), with the same probe put in
+// before the page's own scripts; its buttons are never pressed, so nothing in a live app is set off.
+
+// An address on this Mac or a private network (a dev server, a Tailscale machine); never the internet.
+export function isLocalAddress(text) {
+  let u;
+  try { u = new URL(text); } catch { return false; }
+  if (!/^https?:$/.test(u.protocol)) return false;
+  const h = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h === '::1') return true;
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 100 && b >= 64 && b <= 127);
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// A fetch with a time limit of its own (AbortSignal.timeout never fires under bun test).
+async function fetchFor(url, ms) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try { const r = await fetch(url, { signal: ac.signal, redirect: 'follow' }); return { status: r.status, text: await r.text() }; }
+  catch (e) { return { error: e.name === 'AbortError' ? 'it did not answer within 5 s' : 'nothing answers there' }; }
+  finally { clearTimeout(t); }
+}
+// Chrome with its debugging connection on a free port: send(method, params, session) → result.
+async function devtools(chrome, scratch) {
+  const proc = spawn(chrome, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--mute-audio',
+    `--user-data-dir=${join(scratch, 'profile-address')}`, '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', ...(platform() === 'linux' ? ['--no-sandbox'] : []), 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const kill = () => { try { proc.kill('SIGKILL'); } catch {} };
+  const wsUrl = await new Promise((resolve) => {
+    let err = '';
+    const t = setTimeout(() => resolve(null), 10_000);
+    proc.stderr.on('data', (d) => { err += d; const m = /DevTools listening on (ws:\/\/\S+)/.exec(err); if (m) { clearTimeout(t); resolve(m[1]); } });
+    proc.on('error', () => { clearTimeout(t); resolve(null); });
+    proc.on('close', () => { clearTimeout(t); resolve(null); });
+  });
+  if (!wsUrl) { kill(); return null; }
+  const ws = new WebSocket(wsUrl);
+  try { await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = () => reject(new Error('no connection')); }); } catch { kill(); return null; }
+  let seq = 0;
+  const waiting = new Map();
+  ws.onmessage = (e) => {
+    let m;
+    try { m = JSON.parse(String(e.data)); } catch { return; }
+    const w = m.id && waiting.get(m.id);
+    if (!w) return;
+    waiting.delete(m.id);
+    if (m.error) w.reject(new Error(m.error.message)); else w.resolve(m.result);
+  };
+  const send = (method, params = {}, sessionId = undefined) => new Promise((resolve, reject) => {
+    const id = ++seq;
+    waiting.set(id, { resolve, reject });
+    ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
+  });
+  return { send, close() { try { ws.close(); } catch {} kill(); } };
+}
+// One look at an address at one size, in a tab of its own.
+async function addressPass(dt, url, p, probe) {
+  let targetId = null;
+  try {
+    ({ targetId } = await dt.send('Target.createTarget', { url: 'about:blank' }));
+    const { sessionId } = await dt.send('Target.attachToTarget', { targetId, flatten: true });
+    const s = (method, params) => dt.send(method, params, sessionId);
+    await s('Emulation.setDeviceMetricsOverride', { width: p.width, height: p.height, deviceScaleFactor: 1, mobile: false });
+    if (p.dark) await s('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+    await s('Page.enable');
+    await s('Page.addScriptToEvaluateOnNewDocument', { source: probe });
+    const nav = await s('Page.navigate', { url });
+    if (nav?.errorText) return { pass: p, failed: nav.errorText };
+    for (const until = Date.now() + 12_000; Date.now() < until;) {
+      await sleep(250);
+      const r = await s('Runtime.evaluate', { expression: "(document.getElementById('__agentic_layout') || {}).textContent || ''", returnByValue: true });
+      const v = r?.result?.value;
+      if (v) return { pass: p, found: JSON.parse(Buffer.from(v, 'base64').toString('utf8')) };
+    }
+    return { pass: p, failed: 'the probe did not report' };
+  } catch (e) {
+    return { pass: p, failed: e.message };
+  } finally {
+    if (targetId) try { await dt.send('Target.closeTarget', { targetId }); } catch {}
+  }
+}
+// Checks an address: { page, problems, secs } or { skipped: why }. No click pass: it is a live app.
+export async function layoutCheckUrl(url, { chrome = findChrome(), passes = PASSES, access = false } = {}) {
+  if (!chrome) return { skipped: 'no headless Chrome on this machine' };
+  if (!isLocalAddress(url)) return { skipped: 'only an address on this Mac or your own network is checked, never one on the internet' };
+  const t0 = Date.now();
+  const got = await fetchFor(url, 5000);
+  if (got.error) return { skipped: `${got.error} (is its server running?)` };
+  if (got.status >= 400) return { skipped: `it answers ${got.status}` };
+  const scratch = mkdtempSync(join(tmpdir(), 'agentic-layout-'));
+  const dt = await devtools(chrome, scratch);
+  try {
+    if (!dt) return { skipped: 'the browser could not start' };
+    const results = [];
+    for (const p of passes) results.push(await addressPass(dt, url, p, access ? ACCESS_PROBE : PROBE));
+    const failed = results.filter((r) => r.failed);
+    if (failed.length === results.length) return { skipped: `the browser could not open it (${failed[0].failed})` };
+    return { page: url, problems: problemsOf(got.text, results), secs: (Date.now() - t0) / 1000 };
+  } finally {
+    dt?.close();
+    try { rmSync(scratch, { recursive: true, force: true }); } catch {}
+  }
+}
+// A loop's page check: target is what its {page} blank was answered with, a file (from cwd) or an address.
+// → { page: as written, address, problems, secs } or { page, address, skipped }.
+export async function checkPage(target, { cwd = process.cwd(), access = false, chrome = findChrome() } = {}) {
+  const page = String(target ?? '').trim();
+  if (/^https?:\/\//i.test(page)) return { page, address: true, ...(await layoutCheckUrl(page, { chrome, access })) };
+  const abs = page.startsWith('~/') ? join(homedir(), page.slice(2)) : page.startsWith('/') ? page : join(cwd, page);
+  if (!page || !existsSync(abs) || !statSync(abs).isFile()) return { page, address: false, skipped: `there is no file ${page || '(none named)'} in this folder` };
+  let html = '';
+  try { html = readFileSync(abs, 'utf8'); } catch { return { page, address: false, skipped: `${page} could not be read` }; }
+  const server = needsServer(html);
+  if (server) return { page, address: false, skipped: `${server}: give its address instead, like http://localhost:5173` };
+  return { page, address: false, ...(await layoutCheck(abs, { chrome, access })) };
+}
+// What a run is told above its message: what the check found, or that it found nothing, or why it could not look.
+export function pageCheckNote(r) {
+  if (r.skipped) return `(The page check of ${r.page} could not run: ${r.skipped}. Say so in your answer, and do what you can from the code.)`;
+  const how = r.address ? ', its buttons not pressed (a live address)' : '';
+  const head = `(The page check of ${r.page}, just now, in a hidden browser at 1440×900, on a phone 390 px wide and in dark mode${how}, ${r.secs.toFixed(1)} s:`;
+  if (!r.problems.length) return `${head} nothing broken.)`;
+  return `${head} ${r.problems.length} problem${r.problems.length === 1 ? '' : 's'}.\n${r.problems.map((x) => `- ${x}`).join('\n')})`;
 }
 
 // A page that only works through its own server (a Vite or React index.html,

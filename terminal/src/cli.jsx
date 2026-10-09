@@ -392,6 +392,16 @@ if (opts.print) {
       rw.finish = async (...a) => { const p = await finish(...a); if (p) loop.points.push(p); return p; };
       loop.rewind = rw;
     }
+    // A loop with a page check (rules/loops "- Page check: {page}"): the page is opened in a hidden browser
+    // first, and what it found goes above the message, so the model starts from the real page, not a guess.
+    if (spec.check?.page && opts.prompt) {
+      const { checkPage, pageCheckNote } = await import('./flows/layoutcheck.mjs');
+      loop.check = { ...spec.check, run: () => checkPage(spec.check.page, { cwd: opts.cwd, access: Boolean(spec.check.access) }) };
+      loop.io.page('start', { page: spec.check.page });
+      const found = await loop.check.run();
+      loop.io.page('before', found);
+      opts.prompt = `${pageCheckNote(found)}\n\n${opts.prompt}`;
+    }
     // Plan mode only reads, as in the window.
     if (mode === 'plan' && opts.prompt) opts.prompt += '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]';
     process.on('SIGTERM', () => process.exit(143));
@@ -532,6 +542,8 @@ if (opts.print) {
       const { windowSpend } = await import('./agent/spend.mjs');
       const files = new Map();
       for (const p of loop.points) for (const f of p.files ?? []) if (f.by !== 'other' && !files.has(f.path)) files.set(f.path, { path: f.path, by: f.by });
+      // A loop that fixes the page until it is clean looks again, so the board can tell a run that is not getting closer.
+      if (loop.check?.after && r.reason === 'done') loop.io.page('after', await loop.check.run());
       loop.io.end(r, { usd: windowSpend().usd, point: loop.points[0]?.n ?? null, until: loop.points.at(-1)?.n ?? null, files: [...files.values()] });
     } else process.stdout.write(`${r.finalText.trim()}\n`);
     await stop();

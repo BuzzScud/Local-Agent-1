@@ -63,7 +63,7 @@ export function openSetup(ui, { mode = 'ask', text = null, unclear = null, sente
   ui.back = ui.view === 'shelf' ? 'shelf' : null;
   if (loop) {
     const lf = fieldsOf(loop);
-    Object.assign(f, { every: lf.every, runs: lf.runs, stopAt: lf.stopAt, cap: lf.cap, steps: lf.steps, mode: lf.mode, askFirst: lf.askFirst, kind: lf.kind, folder: state?.places?.find((x) => x.shown === loop.folder)?.path ?? null });
+    Object.assign(f, { every: lf.every, runs: lf.runs, stopAt: lf.stopAt, cap: lf.cap, steps: lf.steps, mode: lf.mode, askFirst: lf.askFirst, kind: lf.kind, check: lf.check ?? null, folder: state?.places?.find((x) => x.shown === loop.folder)?.path ?? null });
     Object.assign(su, { id: loop.id, again: over(loop), name: loop.name, text: loop.message, keep: true, picture: loop.picture ?? null });
     su.touched.often = true;
     su.step = wizardSteps(su).length - 1;
@@ -126,7 +126,7 @@ function keptOf(su, state) {
   const f = setupFields(su, state);
   const message = su.loaded?.template ?? f.message;
   return { name, about: su.loaded?.about ?? '', message, fills: su.loaded ? su.fills.map((x) => ({ ...x })) : [], picture: su.picture ?? null,
-    fields: { kind: f.kind, every: f.every, runs: f.runs, stopAt: f.stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst }, where: su.save.where, folder: f.folder, replace: su.save.replace ?? null };
+    fields: { kind: f.kind, every: f.every, runs: f.runs, stopAt: f.stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst, ...(su.f.check ? { check: su.f.check } : {}) }, where: su.save.where, folder: f.folder, replace: su.save.replace ?? null };
 }
 // ^S on the last step: kept, not started.
 function saveOnly(b) {

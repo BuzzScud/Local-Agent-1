@@ -15,6 +15,8 @@
 //   - Every: 10m                                              ← 10m, 1h, until done, own pace
 //   - Until: no limit                                         ← 5 runs · 18:30 · 2h · no limit
 //   - Mode: ask · Cap: none · Steps: as /effort · Ask first: off
+//   - Page check: {page}                                      ← the page checked in a hidden browser before each run,
+//                                                               its findings above the message (· who can use it: and that)
 //   - Picture: RUN the tests › READ what fails › TELL you     ← the three boxes in the wizard's picture
 //   - Asks: page = <its ready answer>                         ← a {page} in the message, and its ready answer
 //   ## Each run
@@ -26,7 +28,7 @@ import { HOME } from '../../../models/index.mjs';
 
 // The ready-made ones, read once: under Bun with literal paths, so the one-file app carries them inside it (as
 // prompt-files.mjs does with TOOLS.md); under Node (the bench's scripts import the app's parts) from the disk.
-const SHIPPED_IDS = ['watch-the-tests', 'fix-until-green', 'build-and-lint-guard', 'flaky-test-hunter', 'watch-ci', 'release-watch', 'dev-server-check', 'log-watcher', 'work-digest', 'docs-keeper'];
+const SHIPPED_IDS = ['watch-the-tests', 'fix-until-green', 'build-and-lint-guard', 'flaky-test-hunter', 'watch-ci', 'release-watch', 'dev-server-check', 'log-watcher', 'work-digest', 'docs-keeper', 'layout-watch', 'polish-until-clean', 'theme-guard', 'accessibility-pass', 'design-review'];
 async function shippedText() {
   if (typeof Bun === 'undefined') return SHIPPED_IDS.map((id) => { try { return readFileSync(new URL(`../../rules/loops/${id}.md`, import.meta.url), 'utf8'); } catch { return ''; } });
   try {
@@ -41,6 +43,11 @@ async function shippedText() {
       import('../../rules/loops/log-watcher.md', { with: { type: 'text' } }),
       import('../../rules/loops/work-digest.md', { with: { type: 'text' } }),
       import('../../rules/loops/docs-keeper.md', { with: { type: 'text' } }),
+      import('../../rules/loops/layout-watch.md', { with: { type: 'text' } }),
+      import('../../rules/loops/polish-until-clean.md', { with: { type: 'text' } }),
+      import('../../rules/loops/theme-guard.md', { with: { type: 'text' } }),
+      import('../../rules/loops/accessibility-pass.md', { with: { type: 'text' } }),
+      import('../../rules/loops/design-review.md', { with: { type: 'text' } }),
     ])).map((m) => m.default);
     // Inside the one-file app the import gives the embedded file's path.
     return texts.map((t) => (t.startsWith('/$bunfs/') ? readFileSync(t, 'utf8') : t));
@@ -89,6 +96,7 @@ export function parseLoopFile(text, { id = null } = {}) {
       kind: (field('kind') || '').toLowerCase() || null, every: field('every') || '10m', runs, stopAt,
       mode: (field('mode') || 'ask').toLowerCase(), cap: field('cap') || 'none', steps: field('steps') || 'as /effort',
       askFirst: /^(on|yes|true)$/i.test(field('ask first')),
+      ...(field('page check') ? { check: field('page check') } : {}),
     },
     picture: pictureOf(field('picture')),
     fills: fillsIn(message).map((key) => ({ key, value: answers[key] ?? '' })),
@@ -111,6 +119,7 @@ export function loopFileText(l) {
     ...(f.cap && f.cap !== 'none' ? [`- Cap: ${f.cap}`] : []),
     ...(f.steps && f.steps !== 'as /effort' ? [`- Steps: ${f.steps}`] : []),
     ...(f.askFirst ? ['- Ask first: on'] : []),
+    ...(f.check ? [`- Page check: ${f.check}`] : []),
     ...(l.picture ? [`- Picture: ${pictureText(l.picture)}`] : []),
     ...(asks ? [`- Asks: ${asks}`] : []),
     '',

@@ -6,6 +6,7 @@
 //     { t: 'text', text, final }                      what the model said
 //     { t: 'ask', id, kind, name, text, options, always, sig }   it waits for an answer
 //     { t: 'heard', text, after }                     a note you typed reached the model with that step's result
+//     { t: 'page', when, page, count, skipped, secs }  the loop's page check: when 'start' (checking), 'before' or 'after' the run
 //     { t: 'end', reason, final, secs, steps, tests, usd, point, until, files }   the run is over (tests: { ok, count? },
 //                                                     count = how many fail; usd: what it cost on a paid service;
 //                                                     point…until: its copies for undo, rewind.mjs; files: what it changed)
@@ -112,6 +113,8 @@ export function loopIO({ input = process.stdin, output = process.stdout, mode = 
     more() { return notes.length ? notes.shift() : null; },
     // A run that did not finish and said nothing: the app's last line says why (the model gone, out of steps).
     // more: its cost and its copies for undo (cli.jsx).
+    // The loop's page check (cli.jsx, flows/layoutcheck.mjs checkPage): what it found, for the board.
+    page(when, r = {}) { say({ t: 'page', when, page: r.page ?? '', count: r.problems?.length ?? 0, ...(r.skipped ? { skipped: one(r.skipped, 200) } : {}), secs: r.secs ?? 0 }); },
     end(r, more = {}) { say({ t: 'end', reason: r.reason, final: String(r.finalText || final || (r.reason === 'done' ? '' : lastNote)).trim().slice(0, 6000), secs: r.secs, steps: r.steps, tests, ...more }); },
     fail(message) { say({ t: 'end', reason: 'error', final: String(message), secs: 0, steps: 0, tests }); },
   };

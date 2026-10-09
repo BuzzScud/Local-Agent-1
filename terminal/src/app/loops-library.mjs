@@ -18,7 +18,7 @@ import { modeName, readEvery } from './loops.mjs';
 const p = (t, s = 'text') => [String(t), s];
 const FROM = { ready: 'ready-made', yours: 'yours', project: 'from a project' };
 const listOf = (state, from) => (state.library ?? []).filter((l) => l.from === from);
-const paceOf = (f) => (f.every === 'until done' ? 'until they pass' : /^own/.test(f.every) ? 'its own pace' : `every ${f.every}`);
+const paceOf = (f) => (f.every === 'until done' ? (f.check ? 'until clean' : 'until they pass') : /^own/.test(f.every) ? 'its own pace' : `every ${f.every}`);
 const untilOf = (f) => (f.runs && f.runs !== 'no limit' ? `${f.runs} runs` : f.stopAt && f.stopAt !== 'none' ? `stops ${/^\d+(\.\d+)?[hm]$/.test(f.stopAt) ? 'in ' : 'at '}${f.stopAt}` : 'until closed');
 // What a loop does to your files, in two words: by its mode and kind, else by what it is told.
 const touches = (e) => (e.fields.mode === 'edits' || e.fields.kind === 'debug' ? 'changes files' : /change (no file|nothing|no code)|read the newest|^read /i.test(e.message) ? 'reads only' : 'asks to change');
@@ -38,8 +38,8 @@ export function loadInto(ui, entry, state) {
   su.fills = entry.fills.map((x) => ({ key: x.key, value: x.value || guessFill(x.key, folder) }));
   su.loaded = { id: entry.id, from: entry.from, name: entry.name, about: entry.about, file: entry.file, project: entry.project ? entry.project.split('/').pop() : null, trusted: entry.trusted !== false, template: entry.message };
   su.text = filledText(entry.message, Object.fromEntries(su.fills.map((x) => [x.key, x.value])));
-  const { kind, every, runs, stopAt, cap, steps, mode, askFirst } = entry.fields;
-  Object.assign(su.f, { kind, every, runs, stopAt, cap, steps, mode, askFirst, folder: entry.folder ?? null });
+  const { kind, every, runs, stopAt, cap, steps, mode, askFirst, check } = entry.fields;
+  Object.assign(su.f, { kind, every, runs, stopAt, cap, steps, mode, askFirst, folder: entry.folder ?? null, check: check ?? null });
   su.picture = entry.picture;
   su.touched.often = true;
   su.keep = true;
@@ -284,7 +284,7 @@ export function drawEditor(state, ui, { cols, rows, now }) {
     const kind = kindOfSetup(su);
     const ev = readEvery(su.f.every, { kind });
     const cyc = (su.picture ?? CYCLE[kind] ?? CYCLE.task).flatMap(([v, ww], i) => [...(i ? [p(' ─▶ ', 'accent')] : []), p(v, 'accent b'), p(` ${ww}`, 'text')]);
-    lines.push(fit([p(' '.repeat(X + 2)), p('Your loop  ', 'white b'), ...cyc, p(` ─▶ ${ev.until ? 'again until they pass' : ev.every ? 'then wait' : 'its own pace'} ↺`, 'dim')], cols));
+    lines.push(fit([p(' '.repeat(X + 2)), p('Your loop  ', 'white b'), ...cyc, p(` ─▶ ${ev.until ? (su.f.check ? 'again until clean' : 'again until they pass') : ev.every ? 'then wait' : 'its own pace'} ↺`, 'dim')], cols));
   }
   lines.push(blank(cols));
   const leftB = [p('  ^D Remove  ', 'text on btn')];
@@ -302,7 +302,7 @@ function editorSave(ed, state) {
   const su = asSetup(ed);
   const f = setupFields(su, state);
   const fills = fillsIn(ed.template).map((key) => ({ key, value: ed.values[key] ?? '' }));
-  return { name: ed.name, about: ed.about, message: ed.template, fills, picture: pictureOf(ed.pic), fields: { kind: f.kind, every: f.every, runs: f.runs, stopAt: f.stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst }, where: ed.where, folder: f.folder, replace: ed.entry.file };
+  return { name: ed.name, about: ed.about, message: ed.template, fills, picture: pictureOf(ed.pic), fields: { kind: f.kind, every: f.every, runs: f.runs, stopAt: f.stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst, ...(ed.f.check ? { check: ed.f.check } : {}) }, where: ed.where, folder: f.folder, replace: ed.entry.file };
 }
 const leaveEditor = (ui) => { ui.view = ui.editorBack && ui.editorBack !== 'editor' ? ui.editorBack : 'main'; ui.editor = null; if (ui.view === 'setup' && !ui.setup) ui.view = 'main'; };
 export function editorKey(b, k) {
@@ -321,7 +321,7 @@ export function editorKey(b, k) {
     if (ed.pic && !s.picture) { ed.error = 'Its steps: three of them, each a word and a few more, with › between'; ed.row = rows.indexOf('picture'); return; }
     if (k === '^G') {
       const values = ed.values;
-      const fields = { ...s.fields, message: filledText(s.message, values), name: s.name, picture: s.picture, folder: setupFields(su, state).folder };
+      const fields = { ...s.fields, message: filledText(s.message, values), name: s.name, picture: s.picture, folder: setupFields(su, state).folder, ...(s.fields.check ? { check: filledText(s.fields.check, values) } : {}) };
       if (/\{[a-z][\w-]*\}/i.test(fields.message)) { ed.error = 'Give each blank an answer to start it now'; ed.row = rows.findIndex((x) => x.startsWith('fill:') && !values[x.slice(5)]); return; }
       // Said before it is sent: in the coding window the answer comes back at once and takes this line's place.
       ui.toast = { text: 'Saving and starting…', style: 'dim', until: Date.now() + 3200 };

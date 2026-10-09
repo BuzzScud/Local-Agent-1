@@ -407,7 +407,7 @@ test('the cards at every size: each row exactly the window, a card per loop in p
     // Each card's buttons by what it is doing; the keys say how to press them, in shorter words in a narrow window, so esc is never cut.
     expect(t).toMatch(/Yes {3}Always {3}No {3}Open/);
     expect(t).toMatch(/Pause {3}Stop {3}Start over {3}Open/);
-    expect(t).toMatch(/Running 3 {3}Library 10 {4}tab switches/);
+    expect(t).toMatch(/Running 3 {3}Library 15 {4}tab switches/);
     expect(t).toMatch(/←→ a button.* enter press.* ↑↓ (another )?loop.* tab (the )?library.* \^N new.* esc close/);
     if (cols >= 124) expect(t).toMatch(/←→ a button · enter presses it · ↑↓ another loop · tab the library · \^N new loop · type talk to it · esc close/);
     if (rows >= 38) expect(t).toMatch(/What happened {3}newest first\s+\S+ {2}FIX {3}Fix the failing tes… asks: May it change export\.mjs\?/);

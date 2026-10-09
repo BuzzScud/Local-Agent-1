@@ -1,5 +1,5 @@
 // Loops kept to load again (loop-files.mjs) and the board's Library (loops-library.mjs), without a model:
-// the ten ready-made loops, a loop written and read back, kept for you or in a project, the Library's cards,
+// the fifteen ready-made loops, a loop written and read back, kept for you or in a project, the Library's cards,
 // loading one at the wizard's last step with its blanks, Save as, the one-page form, a project's loop
 // asking once, and /loop <name>. The real window: app-loops.test.mjs.
 import { test, expect } from 'bun:test';
@@ -42,9 +42,9 @@ function windowIn({ projectLoop = true } = {}) {
   return { m, home, project, ui, bd, press, frame, sent, clock, toRow };
 }
 
-test('the ten ready-made loops: files that read back, each a loop the rules take, with three steps of its own', () => {
+test('the fifteen ready-made loops: files that read back, each a loop the rules take, with three steps of its own', () => {
   const ready = F.libraryOf({ home: join(root, 'nobody') });
-  expect(ready.map((l) => l.name)).toEqual(['Watch the tests', 'Fix until green', 'Build and lint guard', 'Flaky test hunter', 'Watch CI', 'Release watch', 'Dev server check', 'Log watcher', 'Work digest', 'Docs keeper']);
+  expect(ready.map((l) => l.name)).toEqual(['Watch the tests', 'Fix until green', 'Build and lint guard', 'Flaky test hunter', 'Watch CI', 'Release watch', 'Dev server check', 'Log watcher', 'Work digest', 'Docs keeper', 'Layout watch', 'Polish until clean', 'Theme guard', 'Accessibility pass', 'Design review']);
   for (const l of ready) {
     expect(l.from).toBe('ready');
     expect(l.about.length).toBeGreaterThan(20);
