@@ -465,7 +465,9 @@ async function checkedBy(newText, after) {
 
 test('a search of the test file after passing tests does not put a good change back', async () => {
   const r = await checkedBy('  // a note\n  return toCsv(rows);', ['grep -n "no-such-words" export.test.mjs']);
-  expect(r.tools.at(-1).error).toBe(true); // grep found nothing
+  // grep found nothing: an answer, not an error, since 8861640 ("A search that finds nothing is no longer a red error")
+  expect(r.tools.at(-1).error).toBeFalsy();
+  expect(r.tools.at(-1).view?.noMatch).toBe(true);
   expect(r.kept).toBe(true);
   expect(r.putBack).toBe(false);
   expect(r.tools.find((t) => t.arg === 'node --test').tests).toEqual({ failed: false, count: 0 }); // count: how many fail (a loop's run says it)
