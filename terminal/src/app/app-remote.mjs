@@ -83,6 +83,8 @@ export function remotePart(self) {
     try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: self.agent.messages[0].content, tools: self.agent.tools(), thinking: self.agent.thinking, effort: self.agent.effort, slot: self.agent.slots?.main, onPhase: self.setStartPhase }); } catch {}
     self.setStarting(false);
     self.push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · your prompts and files go there; /remote switches back`, tone: 'dim' });
+    // The conversation's profile follows (app-profiles.mjs): else the router moved it back at the next step.
+    self.mainToRemote(r, m.remote?.model ?? r.model);
     self.setRemoteState('on');
     // A model still loading on the service: a waiting message goes once it has (preloadRemote).
     const loading = preloadRemote(conn);

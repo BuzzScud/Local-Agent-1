@@ -932,7 +932,9 @@ export function modelLabels(ms) {
     if (ms.state === 'reconnecting') return [`◐ reconnecting to ${where}…`, '◐ reconnecting…', '◐'];
     if (ms.state === 'down') return [`✗ ${where} is not answering`, '✗ not answering', '✗'];
     if (ms.state === 'loading') return [`◐ ${name} loading on the service${ms.gb ? ` · ${ms.gb.toFixed(1)} GB` : ''}`, `◐ ${name} loading`, '◐ loading'];
-    return [`● ${name} on ${where}`, `● ${name}`, '● remote'];
+    // The profile the conversation is on (App.jsx profileTag), when profiles route it.
+    const p = ms.profile ? `${ms.profile} · ` : '';
+    return [`● ${p}${name} on ${where}`, `● ${p}${name}`, '● remote'];
   }
   if (ms.state === 'off') return ['○ model off · ctrl+t start', '○ model off · ctrl+t', '○ off'];
   if (ms.state === 'loading') return [`◐ ${ms.name} loading · ctrl+t stop`, '◐ loading · ctrl+t stop', '◐ loading'];

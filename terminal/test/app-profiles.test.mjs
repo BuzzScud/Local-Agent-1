@@ -60,9 +60,10 @@ test('/profiles is in the / menu on a service, /subagents opens it; a profile ch
   expect(steps.slice(1).every((b) => b.model === 'thinker:35b')).toBe(true);
   expect(readFileSync(join(cwd, 'notes.txt'), 'utf8')).toContain('Hello world');
   expect(s.done).toMatch(/Main: coder:30b → thinker:35b, from this step/);
-  // the window follows: its footer names the new model (onRoute), not the one the task started on
+  // the window follows: its footer names the new model (onRoute), not the one the task started on, and the
+  // profile it is on (9 Oct 2026: a switch back is seen)
   const footer = s.done.trimEnd().split('\n').at(-2); // inside the prompt box, over its bottom edge
-  expect(footer).toMatch(/● thinker:35b on /);
+  expect(footer).toMatch(/● Main · thinker:35b on /);
   expect(footer).not.toMatch(/coder:30b/);
   // /profiles afterwards: Main on thinker:35b, with today's requests on its meter
   expect(s.panel).toMatch(/Main\s+◀ thinker:35b\s+▶/);

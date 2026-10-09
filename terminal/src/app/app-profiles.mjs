@@ -5,7 +5,8 @@
 // switch to another model?").
 // Its functions are put on App by profilesPart(self), as the other parts are.
 import { CLAUDE_MODELS } from '../../../models/index.mjs';
-import { readProfiles, writeProfiles, openProfiles, profileStepRows, listRows, stepUse, serverOf, sameServer, validProfileName, SPILL_STEPS, spillWord, groupsNow, MAIN_PROFILE } from './profiles.mjs';
+import { readProfiles, writeProfiles, openProfiles, profileStepRows, listRows, stepUse, serverOf, sameServer, serverWord, validProfileName, SPILL_STEPS, spillWord, groupsNow, MAIN_PROFILE, profilesSaved, withMain, helpersAway, remoteOfMain } from './profiles.mjs';
+import { saveSettings } from './store.mjs';
 import { ProfileRouter, serverKey } from './profile-router.mjs';
 import { modelWithLimits, ownOf } from './limits.mjs';
 import { RemoteEmbedder } from '../agent/helper-models.mjs';
@@ -40,7 +41,10 @@ export function profilesPart(self) {
   // A pick moved in the panel is saved at once: every window reads the file at its next request.
   const keep = (pk, next) => {
     self.setPicker(next);
-    if (next.data !== pk.data) save(next.data);
+    if (next.data === pk.data) return;
+    const mainOf = (d) => { const n = d.uses['ai:main'] ?? MAIN_PROFILE; return `${n}|${d.profiles[n]?.model}`; };
+    if (mainOf(next.data) !== mainOf(pk.data)) self.agent.pinned = null;
+    save(next.data);
   };
 
   // ←→ on a profile row: its model, the next one its server has (the Claude API's, the service's).
@@ -108,6 +112,9 @@ export function profilesPart(self) {
     // Today's switch: this window's main model, no profile, once the reply has ended.
     else if (key.return && row?.kind === 'window') {
       if (self.agent.busy) { self.flash('Just this window switches when the reply ends: pick a profile to change it from the next step', 3500); return; }
+      // It holds (9 Oct 2026, the owner's pick): the router leaves this window's conversation on it until a
+      // profile is picked here or in /profiles, or /remote connects (agent-model.mjs followProfile).
+      self.agent.pinned = { model: pk.entry.id };
       self.openOwnSettings(pk.entry, { back: pk });
     }
   };
@@ -126,6 +133,7 @@ export function profilesPart(self) {
   // profile goes there, from the next step in the middle of a reply too.
   const saveProfileStep = (pk, { reset = false } = {}) => {
     const pr = pk.own.profile;
+    self.agent.pinned = null;
     const d = data();
     const before = d.profiles[pr.name];
     const levels = pk.model.thinkingLevels ?? [];
@@ -149,6 +157,30 @@ export function profilesPart(self) {
     self.setPicker(null);
     self.keepOwnSettings(pk, { reset });
     applyProfiles();
+  };
+
+  // ---- /remote ------------------------------------------------------------------------------------
+
+  // /remote connected (or the window started on it): the conversation's profile is that server and model
+  // now, in the file every window reads (9 Oct 2026, the owner's picks: "Connect makes the new model Main",
+  // the other windows follow from their next step, the helpers keep their own profiles). Before, the
+  // router moved the conversation back to Main at the next step: /remote looked as if it did nothing.
+  const mainToRemote = (r, model) => {
+    self.agent.pinned = null;
+    if (!profilesSaved()) return;
+    const d = data();
+    const moved = withMain(d, { ...r, model });
+    const now = moved ? moved.data : d;
+    if (moved) {
+      writeProfiles(now);
+      router.seenStamp = router.stamp();
+      const was = moved.was ? `${moved.was.model} · ${serverWord(moved.was.server)}` : 'none';
+      self.push({ type: 'note', tone: 'dim', text: `${moved.name} → ${model} · ${serverWord(serverOf(r))} (was ${was}): your conversation, and every other window on this Mac from its next step. /profiles changes it.` });
+    }
+    self.agent.routeName = moved?.name ?? router.mainName();
+    const away = helpersAway(now);
+    const one = away.every((h) => h.where === away[0]?.where);
+    if (away.length) self.push({ type: 'note', tone: 'dim', text: `The helpers keep their own profiles: ${away.map((h) => `${h.label} → ${h.model}${one ? '' : ` (${h.where})`}`).join(' · ')}${one ? ` (on the ${away[0].where})` : ''}. /profiles moves them.` });
   };
 
   // ---- following the file -------------------------------------------------------------------------
@@ -178,6 +210,9 @@ export function profilesPart(self) {
   const onRoute = (ev) => {
     if (ev.helper) return;
     const m = ev.model;
+    // Moved to Main (changed in /profiles, the hub or another window): /remote's set-up names it too, so the
+    // next start begins there and does not put Main back (mainToRemote).
+    if (ev.name === router.mainName()) { const r = remoteOfMain(self.settings, router.data()); if (r) self.settings.remote = saveSettings({ remote: r }).remote; }
     if (ev.conn) self.remoteRef.current.conn = ev.conn;
     self.setModel(m);
     self.relimit(m);
@@ -193,5 +228,5 @@ export function profilesPart(self) {
   const lendConn = (r, conn) => router.lend(serverOf(r), conn);
   const closeProfiles = () => { router.stop(); flushMeters(); };
 
-  return { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles };
+  return { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles, mainToRemote };
 }

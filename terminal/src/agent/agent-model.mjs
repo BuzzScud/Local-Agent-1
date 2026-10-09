@@ -74,9 +74,12 @@ export class ModelPart {
   // or skill has a profile of its own. The step under way never moves; the new model reads the
   // conversation once (fitContext first makes it fit). A helper agent of yours with a model of its own keeps it.
   // idle: the window following the file between messages: the conversation's own profile (Main), not the last request's type.
+  // pinned ({ model }): /model's "Just this window" (9 Oct 2026, the owner's pick): the conversation stays on
+  // that model while it is the one in use; its helpers still go by their profiles.
   async followProfile({ type, idle = false } = {}) {
     const r = this.router;
-    if (!r?.active() || this.ownUse) { if (this.routeName && !this.isHelper) routeCalls(this.url, null); this.routeName = null; return; }
+    const pinned = !this.isHelper && this.pinned?.model === this.modelName();
+    if (!r?.active() || this.ownUse || pinned) { if (this.routeName && !this.isHelper) routeCalls(this.url, null); this.routeName = null; return; }
     const ai = this.isHelper ? 'helpers' : this.routeAi ?? 'main';
     let route;
     try { route = await r.route({ ai, type: idle ? null : type ?? this.turn?.type ?? null, skill: idle ? null : this.turn?.skillSlug ?? null }, { url: this.url, model: this.modelName() }); } catch (e) {
@@ -94,7 +97,7 @@ export class ModelPart {
     own();
     const reads = this.estNow?.() ?? 0;
     this.emit('profile-route', { name: route.name, conn: route.conn, model: route.model, ctx: route.ctx, server: route.server, helper: Boolean(this.isHelper) });
-    if (!this.isHelper) this.emit('note', { text: `${route.name}: ${from} → ${this.modelName()}${idle ? '' : ', from this step'}.${reads > 2000 ? ` It reads the conversation once (about ${Math.round(reads / 1000)}k tokens).` : ''}`, tone: 'dim', profile: route.name });
+    if (!this.isHelper && from !== this.modelName()) this.emit('note', { text: `${route.name}: ${from} → ${this.modelName()}${idle ? '' : ', from this step'}.${reads > 2000 ? ` It reads the conversation once (about ${Math.round(reads / 1000)}k tokens).` : ''}`, tone: 'dim', profile: route.name });
   }
 
   // This step's extras by profile: its meter's name, and its backup (a spill after the wait in line plus

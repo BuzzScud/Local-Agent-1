@@ -8,8 +8,8 @@
 // A model is picked from the list the Remote tab reads for that server (/remote.json?service=<its source>);
 // the Claude API's from the app's own list.
 import { readFileSync } from 'node:fs';
-import { loadSettings } from './store.mjs';
-import { PROFILES_FILE, profilesSaved, groupsNow, rowsOf, inheritedOf, writeProfiles, SPILL_STEPS, serverWord } from './profiles.mjs';
+import { loadSettings, saveSettings } from './store.mjs';
+import { PROFILES_FILE, profilesSaved, groupsNow, rowsOf, inheritedOf, writeProfiles, SPILL_STEPS, serverWord, remoteOfMain } from './profiles.mjs';
 import { readMeters } from '../agent/profile-meters.mjs';
 import { CLAUDE_MODELS } from '../../../models/index.mjs';
 
@@ -32,6 +32,13 @@ export function profilesHub({ cwd = process.cwd() } = {}) {
       ...(p.server?.kind === 'claude' ? { models: CLAUDE_MODELS.map((m) => m.id) } : {}) }));
     return { saved: true, profiles, groups: groups.map((g) => ({ id: g.id, label: g.label, note: g.note })), rows, meters: readMeters(), spills: SPILL_STEPS };
   };
+  // Saved, and /remote's set-up follows a change of Main, so a window starts where Main is (profiles.mjs remoteOfMain).
+  const keep = (d) => {
+    writeProfiles(d);
+    const s = loadSettings(cwd);
+    const r = remoteOfMain(s, d);
+    if (r) saveSettings({ remote: r });
+  };
   async function route(req, url) {
     if (url.pathname === '/profiles.json' && req.method === 'GET') return json(view());
     if (req.method !== 'POST' || !url.pathname.startsWith('/profiles/')) return null;
@@ -46,7 +53,7 @@ export function profilesHub({ cwd = process.cwd() } = {}) {
       if (body.profile == null) delete d.uses[key];
       else if (d.profiles[body.profile]) d.uses[key] = body.profile;
       else return bad('no such profile');
-      writeProfiles(d);
+      keep(d);
       return json(view());
     }
     if (url.pathname === '/profiles/set') {
@@ -55,7 +62,7 @@ export function profilesHub({ cwd = process.cwd() } = {}) {
       if (typeof body.model === 'string' && body.model.trim()) p.model = body.model.trim().slice(0, 200);
       if ('backup' in body) { if (body.backup == null || body.backup === '') p.backup = null; else if (d.profiles[body.backup] && body.backup !== body.name) p.backup = body.backup; else return bad('no such profile for a backup'); }
       if ('spillAfter' in body) { const n = Number(body.spillAfter); if (!SPILL_STEPS.includes(n)) return bad('not one of the waits'); p.spillAfter = n; }
-      writeProfiles(d);
+      keep(d);
       return json(view());
     }
     return bad('no such action', 404);
