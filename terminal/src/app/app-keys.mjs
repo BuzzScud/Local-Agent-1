@@ -225,6 +225,7 @@ export function keysPart(self) {
       return;
     }
     const ev = parseMouse(seq);
+    if (ev?.kind === 'move') { self.botPointer.current = { col: ev.col, row: ev.row }; return; } // the bot's eyes follow it (bot-layer.jsx)
     if (!ev || ev.kind === 'other') return;
     // A press on a Recent activity row of the start page: that conversation, as /resume would open it.
     // The page's row on screen is Ink's own layout of it (its box's top and its parents'), counted from

@@ -30,7 +30,7 @@ async function until(fn, ms = 15_000) {
   while (Date.now() - t0 < ms) { if (fn()) return true; await new Promise((r) => setTimeout(r, 100)); }
   return false;
 }
-const QUIET = { AGENTIC_NO_OPEN: '1', AGENTIC_FETCH_EVERY: '0', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_HOME_LOOK: 'launcher', TERM: 'xterm-256color', AGENTIC_SESSIONS: 'on', AGENTIC_MEMORY_SAVE: 'off' };
+const QUIET = { AGENTIC_NO_OPEN: '1', AGENTIC_FETCH_EVERY: '0', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_HOME_LOOK: 'launcher', AGENTIC_BOT: 'off', TERM: 'xterm-256color', AGENTIC_SESSIONS: 'on', AGENTIC_MEMORY_SAVE: 'off' };
 function keeperEnv() {
   const { cwd, env, base } = setup();
   homes.push(env.AGENTIC_HOME);

@@ -22,7 +22,7 @@ test('a mouse report is read as a press, a drag, a release or a scroll, with its
   expect(parseMouse('\x1b[<64;5;5M').kind).toBe('wheel');
   expect(parseMouse('\x1b[<65;5;5M').kind).toBe('wheel');
   expect(parseMouse('\x1b[<2;5;5M').kind).toBe('other'); // the right button
-  expect(parseMouse('\x1b[<35;5;5M').kind).toBe('other'); // moving with no button down
+  expect(parseMouse('\x1b[<35;5;5M').kind).toBe('move'); // moving with no button down: the bot's eyes follow it (9 Oct 2026)
   expect(parseMouse('\x1b[A')).toBeNull();
   expect(parseMouse('[<0;1;1M')).toBeNull(); // typed text that only looks like one
   expect(parseCursorReply('\x1b[24;5R')).toEqual({ row: 24, col: 5 });
