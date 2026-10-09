@@ -132,6 +132,13 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the save after each round runs when the model decides too (Claude, on top of its Remember), and on a service
   (Claude, OpenAI-style, Ollama) without a side slot; only a llama.cpp server still needs its side slot
   (`AutoSave.afterTaskOn`, `onService`; `terminal/test/autosave-round.test.mjs`). The quit and first-use saves stay off when the model decides.
+  On a service that save reads every round that ended (`worthSaving(…, { every: true })`, 9 Oct 2026): the older rule
+  skipped a round that was "known" (`knownAlready`: it used a saved fact) or ended "done" with no file changed, and with
+  Claude every fact comes with each request and a commit or an answer ends "done", so from 8b8ee23 to this fix the save
+  after each round added nothing (only Remember did). A llama.cpp side slot keeps the older, cheaper rule.
+  Dated news fades fast (`looksLikeNews`, `NEWS_DAYS` = 7 in facts.mjs): a fact that opens with its date ("On 9 Oct 2026
+  main was pushed as …") is retired by the daily tidy 7 days after it was saved, used or not (used, it never reached
+  `UNUSED_DAYS`); pinned and always facts stay (`terminal/test/facts.test.mjs`).
   Since 30 Sep 2026: a test's prompt pasted into the app is practice too (`isTestPrompt`, against `testPrompts()`
   in `models/evals/prompts.mjs`: the Arena's tests and the design runs' `pages.json` / `components.json`);
   trust moves only for the facts a turn really used (`usedFacts` in `recall.mjs`); a save shows the model the 15

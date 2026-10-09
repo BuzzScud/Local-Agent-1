@@ -128,6 +128,27 @@ test('keeping clean: repeats merge, a fact about a file that is gone and one unu
   expect(undoLast(project).did.filter((d) => d.what === 'brought back')).toHaveLength(4);
 });
 
+test('dated news fades fast: 7 days after it was saved it retires, used or not; a lasting fact, a pinned one and a younger one stay', () => {
+  const { repo, project } = place();
+  applyChanges(project, { add: [
+    { text: 'On 9 Oct 2026 main was pushed to GitHub at 83b8729.' },
+    { text: 'As of 9 Oct 2026, ~/worktrees has 16 copies of the repo.' },
+    { text: 'The 8 Oct "fewer errors" request is partly done.' },
+    { text: 'Pinned: on 9 Oct 2026 the owner picked tidier code over speed.' },
+    { text: 'For commit and push here, commit only own files by path.' },
+  ] }, { today: '2026-10-09' });
+  applyChanges(project, { add: [{ text: 'On 12 Oct 2026 the overhaul branch was merged.' }] }, { today: '2026-10-12' });
+  pinFact(project, 'pinned-on-oct-2026-the-owner');
+  markUsed(project, ['on-oct-2026-main-was-pushed'], '2026-10-16'); // used yesterday: news still goes
+  const t = tidy(project, { today: '2026-10-16', root: repo });
+  expect(t.retired.map((r) => r.why)).toEqual(['dated news, 7 days old', 'dated news, 7 days old', 'dated news, 7 days old']);
+  expect(readFacts(project).map((f) => f.text).sort()).toEqual(['For commit and push here, commit only own files by path.', 'On 12 Oct 2026 the overhaul branch was merged.', 'Pinned: on 9 Oct 2026 the owner picked tidier code over speed.']);
+  // a day short of 7: kept
+  const p2 = place();
+  applyChanges(p2.project, { add: [{ text: 'On 9 Oct 2026 main was pushed to GitHub at 83b8729.' }] }, { today: '2026-10-09' });
+  expect(tidy(p2.project, { today: '2026-10-15', root: p2.repo }).retired).toEqual([]);
+});
+
 test('first use: your two rules are saved once, and an older notes file is carried over line by line', () => {
   const { home, repo, you, project } = place();
   mkdirSync(join(repo, '.agentic'), { recursive: true });

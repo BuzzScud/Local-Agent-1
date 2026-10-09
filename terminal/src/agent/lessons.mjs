@@ -150,7 +150,11 @@ export function isTestPrompt(request, prompts = []) {
 // Is there anything to learn from? A turn that ended with a result, a
 // correction, or the user saying how they want things.
 // again: the review at quit, which reads saved turns again too.
-export function worthSaving(lessons, { again = false } = {}) {
+// every: each round that ended is read, known or not, "done" too (the save after each round on a
+// service, 9 Oct 2026: with Claude every saved fact comes with the request, so nearly every round
+// was "known", and a round that answered or committed ended "done": the save never ran).
+export function worthSaving(lessons, { again = false, every = false } = {}) {
+  if (every) return lessons.some((l) => !l.saved && !l.practice && l.outcome !== 'declined');
   return lessons.some((l) => (again || !l.saved) && !l.known && !l.practice && (['passed', 'failed', 'stuck', 'stopped'].includes(l.outcome) || l.corrected || l.files?.length || SAYS_HOW.test(l.request)));
 }
 
