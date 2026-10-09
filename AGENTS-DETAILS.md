@@ -974,6 +974,47 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   The app tests run with the Launcher (`pty.mjs`, `term.mjs` and the keeper tests set `AGENTIC_HOME_LOOK`), since
   they were written against it; `terminal/test/home-looks.test.mjs` drives the Menu, in a real window too.
 
+## The bot over the prompt box (9 Oct 2026)
+
+- **What and why.** The owner asked for "the agent icon, avatar" on the Menu start page, "detailed and animate
+  live … following your mouse for a little, or jumping on the text field box when you type … natural, animated
+  like pixar". Their picks: the full companion (the page, the box, the whole chat), eyes then a short walk after
+  the mouse, the Visor bot with more moving parts, calm; then five preview rounds (35% smaller, 40% smaller
+  again, a glossier look, /bot to hide it), and "its perfect". The previews are private
+  (`docs/private/design rounds/agentic-coder-bot-companion-preview-2026-10-08*.html`): they show their own
+  conversation titles.
+- **Three pure parts in `terminal/src/ui/`.** `bot-rig.mjs`: a pose in, pixels out (xterm-256 numbers, two to a
+  character): the full bot 10 × 10 pixels (5 rows), the small one on the box 6 × 6 (3 rows), a spinning ball to
+  change size in the air; squash and stretch, lean, look, blink, smile, wide, half shut, an antenna on a spring,
+  arms that swing, cheer, wave or type, feet that walk or tuck; glossy white with sky-blue edges, black glass, eyes
+  that glow; its own `botGlyph` (start.jsx's, measured from Terminal's font). `bot-brain.mjs`: what it does,
+  frame by frame, seeded, so the same inputs give the same frames: breathes, blinks, glances; the eyes follow
+  the pointer and a second of movement 6+ columns away walks it over (16 at most), then bored and back; your
+  typing: a crouch, a curved jump, a ball, a landing on the box by the cursor, hops along it; an empty box on the
+  start page sends it back after 3 s; in a chat it stays on the box (working: tapping; done: a cheer; off:
+  asleep); naps after 2 minutes alone; `hidden`: a wave and a dive into the box, `clip` cutting it at the box's
+  edge, then nothing; shown again it pops out. `bot-paint.mjs`: a pose at a place → the cells it covers, a
+  shadow on the page, nothing below `clip`.
+- **On the screen** (`terminal/src/app/bot-layer.jsx`): `useBot` (in screen.jsx's Screen) ticks 30 times a
+  second while it moves and ten while it stands, and redraws only when a cell changed. It reads where things
+  are from Ink's layout (the prompt box's top, the Menu's title row `homeTitleRow`, the live part's height) and
+  draws the cells as one layer of absolute boxes, last in the live part, so what is under it shows around it.
+  Not drawn while a question or picker has the box's place, in a too-small window, or on the Launcher's page
+  (it has its own bot); it comes back on the box. In a chat, windows of `KEEP_FROM` rows or more keep
+  `KEEP_ROWS` (3) rows above the box for it. The printed start page never has it.
+- **The mouse**: with the bot shown and the mouse the app's, `MOTION_ON` (`?1003h`) asks Terminal for every
+  move of the pointer; `parseMouse` reads them as `move` and app-keys.mjs keeps the last in `botPointer`; given
+  back with the mouse (and at exit). Terminal.app's code has a mouse-moved handler, but whether it sends
+  movement was not tried by hand.
+- **/bot** (`app-slash.mjs`): alone the other state, `/bot hide|show` (also off|on); settings.json `bot`, kept for
+  every window. In the / menu where there is room (`WHEN_ROOM`, last, so it goes first in a short window),
+  found by `/b` in any window. `AGENTIC_BOT=off` leaves it out of a window: `pty.mjs`, `term.mjs`, the keeper
+  and sessions tests set it, so their screens are as they were.
+- **Tests**: `terminal/test/bot.test.mjs` (sizes and colours of every pose, typing onto the box and back, hide and
+  show and nothing ever inside the box, no room over the title, the model's looks, the pointer and the walk's
+  range, the same frames twice, the cells, /bot in the menu, the pointer parsed, and the real window at 150 × 50:
+  over the title, onto the box, /bot hides it and brings it back, kept in settings.json).
+
 ## Agentic Coder Web: the page, the backend and the tools server (8 Oct 2026)
 
 - **What and why.** The owner asked for "a web interface … a backend and tools server with API access … multi user

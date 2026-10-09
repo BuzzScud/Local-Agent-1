@@ -31,6 +31,7 @@ import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, LooksNode, RunningNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords, foldSteps } from './rail.jsx';
 import { HomePage } from './home-looks.jsx';
+import { useBot, BotLayer, KEEP_ROWS, KEEP_FROM } from './bot-layer.jsx';
 import { AttachTray } from './tray.jsx';
 import { ProfileStep, ProfilesPanel } from './profiles-view.jsx';
 import { spillWord } from './profiles.mjs';
@@ -2139,6 +2140,9 @@ export function Screen({ app }) {
   const { width, modelName, cwd } = app;
   // The live part's height as last drawn, and how many items were printed then.
   const liveRef = useRef(null);
+  // the bot over the live part (bot-layer.jsx): where the prompt box is, and its cells as last worked out
+  const boxRef = useRef(null);
+  const bot = useBot(app, liveRef, boxRef);
   const drawn = useRef({ redraw: null, height: 0, count: 0 });
   const working = app.live?.phase === 'working';
   const folded = printedOf(app.items, working);
@@ -2243,13 +2247,15 @@ export function Screen({ app }) {
           {app.agentsLine ? <AgentsLine segs={app.agentsLine} /> : null}
           {app.loopsLine ? <LoopsLine segs={app.loopsLine} /> : null}
           {app.trayLayout ? <AttachTray items={app.tray} layout={app.trayLayout} width={width} mouse={app.mouse} /> : null}
-          <PromptBox app={app} />
+          {app.botAllowed && !app.hold && !bot.hidden && app.rows >= KEEP_FROM ? <Box height={KEEP_ROWS} /> : null}
+          <Box ref={boxRef} flexDirection="column"><PromptBox app={app} /></Box>
           <Menu app={app} />
           <Footer app={app} />
         </Box>
       )}
       {app.meters ? <Meters app={app} /> : <MemoryWarning app={app} />}
       </Box>
+      {bot.cells.length ? <BotLayer cells={bot.cells} /> : null}
       </Box>
     </Box>
   );

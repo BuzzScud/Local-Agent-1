@@ -154,6 +154,12 @@ export function HomePage(props) {
     </Box>
   );
 }
+// The Menu's title row ("Agentic Coder" and the model), counted from the page's first row: the bot stands
+// over it (bot-layer.jsx).
+export function homeTitleRow(start, width) {
+  const { rows } = layoutOf('menu', { start, width });
+  return Math.max(0, rows.findIndex((r) => r?.length));
+}
 // The items of the page as drawn, with where each one is on the window: [{ key, kind, id, does,
 // rects: [{ row, from, to }] }] (from and to: cells from 1). The Launcher has its conversations only.
 export function homeItems(start, width) {

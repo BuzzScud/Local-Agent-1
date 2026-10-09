@@ -6,6 +6,7 @@ import { dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { recentOf } from './start.jsx';
 import { HOME_LOOKS, lookOf, nextLook } from './home-looks.jsx';
+import { botAllowed } from './bot-layer.jsx';
 import { helpersEnv, helperRows, changeHelpers } from './helpers.mjs';
 import { changeHooks, leanEnv } from '../agent/way.mjs';
 import { modeOf } from '../agent/permissions.mjs';
@@ -722,6 +723,17 @@ export function slashPart(self) {
         try { saveSettings({ homeLook: look }); } catch {}
         const { name, note } = HOME_LOOKS.find((l) => l.id === look);
         self.flash(self.holdRef.current ? `${name}: ${note} · /home again for the other` : `${name} it is: /clear shows it now, and every new window starts with it`, 6000);
+        break;
+      }
+      case 'bot': {
+        // The bot over the prompt box (bot-layer.jsx): typed alone the other state, else the one named; kept in
+        // settings.json for every window. Hidden, it waves and dives into the box; shown, it pops back out.
+        const w = arg.trim().toLowerCase();
+        if (w && !/^(hide|show|off|on)$/.test(w)) { self.flash('/bot hide or /bot show (alone: the other one)'); break; }
+        const on = w ? w === 'show' || w === 'on' : !self.S.current.botOn; // S: this render's, not the one runSlash was made in
+        self.setBotOn(on);
+        try { saveSettings({ bot: on }); } catch {}
+        self.flash(!botAllowed() ? 'The bot is left out of this window (AGENTIC_BOT=off); /bot is kept for the next' : on ? 'The bot is back · /bot hides it' : 'The bot is hidden · /bot brings it back', 4000);
         break;
       }
       case 'mouse': {

@@ -23,7 +23,8 @@ import { usageNow, usageEvents, askLimits } from '../agent/claude-usage.mjs';
 import { webSettings } from './web-form.mjs';
 import { walk } from '../tools/fs.mjs';
 import { mentionAt, selectedText } from './edit-input.mjs';
-import { MOUSE_ON, MOUSE_OFF, isMouseText } from './mouse.mjs';
+import { MOUSE_ON, MOUSE_OFF, MOTION_ON, MOTION_OFF, isMouseText } from './mouse.mjs';
+import { botAllowed } from './bot-layer.jsx';
 import { copyToClipboard } from './clipboard.mjs';
 import { matchCommands, COMMANDS } from './commands.mjs';
 import { openMemory } from '../agent/facts.mjs';
@@ -62,7 +63,7 @@ export function App({ opts, win, onRestart }) {
   const self = liveView({
     MCP_EXTRAS: () => MCP_EXTRAS, S: () => S, abortRef: () => abortRef, agent: () => agent, agentRef: () => agentRef,
     agentsKey: () => agentsKey, agentsRef: () => agentsRef, agentsSize: () => agentsSize, aliveRef: () => aliveRef,
-    answerRef: () => answerRef, applyChoice: () => applyChoice, applyKeep: () => applyKeep,
+    answerRef: () => answerRef, applyChoice: () => applyChoice, applyKeep: () => applyKeep, botPointer: () => botPointer, setBotOn: () => setBotOn,
     applyRewind: () => applyRewind, arrowsRef: () => arrowsRef, askBtw: () => askBtw, askCopyBack: () => askCopyBack,
     askedAtOpen: () => askedAtOpen, autoRef: () => autoRef, battleRef: () => battleRef, btwRef: () => btwRef,
     bumpLists: () => bumpLists, busyNow: () => busyNow, catalog: () => catalog, chatOnlyRef: () => chatOnlyRef,
@@ -273,6 +274,11 @@ export function App({ opts, win, onRestart }) {
   const homeFocusRef = useRef(null);
   const setHomeFocus = useCallback((k) => { homeFocusRef.current = k; setHomeFocusState(k); }, []);
   const [mouse, setMouse] = useState(settings.mouse !== false); // /mouse: drag to highlight in the prompt box, on unless turned off (off: the mouse stays Terminal's)
+  // /bot: the bot over the prompt box (bot-layer.jsx), shown unless hidden (settings.json "bot": false);
+  // AGENTIC_BOT=off leaves it out of this window. botPointer: where the mouse last moved (app-keys.mjs).
+  const [botOn, setBotOn] = useState(settings.bot !== false);
+  const botPointer = useRef(null);
+  const botHere = useRef(botAllowed()).current;
   const [wheelPause, setWheelPause] = useState(false); // a scroll just came in: the mouse is Terminal's for a moment
   // /btw: a side question and its answer, in a panel in the prompt box's place
   // (Claude Code's /btw); gone when closed. The main job's own question wins
@@ -481,7 +487,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog, homeLook };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, loopsOn, model, catalog, homeLook, botOn };
   const flash = useCallback(flashFn, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
   // selection settles, like Claude Code's copy on select. Not the whole of it
@@ -825,16 +831,18 @@ export function App({ opts, win, onRestart }) {
   const footerRef = useRef(null);
   // Where the tray over the prompt box drew each attachment's card, for a click on one (onMouse).
   const trayRef = useRef(null);
+  // With the bot shown, every move of the pointer too (MOTION_ON), so its eyes can follow it.
+  const botMotion = botHere && botOn;
   useEffect(() => {
     if (!mouseArmed) return undefined;
     const m = mouseRef.current;
     m.armed = true;
-    tty.write(MOUSE_ON);
-    return () => { clearTimeout(m.asked); Object.assign(m, { armed: false, asked: null, waiting: [], origin: null, down: false }); tty.write(MOUSE_OFF); };
-  }, [mouseArmed, tty]);
+    tty.write(botMotion ? MOUSE_ON + MOTION_ON : MOUSE_ON);
+    return () => { clearTimeout(m.asked); Object.assign(m, { armed: false, asked: null, waiting: [], origin: null, down: false }); botPointer.current = null; tty.write(botMotion ? MOTION_OFF + MOUSE_OFF : MOUSE_OFF); };
+  }, [mouseArmed, tty, botMotion]);
   // However the app ends, Terminal gets its mouse back.
   useEffect(() => {
-    const off = () => { if (mouseRef.current.armed) { try { writeSync(1, MOUSE_OFF); } catch {} } };
+    const off = () => { if (mouseRef.current.armed) { try { writeSync(1, MOTION_OFF + MOUSE_OFF); } catch {} } };
     process.on('exit', off);
     return () => { process.off('exit', off); clearTimeout(mouseRef.current.wheel); };
   }, []);
@@ -953,6 +961,7 @@ export function App({ opts, win, onRestart }) {
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     loopsFrame, loopsLine: loopsShown ? null : loopsSegs,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
+    botOn, botAllowed: botHere, botPointer,
     items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, homeFocus: holdRef.current ? homeFocus : null, walk: holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff ? walkStep : null, tip: tipOnPage ? null : tip,
     // The Claude API's usage (usage-bar.mjs): the bar under the footer, and /usage; the shine runs while a reply does.
     usage: claudeModel ? usage : null, usageLive: live.phase === 'working',
