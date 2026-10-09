@@ -26,7 +26,7 @@ test('classic: the whole task, answering each question by key', async () => {
   // The turn on its rail: your message on its strip, then each step with its mark, closed by ╰─.
   expect(r.text).toMatch(/◇ \S.* {2}\d+s\n/); // a thought: its first sentence, its seconds at the end
   for (const s of ['› add a --json flag to export.mjs', '○ Read  export.mjs · 19 lines', '☐ Update Todos', '✎ Changed  export.mjs · +1 line',
-    "14  +   if (argv.includes('--json'))", '❯ Ran  node --test · 3 pass · 0 fail', '✔ toCsv writes a header row', '╰─ ⠿', 'accept edits on', 'Saved. Continue this conversation with: coding -c']) expect(r.text).toContain(s);
+    "14  +   if (argv.includes('--json'))", '❯ Ran  node --test · 3 pass · 0 fail', '✔ toCsv writes a header row', '╰─ ⠿', '⏵⏵ accept edits │', 'Saved. Continue this conversation with: coding -c']) expect(r.text).toContain(s);
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain("argv.includes('--json')");
   expect(existsSync(join(base, 'home', 'sessions'))).toBe(true);
 }, T);

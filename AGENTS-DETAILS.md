@@ -920,11 +920,12 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   plainly with the day it answers again (00:00 UTC on the 1st) and marks it `busy: false`, so busy.mjs does not
   wait and ask again (the SDK's own two retries still happen); `noteCapped` makes the bar say paused until a
   reply comes.
-- **The drawing** (`terminal/src/app/usage-bar.mjs`, pure): the bar (`usageRow`) is one row under the footer
-  with the footer's ends (two cells in, the words ending two cells from the edge): ◆, the line of what is left
-  (a gradient brightening to its head, today's part amber, the rest faint), then "$433.44 left of $500 · today ·
-  out by Oct 22 at ~$33/day · limits 100%"; the words shorten as the window narrows and the line keeps a fifth of
-  the row (`MIN_LINE` at least). The /usage card (`usagePanel`) has the prompt box's ends: the whole width, round
+- **The drawing** (`terminal/src/app/usage-bar.mjs`, pure): the usage line (`usageRow`) is one row under the
+  footer, inside the prompt box since 8 Oct ("Panel"), with the footer's ends. Since 9 Oct ("1 · Tidy", see
+  below): "◆ $433.44 left of $500", then the line of what is left (a gradient brightening to its head, today's
+  part amber, the rest faint), then "today $56.71 · out by Oct 22" ending where the footer's words do; the
+  daily pace is /usage's, and "limits" shows only under half. The words shorten as the window narrows and the
+  line keeps a fifth of the row (`MIN_LINE` at least). The /usage card (`usagePanel`) has the prompt box's ends: the whole width, round
   corners, the title in the top border, text one cell in, one label column (`LABEL_W`), the numbers ending at one
   edge, the three meters ending together, one blank row between sections. While a reply runs a shine sweeps the
   line; at rest it holds still (a redraw at rest breaks copying text off the screen). App.jsx counts the bar's
@@ -938,6 +939,27 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   kind, the month, paused and cleared, the bar's ends at seven widths, the card's ends, the stand-in Claude API
   with limits and at the cap, the / menu) and `app-usage.test.mjs` (the real window: the bar before and after a
   reply, /usage from the menu, r, esc; and none of it off the Claude API). `fake-anthropic.mjs` takes `limits`.
+
+## The bottom of the window: Tidy and flush (9 Oct 2026)
+
+- **What and why.** The owner, on a screenshot of the prompt box, footer and usage line: "can we clean this up
+  and make it more flush toward the bottom?". Three designs drawn by the real app (private:
+  `docs/private/design rounds/agentic-coder-flush-bottom-3-designs-2026-10-09.html`); their pick, "1 · Tidy":
+  the Panel kept, its rows cleaned, and the box's bottom edge on the window's last line.
+- **Flush** (`patches/ink@7.1.1.patch`, `patchedDependencies` in package.json; `bun install` applies it): Ink
+  wrote a line break after every frame shorter than the window, so the cursor sat on an empty line under the
+  box. The patch draws no line break, places the cursor from the frame's real last row (log-update.js), and
+  writes the line break when the app ends, so "Saved. Continue…" starts under the box. The live part alone
+  still stays a line short of the window (screen.jsx `fill`): one as tall as the window makes Ink wipe the
+  window, scrollback too, and print everything again when it shrinks. So the app starts on the window's
+  second line (cli.jsx), and a start page held live still ends on the last. A new Ink version needs the patch
+  made again (`bun patch ink`, the same three changes, `bun patch --commit node_modules/ink`).
+- **Tidy** (screen.jsx `footerParts`, `remoteParts`): the mode by its short name (`MODE_SHORT` in parts.jsx:
+  "⏵⏵ bypass", "⏵⏵ auto", "⏵⏵ accept edits", "⏸ plan"), never "(shift+tab to cycle)" (the ? list has it); on
+  the Claude API with its usage line, the model's name alone; a tip whole or not at all (`wholeTip`: "? for
+  shortcuts" stands in). The / menu reaches the last line too, so it has one row more than before.
+- **Tests**: `app-usage.test.mjs` (the rows and the box's edge on the last line), `usage.test.mjs` (the line at
+  seven widths), `start.test.mjs` (a tip whole or not at all), and the mode's short name in the app tests.
 
 ## The app's colours: Ocean (8 Oct 2026)
 

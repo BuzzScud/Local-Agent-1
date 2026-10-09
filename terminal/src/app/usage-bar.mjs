@@ -1,12 +1,13 @@
 // The Claude API's usage drawn (8 Oct 2026, the owner's pick "1 · Fuel line": "use design 1 and
-// ensure proper spacing and uniformity"): the bar under the footer and the /usage card. Pure:
+// ensure proper spacing and uniformity"; the line tidied 9 Oct 2026, "1 · Tidy"): the usage line under
+// the footer and the /usage card. Pure:
 // screen.jsx draws the rows this returns, and the tests read them. The numbers are claude-usage.mjs
 // usageNow()'s.
 //   - The line is what is LEFT of the month's cap, from the left, in a gradient that brightens to
 //     its head; then today's spend in amber, then what was spent before today, faint.
-//   - Every row has the same ends: the bar starts and ends where the footer above it does (two cells
-//     in), and the card's borders are the prompt box's (the whole width), its text one cell in, as
-//     the other panels. In the card each label takes one column, the numbers end at one edge, and a
+//   - Every row has the same ends: the line's row starts and ends where the footer above it does
+//     (inside the prompt box, one cell in from its border), and the card's borders are the prompt
+//     box's (the whole width), its text one cell in, as the other panels. In the card each label takes one column, the numbers end at one edge, and a
 //     section is one blank row from the next.
 //   - While a reply runs a shine sweeps the line and its head blinks; at rest it holds still (a
 //     redraw at rest would break copying text off the screen).
@@ -89,38 +90,37 @@ export function fuelLine(w, left, today, { now = Date.now(), live = false } = {}
 }
 const thinMeter = (w, frac) => fuelLine(w, frac, 0);
 
-// The bar under the footer: "◆ ━━━━━━━━━──  $433.44 left of $500 · today $56.71 · out by Oct 22
-// at ~$33/day · limits 100%". width: the window's; it starts and ends two cells in, as the footer.
-// The words shorten as the window narrows; the line always stays (at least MIN_LINE cells).
+// The usage line in the prompt box, under the footer (the owner's pick "1 · Tidy", 9 Oct 2026): "◆ $408.69
+// left of $500  ━━━━━━━━━━━━━━──  today $14.65 · out by Oct 23". What is left on the left, today and the day
+// it runs out on the right (ending where the footer's words above it end), the line between them. The
+// daily pace is /usage's; the limits show only once the tightest is under half (it reads 98–100% nearly
+// always). The words shorten as the window narrows; the line keeps a fifth of the row (MIN_LINE at least).
+// width: the row's cells.
 export const MIN_LINE = 12;
-// pad: the cells left empty at each end (2, as the footer once was; 0 inside the prompt box's frame).
-// wordsFirst: the words, then the line to the row's end (the "Panel" pick, 8 Oct 2026: its words start
-// in the footer's column and its line ends where the footer's words do).
-export function usageRow(u, width, { now = Date.now(), live = false, pad = 2, wordsFirst = false } = {}) {
-  const avail = width - 2 * pad;
+export function usageRow(u, width, { now = Date.now(), live = false } = {}) {
   const r = rateOf(u.limits, now);
   const capped = Boolean(u.capped);
   const known = u.cap != null;
   const sep = S(' · ', C.sep);
-  const moneyLong = capped ? [S('paused', C.bad, null, true), sep, S(`cap reached · back ${dayUtc(u.resetsOn)}`, C.dim)]
+  const moneyLong = capped ? [S('paused', C.bad, null, true), S(` · cap reached · back ${dayUtc(u.resetsOn)}`, C.dim)]
     : known ? [S(money(u.left), C.value, null, true), S(' left', C.dim), S(` of ${money0(u.cap)}`, C.dim)]
       : [S(money(u.spent), C.value, null, true), S(' this month', C.dim)];
   const moneyShort = capped ? [S('paused', C.bad, null, true)] : known ? [S(money0(u.left), C.value, null, true), S(' left', C.dim)] : [S(money0(u.spent), C.value, null, true), S(' this month', C.dim)];
-  const today = [sep, S('today ', C.dim), S(money(u.today.usd), C.text)];
+  const today = [S('today ', C.dim), S(money(u.today.usd), C.text)];
   const warn = !capped && u.pace.beforeReset;
-  const paceLong = warn ? [sep, S(`out by ${day(u.pace.runsOut)}`, C.warn), S(` at ~${money0(u.pace.perDay)}/day`, C.dim)] : [];
-  const paceShort = warn ? [sep, S(`out ${day(u.pace.runsOut)}`, C.warn)] : [];
-  const rate = r ? [sep, S('limits ', C.dim), S(`${r.pct}%`, rateColor(r.pct)), ...(r.secs ? [S(` · full in ${r.secs}s`, C.dim)] : [])] : [];
-  const capNote = known || capped ? [] : [sep, S('the cap shows after a reply', C.dim)];
-  const tries = [[moneyLong, today, paceLong, rate, capNote], [moneyLong, today, paceLong, capNote], [moneyLong, today, paceShort], [moneyLong, paceShort], [moneyShort, paceShort], [moneyShort]];
+  const outLong = warn ? [S(`out by ${day(u.pace.runsOut)}`, C.warn)] : [];
+  const outShort = warn ? [S(`out ${day(u.pace.runsOut)}`, C.warn)] : [];
+  const rate = r && r.pct < 50 ? [S('limits ', C.dim), S(`${r.pct}%`, rateColor(r.pct)), ...(r.secs ? [S(` · full in ${r.secs}s`, C.dim)] : [])] : [];
+  const capNote = known || capped ? [] : [S('the cap shows after a reply', C.dim)];
+  const join = (...parts) => parts.filter((p) => p.length).flatMap((p, i) => (i ? [sep, ...p] : p));
   const mark = [S('◆', C.diamond), S(' ')];
-  let words = tries.at(-1).flat();
-  // The line keeps a fifth of the row at least, so a wide window gives it room before more words.
-  const least = Math.max(MIN_LINE, Math.round(avail * 0.2));
-  for (const t of tries) { const w = t.flat(); if (avail - widthOf(mark) - 2 - widthOf(w) >= least) { words = w; break; } }
-  const lineW = Math.max(1, avail - widthOf(mark) - 2 - widthOf(words));
+  const tries = [[moneyLong, join(today, outLong, rate, capNote)], [moneyLong, join(today, outLong, capNote)], [moneyLong, join(today, outLong)], [moneyLong, join(today, outShort)], [moneyShort, join(today, outShort)], [moneyShort, outShort], [moneyShort, []]];
+  const lineRoom = ([m, w]) => width - widthOf(mark) - widthOf(m) - 2 - (w.length ? widthOf(w) + 2 : 0);
+  const least = Math.max(MIN_LINE, Math.round(width * 0.2));
+  const [m, w] = tries.find((t) => lineRoom(t) >= least) ?? tries.at(-1);
+  const lineW = Math.max(1, lineRoom([m, w]));
   const line = capped ? [S('─'.repeat(lineW), C.bad)] : known ? fuelLine(lineW, u.left / u.cap, Math.min(u.spent, u.today.usd) / u.cap, { now, live }) : [S('─'.repeat(lineW), C.faint)];
-  return [...gap(pad), ...exact(wordsFirst ? [...mark, ...words, ...gap(2), ...line] : [...mark, ...line, ...gap(2), ...words], avail), ...gap(pad)];
+  return exact([...mark, ...m, ...gap(2), ...line, ...(w.length ? [...gap(2), ...w] : [])], width);
 }
 
 const SPARK = '▁▂▃▄▅▆▇█';

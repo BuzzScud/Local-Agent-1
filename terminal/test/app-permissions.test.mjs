@@ -61,12 +61,12 @@ test('a start-up mode saved with /permissions: the next window starts in it and 
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [{ wait: '? for shortcuts' }, { sleep: 400 }, { snapshot: 'start' }, ...quit] });
   expect(r.snapshots.start).toContain('accept edits (/permissions)');
-  expect(r.snapshots.start).toContain('⏵⏵ accept edits on');
+  expect(r.snapshots.start).toContain('⏵⏵ accept edits │');
   writeFileSync(join(base, 'home', 'permissions.json'), '{ "folders": ');
   const r2 = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [{ wait: '? for shortcuts' }, { wait: 'cannot be read' }, { sleep: 300 }, { snapshot: 'start' }, ...quit] });
   await fake.close();
   expect(r2.snapshots.start).toContain('permissions.json cannot be read');
-  expect(r2.snapshots.start).not.toContain('accept edits on'); // the saved mode is off with the rest
+  expect(r2.snapshots.start).not.toContain('⏵⏵ accept edits'); // the saved mode is off with the rest
   expect(readFileSync(join(base, 'home', 'permissions.json'), 'utf8')).toBe('{ "folders": ');
 }, T * 2);
 
@@ -94,7 +94,7 @@ test('/permissions: six rows with what they hold, enter opens a list, test says 
   expect(r.snapshots.allow).toMatch(/1\s+node --test\s+this folder/);
   expect(r.snapshots.test).toContain('REFUSED blocked by your rule "npm publish" (/permissions)');
   expect(r.snapshots.modes).toMatch(/❯ Not saved\s+✓ 6/); // the five modes, then Not saved, the one in use
-  expect(r.snapshots.plan).toContain('⏸ plan mode on');
+  expect(r.snapshots.plan).toContain('⏸ plan │');
   const saved = JSON.parse(readFileSync(join(base, 'home', 'permissions.json'), 'utf8'));
   expect(saved.folders[realpathSync(cwd)].mode).toBe('plan');
 }, T);

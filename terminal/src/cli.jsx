@@ -614,9 +614,11 @@ if (opts.print) {
     ].join(' · ');
   } catch {}
   // A clear window, as `clear` leaves it (what was on screen moves up into
-  // the scrollback): the welcome starts on the top line, the prompt box sits
-  // on the last lines, with space in between.
-  if (process.stdout.isTTY) process.stdout.write(`${'\n'.repeat(process.stdout.rows || 24)}\x1b[H`);
+  // the scrollback): the welcome starts near the top, the prompt box sits on
+  // the last lines, with space in between. The app starts on the second line:
+  // its live part stays a line short of the window (screen.jsx), so a start
+  // page held live still ends on the last line.
+  if (process.stdout.isTTY) process.stdout.write(`${'\n'.repeat(process.stdout.rows || 24)}\x1b[2;1H`);
   // The Mac's memory as the window opens, printed beside the welcome box.
   // The Mac's memory for the footer's live line (App.jsx reads it again every 5 s).
   try { opts.macMem = macMemory(); } catch { opts.macMem = null; }

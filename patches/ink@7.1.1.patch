@@ -1,0 +1,107 @@
+diff --git a/build/ink.js b/build/ink.js
+index 0082666b281ec2db77b875d6b8460bcc19a59ce7..343d98031d591fc3c2d7e75d47246ddef2a4ac09 100644
+--- a/build/ink.js
++++ b/build/ink.js
+@@ -751,8 +751,10 @@ export default class Ink {
+         // Detect fullscreen: output fills or exceeds terminal height.
+         // Only apply when writing to a real TTY — piped output always gets trailing newlines.
+         const viewportRows = isTty ? getWindowSize(this.options.stdout).rows : 24;
+-        const isFullscreen = isTty && outputHeight >= viewportRows;
+-        const outputToRender = isFullscreen ? output : output + '\n';
++        // Agentic Coder: no line break after the frame, at any height, so its last row can be the
++        // window's last row (Ink's own leaves the cursor on an empty row under it). log-update.js places
++        // the cursor from the frame's real last row, and writes the line break when the app ends.
++        const outputToRender = output;
+         const shouldClearTerminal = shouldClearTerminalForFrame({
+             isTty,
+             viewportRows,
+diff --git a/build/log-update.js b/build/log-update.js
+index cdb5fc41f158304c4c4f230a765065ab1fe0a2f7..9c6d274560ed8b6bbcd31e30355d978e92cc6081 100644
+--- a/build/log-update.js
++++ b/build/log-update.js
+@@ -32,13 +32,15 @@ const createStandard = (stream, { showCursor = false } = {}) => {
+         }
+         const lines = str.split('\n');
+         const visibleCount = visibleLineCount(lines, str);
+-        const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor);
++        // Agentic Coder: from the row the cursor is on after the frame (its last row when the frame has
++        // no line break at its end), not always the row under it.
++        const cursorSuffix = buildCursorSuffix(lines.length - 1, activeCursor);
+         if (str === previousOutput && cursorChanged) {
+             stream.write(buildCursorOnlySequence({
+                 cursorWasShown,
+                 previousLineCount,
+                 previousCursorPosition,
+-                visibleLineCount: visibleCount,
++                visibleLineCount: lines.length - 1,
+                 cursorPosition: activeCursor,
+             }));
+         }
+@@ -64,6 +66,11 @@ const createStandard = (stream, { showCursor = false } = {}) => {
+         cursorWasShown = false;
+     };
+     render.done = () => {
++        // Agentic Coder: a frame drawn without a line break at its end gets one now, so what is written
++        // after the app ends starts on the row under it.
++        if (previousOutput && !previousOutput.endsWith('\n')) {
++            stream.write(buildReturnToBottomPrefix(cursorWasShown, previousLineCount, previousCursorPosition) + '\n');
++        }
+         previousOutput = '';
+         previousLineCount = 0;
+         previousCursorPosition = undefined;
+@@ -89,7 +96,7 @@ const createStandard = (stream, { showCursor = false } = {}) => {
+             stream.write(hideCursorEscape);
+         }
+         if (activeCursor) {
+-            stream.write(buildCursorSuffix(visibleLineCount(lines, str), activeCursor));
++            stream.write(buildCursorSuffix(lines.length - 1, activeCursor));
+         }
+         previousCursorPosition = activeCursor ? { ...activeCursor } : undefined;
+         cursorWasShown = activeCursor !== undefined;
+@@ -136,7 +143,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+                 cursorWasShown,
+                 previousLineCount: previousLines.length,
+                 previousCursorPosition,
+-                visibleLineCount: visibleCount,
++                visibleLineCount: nextLines.length - 1,
+                 cursorPosition: activeCursor,
+             }));
+             previousCursorPosition = activeCursor ? { ...activeCursor } : undefined;
+@@ -145,7 +152,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+         }
+         const returnPrefix = buildReturnToBottomPrefix(cursorWasShown, previousLines.length, previousCursorPosition);
+         if (str === '\n' || previousOutput.length === 0) {
+-            const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor);
++            const cursorSuffix = buildCursorSuffix(nextLines.length - 1, activeCursor);
+             stream.write(returnPrefix +
+                 ansiEscapes.eraseLines(previousLines.length) +
+                 str +
+@@ -187,7 +194,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+                 // has no trailing newline (fullscreen mode).
+                 (isLastLine && !hasTrailingNewline ? '' : '\n'));
+         }
+-        const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor);
++        const cursorSuffix = buildCursorSuffix(nextLines.length - 1, activeCursor);
+         buffer.push(cursorSuffix);
+         stream.write(buffer.join(''));
+         cursorWasShown = activeCursor !== undefined;
+@@ -205,6 +212,10 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+         cursorWasShown = false;
+     };
+     render.done = () => {
++        // Agentic Coder: as in the standard renderer above.
++        if (previousOutput && !previousOutput.endsWith('\n')) {
++            stream.write(buildReturnToBottomPrefix(cursorWasShown, previousLines.length, previousCursorPosition) + '\n');
++        }
+         previousOutput = '';
+         previousLines = [];
+         previousCursorPosition = undefined;
+@@ -230,7 +241,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+             stream.write(hideCursorEscape);
+         }
+         if (activeCursor) {
+-            stream.write(buildCursorSuffix(visibleLineCount(lines, str), activeCursor));
++            stream.write(buildCursorSuffix(lines.length - 1, activeCursor));
+         }
+         previousCursorPosition = activeCursor ? { ...activeCursor } : undefined;
+         cursorWasShown = activeCursor !== undefined;

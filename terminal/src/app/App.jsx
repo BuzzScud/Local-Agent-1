@@ -787,9 +787,10 @@ export function App({ opts, win, onRestart }) {
   const btwShown = Boolean(btw && !perm && !answerWait);
   if (!perm && !picker && !btwShown && input.value !== menuClosedFor) {
     // The rows the / menu may take: 18 as ever, and more in a window with room for them (the box, the
-    // footer and their gaps take 6). Under the start page while it is still live, the rows it can give
-    // up and still show its bot (2 + START_BIG and its blank line; start.room, below, shrinks it to fit).
-    const fits = holdRef.current ? (rows ?? 40) - 7 - footRows - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 6 - footRows;
+    // footer and their gaps take 5; the box's edge is the window's last line). Under the start page while
+    // it is still live, the rows it can give up and still show its bot (2 + START_BIG and its blank line;
+    // start.room, below, shrinks it to fit).
+    const fits = holdRef.current ? (rows ?? 40) - 7 - footRows - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 5 - footRows;
     const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
     const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined), remote: Boolean(model.remote), claude: Boolean(claudeModel) }) : [];
     if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
@@ -909,7 +910,7 @@ export function App({ opts, win, onRestart }) {
   // what came under it, the / menu or the shortcuts would leave it fewer than START_MIN rows, or when a
   // panel, pop-up or question opens (the page and a tall panel would not fit together).
   // The rows the start page may use (start.jsx StartPage, start.room): the window less the prompt box,
-  // the footer, their gaps and the cursor's line (6) and the page's own blank line; held, less what
+  // the footer, their gaps and the line the app starts under (6: cli.jsx) and the page's own blank line; held, less what
   // sits under it too (the notes, the / menu, the shortcuts), so it shrinks to make room and stays
   // live. Printed at once (a start on a remote, or --url), it keeps rows for the notes that come after
   // it, a line and a gap each: the mode the last window left, and on a remote where it runs, its

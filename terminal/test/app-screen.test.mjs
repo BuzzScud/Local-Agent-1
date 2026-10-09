@@ -60,17 +60,17 @@ test('the five modes from the keyboard: /mode 1 is Auto, /mode 5 Bypass (red, wi
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/mode 1' }, { key: 'enter' }, { wait: 'auto mode on' }, { sleep: 200 }, { snapshot: 'auto' },
-    { type: '/mode bypass' }, { key: 'enter' }, { wait: 'bypass permissions on' }, { sleep: 200 }, { snapshot: 'bypass' },
-    { key: 'shiftTab' }, { waitGone: 'bypass permissions on (' }, { sleep: 200 }, { snapshot: 'manual' },
+    { wait: '? for shortcuts' }, { type: '/mode 1' }, { key: 'enter' }, { wait: '⏵⏵ auto │' }, { sleep: 200 }, { snapshot: 'auto' },
+    { type: '/mode bypass' }, { key: 'enter' }, { wait: '⏵⏵ bypass │' }, { sleep: 200 }, { snapshot: 'bypass' },
+    { key: 'shiftTab' }, { waitGone: '⏵⏵ bypass │' }, { sleep: 200 }, { snapshot: 'manual' },
     { type: '/mode yolo' }, { key: 'enter' }, { wait: 'There is no mode "yolo"' },
     ...quitTyped,
   ] });
   await fake.close();
   expect(r.snapshots.auto).toContain('Mode is auto: reading, searching and edits inside the project go through');
-  expect(r.snapshots.auto).toContain('⏵⏵ auto mode on (shift+tab to cycle)');
+  expect(r.snapshots.auto).toContain('⏵⏵ auto │'); // short, with no hint ("1 · Tidy", 9 Oct 2026: the ? list has shift+tab)
   expect(r.snapshots.bypass).toContain('Bypass permissions is on: nothing asks. A git push asks first (unless the model is Claude).');
   expect(r.snapshots.bypass).toContain('Still never: rm -rf, sudo, a force push');
-  expect(r.snapshots.bypass).toContain('⏵⏵ bypass permissions on (shift+tab to cycle)');
-  expect(r.snapshots.manual.split('\n').slice(-6).join('\n')).not.toMatch(/mode on|edits on|permissions on/); // Manual shows no label, as Claude Code
+  expect(r.snapshots.bypass).toContain('⏵⏵ bypass │');
+  expect(r.snapshots.manual.split('\n').slice(-6).join('\n')).not.toMatch(/⏵⏵|⏸/); // Manual shows no label, as Claude Code
 }, T);
