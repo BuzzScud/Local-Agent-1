@@ -75,7 +75,7 @@ test('the Arena tab goes to the runner\'s own page, with the hub\'s address and 
   const page = await (await fetch(`${O}/`)).text();
   expect(page).toContain('<title>Arena</title>');
   const st = await get('/api/state');
-  expect([st.fake, Object.keys(st.panel.models)]).toEqual([true, ['gemma', 'qwen', 'k2', 'bonsai', 'constantkv']]); // every model in /model
+  expect([st.fake, Object.keys(st.panel.models)]).toEqual([true, ['qwen', 'k2']]); // every model in /model (Gemma and Bonsai left it, 9 Oct 2026)
   for (const p of ['/tests/run.json', '/tests/run', '/tests/stop']) expect([p, (await hubGet(p)).status]).toEqual([p, 404]);
   // The record is still the hub's own page (the Arena shows it over itself), with the record's data.
   expect((await hubGet('/tests')).status).toBe(200);

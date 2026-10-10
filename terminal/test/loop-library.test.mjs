@@ -109,7 +109,7 @@ test('the Library: /loop with no loop opens it, cards in sections at every size,
   expect(B.openFromChat(ui, '', m.snapshot())).toBe(true);
   expect(ui.view).toBe('shelf');
   let f = frame();
-  expect(f).toMatch(/Running 0 {3}Library 11/);
+  expect(f).toMatch(/Running 0 {3}Library 16/); // the 15 ready-made (Loops 11–15 came 9 Oct 2026) and the project's one
   expect(f).toMatch(/Yours {2}kept for you, in every project[\s\S]*\+ New loop/);
   expect(f).toMatch(/Projects {2}kept in a project, shared through git[\s\S]*TASK {2}Check the export[\s\S]*trades-export · asks once/);
   expect(f).toMatch(/Ready-made {2}come with the app[\s\S]*TEST {2}Watch the tests[\s\S]*RUN › READ › TELL/);
@@ -150,7 +150,7 @@ test('the Library: /loop with no loop opens it, cards in sections at every size,
   expect(ui.view).toBe('main');
   press('tab');
   expect(ui.view).toBe('shelf');
-  expect(frame()).toMatch(/Running 1 {3}Library 12[\s\S]*Yours[\s\S]*WEB {2}News watch/);
+  expect(frame()).toMatch(/Running 1 {3}Library 17[\s\S]*Yours[\s\S]*WEB {2}News watch/);
   press('tab');
   expect(ui.view).toBe('main');
   m.close();

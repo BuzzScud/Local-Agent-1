@@ -237,12 +237,13 @@ test('a Battle set stopped part way: the test under way is left out, the rest sk
 // ---------- The practice runner itself (run.mjs), against the app's stand-in model server ----------
 // A home of its own with the stand-in as the engine and a stand-in model file: nothing real loads.
 async function standInHome() {
-  const { ENGINE, MODELS } = await import('../index.mjs');
+  const { engineOf, MODELS } = await import('../index.mjs');
   const { symlinkSync } = await import('node:fs');
   const home = mkdtempSync(join(tmpdir(), 'agentic-run-standin-'));
-  mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
+  const tag = engineOf(MODELS.k2).tag; // K2 runs on its own engine, not the default one
+  mkdirSync(join(home, 'engine', tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
-  symlinkSync(join(REPO, 'terminal', 'test', 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
+  symlinkSync(join(REPO, 'terminal', 'test', 'fake-llama-server.mjs'), join(home, 'engine', tag, 'llama-server'));
   (await import('node:fs')).writeFileSync(join(home, 'models', MODELS.k2.file), 'stand-in');
   return home;
 }
