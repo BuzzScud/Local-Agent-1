@@ -9,12 +9,15 @@ export function readResults(out, code) {
   else if ((m = /Tests\s+(?:(\d+) failed\s*\|\s*)?(\d+) passed/.exec(out))) { failed = +(m[1] ?? 0); passed = +m[2]; }
   else if ((m = /(\d+) passing/.exec(out))) { passed = +m[1]; failed = +(/(\d+) failing/.exec(out)?.[1] ?? 0); }
   else if ((m = /=+ (?:(\d+) failed, )?(\d+) passed/.exec(out)) || (m = /=+ (\d+) failed/.exec(out))) { failed = +(m[1] ?? 0); passed = +(m[2] ?? 0); }
+  // Bun's own summary (" 1906 pass" and " 7 fail", each on a line): before 9 Oct 2026 its "Ran 1914 tests
+  // across 231 files" line was read as unittest's, so 7 failing came out as none.
+  else if ((m = /^\s*(\d+) pass$/m.exec(out)) && /^\s*\d+ fail$/m.test(out)) { passed = +m[1]; failed = +/^\s*(\d+) fail$/m.exec(out)[1]; }
   // A script's own count (4 Oct 2026: "Results: 22 passed, 2 failed out of 24", read as no count at all).
   else if ((m = /\b(\d+) passed\b[^\n]{0,24}?\b(\d+) failed\b/i.exec(out))) { passed = +m[1]; failed = +m[2]; }
   else if ((m = /\b(\d+) failed\b[^\n]{0,24}?\b(\d+) passed\b/i.exec(out))) { failed = +m[1]; passed = +m[2]; }
   else if ((m = /\b(\d+)\s*(?:\/|of)\s*(\d+) (?:passed|pass|ok)\b/i.exec(out)) && +m[1] <= +m[2]) { passed = +m[1]; failed = +m[2] - +m[1]; }
   else if ((m = /Ran (\d+) tests?/.exec(out))) { const f = /FAILED \((?:failures=(\d+))?(?:, )?(?:errors=(\d+))?/.exec(out); failed = f ? +(f[1] ?? 0) + +(f[2] ?? 0) : 0; passed = +m[1] - failed; }
-  const failing = [...out.matchAll(/^\s*(?:✖|✗|×|FAIL|FAILED)\s+(.+?)(?:\s+\([\d.]+m?s\))?$/gm)].map((x) => x[1].trim()).filter((x) => !/^failing tests:?$/i.test(x) && !x.startsWith("("));
+  const failing = [...out.matchAll(/^\s*(?:✖|✗|×|FAIL|FAILED|\(fail\))\s+(.+?)(?:\s+\([\d.]+m?s\)|\s+\[[\d.]+m?s\])?$/gm)].map((x) => x[1].trim()).filter((x) => !/^failing tests:?$/i.test(x) && !x.startsWith("("));
   const ok = code === 0 && (failed === null || failed === 0);
   return { ok, passed, failed, total: passed === null ? null : passed + failed, failing: [...new Set(failing)].slice(0, 10) };
 }
