@@ -12,7 +12,7 @@ import { HOME } from '../../../models/index.mjs';
 import { attachDropped, attachClipboard, chipOf } from './attach.mjs';
 import { droppedFiles, ATTACH_TOKEN } from '../agent/images.mjs';
 import { listBoards, readState, readRun, sendCommand, runFile, rulesOf, fieldsOf, unclearOf, isLoopCommand, STEPS_WORD, PRESET, readSentence, readEvery, readRuns, readStopAt } from './loops.mjs';
-import { drawBoard, ansiRow, setupChoices, setupPick, setupFields, kindOfSetup, wizardSteps, stepOf, templateOf, TEMPLATES, MORE_ROWS, buttonsOf, watchButtonsOf } from './loops-draw.mjs';
+import { drawBoard, ansiRow, setupChoices, setupPick, setupFields, kindOfSetup, wizardSteps, stepOf, templateOf, TEMPLATES, MORE_ROWS, buttonsOf, watchButtonsOf, splitAddress, wantsAddress, needsAddress } from './loops-draw.mjs';
 import { canResize, resizeSeq } from './agents-window.mjs';
 import { loadInto, setFill, startRows, shelfKey, editorKey, openEditor, openShelf } from './loops-library.mjs';
 import { findByName } from './loop-files.mjs';
@@ -88,13 +88,14 @@ export function showReply(ui, loops, r) {
 // An unclear task (loops.mjs unclearOf) is asked about at step 1 before it goes on.
 export function openSetup(ui, { mode = 'ask', text = null, unclear = null, sentence = null, loop = null, state = null } = {}) {
   const f = { every: '10m', runs: 'no limit', stopAt: 'none', cap: 'none', steps: STEPS_WORD, mode, askFirst: false, kind: null, folder: null };
-  const su = { step: 0, id: null, again: false, name: '', text: text ?? TEMPLATES[0].text, tpl: 0, f, custom: { often: '', stop: '' }, touched: {}, unclear, pick: 0, error: null, typed: '', found: [], keep: false, rule: -1,
+  const su = { step: 0, id: null, again: false, name: '', text: text ?? TEMPLATES[0].text, url: '', web: false, focus: 'text', tpl: 0, f, custom: { often: '', stop: '' }, touched: {}, unclear, pick: 0, error: null, typed: '', found: [], keep: false, rule: -1,
     loaded: null, fills: [], picture: null, save: { name: '', where: 'yours', replace: null }, pasted: { n: 0, files: new Map(), info: new Map() } };
   ui.back = ui.view === 'shelf' ? 'shelf' : null;
   if (loop) {
     const lf = fieldsOf(loop);
     Object.assign(f, { every: lf.every, runs: lf.runs, stopAt: lf.stopAt, cap: lf.cap, steps: lf.steps, mode: lf.mode, askFirst: lf.askFirst, kind: lf.kind, check: lf.check ?? null, folder: state?.places?.find((x) => x.shown === loop.folder)?.path ?? null });
-    Object.assign(su, { id: loop.id, again: over(loop), name: loop.name, text: chipsBack(loop.message, su.pasted), keep: true, picture: loop.picture ?? null });
+    const { words, url } = splitAddress(loop.message);
+    Object.assign(su, { id: loop.id, again: over(loop), name: loop.name, text: chipsBack(words, su.pasted), url, web: Boolean(url), keep: true, picture: loop.picture ?? null });
     su.touched.often = true;
     su.step = wizardSteps(su).length - 1;
   } else if (sentence != null) {
@@ -164,6 +165,8 @@ export function handlePaste(b, text) {
   const su = ui.setup;
   const clean = String(text ?? '').replace(/\x1b\[20[01]~/g, '').replace(/\r\n?/g, '\n');
   if (ui.view === 'setup' && su && !su.unclear && stepOf(su) === 'what') {
+    // An address pasted into its box goes in as it is, on one line.
+    if (su.focus === 'url' && wantsAddress(su)) { su.url += clean.replace(/\s+/g, ' ').trim(); wordsChanged(su); return; }
     const r = attachDropped(clean, { cwd: su.f.folder ?? b.state?.places?.[0]?.path ?? homedir(), pasted: pastedOf(su), dir: attachDir(), id: `loop-${stampOf()}` });
     if (r.failed.length) say(ui, `Could not attach ${basename(r.failed[0].path)}: ${r.failed[0].error}`, 'warn');
     else if (r.added.length) say(ui, r.added.length === 1 ? `${r.added[0].token} attached: each run gets it` : `${r.added.length} files attached: each run gets them`);
@@ -186,6 +189,7 @@ const toStep = (su, name) => { const i = wizardSteps(su).indexOf(name); su.step 
 // The step's answer read before going on: an error stays on the step.
 function stepError(su, step) {
   if (step === 'what' && !(su.text ?? '').trim()) return 'Type what each run should do first';
+  if (step === 'what' && needsAddress(su)) { su.focus = 'url'; return 'Type the address of the page to watch'; }
   if (step === 'often' && su.custom.often) return readEvery(su.custom.often, { kind: kindOfSetup(su) }).error ?? null;
   if (step === 'stop' && su.custom.stop) { const t = su.custom.stop.trim().replace(/^(at|in)\s+/i, ''); return /^\d+(\s*runs?)?$/i.test(t) ? readRuns(t).error ?? null : readStopAt(t).error ?? null; }
   return null;
@@ -196,6 +200,7 @@ function startSetup(b) {
   const su = ui.setup;
   const fields = setupFields(su, state);
   if (!fields.message) { su.error = 'Type what each run should do first'; return toStep(su, 'what'); }
+  if (needsAddress(su)) { su.error = 'Type the address of the page to watch'; su.rule = startRows(su).indexOf('url'); return; }
   if (!su.keep) { const u = unclearOf(fields.message); if (u) { su.unclear = u; su.pick = 0; return toStep(su, 'what'); } }
   const read = rulesOf(fields);
   if (read.error) { su.error = read.error; const row = { message: 'what', every: 'often', runs: 'stop', stopAt: 'stop' }[read.field]; if (row) toStep(su, row); else su.rule = startRows(su).indexOf(read.field === 'cap' ? 'cap' : 'steps'); return; }
@@ -261,15 +266,24 @@ function setupKey(b, k) {
     return;
   }
   if (step === 'what') {
+    // A web loop's page has a box of its own: tab goes to it and back, and typing goes where it is.
+    const inUrl = su.focus === 'url' && wantsAddress(su);
+    if ((k === 'tab' || k === 'shiftTab') && wantsAddress(su)) { su.focus = inUrl ? 'text' : 'url'; su.error = null; return; }
     if (k === 'up' || k === 'down' || k === 'tab' || k === 'shiftTab') {
       const n = TEMPLATES.length;
       su.tpl = (templateOf(su) + (k === 'up' || k === 'shiftTab' ? n - 1 : 1)) % n;
       su.text = TEMPLATES[su.tpl].text;
+      su.web = TEMPLATES[su.tpl].kind === 'web';
+      if (!su.web) su.url = '';
+      su.focus = 'text';
     } else if (k === 'enter') {
       if (!(su.text ?? '').trim()) { su.error = 'Type what each run should do first'; return; }
       if (!su.keep) { const u = unclearOf(su.text); if (u) { su.unclear = u; su.pick = 0; return; } }
       return next();
     } else if (k === '^V') return pasteClipboard(ui, su);
+    else if (inUrl && k === 'backspace') su.url = [...su.url].slice(0, -1).join('');
+    else if (inUrl && k === '^U') su.url = '';
+    else if (inUrl && k.length === 1 && k >= ' ') su.url += k;
     // A chip ([Image #1]) goes in one piece.
     else if (k === 'backspace') { const chip = /\[(?:Image|PDF|File|Folder) #\d+\]$/.exec(su.text ?? ''); su.text = chip ? su.text.slice(0, chip.index) : [...su.text].slice(0, -1).join(''); }
     else if (k === '^U') su.text = '';
@@ -297,10 +311,29 @@ function setupKey(b, k) {
       if (k === 'left') back();
       return;
     }
+    // Its words or its page, typed in place: the rows may come and go as the kind is read again, so
+    // the one you are on is found again by name.
+    if (at === 'text' || at === 'url') {
+      if (k === 'left') return back();
+      if (at === 'url') {
+        if (k === 'backspace') su.url = [...su.url].slice(0, -1).join('');
+        else if (k === '^U') su.url = '';
+        else if (k.length === 1 && k >= ' ') su.url += k;
+        else return;
+      } else if (k === 'backspace') { const chip = /\[(?:Image|PDF|File|Folder) #\d+\]$/.exec(su.text ?? ''); su.text = chip ? su.text.slice(0, chip.index) : [...su.text].slice(0, -1).join(''); }
+      else if (k === '^U') su.text = '';
+      else if (k.length === 1 && k >= ' ') su.text = (su.text ?? '') + k;
+      else return;
+      wordsChanged(su);
+      const now = startRows(su);
+      su.rule = now.includes(at) ? now.indexOf(at) : now.indexOf('text');
+      return;
+    }
     if (at === 'saveWhere' && (k === 'left' || k === 'right' || k === ' ')) { su.save.where = su.save.where === 'project' ? 'yours' : 'project'; su.error = null; return; }
-    if (MORE_ROWS.includes(at) && (k === 'left' || k === 'right' || k === ' ')) {
+    if ((MORE_ROWS.includes(at) || ['where', 'often', 'stop'].includes(at)) && (k === 'left' || k === 'right' || k === ' ')) {
       const cs = setupChoices(at, su, state);
       const pick = setupPick(at, su, state);
+      if (at === 'often' || at === 'stop') su.custom[at] = '';
       setValue(su, at, cs[pick < 0 ? 0 : (pick + (k === 'left' ? cs.length - 1 : 1)) % cs.length][0]);
       su.error = null;
       return;

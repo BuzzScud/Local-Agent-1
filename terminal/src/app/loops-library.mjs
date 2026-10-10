@@ -10,7 +10,7 @@
 // Plain data in, rows out for the drawing; the keys change ui only and send to the window as before.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fit, rowWidth, header, keysLine, framed, loopPicture, wrapWords, cut, pad, chip, rule, blank, setupChoices, setupPick, kindOfSetup, setupFields, MORE_ROWS, wizardSteps, CYCLE } from './loops-draw.mjs';
+import { fit, rowWidth, header, keysLine, framed, loopPicture, wrapWords, cut, pad, chip, rule, blank, setupChoices, setupPick, kindOfSetup, setupFields, MORE_ROWS, wizardSteps, CYCLE, planRows, splitAddress } from './loops-draw.mjs';
 import { openSetup } from './loops-board.mjs';
 import { filledText, fillsIn, pictureOf, pictureText } from './loop-files.mjs';
 import { modeName, readEvery } from './loops.mjs';
@@ -37,7 +37,7 @@ export function loadInto(ui, entry, state) {
   const folder = entry.folder ?? state.places?.[0]?.path ?? null;
   su.fills = entry.fills.map((x) => ({ key: x.key, value: x.value || guessFill(x.key, folder) }));
   su.loaded = { id: entry.id, from: entry.from, name: entry.name, about: entry.about, file: entry.file, project: entry.project ? entry.project.split('/').pop() : null, trusted: entry.trusted !== false, template: entry.message };
-  su.text = filledText(entry.message, Object.fromEntries(su.fills.map((x) => [x.key, x.value])));
+  wordsFrom(su, filledText(entry.message, Object.fromEntries(su.fills.map((x) => [x.key, x.value]))));
   const { kind, every, runs, stopAt, cap, steps, mode, askFirst, check } = entry.fields;
   Object.assign(su.f, { kind, every, runs, stopAt, cap, steps, mode, askFirst, folder: entry.folder ?? null, check: check ?? null });
   su.picture = entry.picture;
@@ -52,11 +52,18 @@ export function loadInto(ui, entry, state) {
 // A blank answered: the message is made again from the loop's own words.
 export function setFill(su, i, value) {
   su.fills[i].value = value;
-  su.text = filledText(su.loaded.template, Object.fromEntries(su.fills.map((x) => [x.key, x.value])));
+  wordsFrom(su, filledText(su.loaded.template, Object.fromEntries(su.fills.map((x) => [x.key, x.value]))));
+}
+// A loop's words, its page (if it watches one) taken out into the address box.
+function wordsFrom(su, message) {
+  const { words, url } = splitAddress(message);
+  su.text = words;
+  su.url = url;
+  su.web = Boolean(url);
 }
 
 // ---- the wizard's last step: the rows a key can move to ----
-export const startRows = (su) => [...(su.fills ?? []).map((_, i) => `fill:${i}`), ...MORE_ROWS, 'saveName', 'saveWhere'];
+export const startRows = (su) => [...(su.fills ?? []).map((_, i) => `fill:${i}`), ...planRows(su), ...MORE_ROWS, 'saveName', 'saveWhere'];
 // Over the title: what was loaded, and a row for each blank it asks.
 export function loadedRows(su, w) {
   const out = [];

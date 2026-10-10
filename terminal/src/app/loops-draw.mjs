@@ -426,7 +426,7 @@ function drawWatch(state, ui, { cols, rows, now, linesOf }) {
 export const TEMPLATES = [
   { kind: 'test', name: 'Run the tests', about: 'and say what fails', text: 'run the tests and say what fails' },
   { kind: 'debug', name: 'Fix the failing tests', about: 'until they all pass', text: 'fix the failing tests until they all pass' },
-  { kind: 'web', name: 'Watch a web page', about: 'and say what is new', text: 'read the Bun releases page and tell me when there is a new version' },
+  { kind: 'web', name: 'Watch a web page', about: 'and say what is new', text: 'read this page and tell me when there is a new version' },
   { kind: 'test', name: 'Check the build', about: 'and the lint', text: 'check the build and the lint, change nothing' },
   { kind: null, name: 'Something else', about: 'type it below', text: '' },
 ];
@@ -435,7 +435,27 @@ export const STEP_NAME = { what: 'What', where: 'Where', often: 'How often', sto
 export const wizardSteps = (su) => ['what', ...(su.id ? [] : ['where']), 'often', 'stop', 'start'];
 export const stepOf = (su) => wizardSteps(su)[Math.min(su.step ?? 0, wizardSteps(su).length - 1)];
 export const MORE_ROWS = ['mode', 'cap', 'steps', 'ask'];
-export const kindOfSetup = (su) => su.f.kind ?? guessKind(su.text ?? '');
+// The page a web loop watches (10 Oct 2026, the owner: "add a seperate adress for the web page it
+// needs to monitor"): its own box at step 1 (su.url; tab moves to it) and a row at the last step.
+// Each run is told it after its words, on the same line; a loop's Rules and a kept loop take it
+// back out into its box (splitAddress).
+const ADDRESS_WORDS = ' — the page to watch: ';
+export const ADDRESS_EXAMPLE = 'https://github.com/oven-sh/bun/releases';
+export const joinAddress = (words, url) => { const w = String(words ?? '').trim(), u = String(url ?? '').trim(); return u ? `${w}${ADDRESS_WORDS}${u}` : w; };
+export function splitAddress(message) {
+  const t = String(message ?? '');
+  const m = /\s*— the page to watch: (\S+)\s*$/.exec(t);
+  return m ? { words: t.slice(0, m.index), url: m[1] } : { words: t, url: '' };
+}
+const hasAddress = (text) => /https?:\/\/\S|\b[a-z0-9-]+\.(com|org|net|io|sh|dev|ai|app|co)\b/i.test(String(text ?? ''));
+export const kindOfSetup = (su) => su.f.kind ?? (su.web ? 'web' : guessKind(joinAddress(su.text, su.url)));
+// The box shows for a web loop, or once an address is in it; it must be filled when "Watch a web
+// page" was picked and the words name no page of their own.
+export const wantsAddress = (su) => Boolean((su.url ?? '').trim() || su.web || kindOfSetup(su) === 'web');
+export const needsAddress = (su) => Boolean(su.web && !(su.url ?? '').trim() && !hasAddress(su.text));
+// The last step's rows for the loop itself (10 Oct 2026, the owner: "more edit power"): its words, its
+// page, where (a new loop only), how often and until, changed right there instead of a step back.
+export const planRows = (su) => ['text', ...(wantsAddress(su) ? ['url'] : []), ...(su.id ? [] : ['where']), 'often', 'stop'];
 // Which template the words are: one whose words they are, else Something else.
 export const templateOf = (su) => { const i = TEMPLATES.findIndex((t) => t.text && t.text === (su.text ?? '').trim()); return i >= 0 ? i : (su.text ?? '').trim() ? TEMPLATES.length - 1 : su.tpl ?? 0; };
 // A row's choices: [value, word, note]. Until's values are { runs, stopAt }.
@@ -485,7 +505,7 @@ export function messageOf(su) {
     const shown = file.startsWith(`${homedir()}/`) ? `~${file.slice(homedir().length)}` : file;
     return /\s/.test(shown) ? `'${file}'` : shown;
   });
-  return text.replace(/[ \t]+/g, ' ').trim();
+  return joinAddress(text.replace(/[ \t]+/g, ' ').trim(), su.url);
 }
 // The wizard's fields as rulesOf reads them.
 export function setupFields(su, state = {}) {
@@ -553,7 +573,7 @@ export function loopPicture(su, state, w, now) {
   const dim = (on, s) => (on ? s : 'faint');
   const center = (pieces) => { const n = rowWidth(pieces); return fit([p(' '.repeat(Math.max(0, Math.floor((w - n) / 2)))), ...pieces], w); };
   // What each run is told (a picture as its chip, not its copy's path).
-  const told = (su.text ?? '').trim();
+  const told = joinAddress(su.text, su.url);
   const words = wrapWords(f.message ? `“${told}”` : 'What each run does comes here: pick it or type it on the left', w - 4);
   const said = words.length > 2 ? [words[0], cut(words.slice(1).join(' '), w - 4)] : words;
   said.forEach((t) => rows.push(center([p(t, f.message ? 'white b' : 'faint')])));
@@ -643,15 +663,26 @@ function stepRows(su, state, w, now) {
     blankRow();
     const text = su.text ?? '';
     const room = w - 8;
-    const shown = [...text].length > room ? `…${[...text].slice(-(room - 1)).join('')}` : text;
-    const bs = su.unclear ? 'warn' : 'accent';
-    row([p('╭', bs), p('─'.repeat(w - 2), bs), p('╮', bs)]);
-    row([p('│', bs), ...fit([p(' › ', 'accent b'), p(shown, 'white'), p(Math.floor(now / 500) % 2 ? '▏' : ' ', 'accent'), ...(text ? [] : [p('type what each run should do', 'faint')])], w - 2), p('│', bs)]);
-    row([p('╰', bs), p('─'.repeat(w - 2), bs), p('╯', bs)]);
+    const tail = (s) => ([...s].length > room ? `…${[...s].slice(-(room - 1)).join('')}` : s);
+    const addr = wantsAddress(su);
+    const inUrl = addr && su.focus === 'url';
+    const blink = Math.floor(now / 500) % 2 ? '▏' : ' ';
+    const box = (value, ph, on, bs) => {
+      row([p('╭', bs), p('─'.repeat(w - 2), bs), p('╮', bs)]);
+      row([p('│', bs), ...fit([p(' › ', on ? 'accent b' : 'dim'), p(tail(value), 'white'), p(on ? blink : ' ', 'accent'), ...(value ? [] : [p(ph, 'faint')])], w - 2), p('│', bs)]);
+      row([p('╰', bs), p('─'.repeat(w - 2), bs), p('╯', bs)]);
+    };
+    box(text, 'type what each run should do', !inUrl, su.unclear ? 'warn' : inUrl ? 'border' : 'accent');
     // The pictures each run gets, or how to give it one.
     const held = trayItems(text, su.pasted);
     if (held.length) held.slice(0, 3).forEach((it) => row([p('  '), p(cut(compactText(it), w - 2), 'accent')]));
     else if (!su.unclear) row([p('  '), p(cut('drag a screenshot in, or ctrl+v: each run gets it', w - 2), 'faint')]);
+    // The page it watches: its own box, tab goes to it and back.
+    if (addr && !su.unclear) {
+      blankRow();
+      row([p('Page to watch', inUrl ? 'white b' : 'text'), p(inUrl ? '   tab: back to the words' : '   tab: type its address', 'faint')]);
+      box(su.url ?? '', ADDRESS_EXAMPLE, inUrl, inUrl ? 'accent' : 'border');
+    }
     if (su.unclear) {
       wrapWords(su.unclear.why, w - 2).slice(0, 2).forEach((t, i) => row([p(i ? '  ' : '! ', 'warn b'), p(t, 'warn')]));
       su.unclear.options.forEach((o, i) => row([p(i === su.pick ? ' ▸ ' : '   ', 'accent b'), p(`${i + 1}  `, 'faint'), p(cut(o.label, w - 6), i === su.pick ? 'white b' : 'text')], i === su.pick ? 'sel' : null));
@@ -669,11 +700,37 @@ function stepRows(su, state, w, now) {
     if (su.loaded) { out.push(...loadedRows(su, w)); blankRow(); }
     else if (su.typed) { row([p('You typed  ', 'faint'), p(cut(`/loop ${su.typed}`, w - 11), 'dim')]); if (su.found?.length) row([p('Read      ', 'faint'), p(cut(su.found.join('  ·  '), w - 10), 'dim')]); blankRow(); }
     const there = su.wide === false ? 'below' : 'on the right';
-    title(su.id ? `Change ${cut(su.name, w - 8)}` : 'Ready to start', su.id ? `Its picture is ${there}. ← goes back to change what it does, how often or until when.` : `The picture ${there} is what it will do. ← goes back to change anything.`);
+    title(su.id ? `Change ${cut(su.name, w - 8)}` : 'Ready to start', `Change any row here; ${su.id ? 'its' : 'the'} picture ${there} follows.`);
     const checks = setupChecks(su, state);
     for (const [mark, words, style] of checks) wrapWords(words, w - 3).slice(0, 3).forEach((t, i) => row([p(i ? '   ' : ` ${mark} `, `${style} b`), p(t, style)]));
     if (checks.length) blankRow();
     const rowsAt = startRows(su);
+    // The loop itself: its words and page typed in place, where, how often and until ←→.
+    row([p('This loop', 'dim'), p('    ↑↓ a row · type, or ←→ to change it', 'faint')]);
+    planRows(su).forEach((r) => {
+      const on = rowsAt[su.rule] === r;
+      const label = { text: 'Each run', url: 'Page', where: 'Where', often: 'How often', stop: 'Until' }[r];
+      const head = [p(on ? ' ▸ ' : '   ', 'accent b'), p(pad(label, 14), on ? 'white b' : 'dim')];
+      if (r === 'text' || r === 'url') {
+        const v = (r === 'text' ? su.text : su.url) ?? '';
+        const room = w - 19;
+        const shown = [...v].length > room ? `…${[...v].slice(-(room - 1)).join('')}` : v;
+        const ph = r === 'text' ? 'type what each run should do' : needsAddress(su) ? 'type its address' : ADDRESS_EXAMPLE;
+        // Empty: what to type, in amber when it must be typed before it starts.
+        const phStyle = needsAddress(su) && r === 'url' ? 'warn' : 'faint';
+        row([...head, p('  '), p(shown, on ? 'white' : 'text'), p(on ? '▏' : '', 'accent'), ...(v ? [] : [p(ph, phStyle)])], on ? 'sel' : null);
+        return;
+      }
+      const cs = setupChoices(r, su, state, now);
+      const i = setupPick(r, su, state, now);
+      const word = i >= 0 ? cs[i][1] : r === 'often' ? `every ${su.custom.often.trim()}` : su.custom.stop.trim();
+      const note = i >= 0 ? cs[i][2] ?? '' : 'as you typed it';
+      // The choice whole first; its note only where it fits (the warnings above say what matters).
+      const ww = Math.max(8, Math.min(26, w - 22));
+      const room = w - 22 - ww;
+      row([...head, p(on ? '◂ ' : '  ', 'accent'), p(pad(cut(word, ww), ww), on ? 'white b' : 'text'), p(on ? ' ▸ ' : '   ', 'accent'), p(room >= 8 ? cut(note, room) : '', note === 'your home folder' ? 'warn' : 'faint')], on ? 'sel' : null);
+    });
+    blankRow();
     row([p('More rules', 'dim'), p('   optional · ↑↓ a rule, ←→ change it', 'faint')]);
     MORE_ROWS.forEach((r) => {
       const on = rowsAt[su.rule] === r;
@@ -710,17 +767,21 @@ function drawSetup(state, ui, { cols, rows, now }) {
   const pic = su;
   const WD = Math.min(cols - 4, 164); // room for the picture's four boxes at full width
   const X = Math.floor((cols - WD) / 2);
+  // A short window: the step's empty rows go first, so the buttons and keys always show (the header,
+  // the steps, the box's two edges, the buttons, the keys, and in a narrow one the picture's line).
+  const most = rows - (out.length + 5 + (wide ? 0 : 1));
+  const shortened = (body) => { let b = body; while (b.length > most) { const i = b.findLastIndex((r) => r.every(([t]) => !t.trim())); if (i < 0) break; b = [...b.slice(0, i), ...b.slice(i + 1)]; } return b; };
   if (wide) {
     const LW = Math.min(58, Math.floor(WD * 0.44));
     const RW = WD - LW - 2;
-    const left = framed(`Step ${at + 1} of ${steps.length}`, stepRows(su, state, LW - 4, now), LW, 'accent');
+    const left = framed(`Step ${at + 1} of ${steps.length}`, shortened(stepRows(su, state, LW - 4, now)), LW, 'accent');
     const right = framed('Your loop', loopPicture(pic, state, RW - 4, now), RW, 'border');
     const h = Math.max(left.length, right.length);
     const padBox = (box, bw) => { const last = box.at(-1); const body = box.slice(0, -1); while (body.length < h - 1) body.push(fit([p('│', last[0][1]), p(' '.repeat(bw - 2)), p('│', last[0][1])], bw)); return [...body, last]; };
     const L = padBox(left, LW), R = padBox(right, RW);
     for (let i = 0; i < h; i++) add(fit([p(' '.repeat(X)), ...L[i], p('  '), ...R[i]], cols));
   } else {
-    for (const r of framed(`Step ${at + 1} of ${steps.length}`, stepRows(su, state, WD - 4, now), WD, 'accent')) add(fit([p(' '.repeat(X)), ...r], cols));
+    for (const r of framed(`Step ${at + 1} of ${steps.length}`, shortened(stepRows(su, state, WD - 4, now)), WD, 'accent')) add(fit([p(' '.repeat(X)), ...r], cols));
     add(blank(cols), true);
     // The picture, shorter: the steps on one line and the runs.
     const drawn = loopPicture(pic, state, WD - 4, now);
@@ -729,7 +790,8 @@ function drawSetup(state, ui, { cols, rows, now }) {
     const ev = readEvery(f.every, { kind });
     const cyc = (pic.picture ?? CYCLE[kind] ?? CYCLE.task).flatMap(([v, w], i) => [...(i ? [p(' ─▶ ', 'accent')] : []), p(v, 'accent b'), p(` ${w}`, 'text')]);
     add(fit([p(' '.repeat(X + 2)), p('Your loop  ', 'white b'), ...cyc, p(` ─▶ ${ev.until ? (f.check ? 'again until clean' : 'again until they pass') : ev.every ? `wait ${spokenEvery(ev.every)}` : 'its own pace'} ↺`, 'dim')], cols));
-    for (const r of drawn.slice(-9, -5)) add(fit([p(' '.repeat(X)), ...r], cols));
+    // The runs' times: dropped all together in a short window, after the empty rows.
+    for (const r of drawn.slice(-9, -5)) add(fit([p(' '.repeat(X)), ...r], cols), 'pic');
   }
   add(blank(cols), true);
   // The buttons, always in the same place: Back on the left, the next step's on the right.
@@ -741,14 +803,18 @@ function drawSetup(state, ui, { cols, rows, now }) {
   add(fit([p(' '.repeat(X)), ...backB, p(' '.repeat(Math.max(1, WD - rowWidth(backB) - rowWidth(nextB)))), ...nextB], cols));
   const room = rows - out.length - 1;
   let list = lines;
-  while (list.length > room && list.some(([, opt]) => opt)) { const i = list.map(([, opt]) => opt).lastIndexOf(true); list = [...list.slice(0, i), ...list.slice(i + 1)]; }
+  while (list.length > room && list.some(([, opt]) => opt)) {
+    const i = list.map(([, opt]) => opt).lastIndexOf(true);
+    list = i < 0 ? list.filter(([, opt]) => opt !== 'pic') : [...list.slice(0, i), ...list.slice(i + 1)];
+  }
   const top = Math.max(0, Math.floor((room - list.length) / 3));
   for (let i = 0; i < room; i++) out.push(list[i - top]?.[0] ?? blank(cols));
   const at2 = startRows(su)[su.rule];
-  const typing = last && (at2 === 'saveName' || String(at2).startsWith('fill:'));
+  const typing = last && (at2 === 'saveName' || at2 === 'text' || at2 === 'url' || String(at2).startsWith('fill:'));
+  const typeWord = { saveName: 'its name', text: 'its words', url: 'the address' }[at2] ?? 'the answer';
   const keys = su.unclear ? [['1–3', 'pick'], ['↑↓', 'move'], ['enter', 'this one'], ['esc', 'cancel']]
-    : last ? [['enter', su.id ? 'save' : named ? 'save and start' : 'start'], ...(named && !su.id ? [['^S', 'save only']] : []), ['←', 'back'], ['↑↓', 'a row'], typing ? ['type', at2 === 'saveName' ? 'its name' : 'the answer'] : ['←→', 'change it'], ...(su.loaded && su.loaded.from !== 'ready' ? [['^E', 'every field']] : []), ['esc', 'cancel']]
-    : [['enter', last ? (su.id ? 'save' : 'start') : 'next'], ...(at > 0 ? [['←', 'back']] : []), ['↑↓', step === 'start' ? 'a rule' : 'pick'], ...(step === 'what' ? [['type', 'your own words'], ['ctrl+v', 'a picture']] : step === 'often' || step === 'stop' ? [['type', 'your own']] : step === 'start' ? [['←→', 'change a rule']] : []), ['esc', 'cancel']];
+    : last ? [['enter', su.id ? 'save' : named ? 'save and start' : 'start'], ...(named && !su.id ? [['^S', 'save only']] : []), ['←', 'back'], ['↑↓', 'a row'], typing ? ['type', typeWord] : ['←→', 'change it'], ...(su.loaded && su.loaded.from !== 'ready' ? [['^E', 'every field']] : []), ['esc', 'cancel']]
+    : [['enter', last ? (su.id ? 'save' : 'start') : 'next'], ...(at > 0 ? [['←', 'back']] : []), ['↑↓', step === 'start' ? 'a rule' : 'pick'], ...(step === 'what' ? [['type', su.focus === 'url' && wantsAddress(su) ? 'the address' : 'your own words'], ...(wantsAddress(su) ? [['tab', su.focus === 'url' ? 'the words' : 'the address']] : []), ['ctrl+v', 'a picture']] : step === 'often' || step === 'stop' ? [['type', 'your own']] : step === 'start' ? [['←→', 'change a rule']] : []), ['esc', 'cancel']];
   return [...out.slice(0, rows - 1), keysLine(cols, keys, ui.toast, now)];
 }
 
