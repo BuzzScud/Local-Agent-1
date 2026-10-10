@@ -332,7 +332,6 @@ export function whereOf(s) {
   const local = s.local === 'any' ? 'local services' : s.local?.length ? `127.0.0.1:${s.local.join(', ')}` : null;
   return `${String(s.command).split('/').pop()} · ${s.sandbox === false ? 'no sandbox' : ['sandbox', s.net ? 'internet' : null, local].filter(Boolean).join(' · ')}`;
 }
-export { tilde as tildePath };
 
 // A picture a tool returned ({ data, mime }), as the conversation carries one (agent/images.mjs):
 // made no larger than a model takes, by the picture helper. Where that helper is not built, a

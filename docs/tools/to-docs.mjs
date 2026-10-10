@@ -6,8 +6,8 @@
 // in .gitignore). The owner's own things (memory-about-you, design examples,
 // morning briefs, Gemma run files) live in docs/private/, which never leaves
 // this Mac; `bun run docs` and `bun run check` fail if a file of it is tracked.
-import { existsSync, copyFileSync, mkdirSync, readFileSync, statSync } from 'node:fs';
-import { join, basename, dirname, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { join, dirname, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -62,19 +62,4 @@ export function docsPath(name) {
   const p = join(DOCS_DIR, name);
   mkdirSync(dirname(p), { recursive: true });
   return p;
-}
-
-// Copies a finished file into the DOCS folder; returns where it went, or null.
-// A missing folder is not recreated (it may have been moved): it says so instead.
-export function toDocs(file, name = basename(file)) {
-  if (process.env.AGENTIC_NO_DOCS) return null;
-  if (!existsSync(DOCS_DIR)) {
-    console.log(`not copied to ${DOCS_DIR.replace(homedir(), '~')}: the folder is not there (moved? set AGENTIC_DOCS)`);
-    return null;
-  }
-  const to = join(DOCS_DIR, name);
-  mkdirSync(dirname(to), { recursive: true });
-  copyFileSync(file, to);
-  console.log(`copied to ${to.replace(homedir(), '~')}`);
-  return to;
 }

@@ -666,7 +666,13 @@ if (opts.print) {
   const instance = render(<App opts={opts} win={win} onRestart={(a) => { restartArgs = a; }} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30, incrementalRendering: incremental });
   const bye = () => { try { instance.unmount(); } catch {} };
   process.on('SIGTERM', bye);
-  process.on('SIGHUP', bye);
+  // The terminal is gone: its window closed (SIGHUP), or the pseudo-terminal that held the app ended (stdin
+  // ends: a host that stopped, a harness done with it). The app closes as on quit, and should that take more
+  // than a few seconds (a save waiting on a model, a server that will not stop), it ends anyway. Until 10 Oct
+  // 2026 nothing bounded it: one day's test runs left 101 apps whose terminals had gone, 2.9 GB of memory.
+  const gone = () => { bye(); setTimeout(() => process.exit(0), Number(process.env.AGENTIC_HANGUP_GRACE_MS) || 5000).unref(); };
+  process.on('SIGHUP', gone);
+  process.stdin.on('end', gone);
   await instance.waitUntilExit();
   if (restartArgs) {
     // The launcher waiting on this app starts the new version (see update.mjs).
