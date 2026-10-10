@@ -5,6 +5,7 @@
 //   - a run that would ask is paused ("needs you") and the other loops go on;
 //   - runs work right in the folder; they wait while the model is off (nothing loads by itself);
 //   - a loop ends when a run says its job is done, or after 24 hours ($5 on a paid service);
+//   - a fixing loop's "done" is checked: the app runs the tests itself and ends it only if they pass (9 Oct);
 //   - a debugging run keeps a half-fix when fewer tests fail and none fails newly (agent.mjs).
 // The window keeps the loops (Loops below) and starts `coding -p --loop-events` for each run
 // (startRun, loop-run.mjs). What it knows is written to <home>/loops/<pid>/ for the board
@@ -246,7 +247,7 @@ export function loopNote(loop, n, { now = Date.now() } = {}) {
   if (runs.length) {
     const earlier = runs[0].n - 1;
     const line = (r, max) => {
-      const words = String((r.reason && r.reason !== 'done' ? r.summary : r.said || r.summary) || 'nothing said').replace(/\s+/g, ' ').trim();
+      const words = String((r.unconfirmed || (r.reason && r.reason !== 'done') ? r.summary : r.said || r.summary) || 'nothing said').replace(/\s+/g, ' ').trim();
       const fails = r.failing > 0 ? `, ${r.failing} test${r.failing === 1 ? '' : 's'} still failing` : '';
       return `- Run ${r.n} at ${at(r.startedAt)}${fails}: ${words.length > max ? `${words.slice(0, max - 1)}…` : words}`;
     };
@@ -254,7 +255,12 @@ export function loopNote(loop, n, { now = Date.now() } = {}) {
     const anew = ['debug', 'task'].includes(loop.kind) ? '\nDo not try again what an earlier run tried and saw fail.' : '';
     parts.push(`What the earlier runs did${earlier > 0 ? ` (the last ${runs.length}; ${earlier} before them are not listed)` : ''}, oldest first:\n${runs.map((r, i) => line(r, i === runs.length - 1 ? 400 : 160)).join('\n')}${anew}\n`);
   }
-  parts.push('If the whole job is finished for good and no further run is needed, end your answer with the line: LOOP DONE');
+  const last = loop.runs.at(-1);
+  if (last?.unconfirmed) {
+    const u = last.unconfirmed;
+    parts.push(`Run ${last.n} said LOOP DONE, but ${u.timedOut ? `the app's own run of ${u.command} did not finish in time` : `when the app ran ${u.command} itself, ${u.failed ?? 'some'} test${u.failed === 1 ? '' : 's'} failed${u.failing?.length ? ` (${u.failing.slice(0, 5).join('; ')})` : ''}`}. The loop goes on until that command passes.`);
+  }
+  parts.push(`If the whole job is finished for good and no further run is needed, end your answer with the line: LOOP DONE${loop.kind === 'debug' && !loop.check ? ' (the app then runs the tests itself, and the loop ends only if they pass)' : ''}`);
   if (!loop.every && !loop.until) parts.push('You may set when the next run starts by ending with the line: NEXT RUN IN <minutes> MIN');
   return `(${parts.join(' ').replace(/\n /g, '\n')})`;
 }
@@ -286,6 +292,18 @@ export function pageWords(ev) {
   if (ev.when === 'start') return `Checking ${ev.page} in a hidden browser…`;
   if (ev.skipped) return `${what} of ${ev.page} could not run: ${ev.skipped}`;
   return `${what} of ${ev.page}: ${ev.count ? `${ev.count} problem${ev.count === 1 ? '' : 's'}` : 'nothing broken'} (${Number(ev.secs ?? 0).toFixed(1)} s)`;
+}
+// The app's own run of the tests after a LOOP DONE, in a line for the run's log on the board.
+function confirmWords(ev) {
+  if (ev.when === 'start') return `It said LOOP DONE: checking with ${ev.command}…`;
+  if (ev.skipped) return `It said LOOP DONE; nothing to check it with (${ev.skipped})`;
+  if (ev.timedOut) return `${ev.command} did not finish in time: not done`;
+  if (ev.ok) return `${ev.command} passes (${Number(ev.secs ?? 0)} s): done`;
+  return `${ev.command}: ${ev.failed ?? 'some'} test${ev.failed === 1 ? '' : 's'} still fail: not done`;
+}
+// A run that said LOOP DONE while the app's run of the tests failed, in a line (its summary).
+function unconfirmedWords(u) {
+  return u.timedOut ? `said done, but ${u.command} did not finish in time` : `said done, but ${u.failed ?? 'some'} test${u.failed === 1 ? '' : 's'} still fail (${u.command})`;
 }
 // One line about how a run ended, for the board.
 export function summaryOf(said, reason) {
@@ -349,7 +367,7 @@ export function startRun(spec, { self = selfCommand(), env = process.env } = {})
   const child = spawn(self[0], [...self.slice(1), ...args], {
     cwd: spec.folder, stdio: ['pipe', 'pipe', 'pipe'],
     // The memory is read, never saved to, by a run nobody watches; what it costs counts under its window.
-    env: { ...env, AGENTIC_LOOP_SPEC: JSON.stringify({ prompt: spec.prompt, allow: spec.allow ?? [], steps: spec.steps ?? null, rewind: spec.rewind ?? null, ...(spec.resume ? { resume: spec.resume } : {}), ...(spec.check ? { check: spec.check } : {}) }), AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_SPEND_PID: String(spec.owner ?? process.pid), AGENTIC_OPEN: 'off' },
+    env: { ...env, AGENTIC_LOOP_SPEC: JSON.stringify({ prompt: spec.prompt, allow: spec.allow ?? [], steps: spec.steps ?? null, rewind: spec.rewind ?? null, ...(spec.resume ? { resume: spec.resume } : {}), ...(spec.check ? { check: spec.check } : {}), ...(spec.confirm ? { confirm: true } : {}) }), AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_SPEND_PID: String(spec.owner ?? process.pid), AGENTIC_OPEN: 'off' },
   });
   const fns = [];
   let carry = '', err = '', ended = false;
@@ -484,7 +502,7 @@ export class Loops {
     }
     this.say(l, 'start', `run ${run.n}`, { n: run.n });
     let h;
-    try { h = this.start({ folder: l.folder, prompt, mode: l.mode, url: st.url ?? null, slots: st.slots ?? 1, local: Boolean(st.local), flows: st.flows, allow: l.allowed, owner: this.pid, steps: l.steps, rewind: sessionOf(this.pid, l.id), check: l.check ? { ...l.check, after: Boolean(l.until) } : null }); }
+    try { h = this.start({ folder: l.folder, prompt, mode: l.mode, url: st.url ?? null, slots: st.slots ?? 1, local: Boolean(st.local), flows: st.flows, allow: l.allowed, owner: this.pid, steps: l.steps, rewind: sessionOf(this.pid, l.id), check: l.check ? { ...l.check, after: Boolean(l.until) } : null, confirm: l.kind === 'debug' && !l.check }); }
     catch (e) { this.finish(l, run, { reason: 'error', final: `The run could not start: ${e.message}` }); return; }
     this.handles.set(l.id, h);
     h.on((ev) => this.onEvent(l, run, ev));
@@ -509,6 +527,11 @@ export class Loops {
       run.page = { ...(run.page ?? {}), [ev.when === 'after' ? 'left' : 'found']: ev.skipped ? null : ev.count };
       this.line(l, run, 'page', pageWords(ev));
     }
+    // A fixing loop's run said LOOP DONE: the app's own run of the tests (loop-run.mjs confirmDone).
+    else if (ev.t === 'confirm') {
+      if (ev.when === 'after') run.confirm = { command: ev.command ?? null, ok: Boolean(ev.ok), failed: ev.failed ?? null, failing: ev.failing ?? [], timedOut: Boolean(ev.timedOut), skipped: ev.skipped ?? null };
+      this.line(l, run, 'check', confirmWords(ev));
+    }
     else if (ev.t === 'ask') {
       run.needs = { id: ev.id, kind: ev.kind, name: ev.name, text: ev.text, options: ev.options ?? [], always: ev.always ?? null, sig: ev.sig ?? null, since: this.now() };
       l.state = 'needs';
@@ -526,7 +549,10 @@ export class Loops {
     // A run is ok (the app's blue) when it finished and the tests it ran last passed; a stop or a miss is red.
     const tests = ev.tests ?? run.tests ?? null;
     run.ok = ev.reason === 'done' && (tests ? tests.ok : true);
-    run.summary = run.redo ? 'stopped to start over' : run.stopped ? 'stopped by you' : summaryOf(end.said, ev.reason);
+    // It said LOOP DONE and the app's own run of the tests did not pass: not done, and the next run is told.
+    const c = run.confirm;
+    const unconfirmed = ev.reason === 'done' && end.done && c && !c.skipped && !c.ok ? { command: c.command, failed: c.failed, failing: c.failing, timedOut: c.timedOut } : null;
+    run.summary = run.redo ? 'stopped to start over' : run.stopped ? 'stopped by you' : unconfirmed ? unconfirmedWords(unconfirmed) : summaryOf(end.said, ev.reason);
     run.said = end.said.slice(0, 600);
     run.needs = null;
     // A note that came as the answer was given is the run's next message (loop-run.mjs more): read, with no step after it.
@@ -534,7 +560,7 @@ export class Loops {
     const usd = Number(ev.usd) || 0;
     l.spent = (l.spent ?? 0) + usd;
     if (!run.redo) l.counted = (l.counted ?? 0) + 1;
-    l.runs.push({ n: run.n, startedAt: run.startedAt, endedAt: run.endedAt, ok: run.ok, summary: run.summary, said: run.said, lines: run.lines, reason: ev.reason, failing: Number.isFinite(tests?.count) ? tests.count : null, page: run.page ?? null, usd, point: ev.point ?? null, until: ev.until ?? ev.point ?? null, files: ev.files ?? [], redo: run.redo ?? null });
+    l.runs.push({ n: run.n, startedAt: run.startedAt, endedAt: run.endedAt, ok: run.ok, summary: run.summary, said: run.said, lines: run.lines, reason: ev.reason, failing: Number.isFinite(tests?.count) ? tests.count : null, page: run.page ?? null, usd, point: ev.point ?? null, until: ev.until ?? ev.point ?? null, files: ev.files ?? [], redo: run.redo ?? null, unconfirmed });
     if (l.runs.length > 60) l.runs.shift();
     l.current = null;
     this.say(l, 'end', run.summary, { ok: run.ok, n: run.n, ms: run.endedAt - run.startedAt });
@@ -542,7 +568,8 @@ export class Loops {
     // Stopped to start over: it waits for the run's copy (lateEnd), puts its changes back if you said so, then runs again.
     if (run.redo) { l.state = 'redoing'; this.redoWait(l, l.runs.at(-1)); this.changed(); return; }
     // The job is done: the run said so, or a debugging loop's tests pass.
-    if (ev.reason === 'done' && (end.done || (l.until && tests?.ok && !l.check))) { this.end(l, 'done', end.done ? 'the run said its job is done' : `the tests pass after ${run.n} run${run.n === 1 ? '' : 's'}`); return; }
+    const checked = c && !c.skipped && c.ok ? ` and ${c.command} passes` : '';
+    if (ev.reason === 'done' && ((end.done && !unconfirmed) || (l.until && tests?.ok && !l.check))) { this.end(l, 'done', end.done ? `the run said its job is done${checked}` : `the tests pass after ${run.n} run${run.n === 1 ? '' : 's'}`); return; }
     const limit = limitWhy(l, this.now());
     if (limit) { this.end(l, 'done', limit); return; }
     l.gap = end.nextSecs;

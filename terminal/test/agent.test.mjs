@@ -519,6 +519,13 @@ test('a test run fails by its exit code, or by the failures its runner counted',
   expect(testsFailed('ℹ tests 2\nℹ pass 1\nℹ fail 1', 0)).toBe(true);
   expect(testsFailed('', 1)).toBe(true);
   expect(testsFailed('done', 0)).toBe(false);
+  // Bun's summary: its "Ran N tests across M files" line is not unittest's (7 failing were read as none).
+  const { readResults } = await import('../src/flows/results.mjs');
+  const bun = ' 1906 pass\n 1 skip\n 7 fail\n 195912 expect() calls\nRan 1914 tests across 231 files. [239.15s]\n(fail) /btw mid-reply: answered in the panel [30780.88ms]';
+  expect(readResults(bun, 1)).toMatchObject({ ok: false, passed: 1906, failed: 7, failing: ['/btw mid-reply: answered in the panel'] });
+  expect(readResults(' 12 pass\n 0 fail\nRan 12 tests across 2 files. [0.30s]', 0)).toMatchObject({ ok: true, passed: 12, failed: 0 });
+  expect(readResults('Ran 3 tests in 0.001s\n\nFAILED (failures=1)', 1)).toMatchObject({ passed: 2, failed: 1 }); // unittest's still
+  expect(testsFailed(bun, 0, { piped: true })).toBe(true);
 });
 
 test('after an edit, what a command writes stays in the project', async () => {

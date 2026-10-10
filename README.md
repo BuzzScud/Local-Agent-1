@@ -157,7 +157,8 @@ command for everything about loops:
 
 A loop belongs to the window it was made in: it works in the folder picked at Where, in the mode the
 window was in, and ends when the window closes, when a run says its job is done, or after 24
-hours. Each run is a fresh conversation, told how the last runs ended. With the model off, Start
+hours. A fixing loop's "done" is checked: the app then runs the project's tests itself, and the loop
+ends only if they pass (else the next run is told which still fail). Each run is a fresh conversation, told how the last runs ended. With the model off, Start
 turns it on; a loop's runs wait while the model loads or the window itself is answering. On
 this Mac's model one run goes at a time; on a service, three.
 

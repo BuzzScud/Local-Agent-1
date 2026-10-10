@@ -7,6 +7,8 @@
 //     { t: 'ask', id, kind, name, text, options, always, sig }   it waits for an answer
 //     { t: 'heard', text, after }                     a note you typed reached the model with that step's result
 //     { t: 'page', when, page, count, skipped, secs }  the loop's page check: when 'start' (checking), 'before' or 'after' the run
+//     { t: 'confirm', when, command, ok, failed, failing, timedOut, skipped, secs }   a fixing loop's run said LOOP DONE:
+//                                                     the app's own run of the tests (when 'start', then 'after'; confirmDone)
 //     { t: 'end', reason, final, secs, steps, tests, usd, point, until, files }   the run is over (tests: { ok, count? },
 //                                                     count = how many fail; usd: what it cost on a paid service;
 //                                                     point…until: its copies for undo, rewind.mjs; files: what it changed)
@@ -16,6 +18,26 @@
 //                           message when the turn ends first
 //     { t: 'stop' }         end the run now
 // Nothing else is printed on stdout, so a line that does not parse is not from here.
+
+import { testCommand } from '../agent/prompt.mjs';
+import { runCommand } from '../tools/run.mjs';
+import { readResults } from '../flows/results.mjs';
+
+// A run that ends its answer with the line LOOP DONE says the whole job is finished (loops.mjs readEnding).
+export const saysDone = (text) => /^\W*LOOP DONE\W*$/im.test(String(text ?? ''));
+
+// A fixing loop is done when its tests pass, not when its run says so (9 Oct 2026, the owner's pick: a run
+// said it was finished with tests still failing). After a LOOP DONE the app runs the project's tests itself,
+// in the same fence as the model's commands (Bypass opens it, tools.mjs Bash), and says what it found.
+// No test command in the folder: nothing to check, and the run's word stands (skipped).
+export async function confirmDone({ cwd, mode = 'ask', command = testCommand(cwd), run = runCommand, timeoutMs = Number(process.env.AGENTIC_LOOP_CONFIRM_MS) || 600_000, signal } = {}) {
+  if (!command) return { skipped: 'no test command in this folder' };
+  const r = await run(command, { cwd, timeoutMs, maxLines: 400, signal, ...(mode === 'bypass' ? { sandbox: { open: true } } : {}) });
+  const secs = Math.round((r.ms ?? 0) / 1000);
+  if (r.timedOut) return { command, ok: false, failed: null, failing: [], timedOut: true, secs };
+  const res = readResults(r.whole ?? (r.lines ?? []).join('\n'), r.code ?? 1);
+  return { command, ok: res.ok, failed: res.failed ?? (res.ok ? 0 : null), failing: res.failing, secs };
+}
 
 // A step that runs the project's tests (the board lights its TESTS step, and a miss turns the run red).
 // The agent says which steps those are (ev.tests: permissions.mjs runsTests, the rule its own check
@@ -115,6 +137,11 @@ export function loopIO({ input = process.stdin, output = process.stdout, mode = 
     // more: its cost and its copies for undo (cli.jsx).
     // The loop's page check (cli.jsx, flows/layoutcheck.mjs checkPage): what it found, for the board.
     page(when, r = {}) { say({ t: 'page', when, page: r.page ?? '', count: r.problems?.length ?? 0, ...(r.skipped ? { skipped: one(r.skipped, 200) } : {}), secs: r.secs ?? 0 }); },
+    // The app's own run of the tests after a LOOP DONE (confirmDone): what it found is the run's test result.
+    confirm(when, c = {}) {
+      if (when === 'after' && !c.skipped) tests = { ok: Boolean(c.ok), ...(Number.isFinite(c.failed) ? { count: c.failed } : {}) };
+      say({ t: 'confirm', when, ...(c.command ? { command: one(c.command, 120) } : {}), ...(when === 'after' ? { ok: Boolean(c.ok), failed: c.failed ?? null, failing: (c.failing ?? []).map((n) => one(n, 100)), timedOut: Boolean(c.timedOut), secs: c.secs ?? 0 } : {}), ...(c.skipped ? { skipped: one(c.skipped, 160) } : {}) });
+    },
     end(r, more = {}) { say({ t: 'end', reason: r.reason, final: String(r.finalText || final || (r.reason === 'done' ? '' : lastNote)).trim().slice(0, 6000), secs: r.secs, steps: r.steps, tests, ...more }); },
     fail(message) { say({ t: 'end', reason: 'error', final: String(message), secs: 0, steps: 0, tests }); },
   };

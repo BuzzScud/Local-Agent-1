@@ -121,7 +121,7 @@ function runLines(l, run, lines, cols, now, { tail = null, full = false } = {}) 
     }
     if (x.kind === 'note') { out.push(fit([p('   · ', 'faint'), p(cut(x.text, w - 6), 'dim')], w)); continue; }
     // The loop's page check (loops.mjs pageWords): checking, what it found.
-    if (x.kind === 'page') { out.push(fit([p(' ◉ ', 'accent'), p(cut(x.text, w - 4), 'white')], w)); continue; }
+    if (x.kind === 'page' || x.kind === 'check') { out.push(fit([p(' ◉ ', 'accent'), p(cut(x.text, w - 4), 'white')], w)); continue; }
     if (x.kind === 'ask') { if (live && l.current.needs && x === lines.at(-1)) continue; out.push(fit([p(' ? ', 'warn b'), p(cut(x.text, w - 4), 'warn')], w)); continue; }
     if (x.kind === 'answer') { out.push(fit([p('   ⎿ ', 'faint'), p(cut(`you: ${x.text}`, w - 6), 'dim')], w)); continue; }
     if (x.kind === 'text') {
@@ -146,9 +146,9 @@ function nowWords(l, lines, now) {
   if (l.current) {
     const took = dur(now - l.current.startedAt);
     const steps = lines.filter((x) => x.kind === 'tool' || x.kind === 'fail');
-    const x = [...lines].reverse().find((y) => y.kind === 'tool' || y.kind === 'fail' || y.kind === 'text' || y.kind === 'page');
+    const x = [...lines].reverse().find((y) => y.kind === 'tool' || y.kind === 'fail' || y.kind === 'text' || y.kind === 'page' || y.kind === 'check');
     if (!x) return [`${spin(now)} starting · ${took}`, 'accent'];
-    if (x.kind === 'page') return [`${spin(now)} ${x.text} · ${took}`, 'accent'];
+    if (x.kind === 'page' || x.kind === 'check') return [`${spin(now)} ${x.text} · ${took}`, 'accent'];
     if (x.kind === 'text') return [`${spin(now)} writing its answer · ${took}`, 'accent'];
     const m = /^([^(]+)\((.*)\)$/s.exec(x.text);
     const what = m ? `${m[1]} ${m[2].replace(/\s+/g, ' ')}` : x.text;
@@ -639,7 +639,7 @@ function stepRows(su, state, w, now) {
     title('How often should it run?', `${kindOfSetup(su) === 'debug' ? 'A fixing loop can run until its tests pass. ' : ''}The next run counts from the end of the last one.`);
     list(setupChoices('often', su, state, now), setupPick('often', su, state, now), { typed: su.custom.often, ph: '7m, 90s, 2h' });
   } else if (step === 'stop') {
-    title('When should it stop?', 'It also stops when you close this window, after 24 hours at most, or when a run says its job is done.');
+    title('When should it stop?', 'It also stops when you close this window, after 24 hours, or when a run says its job is done (a fix: once its tests pass).');
     list(setupChoices('stop', su, state, now), setupPick('stop', su, state, now), { typed: su.custom.stop, ph: '20 (runs), 18:30, 2h' });
   } else {
     if (su.loaded) { out.push(...loadedRows(su, w)); blankRow(); }

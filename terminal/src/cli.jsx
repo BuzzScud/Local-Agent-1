@@ -380,7 +380,7 @@ if (opts.print) {
     opts.prompt = spec.prompt;
     const { modeOf } = await import('./agent/permissions.mjs');
     const mode = modeOf(opts.mode) ?? 'ask';
-    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode, steps: Number(spec.steps) || null, rewind: null, points: [], resume: null };
+    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode, steps: Number(spec.steps) || null, rewind: null, points: [], resume: null, confirm: Boolean(spec.confirm) };
     // A follow-up (the web, terminal/src/web/runner.mjs): the conversation of the run before it, from its transcript.
     if (spec.resume) { try { loop.resume = JSON.parse((await import('node:fs')).readFileSync(spec.resume, 'utf8')).messages ?? null; } catch { /* starts fresh: said by the run's first note */ } }
     // Its copies for undo (rewind.mjs): one session a loop, kept apart from the window's own. Each message
@@ -544,6 +544,15 @@ if (opts.print) {
       for (const p of loop.points) for (const f of p.files ?? []) if (f.by !== 'other' && !files.has(f.path)) files.set(f.path, { path: f.path, by: f.by });
       // A loop that fixes the page until it is clean looks again, so the board can tell a run that is not getting closer.
       if (loop.check?.after && r.reason === 'done') loop.io.page('after', await loop.check.run());
+      // A fixing loop's run that says LOOP DONE: the app runs the tests itself, and the loop ends only if they pass.
+      if (loop.confirm && r.reason === 'done') {
+        const { saysDone, confirmDone } = await import('./app/loop-run.mjs');
+        if (saysDone(r.finalText)) {
+          const command = (await import('./agent/prompt.mjs')).testCommand(opts.cwd);
+          if (command) loop.io.confirm('start', { command });
+          loop.io.confirm('after', await confirmDone({ cwd: opts.cwd, mode: loop.mode, command, signal: loop.io.signal }));
+        }
+      }
       loop.io.end(r, { usd: windowSpend().usd, point: loop.points[0]?.n ?? null, until: loop.points.at(-1)?.n ?? null, files: [...files.values()] });
     } else process.stdout.write(`${r.finalText.trim()}\n`);
     await stop();

@@ -192,6 +192,81 @@ test('a loop ends when a run says its job is done, when a debugging loop\'s test
   m.close();
 });
 
+test('a fixing loop is done when the app\'s own run of the tests passes, not when its run says so', () => {
+  const { m, runs, pass, dir } = window();
+  const a = m.add(L.parseLoop('debug'));
+  const b = m.add(L.parseLoop('10m watch the build'));
+  pass(1000);
+  // Only a fixing loop with no page check asks for the app's own run.
+  expect(runs[0].spec.confirm).toBe(true);
+  // It says LOOP DONE; the app runs the tests itself and 2 still fail: not done, and the next run is told.
+  runs[0].emit({ t: 'confirm', when: 'start', command: 'bun run test' });
+  runs[0].emit({ t: 'confirm', when: 'after', command: 'bun run test', ok: false, failed: 2, failing: ['quoting', 'extra column'], secs: 4 });
+  runs[0].emit({ t: 'end', reason: 'done', final: 'Every test passes now.\nLOOP DONE', tests: { ok: false, count: 2 } });
+  expect(a.state).toBe('waiting');
+  expect(a.runs.at(-1)).toMatchObject({ ok: false, failing: 2, summary: 'said done, but 2 tests still fail (bun run test)', unconfirmed: { command: 'bun run test', failed: 2 } });
+  expect(L.readRun(dir, process.pid, a.id, 1).filter((x) => x.kind === 'check').map((x) => x.text)).toEqual(['It said LOOP DONE: checking with bun run test…', 'bun run test: 2 tests still fail: not done']);
+  pass(100);
+  expect(runs[1].spec.confirm).toBe(false); // the watching loop: its word stands
+  runs[1].emit({ t: 'end', reason: 'done', final: 'Green.\nLOOP DONE' });
+  expect(b).toMatchObject({ state: 'done', doneWhy: 'the run said its job is done' });
+  pass(15_000);
+  expect(runs[2].spec.prompt).toContain('- Run 1 at ');
+  expect(runs[2].spec.prompt).toContain('2 tests still failing: said done, but 2 tests still fail (bun run test)');
+  expect(runs[2].spec.prompt).toContain('Run 1 said LOOP DONE, but when the app ran bun run test itself, 2 tests failed (quoting; extra column). The loop goes on until that command passes.');
+  expect(runs[2].spec.prompt).toContain('LOOP DONE (the app then runs the tests itself, and the loop ends only if they pass)');
+  // This time the app's run passes: done, and the reason says it was checked.
+  runs[2].emit({ t: 'confirm', when: 'after', command: 'bun run test', ok: true, failed: 0, failing: [], secs: 5 });
+  runs[2].emit({ t: 'end', reason: 'done', final: 'Fixed the extra column.\nLOOP DONE', tests: { ok: true, count: 0 } });
+  expect(a).toMatchObject({ state: 'done', doneWhy: 'the run said its job is done and bun run test passes' });
+  // No test command in the folder: nothing to check it with, so the run's word stands.
+  const c = m.add(L.parseLoop('fix the broken link in the notes'));
+  pass(1000);
+  runs.at(-1).emit({ t: 'confirm', when: 'after', skipped: 'no test command in this folder' });
+  runs.at(-1).emit({ t: 'end', reason: 'done', final: 'Fixed.\nLOOP DONE' });
+  expect(c).toMatchObject({ kind: 'debug', state: 'done', doneWhy: 'the run said its job is done' });
+  m.close();
+});
+
+test('a fixing loop that keeps saying done while the same tests fail stops getting runs and waits for you', () => {
+  const { m, runs, pass } = window();
+  const a = m.add(L.parseLoop('debug'));
+  for (let i = 0; i < 2; i++) {
+    pass(15_000);
+    runs.at(-1).emit({ t: 'confirm', when: 'after', command: 'bun run test', ok: false, failed: 3, failing: [], secs: 4 });
+    runs.at(-1).emit({ t: 'end', reason: 'done', final: 'All done.\nLOOP DONE', tests: { ok: false, count: 3 } });
+  }
+  expect(a.state).toBe('paused');
+  expect(a.stuck).toBe('3 tests still fail after runs 1 and 2: it is not getting closer');
+  m.close();
+});
+
+test('the run side: the app runs the tests itself after a LOOP DONE, in the fence the model\'s commands use', async () => {
+  expect(R.saysDone('All pass.\nLOOP DONE')).toBe(true);
+  expect(R.saysDone('I will say LOOP DONE when the tests pass.')).toBe(false);
+  const calls = [];
+  const fake = (out, code, more = {}) => async (command, o) => { calls.push({ command, sandbox: o.sandbox ?? null, timeoutMs: o.timeoutMs }); return { code, lines: out.split('\n'), ms: 4200, ...more }; };
+  expect(await R.confirmDone({ cwd: '/tmp', command: 'bun run test', run: fake(' 12 pass\n 2 fail\n(fail) quoting [3.10ms]\n(fail) extra column [1.00ms]\nRan 14 tests across 3 files.', 1) }))
+    .toEqual({ command: 'bun run test', ok: false, failed: 2, failing: ['quoting', 'extra column'], secs: 4 });
+  expect(await R.confirmDone({ cwd: '/tmp', command: 'npm test', mode: 'bypass', run: fake('ℹ pass 5\nℹ fail 0', 0) })).toMatchObject({ ok: true, failed: 0 });
+  expect(await R.confirmDone({ cwd: '/tmp', command: 'npm test', run: fake('', null, { timedOut: true }) })).toMatchObject({ ok: false, timedOut: true });
+  expect(await R.confirmDone({ cwd: '/tmp', command: null, run: fake('', 0) })).toEqual({ skipped: 'no test command in this folder' });
+  expect(calls.map((c) => c.sandbox)).toEqual([null, { open: true }, null]); // Bypass opens it, as for the model's commands
+  expect(calls[0].timeoutMs).toBe(600_000);
+  // What it found is the run's test result in its end line, for the window.
+  const out = new PassThrough();
+  let said = '';
+  out.on('data', (d) => { said += d; });
+  const io = R.loopIO({ input: new PassThrough(), output: out });
+  io.confirm('start', { command: 'bun run test' });
+  io.confirm('after', { command: 'bun run test', ok: false, failed: 2, failing: ['quoting'], secs: 4 });
+  io.end({ reason: 'done', finalText: 'Done.\nLOOP DONE' });
+  const lines = said.trim().split('\n').map((l) => JSON.parse(l));
+  expect(lines[0]).toEqual({ t: 'confirm', when: 'start', command: 'bun run test' });
+  expect(lines[1]).toMatchObject({ t: 'confirm', when: 'after', ok: false, failed: 2, failing: ['quoting'] });
+  expect(lines[2]).toMatchObject({ t: 'end', reason: 'done', tests: { ok: false, count: 2 } });
+});
+
 test('each run is told what the earlier runs did (the last eight), and a fixing loop not to try again what failed', () => {
   const t0 = new Date(2026, 9, 4, 9, 0).getTime();
   const runs = Array.from({ length: 10 }, (_, i) => ({ n: i + 1, startedAt: t0 + i * 60_000, ok: false, reason: 'done', said: `Try ${i + 1}: changed toCsv. ${'More words. '.repeat(30)}`, summary: `Try ${i + 1}`, failing: 2 }));
