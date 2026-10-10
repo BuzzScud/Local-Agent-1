@@ -30,7 +30,10 @@ export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '
 // saw the start page and never the prompt box ("timed out waiting for ? for shortcuts", 9 Oct 2026).
 // Taken out, not set to 0: Ink reads CI=0 as no CI, but the colour library reads any CI as a CI server
 // and draws 16 colours, and the tests that look for the selection's blue (24) then fail (9 Oct 2026).
-export const withoutCi = (env) => { const e = { ...env }; delete e.CI; delete e.CONTINUOUS_INTEGRATION; return e; };
+// No NO_COLOR, FORCE_COLOR: Agentic Coder's own commands also set NO_COLOR=1 and FORCE_COLOR=0, so the
+// driven app drew no colour at all and the dragged picture's card came out grey (app-vision, 9 Oct 2026);
+// the user's Terminal sets neither.
+export const withoutCi = (env) => { const e = { ...env }; delete e.CI; delete e.CONTINUOUS_INTEGRATION; delete e.NO_COLOR; delete e.FORCE_COLOR; return e; };
 // A key the terminal itself acts on while the app is not yet reading keys (ctrl+t, ctrl+c, ctrl+z…):
 // not enter, tab or esc and its sequences, which wait in line like any letter.
 const isControl = (k) => typeof k === 'string' && k.length === 1 && k.charCodeAt(0) < 32 && !'\t\r\n\x1b'.includes(k);
