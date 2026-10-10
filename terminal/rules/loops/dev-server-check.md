@@ -5,7 +5,7 @@ Opens your dev server every 5 minutes and says only when something changed: down
 - Every: 5m
 - Until: no limit
 - Mode: ask
-- Picture: OPEN the server › CHECK for errors › TELL what changed
+- Picture: OPEN the server › CHECK for errors › COMPARE to last run › TELL what changed
 - Asks: url = http://localhost:5173
 
 ## Each run

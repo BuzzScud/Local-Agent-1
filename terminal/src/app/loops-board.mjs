@@ -18,7 +18,7 @@ import { loadInto, setFill, startRows, shelfKey, editorKey, openEditor, openShel
 import { findByName } from './loop-files.mjs';
 import { pickOnTerminal } from './pick.mjs';
 
-const BOARD_SIZE = [124, 38];
+const BOARD_SIZE = [168, 46];
 // inApp: the board is the coding window's own screen (esc goes back to the chat).
 // back: where the wizard goes on esc (the Library, or the cards); shelf: the Library's pick and what was typed
 // to find; editor: the one-page form of a loop you kept (loops-library.mjs).

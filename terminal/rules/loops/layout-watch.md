@@ -6,7 +6,7 @@ Checks your page every 15 minutes in a hidden browser (desktop, phone, dark mode
 - Until: no limit
 - Mode: ask
 - Page check: {page}
-- Picture: CHECK the page › COMPARE to last run › TELL what changed
+- Picture: CHECK the page › COMPARE to last run › SORT new or gone › TELL what changed
 - Asks: page = index.html
 
 ## Each run

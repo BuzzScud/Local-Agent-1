@@ -5,7 +5,7 @@ Reads a page every hour and tells you when something new is there, with its main
 - Every: 1h
 - Until: no limit
 - Mode: ask
-- Picture: OPEN the page › FIND what is new › TELL you
+- Picture: OPEN the page › FIND what is new › COMPARE to last run › TELL you
 - Asks: page = https://bun.sh/blog
 
 ## Each run

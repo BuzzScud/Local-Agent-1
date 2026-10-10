@@ -629,7 +629,7 @@ export function runPart(self) {
     openLoopsFrom(self.loopsUi.current, arg, m.snapshot());
     if (canResize() && !self.loopsSize.current) {
       const cur = { columns: process.stdout.columns, rows: process.stdout.rows };
-      const to = growTo(cur, [120, 36]);
+      const to = growTo(cur, [168, 46]);
       if (to) { self.loopsSize.current = cur; try { process.stdout.write(resizeSeq(to[0], to[1])); } catch { /* the window stays as it is */ } }
     }
     self.setLoopsOn(true);

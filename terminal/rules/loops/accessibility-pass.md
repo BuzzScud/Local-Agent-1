@@ -6,7 +6,7 @@ Every hour, checks your page for what stops people using a keyboard or a screen 
 - Until: no limit
 - Mode: ask
 - Page check: {page} · who can use it
-- Picture: CHECK the page › READ the code › LIST each fix
+- Picture: CHECK the page › READ the code › RANK the worst › LIST each fix
 - Asks: page = index.html
 
 ## Each run

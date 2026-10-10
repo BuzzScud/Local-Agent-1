@@ -1006,7 +1006,7 @@ test('the wizard: a step at a time with the picture beside it, test5m caught, a 
   expect(f).toMatch(/✓ 1 What {2}── {2}◉ 2 Where {2}── {2}○ 3 How often/);
   expect(f).toMatch(/Where should it work\?/);
   expect(f).toMatch(/Your loop[\s\S]*“Run the tests\. Say which fail and why/);
-  expect(f).toMatch(/1 RUN[\s\S]*2 READ[\s\S]*3 TELL/);
+  expect(f).toMatch(/1 RUN[\s\S]*2 READ[\s\S]*3 FIND[\s\S]*4 TELL/);
   press('enter');
   expect(frame()).toMatch(/How often should it run\?/);
   expect(frame()).toMatch(/▸ every 5 minutes/);

@@ -7,7 +7,7 @@ Fixes what the page check finds, run after run, and ends once nothing is broken 
 - Mode: edits
 - Cap: $1.00
 - Page check: {page}
-- Picture: CHECK the page › FIX the layout › CHECK again
+- Picture: CHECK the page › PICK the worst › FIX the layout › CHECK again
 - Asks: page = index.html
 
 ## Each run

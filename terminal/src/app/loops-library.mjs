@@ -239,7 +239,7 @@ export function drawEditor(state, ui, { cols, rows, now }) {
   const su = asSetup(ed);
   const out = [header(state, ui, now, cols, `Change ${cut(ed.name, 40)}`), rule(cols)];
   const lines = [blank(cols), fit([p(' '.repeat(Math.max(0, Math.floor((cols - 62) / 2)))), p('One page: every field, and the picture beside it changes as you type', 'dim')], cols), blank(cols)];
-  const WD = Math.min(cols - 4, 132);
+  const WD = Math.min(cols - 4, 168); // room for the picture's four boxes at full width
   const X = Math.floor((cols - WD) / 2);
   const wide = cols >= 118;
   const LW = wide ? Math.min(62, Math.floor(WD * 0.5)) : WD;
@@ -261,7 +261,19 @@ export function drawEditor(state, ui, { cols, rows, now }) {
     } else if (r.startsWith('fill:')) {
       const k = r.slice(5);
       er.push(fit([...lab(`{${k}}`, on), p(ed.values[k] || 'its ready answer (or empty: asked when loaded)', ed.values[k] ? 'accent' : 'faint'), p(on ? '▏' : '', 'accent')], w, bg));
-    } else if (r === 'picture') er.push(fit([...lab('Its steps', on), p(ed.pic || 'VERB words › VERB words › VERB words', ed.pic ? (pictureOf(ed.pic) ? 'accent b' : 'warn') : 'faint'), p(on ? '▏' : '', 'accent')], w, bg));
+    } else if (r === 'picture') {
+      // Four steps run long: past the row's width they go on a second line, split at a ›.
+      const txt = ed.pic || 'VERB words › VERB words › VERB words › VERB words';
+      const st = ed.pic ? (pictureOf(ed.pic) ? 'accent b' : 'warn') : 'faint';
+      const room = w - 16;
+      let one = txt, two = '';
+      if (txt.length > room) {
+        const cut2 = txt.lastIndexOf('›', room);
+        if (cut2 > 0) { one = txt.slice(0, cut2 + 1).trimEnd(); two = txt.slice(cut2 + 1).trimStart(); }
+      }
+      er.push(fit([...lab('Its steps', on), p(one, st), p(on && !two ? '▏' : '', 'accent')], w, bg));
+      if (two) er.push(fit([p(' '.repeat(16)), p(two, st), p(on ? '▏' : '', 'accent')], w, bg));
+    }
     else if (r === 'savefor') {
       const place = (state.places ?? []).find((x) => x.path === setupFields(su, state).folder);
       er.push(fit([...lab('Kept', on), p(on ? '◂ ' : '  ', 'accent'), p(ed.where === 'project' && place && place.shown !== '~' ? `in ${place.shown.split('/').pop()}` : 'for you, every project', 'text'), p(on ? ' ▸' : '', 'accent')], w, bg));
@@ -318,7 +330,7 @@ export function editorKey(b, k) {
     const s = editorSave(ed, state);
     if (!s.name.trim()) { ed.error = 'Give it a name first'; ed.row = 0; return; }
     if (!s.message.trim()) { ed.error = 'Type what each run should do first'; ed.row = 1; return; }
-    if (ed.pic && !s.picture) { ed.error = 'Its steps: three of them, each a word and a few more, with › between'; ed.row = rows.indexOf('picture'); return; }
+    if (ed.pic && !s.picture) { ed.error = 'Its steps: four of them, each a word and a few more, with › between'; ed.row = rows.indexOf('picture'); return; }
     if (k === '^G') {
       const values = ed.values;
       const fields = { ...s.fields, message: filledText(s.message, values), name: s.name, picture: s.picture, folder: setupFields(su, state).folder, ...(s.fields.check ? { check: filledText(s.fields.check, values) } : {}) };
