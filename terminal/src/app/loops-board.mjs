@@ -6,7 +6,11 @@
 // 2026, the owner's pick after letters ate what they typed); ←→ picks a card's button and enter
 // presses it (9 Oct 2026); the ctrl keys of 4 Oct still work.
 import { statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
+import { attachDropped, attachClipboard, chipOf } from './attach.mjs';
+import { droppedFiles, ATTACH_TOKEN } from '../agent/images.mjs';
 import { listBoards, readState, readRun, sendCommand, runFile, rulesOf, fieldsOf, unclearOf, isLoopCommand, STEPS_WORD, PRESET, readSentence, readEvery, readRuns, readStopAt } from './loops.mjs';
 import { drawBoard, ansiRow, setupChoices, setupPick, setupFields, kindOfSetup, wizardSteps, stepOf, templateOf, TEMPLATES, MORE_ROWS, buttonsOf, watchButtonsOf } from './loops-draw.mjs';
 import { canResize, resizeSeq } from './agents-window.mjs';
@@ -43,6 +47,32 @@ export function keysOf(s) {
   return keys;
 }
 
+// A chunk of terminal input as keys and pastes: [{ keys } | { paste }]. A paste is what comes between
+// the terminal's marks (\x1b[200~ … \x1b[201~, bracketed paste), across chunks too (st.pasting holds
+// it meanwhile); a terminal without them sends a drop as one chunk of plain text, read as a paste. A
+// chunk with an enter or another control key in it, unmarked, is keys, as typed.
+export function inputParts(s, st = { pasting: null }) {
+  const parts = [];
+  let rest = s;
+  while (rest) {
+    if (st.pasting != null) {
+      const end = rest.indexOf('\x1b[201~');
+      if (end < 0) { st.pasting += rest; return parts; }
+      parts.push({ paste: st.pasting + rest.slice(0, end) });
+      st.pasting = null;
+      rest = rest.slice(end + 6);
+      continue;
+    }
+    const at = rest.indexOf('\x1b[200~');
+    const before = at < 0 ? rest : rest.slice(0, at);
+    if (before) parts.push([...before].length > 1 && !/[\x00-\x1f\x7f]/.test(before) ? { paste: before } : { keys: before });
+    if (at < 0) break;
+    st.pasting = '';
+    rest = rest.slice(at + 6);
+  }
+  return parts;
+}
+
 // What the window said back to something sent from the board: a line at the bottom, and the loop it made picked.
 export function showReply(ui, loops, r) {
   if (r == null) return;
@@ -59,12 +89,12 @@ export function showReply(ui, loops, r) {
 export function openSetup(ui, { mode = 'ask', text = null, unclear = null, sentence = null, loop = null, state = null } = {}) {
   const f = { every: '10m', runs: 'no limit', stopAt: 'none', cap: 'none', steps: STEPS_WORD, mode, askFirst: false, kind: null, folder: null };
   const su = { step: 0, id: null, again: false, name: '', text: text ?? TEMPLATES[0].text, tpl: 0, f, custom: { often: '', stop: '' }, touched: {}, unclear, pick: 0, error: null, typed: '', found: [], keep: false, rule: -1,
-    loaded: null, fills: [], picture: null, save: { name: '', where: 'yours', replace: null } };
+    loaded: null, fills: [], picture: null, save: { name: '', where: 'yours', replace: null }, pasted: { n: 0, files: new Map(), info: new Map() } };
   ui.back = ui.view === 'shelf' ? 'shelf' : null;
   if (loop) {
     const lf = fieldsOf(loop);
     Object.assign(f, { every: lf.every, runs: lf.runs, stopAt: lf.stopAt, cap: lf.cap, steps: lf.steps, mode: lf.mode, askFirst: lf.askFirst, kind: lf.kind, check: lf.check ?? null, folder: state?.places?.find((x) => x.shown === loop.folder)?.path ?? null });
-    Object.assign(su, { id: loop.id, again: over(loop), name: loop.name, text: loop.message, keep: true, picture: loop.picture ?? null });
+    Object.assign(su, { id: loop.id, again: over(loop), name: loop.name, text: chipsBack(loop.message, su.pasted), keep: true, picture: loop.picture ?? null });
     su.touched.often = true;
     su.step = wizardSteps(su).length - 1;
   } else if (sentence != null) {
@@ -80,6 +110,68 @@ export function openSetup(ui, { mode = 'ask', text = null, unclear = null, sente
   if (!su.touched.often) oftenFor(su);
   ui.setup = su;
   ui.view = 'setup';
+}
+// A picture for every run (10 Oct 2026, the owner's ask): at step 1 a screenshot dragged in, pasted as
+// its path or put on the clipboard (ctrl+v) is copied at once to <home>/attachments (macOS's floating
+// screenshot goes away) and shows as [Image #n] in the box, as in the prompt box (attach.mjs). The
+// loop's message carries the copy's path in its place (loops-draw.mjs messageOf), and each run's
+// `coding -p` sends a picture its prompt names along with it (cli.jsx).
+const attachDir = () => join(HOME, 'attachments');
+const pastedOf = (su) => (su.pasted ??= { n: 0, files: new Map(), info: new Map() });
+// A loop's message, its copies made chips again, for its rules to change.
+function chipsBack(message, pasted) {
+  let out = String(message ?? '');
+  const dir = attachDir();
+  for (const d of droppedFiles(out, homedir(), { any: true })) {
+    if (!d.path.startsWith(`${dir}/`)) continue;
+    const n = ++pasted.n;
+    let bytes = null;
+    try { bytes = statSync(d.path).size; } catch { /* gone: the chip says so as a plain name */ }
+    pasted.files.set(n, d.path);
+    pasted.info.set(n, { kind: d.kind, name: basename(d.path), bytes });
+    out = out.replace(d.raw, chipOf(d.kind, n));
+  }
+  return out;
+}
+// New words at step 1: the kind is read off them again, and so is how often, until you choose it; a loaded loop is yours now.
+function wordsChanged(su) {
+  su.f.kind = null;
+  su.keep = false;
+  if (su.loaded) { su.loaded = null; su.fills = []; su.picture = null; }
+  su.error = null;
+  oftenFor(su);
+}
+const isExample = (su) => TEMPLATES.some((t) => t.text && t.text === (su.text ?? '').trim());
+// Words or a picture added to the box at step 1: a picture goes after your words (and an example's), with a space.
+function addToBox(su, words, picture) {
+  const had = picture ? su.text ?? '' : isExample(su) ? '' : su.text ?? '';
+  su.text = picture && had.trim() && !/\s$/.test(had) && !/^\s/.test(words) ? `${had} ${words}` : had + words;
+  wordsChanged(su);
+}
+// ctrl+v at step 1: the clipboard's picture.
+function pasteClipboard(ui, su) {
+  let got = null;
+  try { got = attachClipboard({ pasted: pastedOf(su), dir: attachDir(), id: `loop-${stampOf()}` }); } catch (e) { say(ui, `Could not attach the clipboard's picture: ${e.message}`, 'warn'); return; }
+  if (!got) { say(ui, 'No picture on the clipboard: copy a screenshot (ctrl+shift+cmd+4) or drag one in', 'dim'); return; }
+  addToBox(su, got.token, true);
+  say(ui, `Picture attached as ${got.token}: each run gets it`);
+}
+// Text pasted (or a file dropped: Terminal types its path) while the board has the window. At step 1 a
+// picture, PDF or dropped file becomes a chip (attach.mjs attachDropped); elsewhere the text goes in
+// as typed, its line breaks as spaces, so a paste never presses enter.
+export function handlePaste(b, text) {
+  const { ui } = b;
+  const su = ui.setup;
+  const clean = String(text ?? '').replace(/\x1b\[20[01]~/g, '').replace(/\r\n?/g, '\n');
+  if (ui.view === 'setup' && su && !su.unclear && stepOf(su) === 'what') {
+    const r = attachDropped(clean, { cwd: su.f.folder ?? b.state?.places?.[0]?.path ?? homedir(), pasted: pastedOf(su), dir: attachDir(), id: `loop-${stampOf()}` });
+    if (r.failed.length) say(ui, `Could not attach ${basename(r.failed[0].path)}: ${r.failed[0].error}`, 'warn');
+    else if (r.added.length) say(ui, r.added.length === 1 ? `${r.added[0].token} attached: each run gets it` : `${r.added.length} files attached: each run gets them`);
+    const words = r.text.replace(/\s*\n\s*/g, ' ').replace(/[\x00-\x1f\x7f]/g, '');
+    if (words.trim()) addToBox(su, r.added.length ? words.trim() : words, r.added.length > 0);
+    return;
+  }
+  for (const c of [...clean.replace(/\s*\n\s*/g, ' ')]) if (c >= ' ' && c !== '\x7f') handleKey(b, c);
 }
 // How often, until you choose: a fixing loop until its tests pass, any other every 10 minutes.
 const oftenFor = (su) => { if (!su.touched.often && !su.custom.often) su.f.every = kindOfSetup(su) === 'debug' ? 'until done' : '10m'; };
@@ -177,17 +269,14 @@ function setupKey(b, k) {
       if (!(su.text ?? '').trim()) { su.error = 'Type what each run should do first'; return; }
       if (!su.keep) { const u = unclearOf(su.text); if (u) { su.unclear = u; su.pick = 0; return; } }
       return next();
-    } else if (k === 'backspace') su.text = [...su.text].slice(0, -1).join('');
+    } else if (k === '^V') return pasteClipboard(ui, su);
+    // A chip ([Image #1]) goes in one piece.
+    else if (k === 'backspace') { const chip = /\[(?:Image|PDF|File|Folder) #\d+\]$/.exec(su.text ?? ''); su.text = chip ? su.text.slice(0, chip.index) : [...su.text].slice(0, -1).join(''); }
     else if (k === '^U') su.text = '';
     // Typing over an example, as it was picked, starts your own words.
-    else if (k.length === 1 && k >= ' ') su.text = (TEMPLATES.some((t) => t.text && t.text === (su.text ?? '').trim()) ? '' : su.text) + k;
+    else if (k.length === 1 && k >= ' ') su.text = (isExample(su) ? '' : su.text) + k;
     else return;
-    // New words: the kind is read off them again, and so is how often, until you choose it; a loaded loop is yours now.
-    su.f.kind = null;
-    su.keep = false;
-    if (su.loaded) { su.loaded = null; su.fills = []; su.picture = null; }
-    su.error = null;
-    oftenFor(su);
+    wordsChanged(su);
     return;
   }
   if (step === 'start') {
@@ -493,23 +582,28 @@ export async function runBoard({ home = HOME, pid = null, input = process.stdin,
       for (const t of timers) clearInterval(t);
       input.off('readable', onReadable);
       out.off('resize', onResize);
-      out.write('\x1b[0m\x1b[?25h\x1b[?1049l');
+      out.write('\x1b[0m\x1b[?25h\x1b[?2004l\x1b[?1049l');
       input.setRawMode(false);
       if (last) out.write(`${last}\n`);
       resolve(code);
     };
     const b = { get state() { return state; }, ui, send: (cmd) => sendCommand(home, pid, cmd), quit: () => leave(0, 'The loop board is closed. The loops go on in their window; /loop there shows them.') };
+    const pasteState = { pasting: null };
     const onReadable = () => {
       let c;
       while (!done && (c = input.read()) !== null) {
-        for (const k of keysOf(String(c))) { if (k === '^C') return leave(0, 'The loop board is closed. The loops go on in their window.'); handleKey(b, k); if (done) return; }
+        for (const part of inputParts(String(c), pasteState)) {
+          if (part.paste != null) { handlePaste(b, part.paste); continue; }
+          for (const k of keysOf(part.keys)) { if (k === '^C') return leave(0, 'The loop board is closed. The loops go on in their window.'); handleKey(b, k); if (done) return; }
+        }
         paint();
       }
     };
     const onResize = () => { out.write('\x1b[2J'); paint(true); };
     // The board grows to 124 × 38 where the terminal follows that (as /agents does), keeping a bigger window.
     if (canResize(env, out) && ((out.columns ?? 0) < BOARD_SIZE[0] || (out.rows ?? 0) < BOARD_SIZE[1])) out.write(resizeSeq(Math.max(out.columns ?? 0, BOARD_SIZE[0]), Math.max(out.rows ?? 0, BOARD_SIZE[1])));
-    out.write('\x1b[?1049h\x1b[?25l\x1b[2J');
+    // Bracketed paste: the terminal marks a paste (and a drop), so its line breaks are never enter.
+    out.write('\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[2J');
     input.setRawMode(true);
     input.on('readable', onReadable);
     out.on('resize', onResize);

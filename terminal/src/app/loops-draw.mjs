@@ -10,6 +10,9 @@
 // Plain data in, rows out: tested on its own (loops.test.mjs).
 import { everyWord as secsWord, limitWords, modeName, guessKind, spokenEvery, readEvery, readRuns, readStopAt, LOOP_MODES, STEPS_WORD } from './loops.mjs';
 import { HUE } from '../ui/theme.mjs';
+import { homedir } from 'node:os';
+import { ATTACH_TOKEN } from '../agent/images.mjs';
+import { trayItems, compactText } from './attach.mjs';
 import { drawShelf, drawEditor, shelfTabs, startRows, loadedRows, saveRows } from './loops-library.mjs';
 
 // Styles: a foreground (xterm-256, the app's own colours in ui/theme.mjs), "b" for bold, "on <bg>".
@@ -472,6 +475,18 @@ export function setupPick(row, su, state = {}, now = Date.now()) {
   const key = { mode: 'mode', cap: 'cap', steps: 'steps', ask: 'askFirst' }[row];
   return cs.findIndex(([v]) => v === f[key]);
 }
+// What each run is told: the box's words, each chip ([Image #1]: loops-board.mjs handlePaste) as its
+// copy's path, which the run's `coding -p` sends as a picture (cli.jsx); in quotes when it has a space.
+export function messageOf(su) {
+  const files = su.pasted?.files;
+  const text = String(su.text ?? '').replace(ATTACH_TOKEN, (chip, kind, n) => {
+    const file = files?.get(Number(n));
+    if (!file) return chip;
+    const shown = file.startsWith(`${homedir()}/`) ? `~${file.slice(homedir().length)}` : file;
+    return /\s/.test(shown) ? `'${file}'` : shown;
+  });
+  return text.replace(/[ \t]+/g, ' ').trim();
+}
 // The wizard's fields as rulesOf reads them.
 export function setupFields(su, state = {}) {
   const f = su.f;
@@ -480,7 +495,7 @@ export function setupFields(su, state = {}) {
   const t = su.custom.stop?.trim();
   if (t) { if (/^\d+$/.test(t.replace(/\s*runs?$/i, ''))) { runs = t.replace(/\s*runs?$/i, ''); stopAt = 'none'; } else { runs = 'no limit'; stopAt = t.replace(/^(at|in)\s+/i, ''); } }
   const name = su.id ? su.name : (su.save?.name ?? '').trim() || su.loaded?.name || '';
-  return { message: (su.text ?? '').trim(), kind: kindOfSetup(su), every, runs, stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst, folder: f.folder ?? state.places?.[0]?.path ?? null, name, picture: su.picture ?? null,
+  return { message: messageOf(su), kind: kindOfSetup(su), every, runs, stopAt, cap: f.cap, steps: f.steps, mode: f.mode, askFirst: f.askFirst, folder: f.folder ?? state.places?.[0]?.path ?? null, name, picture: su.picture ?? null,
     // Its page check (a loaded loop's "- Page check: {page}"), with the blank as answered.
     ...(f.check ? { check: String(f.check).replace(/\{([a-z][a-z0-9_-]{0,30})\}/gi, (all, k) => (su.fills ?? []).find((x) => x.key === k)?.value?.trim() || all) } : {}) };
 }
@@ -537,8 +552,9 @@ export function loopPicture(su, state, w, now) {
   const f = setupFields(su, state);
   const dim = (on, s) => (on ? s : 'faint');
   const center = (pieces) => { const n = rowWidth(pieces); return fit([p(' '.repeat(Math.max(0, Math.floor((w - n) / 2)))), ...pieces], w); };
-  // What each run is told.
-  const words = wrapWords(f.message ? `“${f.message}”` : 'What each run does comes here: pick it or type it on the left', w - 4);
+  // What each run is told (a picture as its chip, not its copy's path).
+  const told = (su.text ?? '').trim();
+  const words = wrapWords(f.message ? `“${told}”` : 'What each run does comes here: pick it or type it on the left', w - 4);
   const said = words.length > 2 ? [words[0], cut(words.slice(1).join(' '), w - 4)] : words;
   said.forEach((t) => rows.push(center([p(t, f.message ? 'white b' : 'faint')])));
   if (said.length < 2) rows.push(blank(w));
@@ -628,6 +644,10 @@ function stepRows(su, state, w, now) {
     row([p('╭', bs), p('─'.repeat(w - 2), bs), p('╮', bs)]);
     row([p('│', bs), ...fit([p(' › ', 'accent b'), p(shown, 'white'), p(Math.floor(now / 500) % 2 ? '▏' : ' ', 'accent'), ...(text ? [] : [p('type what each run should do', 'faint')])], w - 2), p('│', bs)]);
     row([p('╰', bs), p('─'.repeat(w - 2), bs), p('╯', bs)]);
+    // The pictures each run gets, or how to give it one.
+    const held = trayItems(text, su.pasted);
+    if (held.length) held.slice(0, 3).forEach((it) => row([p('  '), p(cut(compactText(it), w - 2), 'accent')]));
+    else if (!su.unclear) row([p('  '), p(cut('drag a screenshot in, or ctrl+v: each run gets it', w - 2), 'faint')]);
     if (su.unclear) {
       wrapWords(su.unclear.why, w - 2).slice(0, 2).forEach((t, i) => row([p(i ? '  ' : '! ', 'warn b'), p(t, 'warn')]));
       su.unclear.options.forEach((o, i) => row([p(i === su.pick ? ' ▸ ' : '   ', 'accent b'), p(`${i + 1}  `, 'faint'), p(cut(o.label, w - 6), i === su.pick ? 'white b' : 'text')], i === su.pick ? 'sel' : null));
@@ -724,7 +744,7 @@ function drawSetup(state, ui, { cols, rows, now }) {
   const typing = last && (at2 === 'saveName' || String(at2).startsWith('fill:'));
   const keys = su.unclear ? [['1–3', 'pick'], ['↑↓', 'move'], ['enter', 'this one'], ['esc', 'cancel']]
     : last ? [['enter', su.id ? 'save' : named ? 'save and start' : 'start'], ...(named && !su.id ? [['^S', 'save only']] : []), ['←', 'back'], ['↑↓', 'a row'], typing ? ['type', at2 === 'saveName' ? 'its name' : 'the answer'] : ['←→', 'change it'], ...(su.loaded && su.loaded.from !== 'ready' ? [['^E', 'every field']] : []), ['esc', 'cancel']]
-    : [['enter', last ? (su.id ? 'save' : 'start') : 'next'], ...(at > 0 ? [['←', 'back']] : []), ['↑↓', step === 'start' ? 'a rule' : 'pick'], ...(step === 'what' ? [['type', 'your own words']] : step === 'often' || step === 'stop' ? [['type', 'your own']] : step === 'start' ? [['←→', 'change a rule']] : []), ['esc', 'cancel']];
+    : [['enter', last ? (su.id ? 'save' : 'start') : 'next'], ...(at > 0 ? [['←', 'back']] : []), ['↑↓', step === 'start' ? 'a rule' : 'pick'], ...(step === 'what' ? [['type', 'your own words'], ['ctrl+v', 'a picture']] : step === 'often' || step === 'stop' ? [['type', 'your own']] : step === 'start' ? [['←→', 'change a rule']] : []), ['esc', 'cancel']];
   return [...out.slice(0, rows - 1), keysLine(cols, keys, ui.toast, now)];
 }
 

@@ -3,10 +3,11 @@
 // files the board reads and the keys it sends back, and the Cards drawn at the sizes they meet.
 // End to end with the app and a stand-in model: app-loops.test.mjs.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { PassThrough } from 'node:stream';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { needs } from './needs.mjs';
 
 // A throwaway home before the models part is imported (it reads AGENTIC_HOME once).
 const home = join(mkdtempSync(join(tmpdir(), 'agentic-loops-')), 'home');
@@ -17,6 +18,8 @@ const D = await import('../src/app/loops-draw.mjs');
 const B = await import('../src/app/loops-board.mjs');
 const R = await import('../src/app/loop-run.mjs');
 const { HOME } = await import('../../models/index.mjs');
+const media = await import('../src/tools/media.mjs');
+const { droppedFiles } = await import('../src/agent/images.mjs');
 
 const text = (rows) => rows.map((r) => r.map(([t]) => t).join('')).join('\n');
 // A window's loops with pretend runs and a clock the test moves. pid: a number that is this
@@ -1054,6 +1057,73 @@ test('the wizard: a step at a time with the picture beside it, test5m caught, a 
   press('esc');
   expect(bd.ui.view).toBe('main');
   expect(sent).toEqual([]);
+  b.m.close();
+});
+
+test.skipIf(needs('pictures', media.mediaTool))('the wizard: a screenshot dropped at step 1 is copied and shown as [Image #1]; the loop is told its copy’s path; backspace takes the chip whole; reopened, it is a chip again', () => {
+  const b = board();
+  const sent = [];
+  const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
+  const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
+  const frame = (cols = 144, rows = 46) => { const f = D.drawBoard(bd.state, bd.ui, { cols, rows, now: b.m.now(), linesOf: () => [] }); for (const r of f) expect(D.rowWidth(r)).toBe(cols); return text(f); };
+  const shot = join(mkdtempSync(join(tmpdir(), 'agentic-shot-')), 'Screenshot 2026-10-10 at 3.11.34 PM.png');
+  media.textImage(shot, 'MONITOR', { w: 1440, h: 900 });
+  B.openSetup(bd.ui, { mode: 'ask' });
+  expect(frame()).toMatch(/drag a screenshot in, or ctrl\+v: each run gets it/);
+  expect(frame()).toMatch(/ctrl\+v a picture/);
+  press('^U', ...'monitor the session');
+  // Dropped: Terminal types its path, escaped; the original may go before the loop starts.
+  B.handlePaste(bd, shot.replace(/ /g, '\\ '));
+  const su = bd.ui.setup;
+  expect(su.text).toBe('monitor the session [Image #1]');
+  const copy = su.pasted.files.get(1);
+  expect(copy.startsWith(join(HOME, 'attachments', 'loop-'))).toBe(true);
+  rmSync(shot);
+  expect(existsSync(copy)).toBe(true);
+  const f = frame();
+  expect(f).toMatch(/▣ \[Image #1\] Screenshot 3\.11 PM · 1440×900/);
+  expect(f).toMatch(/“monitor the session \[Image #1\]”/);
+  expect(D.setupFields(su, bd.state).message).toBe(`monitor the session ${copy}`.replace(homedir(), '~'));
+  // Backspace takes the chip in one piece; a plain paste elsewhere never presses enter.
+  press('backspace');
+  expect(su.text).toBe('monitor the session ');
+  B.handlePaste(bd, `${copy}`);
+  expect(su.text).toBe('monitor the session [Image #2]');
+  press('enter', 'enter', 'enter', 'enter');
+  expect(D.stepOf(bd.ui.setup)).toBe('start');
+  press('enter');
+  const add = sent.pop();
+  expect(add.fields.message).toMatch(/^monitor the session ~?\/.*attachments\/loop-.*-2\.png$/);
+  // A run's prompt names the copy: cli.jsx sends it as a picture (droppedFiles finds it).
+  expect(droppedFiles(add.fields.message, tmpdir()).map((d) => d.kind)).toEqual(['image']);
+  // Its rules opened again: the path is a chip again.
+  B.openSetup(bd.ui, { loop: { ...L.parseLoop('test 5m'), id: 'x', name: 'x', message: add.fields.message, state: 'waiting', runs: [] }, state: bd.state });
+  expect(bd.ui.setup.text).toBe('monitor the session [Image #1]');
+  expect(D.setupFields(bd.ui.setup, bd.state).message).toBe(add.fields.message);
+  b.m.close();
+});
+
+test('a paste on the board goes in as typed, its line breaks as spaces: it never presses enter', () => {
+  const b = board();
+  const sent = [];
+  const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
+  B.openSetup(bd.ui, { mode: 'ask' });
+  B.handlePaste(bd, 'check the logs\nand say what is new');
+  expect(bd.ui.setup.text).toBe('check the logs and say what is new');
+  expect(D.stepOf(bd.ui.setup)).toBe('what');
+  B.handleKey(bd, 'esc');
+  B.handlePaste(bd, 'a note\n');
+  expect(bd.ui.chat.text).toBe('a note ');
+  expect(sent).toEqual([]);
+  // `coding loops` in its own terminal: a marked paste is one paste, across chunks too, line breaks and all.
+  const st = { pasting: null };
+  expect(B.inputParts('x\x1b[200~two\nlines\x1b[201~\r', st)).toEqual([{ keys: 'x' }, { paste: 'two\nlines' }, { keys: '\r' }]);
+  expect(B.inputParts('\x1b[200~first\n', st)).toEqual([]);
+  expect(B.inputParts('second\x1b[201~', st)).toEqual([{ paste: 'first\nsecond' }]);
+  // Unmarked: a dropped path in one chunk is a paste; a chunk with enter in it is keys, as typed.
+  expect(B.inputParts('/Users/me/shot.png', st)).toEqual([{ paste: '/Users/me/shot.png' }]);
+  expect(B.inputParts('a\r', st)).toEqual([{ keys: 'a\r' }]);
+  expect(B.inputParts('\x1b[A', st)).toEqual([{ keys: '\x1b[A' }]);
   b.m.close();
 });
 
