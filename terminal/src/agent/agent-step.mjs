@@ -526,11 +526,17 @@ export class StepPart {
     if ((call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.rewind?.edited(prepared.abs, prepared.created ? null : prepared.before);
     // The app's own file, changed because it works on itself (self.mjs): a dated copy first.
     const ownCopy = d.self && (call.name === 'Edit' || call.name === 'Write') && prepared.abs ? keepOwnCopy(prepared.abs) : null;
+    // A wait the model chose ends early once a message of yours is waiting (agent.mjs heard).
+    const heard = new AbortController();
+    if (this.waiting?.()) heard.abort();
+    this.heardCtl = heard;
+    env.heard = heard.signal;
     try {
       out = aside ? await this.runAside(args.command, signal)
         : call.name === 'Bash' && this.rewind ? await this.rewind.around(() => execute(call.name, args, prepared, env))
         : await execute(call.name, args, prepared, env);
     } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
+    if (this.heardCtl === heard) this.heardCtl = null;
     if (ownCopy && !out.error) out.text += `\n${copyNote(ownCopy)}`;
     // The model asked the App tool for the restart itself: the end of the turn does not ask again (agent-work.mjs).
     if (out.restarted && this.turn) this.turn.restarted = true;

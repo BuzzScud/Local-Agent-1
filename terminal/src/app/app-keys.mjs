@@ -20,7 +20,7 @@ import { fromScreen } from './screen-copy.mjs';
 import { addHistory } from './store.mjs';
 import { formRows as mcpFormRows, startMcpEdit } from './mcp-form.mjs';
 import { isQuit } from '../flows/words.mjs';
-import { pick, PLACEHOLDERS, IDLE } from './app-common.mjs';
+import { pick, PLACEHOLDERS, IDLE, steerable } from './app-common.mjs';
 import { askPaste, askState } from './app-ask.mjs';
 import { pickerKeysPart } from './keys-pickers.mjs';
 
@@ -58,7 +58,7 @@ export function keysPart(self) {
     self.historyRef.current.push(value);
     self.setTip(null);
     // A model loading on the service: the message waits for it (preloadRemote sends it).
-    if (self.agent.busy || self.S.current.starting || self.S.current.remoteState === 'loading') { self.queuedRef.current = value; self.setQueued(value); return; }
+    if (self.agent.busy || self.S.current.starting || self.S.current.remoteState === 'loading') { self.queuedRef.current = value; self.setQueued(value); if (self.agent.busy && steerable(value)) self.agent.heard?.(); return; }
     self.sendPrompt(value);
   };
 

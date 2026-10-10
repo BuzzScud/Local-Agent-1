@@ -154,6 +154,8 @@ export function runPart(self) {
       on('mode', (m) => self.setModeState(m)),
       on('screen-setup', () => self.push({ type: 'note', text: `The model tried to look at the screen, but macOS has not let ${terminalApp()} take pictures of it yet: type /screen setup (once).`, tone: 'warn' })),
       on('settled', () => self.autoRef.current.schedule()),
+      // A message typed while it worked went to it with this step (App.jsx steering): said where it landed.
+      on('steered', ({ notes }) => { for (const text of notes ?? []) self.push({ type: 'note', text: `You, while it worked: "${text.length > 200 ? `${text.slice(0, 199)}…` : text}" (it reads this now)`, tone: 'dim' }); }),
       on('compacted', ({ summary, inPlace, n }) => { self.push({ type: 'note', text: inPlace ? `Picked up from its notes${n ? ` (${n})` : ''}` : `Summarized${n ? ` (${n})` : ''}, carrying on`, tone: 'dim' }); self.fold({ title: 'Summary', text: summary }); }),
       // A background job ended with nothing running: told to the model once a queued message had its turn.
       on('jobs-waiting', () => setTimeout(() => self.jobWakeRef.current?.(), 150)),

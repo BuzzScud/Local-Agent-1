@@ -43,7 +43,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null, userHooks = null, steering = null, lean = false }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null, userHooks = null, steering = null, waiting = null, lean = false }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -98,6 +98,12 @@ export class Agent extends EventEmitter {
     // steering() → the notes typed to a loop's run while it works (loop-run.mjs): each goes on the end of
     // the next step's result, so it is read now rather than when the turn ends ('steered' says so).
     this.steering = steering;
+    // waiting() → a message of yours is waiting for steering (the window's: app-keys.mjs). While one is,
+    // a wait the model chose (a Bash that starts with sleep, Jobs with wait) ends early, and heard()
+    // ends the one running, so "eta?" is answered in seconds, not after a 10-minute sleep (9 Oct 2026:
+    // three of six Esc presses that week were only to ask how much longer).
+    this.waiting = waiting;
+    this.heardCtl = null;
     // Someone is at the screen to look at a saved page (askPage): the app says so; coding -p,
     // the benches and the tests check pages by themselves, as before.
     this.pageAsk = pageAsk;
@@ -489,6 +495,9 @@ export class Agent extends EventEmitter {
   // ---- background jobs (tools/jobs.mjs) ----
   // Nothing running: no reply, and no message on its way in.
   idle() { return !this.busy && !this.sending; }
+
+  // A message of yours came in while it works: the wait running now (if any) ends early.
+  heard() { this.heardCtl?.abort(); }
 
   // A background job ended. One stopped (by the model, by you, at quit) or one of a conversation
   // that was cleared is only a line. One that ended by itself is news for the model: told with its

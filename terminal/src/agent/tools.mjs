@@ -88,8 +88,8 @@ export const TOOL_DEFS = [
 // last look, the list, or a stop. On every way, so the list of tools never moves.
 const JOBS_TOOL_DEF = {
   name: 'Jobs',
-  description: 'Your background commands (Bash with background: true). With id: what it printed since you last looked, and whether it still runs; add stop: true to stop it. Without id: the list.',
-  parameters: { type: 'object', properties: { id: str('The job, such as job1'), stop: { type: 'boolean', description: 'true stops it, and everything it started' } }, required: [] },
+  description: 'Your background commands (Bash with background: true). With id: what it printed since you last looked, and whether it still runs; add stop: true to stop it, or wait: seconds to wait until it ends (instead of a Bash sleep): the wait ends early when the user writes. Without id: the list.',
+  parameters: { type: 'object', properties: { id: str('The job, such as job1'), stop: { type: 'boolean', description: 'true stops it, and everything it started' }, wait: { type: 'integer', description: 'Optional: up to this many seconds (600 at most), until the job ends or the user writes' } }, required: [] },
 };
 
 // The model decides (/effort's Who decides row on Model, agent/way.mjs): what the app did for the
@@ -1246,9 +1246,16 @@ export async function execute(name, args, prepared, env) {
       const scripts = Boolean(saved) || usesScripts(args.command, env.cwd);
       // self: the app works on itself (permissions.mjs isSelf): its own folder is open too.
       const sandbox = open ? { open: true, self: Boolean(now.self) } : scripts ? { readOnly: [scriptsDir()] } : null;
-      const r = await runCommand(commandWithScripts(args.command, env.cwd), { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal, squeeze: env.rulesSet === 'remote', ...(sandbox ? { sandbox } : {}) });
+      // A wait the model chose ("sleep 115; grep … run.log") ends early when a message of yours comes in.
+      const wait = env.heard && waitsFirst(args.command);
+      const signal = wait ? AbortSignal.any([env.signal, env.heard].filter(Boolean)) : env.signal;
+      const r = await runCommand(commandWithScripts(args.command, env.cwd), { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal, squeeze: env.rulesSet === 'remote', ...(sandbox ? { sandbox } : {}) });
       if (scripts) r.lines = r.lines.map(outputWithScripts);
       const body = r.lines.join('\n');
+      const secs = `${Math.round(r.ms / 1000)} s`;
+      if (wait && env.heard.aborted && !env.signal?.aborted) return { text: `${body ? `${cut(body, max)}\n` : ''}(The wait ended early, after ${secs}: the user sent a message, which comes with this result. The rest of the command did not run: answer the user first, then run it again if it is still needed.)`, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: false, heard: true } };
+      // Esc: the user stopped it. Not a failure of the command's own.
+      if (env.signal?.aborted) return { text: `${body ? `${cut(body, max)}\n` : ''}(Stopped by the user after ${secs}.)`, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: false, stopped: true } };
       const took = timeoutMs >= 90_000 && timeoutMs % 60_000 === 0 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
       const longer = r.timedOut && timeoutMs < MAX_TIMEOUT_SECS * 1000 ? `; for longer, send timeout (up to ${MAX_TIMEOUT_SECS} seconds), or background: true for one that need not be waited for` : '';
       const none = noMatch(args.command, r);
@@ -1306,6 +1313,13 @@ export function noMatch(command, r) {
 // A compare that found differences: diff and cmp end with exit code 1 when the files differ (2 is
 // trouble), which is their answer, not a failure (9 Oct 2026: "diff before.txt after.txt" was red
 // twice in one conversation). The same rule for where it stands in the command as noMatch.
+// A command that starts with a wait: "sleep 115; grep …", "sleep 60 && tail run.log", "sleep 30".
+export function waitsFirst(command) {
+  const s = splitCommand(command);
+  if (s.nested || s.background || s.open) return false;
+  return /^sleep\s+\d+(?:\.\d+)?[smh]?$/.test(String(s.parts[0] ?? '').trim()) && (s.parts.length === 1 || s.seps[0] !== '||');
+}
+
 const COMPARERS = /^(?:diff|cmp)\b/;
 export function differs(command, r) {
   if (r.code !== 1 || r.timedOut || !r.lines.some((l) => l.trim())) return false;
@@ -1372,10 +1386,19 @@ async function jobsTool(args, env, max) {
     const last = jobs.tail(job, 10);
     return { text: `Stopped ${job.id} (${job.command}) after ${took(Date.now() - job.started)}.${last.length ? ` Its last lines:\n${cut(last.join('\n'), max)}` : ''}`, view: { kind: 'job', what: `Stopped ${job.id}`, lines: last } };
   }
+  // wait: until it ends, the user writes, Esc, or the seconds are up (one look then, not a sleep's guess).
+  const waitSecs = Math.min(MAX_TIMEOUT_SECS, Math.max(0, Number(args.wait) || 0));
+  let waited = '';
+  if (waitSecs && !job.ended) {
+    const t0 = Date.now();
+    while (!job.ended && !env.heard?.aborted && !env.signal?.aborted && Date.now() - t0 < waitSecs * 1000) await new Promise((r) => setTimeout(r, 100));
+    const s = took(Date.now() - t0);
+    waited = job.ended ? `(Waited ${s}: it ended.)\n` : env.heard?.aborted ? `(Waited ${s}: the user sent a message, which comes with this result; answer it first.)\n` : env.signal?.aborted ? '' : `(Waited ${s}: it is still running.)\n`;
+  }
   const { lines, dropped } = jobs.look(job, env.bash?.maxLines ?? 80);
   const head = jobs.line(job);
   const body = lines.length ? `New output since you last looked${dropped ? ` (${dropped} older characters were not kept)` : ''}:\n${cut(lines.join('\n'), max)}` : 'No new output since you last looked.';
-  return { text: `${head}\n${body}`, view: { kind: 'job', what: head, lines } };
+  return { text: `${waited}${head}\n${body}`, view: { kind: 'job', what: head, lines } };
 }
 
 // ---- the app itself (APP_TOOL_DEF) ----------------------------------------------------------------
