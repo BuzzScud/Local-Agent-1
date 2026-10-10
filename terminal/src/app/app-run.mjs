@@ -12,7 +12,7 @@ import { updateWindow } from './copies.mjs';
 import { kindWord } from './remote-form.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { listSessions } from './store.mjs';
-import { newUi as newLoopsUi, openFromChat as openLoopsFrom, showReply as loopsReply, handleKey as loopsHandleKey } from './loops-board.mjs';
+import { newUi as newLoopsUi, openFromChat as openLoopsFrom, showReply as loopsReply, handleKey as loopsHandleKey, handlePaste as loopsHandlePaste } from './loops-board.mjs';
 import { saveTrust } from './trust.mjs';
 import { reloadMcp } from './mcp-start.mjs';
 import { mcpLogFile } from './mcp-store.mjs';
@@ -640,12 +640,8 @@ export function runPart(self) {
     self.loopsSize.current = null;
     if (was && canResize()) { try { process.stdout.write(resizeSeq(was.columns, was.rows)); } catch { /* it stays big */ } }
   };
-  // A key while /loop's board has the window, as the board's own key names (loops-board.mjs keysOf).
-  const loopsKey = (ch, key) => {
-    const m = self.loopsRef.current, ui = self.loopsUi.current;
-    if (!m || !ui) { closeLoops(); return; }
-    const keys = key.return ? ['enter'] : key.escape ? ['esc'] : key.backspace || key.delete ? ['backspace'] : key.upArrow ? ['up'] : key.downArrow ? ['down'] : key.leftArrow ? ['left'] : key.rightArrow ? ['right']
-      : key.tab ? [key.shift ? 'shiftTab' : 'tab'] : key.ctrl && /^[a-z]$/i.test(ch) ? [`^${ch.toUpperCase()}`] : key.meta ? [] : [...String(ch ?? '')].filter((c) => c >= ' ');
+  // The board as loops-board.mjs takes it: { state, ui, quit, send }.
+  const loopsBoard = (m, ui) => {
     const b = {
       state: m.snapshot(), ui, quit: closeLoops,
       // What the board sends goes straight to the loops here (the board in another terminal sends a file).
@@ -656,7 +652,23 @@ export function runPart(self) {
         self.setLoopsBadge(self.loopsBadgeOf(m));
       },
     };
+    return b;
+  };
+  // A key while /loop's board has the window, as the board's own key names (loops-board.mjs keysOf).
+  const loopsKey = (ch, key) => {
+    const m = self.loopsRef.current, ui = self.loopsUi.current;
+    if (!m || !ui) { closeLoops(); return; }
+    const keys = key.return ? ['enter'] : key.escape ? ['esc'] : key.backspace || key.delete ? ['backspace'] : key.upArrow ? ['up'] : key.downArrow ? ['down'] : key.leftArrow ? ['left'] : key.rightArrow ? ['right']
+      : key.tab ? [key.shift ? 'shiftTab' : 'tab'] : key.ctrl && /^[a-z]$/i.test(ch) ? [`^${ch.toUpperCase()}`] : key.meta ? [] : [...String(ch ?? '')].filter((c) => c >= ' ');
+    const b = loopsBoard(m, ui);
     for (const k of keys) { loopsHandleKey(b, k); b.state = m.snapshot(); }
+    self.setLoopsTick((x) => x + 1);
+  };
+  // A paste or a dropped file while the board has the window: step 1 attaches a picture (loops-board.mjs handlePaste).
+  const loopsPaste = (text) => {
+    const m = self.loopsRef.current, ui = self.loopsUi.current;
+    if (!m || !ui) { closeLoops(); return; }
+    loopsHandlePaste(loopsBoard(m, ui), text);
     self.setLoopsTick((x) => x + 1);
   };
   const closeAgents = () => { self.setAgentsView(null); agentsGiveBack(); };
@@ -711,5 +723,5 @@ export function runPart(self) {
     if (ch && !key.ctrl && !key.meta && !key.return && !key.tab) { self.setAgentsView('chat'); return false; }
     return true;
   };
-  return { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, startAgents, agentsKey };
+  return { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey };
 }

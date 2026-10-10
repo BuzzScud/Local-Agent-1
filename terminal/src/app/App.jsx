@@ -80,7 +80,7 @@ export function App({ opts, win, onRestart }) {
     jobWakeRef: () => jobWakeRef, jumpBoxKey: () => jumpBoxKey, jumpTo: () => jumpTo, lastCheck: () => lastCheck,
     limitsRef: () => limitsRef, loadFnRef: () => loadFnRef, loadRef: () => loadRef,
     loadedOnce: () => loadedOnce, loadsAtOpen: () => loadsAtOpen, localModelRef: () => localModelRef,
-    loopsBadgeOf: () => loopsBadgeOf, loopsKey: () => loopsKey, loopsOf: () => loopsOf, loopsRef: () => loopsRef,
+    loopsBadgeOf: () => loopsBadgeOf, loopsKey: () => loopsKey, loopsPaste: () => loopsPaste, loopsOf: () => loopsOf, loopsRef: () => loopsRef,
     loopsSeen: () => loopsSeen, loopsSegsKey: () => loopsSegsKey, loopsSize: () => loopsSize, loopsUi: () => loopsUi,
     macRef: () => macRef, mcpHub: () => mcpHub, mcpKeys: () => mcpKeys, mcpLists: () => mcpLists, mcpRef: () => mcpRef,
     mcpSigning: () => mcpSigning, mcpTests: () => mcpTests, measure: () => measure,
@@ -732,7 +732,7 @@ export function App({ opts, win, onRestart }) {
 
   // Keep a copy of what was shown, for /resume.
   useEffect(() => { sessionRef.current.items = items.filter((it) => it.type !== 'welcome'); }, [items]);
-  const { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, startAgents, agentsKey } = runPart(self);
+  const { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey } = runPart(self);
   const sendPrompt = useCallback(sendPromptFn, [agent, cwd, push]);
 
   // A background job that ended after the reply (agent 'jobs-waiting', tools/jobs.mjs): the model is

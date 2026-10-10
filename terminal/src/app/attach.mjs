@@ -31,7 +31,7 @@ const TRAY_MIN_COLS = 60;
 export const COPY_MAX = 200 * 1024 * 1024;
 const WORD = { image: 'Image', pdf: 'PDF', file: 'File', folder: 'Folder' };
 const KIND = { Image: 'image', PDF: 'pdf', File: 'file', Folder: 'folder' };
-const chipOf = (kind, n) => `[${WORD[kind] ?? 'File'} #${n}]`;
+export const chipOf = (kind, n) => `[${WORD[kind] ?? 'File'} #${n}]`;
 const tried = (fn) => { try { return fn(); } catch { return undefined; } };
 
 // What the tray keeps of an attachment, its thumbnail made now (a picture macOS cannot open throws;

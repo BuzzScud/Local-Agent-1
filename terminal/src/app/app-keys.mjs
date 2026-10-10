@@ -94,6 +94,8 @@ export function keysPart(self) {
   const onPaste = (text) => {
     self.setPopup(null); // a paste closes the /help box, like any key
     self.setHandedBack(false); // and takes the mouse back from Terminal (handBack)
+    // /loop's board has the window: a paste goes to it (a screenshot dropped at step 1 is attached), not the hidden prompt.
+    { const cur = self.S.current; if (cur.loopsOn && !cur.perm && !cur.picker && !cur.answerWait) { self.loopsPaste(text); return; } }
     // /remote: a paste goes into the row being edited (an API key, an address), or starts editing a text row.
     const rp = self.S.current.picker;
     // /mcp's form: a paste goes into the row being edited, or starts editing a text row (a key, a command, an address).
