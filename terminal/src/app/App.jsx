@@ -47,7 +47,7 @@ import { watchUpdates, updateText } from './update.mjs';
 import { readLimits, modelWithLimits, applyLimits, applySearch } from './limits.mjs';
 import { agentsLine } from './agents-tree.mjs';
 import { trayItems, trayLayout } from './attach.mjs';
-import { IDLE, PLACEHOLDERS, liveView, pick, short } from './app-common.mjs';
+import { IDLE, PLACEHOLDERS, liveView, pick, short, steerable } from './app-common.mjs';
 import { modelPart } from './app-model.mjs';
 import { remotePart } from './app-remote.mjs';
 import { panelsPart } from './app-panels.mjs';
@@ -500,6 +500,15 @@ export function App({ opts, win, onRestart }) {
       openPage: process.env.AGENTIC_OPEN === 'off' ? null : (page) => { spawnSync(process.platform === 'darwin' ? 'open' : 'xdg-open', [page], { stdio: 'ignore', timeout: 10_000 }); },
       // You are here to look: a page saved for a request stops the turn and asks first (/design ask).
       pageAsk: true,
+      // A message typed while it works goes to it with its next step, as in Claude Code (the owner's pick,
+      // 10 Oct 2026), not after the whole reply; a wait it chose ends early for it (agent.mjs heard).
+      steering: () => {
+        const q = queuedRef.current;
+        if (!steerable(q)) return [];
+        queuedRef.current = null; setQueued(null);
+        return [q];
+      },
+      waiting: () => steerable(queuedRef.current),
       url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
       // a server given with --url and --slots 2 has a side slot for the save and the sorting
       ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),

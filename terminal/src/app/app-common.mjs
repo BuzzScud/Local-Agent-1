@@ -122,3 +122,8 @@ export function expandMentions(value, cwd, maxChars, pasted = new Map(), from = 
 // The App's names for the functions in its parts (App.jsx's self): each a getter that reads the name when a
 // function uses it, in the render that made the function; `set` holds the few the functions also write.
 export const liveView = (get, set = {}) => Object.defineProperties({}, Object.fromEntries(Object.entries(get).map(([k, g]) => [k, { get: g, ...(set[k] ? { set: set[k] } : {}), enumerable: true }])));
+
+// A message typed while the model works that may go to it with its next step (agent.mjs steering):
+// plain words, not a picture or a file dropped in ([Image #1], [File #2]: those go with a message of
+// their own, after the reply), nor a slash command.
+export const steerable = (text) => Boolean(text && text.trim()) && !/^[/!]/.test(text.trim()) && !/\[(?:Image|PDF|File|Folder) #\d+\]/.test(text);

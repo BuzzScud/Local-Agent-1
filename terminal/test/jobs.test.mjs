@@ -207,3 +207,74 @@ test('jobs that ended while nothing ran ride with your next message', async () =
   expect(user).toMatch(/^Hello there, what happened\?\n\n\(Meanwhile: background job job1 \(echo from-before\) ended by itself: exit code 0/);
   rmSync(d, { recursive: true, force: true });
 });
+
+test('a wait the model chose ends early when you write; any other command runs on; Esc is "stopped by you", no error', async () => {
+  const { waitsFirst } = await import('../src/agent/tools.mjs');
+  expect(['sleep 115; grep -E x run.log', 'sleep 60 && tail run.log', 'sleep 30', 'sleep 2m; echo ok'].map(waitsFirst)).toEqual([true, true, true, true]);
+  expect(['bun run test', 'echo a; sleep 5', 'sleep 5 || echo no', 'sleep $(cat n)'].map(waitsFirst)).toEqual([false, false, false, false]);
+  const d = dir();
+  const heardIn = (ms) => { const ac = new AbortController(); setTimeout(() => ac.abort(), ms); return ac.signal; };
+  const t0 = Date.now();
+  const r = await execute('Bash', { command: 'sleep 20; echo late' }, {}, { cwd: d, bash: { maxLines: 80 }, heard: heardIn(300) });
+  expect(Date.now() - t0).toBeLessThan(5000);
+  expect(r.error).toBeFalsy();
+  expect(r.view.heard).toBe(true);
+  expect(r.text).toMatch(/^\(The wait ended early, after \d+ s: the user sent a message, which comes with this result\. The rest of the command did not run/);
+  // Not a wait: a message of yours does not stop it.
+  const run = await execute('Bash', { command: 'echo start; sleep 0.6; echo built' }, {}, { cwd: d, bash: { maxLines: 80 }, heard: heardIn(100) });
+  expect([run.error, run.text]).toEqual([false, 'start\nbuilt']);
+  // Esc (the turn's signal): stopped by you, which is not the command failing.
+  const esc = await execute('Bash', { command: 'sleep 20' }, {}, { cwd: d, bash: { maxLines: 80 }, signal: heardIn(300) });
+  expect([esc.error, esc.view.stopped]).toEqual([undefined, true]);
+  expect(esc.text).toMatch(/^\(Stopped by the user after \d+ s\.\)$/);
+  rmSync(d, { recursive: true, force: true });
+}, 15_000);
+
+test('Jobs with wait: until the job ends, until you write, or until the seconds are up', async () => {
+  const d = dir();
+  const jobs = new Jobs({ firstMs: 100 });
+  const env = { cwd: d, jobs, bash: { maxLines: 80 } };
+  await execute('Bash', { command: 'sleep 0.8; echo done-here', background: true }, {}, env);
+  const t0 = Date.now();
+  const ended = await execute('Jobs', { id: 'job1', wait: 30 }, {}, env);
+  expect(Date.now() - t0).toBeLessThan(5000);
+  expect(ended.text).toMatch(/^\(Waited \d+ s: it ended\.\)\njob1 · ended, exit code 0 after \d+ s · sleep 0\.8; echo done-here\nNew output since you last looked:\ndone-here/);
+  expect(ended.view.what).toMatch(/^job1 · ended/);
+  await execute('Bash', { command: 'sleep 30', background: true }, {}, env);
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 300);
+  const heard = await execute('Jobs', { id: 'job2', wait: 30 }, {}, { ...env, heard: ac.signal });
+  expect(heard.text).toMatch(/^\(Waited \d+ s: the user sent a message, which comes with this result; answer it first\.\)\njob2 · running/);
+  const up = await execute('Jobs', { id: 'job2', wait: 1 }, {}, env);
+  expect(up.text).toMatch(/^\(Waited 1 s: it is still running\.\)\njob2 · running/);
+  expect(toolSchemas({ way: 'model' }).find((t) => t.function?.name === 'Jobs' || t.name === 'Jobs')).toBeTruthy();
+  jobs.stopAll({ now: true });
+  rmSync(d, { recursive: true, force: true });
+}, 15_000);
+
+test('a message typed while it works goes with its next step, and the wait it was in ends early for it', async () => {
+  const { steerable } = await import('../src/app/app-common.mjs');
+  expect([steerable('eta?'), steerable('/model'), steerable('look at [Image #1]'), steerable('  '), steerable(null)]).toEqual([true, false, false, false, false]);
+  const d = dir();
+  writeFileSync(join(d, 'package.json'), '{"name":"x"}\n');
+  const fake = await startFakeServer([
+    { tool: { name: 'Bash', args: { command: 'sleep 20; grep -c pass run.log' } } },
+    { text: 'About two more minutes.' },
+  ]);
+  let queued = null;
+  const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd: d, system: systemPrompt({ cwd: d, git: 'test' }), thinking: false, ctx: 32768, mode: 'bypass', flows: false, way: 'model', hooks: [], verify: false, ask: async () => ({ choice: 'yes' }),
+    steering: () => { const q = queued; queued = null; return steerable(q) ? [q] : []; }, waiting: () => steerable(queued) });
+  const steered = [];
+  agent.on('steered', (e) => steered.push(...e.notes));
+  setTimeout(() => { queued = 'eta?'; agent.heard(); }, 500);
+  const t0 = Date.now();
+  await agent.send('Wait for the test run, then tell me how it went.');
+  await fake.close();
+  expect(Date.now() - t0).toBeLessThan(10_000);
+  const result = toolResults(fake, 1).at(-1).content;
+  expect(result).toContain('(The wait ended early, after');
+  expect(result).toContain('(A note from the user, sent while you worked: eta?)');
+  expect(steered).toEqual(['eta?']);
+  expect(queued).toBe(null);
+  rmSync(d, { recursive: true, force: true });
+}, 20_000);

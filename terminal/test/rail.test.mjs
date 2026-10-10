@@ -233,6 +233,9 @@ test('a command is one row with what it came to at its end: a test run\'s counts
   expect(outcome('grep x a.txt', { code: 1, lines: [], noMatch: true })).toEqual({ end: 'no lines matched', color: C.dim });
   // So is a diff that found differences (tools.mjs differs).
   expect(outcome('diff a b', { code: 1, lines: ['2c2', '< b', '---', '> c'], differs: true })).toEqual({ end: 'files differ · 4 lines', color: C.dim });
+  // A wait that ended because you wrote, and a command you stopped with esc: dim, not red.
+  expect(outcome('sleep 115; grep x run.log', { code: null, lines: [''], heard: true })).toEqual({ end: 'wait ended: you wrote', color: C.dim });
+  expect(outcome('bun run check', { code: null, lines: [''], stopped: true })).toEqual({ end: 'stopped by you', color: C.dim });
   expect(outcome('ls', { code: 0, lines: ['a', 'b', '… 120 lines cut …', 'y', 'z'] }).end).toBe('124 lines');
   expect(outcome('ls', { code: 0, lines: [] }).end).toBe('no output');
   // Words that look like counts in what a command that is no test printed are just its lines.
