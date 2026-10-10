@@ -367,7 +367,7 @@ export function startRun(spec, { self = selfCommand(), env = process.env } = {})
   const child = spawn(self[0], [...self.slice(1), ...args], {
     cwd: spec.folder, stdio: ['pipe', 'pipe', 'pipe'],
     // The memory is read, never saved to, by a run nobody watches; what it costs counts under its window.
-    env: { ...env, AGENTIC_LOOP_SPEC: JSON.stringify({ prompt: spec.prompt, allow: spec.allow ?? [], steps: spec.steps ?? null, rewind: spec.rewind ?? null, ...(spec.resume ? { resume: spec.resume } : {}), ...(spec.check ? { check: spec.check } : {}), ...(spec.confirm ? { confirm: true } : {}) }), AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_SPEND_PID: String(spec.owner ?? process.pid), AGENTIC_OPEN: 'off' },
+    env: { ...env, AGENTIC_LOOP_SPEC: JSON.stringify({ prompt: spec.prompt, allow: spec.allow ?? [], steps: spec.steps ?? null, rewind: spec.rewind ?? null, ...(spec.resume ? { resume: spec.resume } : {}), ...(spec.check ? { check: spec.check } : {}), ...(spec.confirm ? { confirm: true } : {}), ...(spec.testsFirst === false ? { testsFirst: false } : {}) }), AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_SPEND_PID: String(spec.owner ?? process.pid), AGENTIC_OPEN: 'off' },
   });
   const fns = [];
   let carry = '', err = '', ended = false;
@@ -502,7 +502,7 @@ export class Loops {
     }
     this.say(l, 'start', `run ${run.n}`, { n: run.n });
     let h;
-    try { h = this.start({ folder: l.folder, prompt, mode: l.mode, url: st.url ?? null, slots: st.slots ?? 1, local: Boolean(st.local), flows: st.flows, allow: l.allowed, owner: this.pid, steps: l.steps, rewind: sessionOf(this.pid, l.id), check: l.check ? { ...l.check, after: Boolean(l.until) } : null, confirm: l.kind === 'debug' && !l.check }); }
+    try { h = this.start({ folder: l.folder, prompt, mode: l.mode, url: st.url ?? null, slots: st.slots ?? 1, local: Boolean(st.local), flows: st.flows, allow: l.allowed, owner: this.pid, steps: l.steps, rewind: sessionOf(this.pid, l.id), check: l.check ? { ...l.check, after: Boolean(l.until) } : null, confirm: l.kind === 'debug' && !l.check, testsFirst: !(l.runs.at(-1)?.failing != null) }); }
     catch (e) { this.finish(l, run, { reason: 'error', final: `The run could not start: ${e.message}` }); return; }
     this.handles.set(l.id, h);
     h.on((ev) => this.onEvent(l, run, ev));

@@ -43,7 +43,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null, userHooks = null, steering = null, waiting = null, lean = false }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, testsFirst = true, mcp = null, userHooks = null, steering = null, waiting = null, lean = false }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -95,6 +95,8 @@ export class Agent extends EventEmitter {
     this.openPage = openPage;
     // A loop's run (/loop): changes that leave fewer tests failing, and none newly failing, stay (putBackWhy).
     this.keepProgress = Boolean(keepProgress);
+    // A loop's run whose last run ran the tests: the tests helper does not run them first (agent-read.mjs).
+    this.testsFirst = testsFirst !== false;
     // steering() → the notes typed to a loop's run while it works (loop-run.mjs): each goes on the end of
     // the next step's result, so it is read now rather than when the turn ends ('steered' says so).
     this.steering = steering;

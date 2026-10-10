@@ -78,7 +78,7 @@ export const MAP_MIN_FILES = 4; // fewer code files than this: no project map, t
 // ~2,950 tokens at 16k (about 20 s of reading), ~5,900 at 32k, at most 8,000.
 export const RANK_SHARE = 0.18;
 export const RANK_MAX_TOKENS = 8000;
-export const TESTS_FIRST_MS = 60_000; // the tests helper's run before the first step
+export const TESTS_FIRST_MS = Number(process.env.AGENTIC_TESTS_FIRST_MS) || 60_000; // the tests helper's run before the first step (a test sets it shorter)
 // Asking about code even when the request was not sorted (plan mode, a folder that is not a project).
 export const EXPLAIN = /\b(explain|describe|walk me through|summari[sz]e|what does|how does|what is in|tell me about)\b/i;
 // A message that says the last turn went wrong.
