@@ -10,7 +10,7 @@
 //   AGENTIC_UPDATE_EVERY=<ms> looks more often (the tests); AGENTIC_FETCH_EVERY=<ms>
 //   asks GitHub that often, 0 never.
 import { spawn } from 'node:child_process';
-import { statSync, writeFileSync, unlinkSync } from 'node:fs';
+import { statSync, lstatSync, readFileSync, writeFileSync, unlinkSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 
 const EVERY_MS = 20_000;
@@ -134,10 +134,37 @@ export async function fetchMain(repo, timeout = 20_000) {
 export const plain = (text) => String(text ?? '').split('\n').map((l) => l.replace(/^(fatal|error): /, '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim()).find(Boolean)?.slice(0, 200) ?? '';
 export const msEnv = (name, dflt) => { const v = process.env[`AGENTIC_${name}`]; return v === undefined || v === '' ? dflt : Number(v) || 0; };
 
+// The `coding` command keeps itself current (10 Oct 2026). The launcher only replaced itself when a pull at
+// its own start brought a change to it; one that came in by /update, or a launcher installed before 9 Oct
+// (which never replaced itself), stayed old for ever, and that Mac needed `bun run install-cli` by hand.
+// Now the app, at each start and each /update restart, puts the repo's launcher in its place when they
+// differ: only the one that started it (AGENTIC_LAUNCHER), a plain file of yours (not a link) installed for
+// this repo, replaced whole (rename), so the shell running the old copy carries on with it.
+// Returns 'updated', 'same' or why it was left alone.
+export function refreshLauncher(repo, launcher = process.env.AGENTIC_LAUNCHER) {
+  if (!repo || !launcher) return 'no launcher';
+  try {
+    const st = lstatSync(launcher);
+    if (!st.isFile() || (process.getuid && st.uid !== process.getuid())) return 'not a plain file of yours';
+    const have = readFileSync(launcher, 'utf8');
+    if (!have.includes(`REPO="\${AGENTIC_REPO:-${repo}}"`)) return 'installed for another folder';
+    const want = readFileSync(join(repo, 'terminal', 'app', 'agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo);
+    if (have === want) return 'same';
+    const tmp = `${launcher}.new`;
+    try { unlinkSync(tmp); } catch {}
+    writeFileSync(tmp, want, { flag: 'wx', mode: 0o755 });
+    renameSync(tmp, launcher);
+    return 'updated';
+  } catch (e) {
+    return plain(e.message);
+  }
+}
+
 // Watches until stopped; calls onChange with the new state when it changes.
 // Returns { stop, check }: check() asks GitHub, then looks (for /update).
 export function watchUpdates(onChange, { repo = findRepo(), every = msEnv('UPDATE_EVERY', EVERY_MS) || EVERY_MS, fetchEvery = msEnv('FETCH_EVERY', FETCH_EVERY_MS) } = {}) {
   if (!repo || process.env.AGENTIC_NO_UPDATE === '1') return { repo: null, stop: () => {}, check: async () => null };
+  refreshLauncher(repo);
   const built = builtAt();
   let start = null;
   let last = null;
