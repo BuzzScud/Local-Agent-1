@@ -270,3 +270,11 @@ test("the folder's own name as a path means the folder", () => {
   expect(prepare('Edit', { path: own, old_text: 'x', new_text: 'y' }, { cwd: dir }).error).toContain('is a folder');
   expect(prepare('Edit', { path: 'nope.js', old_text: 'x', new_text: 'y' }, { cwd: dir }).error).toContain('List or Search');
 });
+
+test("the end of the folder's own path, repeated, means the folder", () => {
+  const end = dir.split('/').filter(Boolean).slice(-2).join('/');
+  expect(resolvePath(dir, end).abs).toBe(dir);
+  expect(resolvePath(dir, `${end}/src/b.js`).abs).toBe(join(dir, 'src/b.js'));
+  expect(resolvePath(dir, 'src/b.js').abs).toBe(join(dir, 'src/b.js'));
+  expect(resolvePath(dir, 'nothing/here.js').abs).toBe(join(dir, 'nothing/here.js'));
+});

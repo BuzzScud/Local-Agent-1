@@ -279,6 +279,22 @@ test('a grep that finds nothing is an answer, not an error; a grep of a missing 
   }
 }, 15_000);
 
+test('a diff that finds differences is an answer, not an error; a diff of a missing file, or after a pipe, still is', async () => {
+  const cwd = project();
+  writeFileSync(join(cwd, 'before.txt'), 'a\nb\n');
+  writeFileSync(join(cwd, 'after.txt'), 'a\nc\n');
+  const env = { cwd, bash: { maxLines: 80, timeoutMs: 120_000 } };
+  for (const command of ['diff before.txt after.txt', 'cd . && diff before.txt after.txt', 'cmp before.txt after.txt']) {
+    const r = await execute('Bash', { command }, {}, env);
+    expect([command, r.error, r.view.differs, r.text.endsWith('(the files differ: exit code 1)')]).toEqual([command, false, true, true]);
+  }
+  for (const command of ['diff before.txt no-such.txt', 'test -f nope && diff before.txt after.txt', 'diff before.txt after.txt; false']) {
+    const r = await execute('Bash', { command }, {}, env);
+    expect([command, r.error]).toEqual([command, true]);
+  }
+  expect((await execute('Bash', { command: 'diff before.txt before.txt' }, {}, env)).error).toBe(false);
+}, 15_000);
+
 test('Search rows: named choices move along their list, junk is left out, and only a change is saved', () => {
   let v = defaultLimits(model);
   expect(moveLimit(v, 'embedder', -1, model).embedder).toBe('off');

@@ -590,9 +590,23 @@ export function resolvePath(cwd, p) {
   // "SCRIPTS/…" is this window's saved scripts (scripts.mjs): the model's own, so it may change them.
   const sc = scriptsPathFor(p, cwd);
   if (sc) return { abs: sc.abs, rel: p, inside: true, scripts: true };
+  // One named by a longer path that is not there, ending in SCRIPTS/… (9 Oct 2026: a Read of
+  // /…/worktrees/x/SCRIPTS/out-29.txt was "File not found"): that saved file, when it is there.
+  const tail = /(?:^|\/)(SCRIPTS\/[^/].*)$/.exec(p)?.[1];
+  const scTail = tail && tail !== p && !existsSync(isAbsolute(p) ? p : resolve(cwd, p)) ? scriptsPathFor(tail, cwd) : null;
+  if (scTail && existsSync(scTail.abs)) return { abs: scTail.abs, rel: tail, inside: true, scripts: true };
   // The folder's own name used as a path ("project", "project/a.js") means the folder.
   const own = cwd.split(sep).pop();
   if (!isAbsolute(p) && own && (p === own || p.startsWith(`${own}/`)) && !existsSync(resolve(cwd, p))) p = p === own ? '.' : p.slice(own.length + 1);
+  // So does the end of the folder's own path ("Desktop/project/src" from inside project; 9 Oct 2026:
+  // a window that had worked from ~ went on in the project, and its Search was "No such path").
+  else if (!isAbsolute(p) && !existsSync(resolve(cwd, p))) {
+    const at = cwd.split(sep).filter(Boolean);
+    const ps = p.split('/').filter(Boolean);
+    for (let k = Math.min(at.length, ps.length); k >= 2; k--) {
+      if (at.slice(-k).join('/') === ps.slice(0, k).join('/')) { p = ps.slice(k).join('/') || '.'; break; }
+    }
+  }
   let abs = isAbsolute(p) ? resolve(p) : resolve(cwd, p);
   // Small models retype the project's full path and get it slightly wrong.
   // A parent of the project folder means the project folder; otherwise try
@@ -1239,14 +1253,16 @@ export async function execute(name, args, prepared, env) {
       const longer = r.timedOut && timeoutMs < MAX_TIMEOUT_SECS * 1000 ? `; for longer, send timeout (up to ${MAX_TIMEOUT_SECS} seconds), or background: true for one that need not be waited for` : '';
       const none = noMatch(args.command, r);
       if (none) return { text: '(no lines matched: the search found nothing, exit code 1)', view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: false, noMatch: true } };
-      const status = r.timedOut ? `\n(stopped after ${took}${longer})` : r.code === 0 ? '' : `\n(exit code ${r.code})`;
+      const diff = differs(args.command, r);
+      const status = r.timedOut ? `\n(stopped after ${took}${longer})` : r.code === 0 ? '' : diff ? '\n(the files differ: exit code 1)' : `\n(exit code ${r.code})`;
+      const failed = r.code !== 0 && !diff;
       // Where a failed script stopped, with its lines (a traceback's "line 279 of <stdin>"), and the saved file.
-      const where = r.code !== 0 && !r.timedOut ? failingLine(body, { body: heredocScript(args.command)?.body ?? null, saved: saved?.name ?? null, cwd: env.cwd }) : '';
+      const where = failed && !r.timedOut ? failingLine(body, { body: heredocScript(args.command)?.body ?? null, saved: saved?.name ?? null, cwd: env.cwd }) : '';
       // Output too long to show: kept whole as SCRIPTS/out-<n>.txt, to Read in parts instead of running it again.
       const kept = r.whole || body.length > max ? saveOutput(scripts ? outputWithScripts(r.whole ?? body) : r.whole ?? body, env.cwd) : null;
       const keptNote = kept ? `(The whole output, ${kept.lines.toLocaleString('en-US')} lines, is saved as ${kept.name}: Read it with offset and limit, or find, instead of running the command again.)` : '';
-      const after = [where, r.code !== 0 ? tildeHint(body) : '', r.code !== 0 ? nodeHint(body) : '', saved ? savedNote(saved) : '', keptNote].filter(Boolean).join('\n');
-      return { text: cut(body || '(no output)', max) + status + (after ? `\n${after}` : ''), error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut, ...(r.timedOut ? { after: took } : {}), ...(saved ? { saved: saved.name } : {}) }, ...(saved ? { saved } : {}) };
+      const after = [where, failed ? tildeHint(body) : '', failed ? nodeHint(body) : '', saved ? savedNote(saved) : '', keptNote].filter(Boolean).join('\n');
+      return { text: cut(body || '(no output)', max) + status + (after ? `\n${after}` : ''), error: failed, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut, ...(diff ? { differs: true } : {}), ...(r.timedOut ? { after: took } : {}), ...(saved ? { saved: saved.name } : {}) }, ...(saved ? { saved } : {}) };
     }
     case 'Jobs': return jobsTool(args, env, max);
     case 'App': return appTool(args, env, max);
@@ -1285,6 +1301,20 @@ export function noMatch(command, r) {
   while (parts.length && !parts.at(-1)) parts.pop();
   if (!parts.length || !SEARCHERS.test(parts.at(-1))) return false;
   return s.seps.slice(0, parts.length - 1).every((sep, i) => sep !== '||' && (sep !== '&&' || /^(?:cd|pushd)\b/.test(parts[i])));
+}
+
+// A compare that found differences: diff and cmp end with exit code 1 when the files differ (2 is
+// trouble), which is their answer, not a failure (9 Oct 2026: "diff before.txt after.txt" was red
+// twice in one conversation). The same rule for where it stands in the command as noMatch.
+const COMPARERS = /^(?:diff|cmp)\b/;
+export function differs(command, r) {
+  if (r.code !== 1 || r.timedOut || !r.lines.some((l) => l.trim())) return false;
+  const s = splitCommand(command);
+  if (s.nested || s.background || s.open) return false;
+  const parts = s.parts.map((p) => p.trim());
+  while (parts.length && !parts.at(-1)) parts.pop();
+  if (!parts.length || !COMPARERS.test(parts.at(-1))) return false;
+  return s.seps.slice(0, parts.length - 1).every((sep, i) => sep !== '||' && sep !== '|' && (sep !== '&&' || /^(?:cd|pushd)\b/.test(parts[i])));
 }
 
 // ---- background commands (tools/jobs.mjs) ---------------------------------------------------------
