@@ -3,7 +3,7 @@
 // it when Agentic Coder exits.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, openSync, closeSync, appendFileSync } from 'node:fs';
-import { createConnection } from 'node:net';
+import { createConnection, createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
@@ -44,11 +44,20 @@ function watch(pid, port, secs) {
   spawn('/bin/sh', ['-c', '/bin/sh -c "$0" agentic-watch "$@" </dev/null >/dev/null 2>&1 &', WATCH, ...args], { detached: true, stdio: 'ignore' }).unref();
 }
 
-const portFree = (port) => new Promise((resolve) => {
+// Free: nothing answers there, and the port can be taken. Both, since a sandbox or a firewall can stop
+// the connect to a server already running (it looked free, and the new server exited "address in use",
+// 9 Oct 2026), and a server listening on every address does not always stop a 127.0.0.1 listen.
+const answers = (port) => new Promise((resolve) => {
   const sock = createConnection({ port, host: '127.0.0.1' });
-  sock.once('connect', () => { sock.destroy(); resolve(false); });
-  sock.once('error', () => resolve(true));
+  sock.once('connect', () => { sock.destroy(); resolve(true); });
+  sock.once('error', () => resolve(false));
 });
+const canListen = (port) => new Promise((resolve) => {
+  const srv = createServer();
+  srv.once('error', () => resolve(false));
+  srv.listen({ port, host: '127.0.0.1', exclusive: true }, () => srv.close(() => resolve(true)));
+});
+export const portFree = async (port) => !(await answers(port)) && (await canListen(port));
 
 function alive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }

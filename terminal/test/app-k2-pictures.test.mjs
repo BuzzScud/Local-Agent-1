@@ -47,7 +47,7 @@ test.skipIf(needs('pictures', mediaTool))('K2 and a picture: asked first; Qwen t
   const a = r.snapshots.asked.replace(/\s+/g, ' ');
   expect(a).toContain(`${Q.name} for this message`);
   expect(a).toContain('Send without the picture');
-  expect(a).not.toContain(`${MODELS.gemma.name} for this message`); // its files are not here
+  expect(a).not.toMatch(/Gemma[^·]* for this message/); // Gemma left the model list (9 Oct 2026): never offered
   // Three starts: K2 (no add-on), Qwen with its add-on, K2 again; each on its own engine.
   const starts = readFileSync(args, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   const file = (s) => s[s.indexOf('-m') + 1];

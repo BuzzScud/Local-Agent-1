@@ -147,6 +147,25 @@ test('a server that quits removes its port files only while they still name it; 
   expect(out.app).toEqual({ other: false, left: true, mine: true, gone: true, none: false });
 }, 40_000);
 
+// A port is free only when nothing answers there and it can be taken (9 Oct 2026): in a sandbox the
+// connect to a running server is refused, so the look by connecting alone called a held port free.
+test('portFree: a port something listens on is not free, and is free again once let go', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-free-'));
+  const script = `
+    import { createServer } from 'node:net';
+    const { portFree } = await import(${JSON.stringify(join(import.meta.dir, '../runtime/server.mjs'))});
+    const srv = createServer();
+    await new Promise((r) => srv.listen({ port: 0, host: '127.0.0.1' }, r));
+    const port = srv.address().port;
+    const held = await portFree(port);
+    await new Promise((r) => srv.close(r));
+    console.log(JSON.stringify({ held, after: await portFree(port) }));
+    process.exit(0);
+  `;
+  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 20000 });
+  expect(JSON.parse(r.stdout.trim().split('\n').pop() || JSON.stringify({ error: r.stderr.slice(-300) }))).toEqual({ held: false, after: true });
+});
+
 // Two windows (or two tests) starting a model at the same moment: both looked, both saw 17600 free, and
 // the one whose server came second found the port taken and died while loading (3 Oct 2026: "Could not
 // start the model: llama-server exited while loading (code 1)", and a start test that failed now and then).
