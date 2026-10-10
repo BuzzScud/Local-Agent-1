@@ -3,12 +3,18 @@
 // the browser would otherwise be answered by the test's hub, which has no
 // model file, and Weights would say the model is not on this Mac (27 Sep).
 import { afterAll } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { needs } from './needs.mjs';
+import { cleanRun, makeRunFolder } from './test-tmp.mjs';
 
 process.env.AGENTIC_HUB_PORT = '0';
+// Every test process works in a run folder of its own and leaves nothing behind (test-tmp.mjs, 10 Oct
+// 2026): TMPDIR points at it, so every throwaway folder the tests make, and every one the app they start
+// makes, lands inside it; when the tests are over, the programs started from it are stopped and the folder
+// goes. (One day's runs had left 58,000 folders and 101 running apps in the temp folder.)
+const run = makeRunFolder();
 // Every test process has a throwaway home before anything loads (3 Oct 2026). The models part reads
 // its home once; with several files in one `bun test`, a file that imported it first with no
 // AGENTIC_HOME froze the real ~/.agentic-coder for the files after it, and one of them deleted the real
@@ -17,10 +23,10 @@ process.env.AGENTIC_HUB_PORT = '0';
 // run: models/registry.mjs.)
 process.env.AGENTIC_TEST_HOME = mkdtempSync(join(tmpdir(), 'agentic-test-home-'));
 process.env.AGENTIC_HOME ??= process.env.AGENTIC_TEST_HOME;
-// This process's own throwaway goes when its tests are over (a full run made about 170 of them and left
-// them in the temp folder). Only the one made here: never a home the process was given. A preload's
-// afterAll runs once, after the last file's tests; under bun test the process's 'exit' never fires.
-{ const own = process.env.AGENTIC_TEST_HOME; afterAll(() => { try { rmSync(own, { recursive: true, force: true }); } catch { /* the temp folder is cleared by macOS anyway */ } }); }
+// This process's run folder, its home inside it, goes when its tests are over, with every program still
+// running from it. A preload's afterAll runs once, after the last file's tests; under bun test the
+// process's 'exit' never fires. (A process that ends without it is cleaned by `bun run test`'s sweep.)
+afterAll(async () => { try { await cleanRun(run); } catch { /* the temp folder is cleared by macOS anyway */ } });
 // A tool a test needs that this Mac lacks is a named skip (needs.mjs); a test of the models part
 // reaches it here, since it cannot import a file of the terminal's.
 globalThis.needs = needs;

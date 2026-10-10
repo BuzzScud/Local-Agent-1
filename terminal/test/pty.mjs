@@ -47,7 +47,9 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   // The shell inside script(1) writes the name of its terminal (the app's) to a file first, so the
   // harness can read the terminal's mode without ps, which Agentic Coder's own sandbox refuses.
   const ttyFile = `${out}.tty`;
-  const cmd = `tty > '${ttyFile}' 2>/dev/null; stty cols ${cols} rows ${rows}; exec ${exe} ${args.map((a) => `'${a}'`).join(' ')}`;
+  // The shell's own pid too: it execs the app, so that pid is the app's (a test may send it a signal).
+  const pidFile = `${out}.pid`;
+  const cmd = `tty > '${ttyFile}' 2>/dev/null; echo $$ > '${pidFile}'; stty cols ${cols} rows ${rows}; exec ${exe} ${args.map((a) => `'${a}'`).join(' ')}`;
   // script(1) needs a real pipe on stdin (Node's default is a socket, and on
   // macOS a FIFO counts as one too), so keys go FIFO → cat → pipe → script.
   const fifo = `${out}.in`;
@@ -100,6 +102,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   let reads = false;
   let tty = null;
   const appTty = () => { try { return readFileSync(ttyFile, 'utf8').trim().match(/^\/dev\/\S+$/)?.[0] ?? null; } catch { return null; } };
+  const appPid = () => { try { return Number(readFileSync(pidFile, 'utf8').trim()) || null; } catch { return null; } };
   const readsKeys = async () => {
     const t0 = Date.now();
     while (!reads && Date.now() - t0 < 5000) {
@@ -133,7 +136,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
       }
       if (s.sleep) await new Promise((r) => setTimeout(r, s.sleep));
       // a check while the app runs, given the screen so far; write sends keys (or what a terminal would answer) worked out from that screen
-      if (s.fn) await s.fn({ text: await screenNow(), raw: read, screen: () => emulate(read(), cols, rows), write: stdin.write });
+      if (s.fn) await s.fn({ text: await screenNow(), raw: read, screen: () => emulate(read(), cols, rows), write: stdin.write, pid: appPid });
       if (s.autoYes) {
         // Answer "Yes" to every question until the turn ends (the prompt box comes back).
         const t0 = Date.now();
@@ -159,9 +162,13 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
     try { closeSync(fd); } catch {}
     code = await Promise.race([done, new Promise((r) => setTimeout(() => r('timeout'), 8000))]);
     clearTimeout(killer);
-    if (code === 'timeout') killAll();
+    // The group goes whatever the app did: one that quit left nothing to stop, and a straggler (a server
+    // it started, a host) goes with it. Until 10 Oct 2026 only a run out of time was stopped, so a test
+    // that ran out of time itself, or a process that ended first, left its app running.
+    killAll();
     rmSync(fifo, { force: true });
     rmSync(ttyFile, { force: true });
+    rmSync(pidFile, { force: true });
   }
   const raw = read();
   rmSync(out, { force: true });

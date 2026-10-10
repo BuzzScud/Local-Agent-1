@@ -5,7 +5,7 @@
 // (1 = one after the other). A run narrowed by extra arguments (a file,
 // -t "name") goes to one `bun test` as before and is not recorded.
 //   node models/evals/tools/run-suite.mjs [anything bun test takes]
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +16,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const extra = process.argv.slice(2);
 const t0 = Date.now();
 const env = { ...process.env, ...(process.stdout.isTTY && !process.env.NO_COLOR ? { FORCE_COLOR: '1' } : {}) };
+// What an earlier run left: the run folders of test processes that are gone, and the programs still
+// running from them (terminal/test/test-tmp.mjs; a bun of its own, since the models part imports no file
+// of the terminal's but its index). At the start and the end of every run; a sweep that fails never fails the run.
+const sweep = () => { try { const out = execFileSync('bun', [join(root, 'terminal', 'test', 'test-tmp.mjs'), '--sweep'], { encoding: 'utf8', timeout: 60_000 }); if (out) process.stdout.write(out); } catch { /* nothing to clean, or no bun: the run goes on */ } };
+sweep();
 const plain = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 const count = (text, word) => { const m = new RegExp(`^\\s*(\\d+) ${word}`, 'm').exec(text); return m ? Number(m[1]) : null; };
 // The tests that failed, by name, from what bun printed: "(fail) group > name [1.2ms]", or "✗ group > name"
@@ -65,6 +70,7 @@ if (extra.length || jobs === 1) {
   const { code, out } = await bunTest([...(named ? [] : ['./terminal/test', './models/test']), ...extra], { live: true });
   const tail = plain(out.slice(-4000));
   record({ pass: count(tail, 'pass\\b'), fail: count(tail, 'fail\\b') ?? 0, files: /across (\d+) files/.exec(tail)?.[1], code, failed: failedIn(out), why: skipsIn(out) });
+  sweep();
   process.exit(code);
 }
 
@@ -115,4 +121,5 @@ const code = worst || (fail ? 1 : 0);
 process.stdout.write(`\n ${sum.pass} pass\n${sum.skip ? ` ${sum.skip} skip\n` : ''}${skipWords(why) ? ` skipped for want of a tool: ${skipWords(why)}\n` : ''}${sum.todo ? ` ${sum.todo} todo\n` : ''} ${fail} fail\n ${sum.expects} expect() calls\nRan ${sum.tests} tests across ${files.length} files. [${secs.toFixed(2)}s]\n`);
 try { mkdirSync(dirname(timesFile), { recursive: true }); writeFileSync(timesFile, JSON.stringify(took, null, 1)); } catch { /* only a hint for the next run's order */ }
 record({ pass: sum.pass, fail, files: files.length, code, failed: [...failed, ...broken.map((f) => `${f.split('/').pop()} › no result could be read`)], why });
+sweep();
 process.exit(code);

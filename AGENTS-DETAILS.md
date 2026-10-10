@@ -98,6 +98,20 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   hides a tool for a test of the skips. Which tests need what was measured, not guessed: the suite run with python and
   the picture helper taken away.
 - **Every test process has a throwaway home** (test-env.mjs, 3 Oct 2026) and removes its own when it ends.
+- **Every test process works in a run folder of its own, and a run leaves nothing behind** (`terminal/test/test-tmp.mjs`,
+  10 Oct 2026). One day's runs had left 58,000 folders (17.6 GB) and 101 running apps (2.9 GB of memory, 20 GB of swap)
+  in the Mac's temp folder: the tests make throwaway folders with mkdtemp(tmpdir()) in some 650 places and seldom remove
+  them, and an app a test did not stop stayed when its process ended (bun fires no 'exit' there, and pty.mjs stopped the
+  app only when the run itself was out of time). Now the preload points TMPDIR at `/private/tmp/agentic-run-<pid>-…`
+  (`RUN_BASE`: in the Mac's own temp folder the longer project paths cut the lines app-mcp and app-permissions wait
+  for at the screen's edge; a run started inside a run nests in its folder), so every throwaway of the tests, of the app they start and of what the app starts lands inside it (Bun's
+  os.tmpdir() follows a change of TMPDIR); its afterAll stops the programs whose environment carries that TMPDIR, and
+  their children (`processesIn`: ps -E shows no environment for Apple's own programs), then removes the folder.
+  `bun run test` sweeps at its start and end (`test-tmp.mjs --sweep`, run as a bun of its own: the seam rule) the run
+  folders whose pid is gone. pty.mjs stops its app's process group when a run ends whatever the app did, and a `fn`
+  step gets `pid()` (the app's own pid: the shell that execs it writes `$$` first). The app itself ends when its
+  terminal goes (cli.jsx: SIGHUP, or stdin's end, close it as on quit, and `process.exit` after
+  `AGENTIC_HANGUP_GRACE_MS`, 5 s, should the closing hang). Tests: `test-tmp.test.mjs`, `app-hangup.test.mjs`.
 - **The app tests drive the app in its own window** (`AGENTIC_SESSIONS=off` in test-env.mjs), not the way a window
   runs it since 3 Oct 2026 (inside a keeper, sessions.mjs). `terminal/test/app-keeper.test.mjs` drives the everyday
   things through the keeper (a reply, a paste, /clear, the menus before the app and typing after them, a mouse drag),
