@@ -8,7 +8,7 @@ import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart, folderArgs, withStartFolder } from '../src/app/update.mjs';
+import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart, folderArgs, withStartFolder, refreshLauncher } from '../src/app/update.mjs';
 import { runCommand } from '../src/tools/run.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { openTerm } from './term.mjs';
@@ -420,4 +420,34 @@ test('a restart starts in the folder the window works in now; a folder given at 
   expect(withStartFolder(['--resume', 'x'], { picked: true, cwd: '/p' })).toEqual(['--folder', '/p', '--resume', 'x']);
   // started where coding was typed and not moved: the launcher's own folder
   expect(withStartFolder(['--resume', 'x'], { cwd: '/home' })).toEqual(['--resume', 'x']);
+});
+
+// 10 Oct 2026: a launcher change that came in by /update, or a launcher installed before 9 Oct, was never put
+// in place (only a pull at the launcher's own start replaced it); that Mac needed `bun run install-cli` by hand.
+test('the app puts the repo\'s launcher in place of an old one; a link, another folder\'s launcher, or no launcher is left alone', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'agentic-launcher-'));
+  put(repo, 'terminal/app/agentic-coder-launcher.sh', '#!/bin/sh\n# the newest launcher\nREPO="${AGENTIC_REPO:-__REPO__}"\n');
+  const want = `#!/bin/sh\n# the newest launcher\nREPO="\${AGENTIC_REPO:-${repo}}"\n`;
+  const bin = mkdtempSync(join(tmpdir(), 'agentic-bin-'));
+  const launcher = join(bin, 'coding');
+  // an old one, installed for this repo: replaced whole, still runnable
+  writeFileSync(launcher, `#!/bin/sh\n# from before 9 Oct\nREPO="\${AGENTIC_REPO:-${repo}}"\n`, { mode: 0o755 });
+  expect(refreshLauncher(repo, launcher)).toBe('updated');
+  expect(readFileSync(launcher, 'utf8')).toBe(want);
+  expect(statSync(launcher).mode & 0o111).toBeTruthy();
+  expect(existsSync(`${launcher}.new`)).toBe(false);
+  // the next start: nothing to do
+  expect(refreshLauncher(repo, launcher)).toBe('same');
+  // installed for another folder (a worktree's): left as it is
+  const other = join(bin, 'other');
+  writeFileSync(other, '#!/bin/sh\nREPO="${AGENTIC_REPO:-/somewhere/else}"\n', { mode: 0o755 });
+  expect(refreshLauncher(repo, other)).toBe('installed for another folder');
+  expect(readFileSync(other, 'utf8')).toContain('/somewhere/else');
+  // a link: never followed or replaced
+  const link = join(bin, 'link');
+  symlinkSync(other, link);
+  expect(refreshLauncher(repo, link)).toBe('not a plain file of yours');
+  expect(lstatSync(link).isSymbolicLink()).toBe(true);
+  // run from the source (no launcher)
+  expect(refreshLauncher(repo, null)).toBe('no launcher');
 });
