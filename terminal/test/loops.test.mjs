@@ -1103,6 +1103,100 @@ test.skipIf(needs('pictures', media.mediaTool))('the wizard: a screenshot droppe
   b.m.close();
 });
 
+test('the wizard: a web loop has its own address box at step 1, asked for before it goes on; each run is told the page; its Rules take it back out', () => {
+  const b = board();
+  const sent = [];
+  const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
+  const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
+  const frame = (cols = 124, rows = 38) => { const f = D.drawBoard(bd.state, bd.ui, { cols, rows, now: b.m.now(), linesOf: () => [] }); for (const r of f) expect(D.rowWidth(r)).toBe(cols); return text(f); };
+  B.openSetup(bd.ui, { mode: 'ask' });
+  expect(frame()).not.toMatch(/Page to watch/);
+  press('down', 'down'); // Watch a web page
+  const su = bd.ui.setup;
+  expect(su).toMatchObject({ web: true, url: '', focus: 'text' });
+  let f = frame();
+  expect(f).toMatch(/Page to watch {3}tab: type its address/);
+  expect(f).toMatch(/https:\/\/github\.com\/oven-sh\/bun\/releases/); // the example, faint, until typed
+  expect(f).toMatch(/tab the address/);
+  // No address: enter stays on the step, in the box.
+  press('enter');
+  expect(D.stepOf(su)).toBe('what');
+  expect(su).toMatchObject({ focus: 'url', error: 'Type the address of the page to watch' });
+  press(...'https://bun.sh/blox', 'backspace');
+  B.handlePaste(bd, 'g\n');
+  expect(su.url).toBe('https://bun.sh/blog');
+  expect(su.text).toBe(D.TEMPLATES[2].text); // typing in the box left the words alone
+  press('tab');
+  expect(su.focus).toBe('text');
+  press(...'x', 'backspace');
+  expect(su.text).toBe(''); // typing over the example starts your own words
+  press(...'tell me what is new');
+  expect(D.kindOfSetup(su)).toBe('web');
+  expect(D.setupFields(su, bd.state).message).toBe('tell me what is new — the page to watch: https://bun.sh/blog');
+  expect(frame()).toMatch(/“tell me what is new — the page to watch:[\s\S]{0,140}bun\.sh\/blog”/);
+  press('enter', 'enter', 'enter', 'enter');
+  expect(D.stepOf(su)).toBe('start');
+  press('enter');
+  const add = sent.pop();
+  expect(add).toMatchObject({ op: 'add', fields: { kind: 'web', message: 'tell me what is new — the page to watch: https://bun.sh/blog' } });
+  // Its Rules opened again: the page is back in its own box and row.
+  B.openSetup(bd.ui, { loop: { ...L.parseLoop(`web 30m ${add.fields.message}`), id: 'x', name: 'x', message: add.fields.message, state: 'waiting', runs: [] }, state: bd.state });
+  expect(bd.ui.setup).toMatchObject({ text: 'tell me what is new', url: 'https://bun.sh/blog', web: true });
+  expect(frame()).toMatch(/Page {12}https:\/\/bun\.sh\/blog/);
+  expect(D.setupFields(bd.ui.setup, bd.state).message).toBe(add.fields.message);
+  // Another example: the box goes, and its address with it.
+  B.openSetup(bd.ui, { mode: 'ask' });
+  press('down', 'down', 'tab', ...'https://x.dev', 'down');
+  expect(bd.ui.setup).toMatchObject({ web: false, url: '' });
+  expect(frame()).not.toMatch(/Page to watch/);
+  b.m.close();
+});
+
+test('the wizard: at the last step the words, the page, where, how often and until change in place', () => {
+  const b = board();
+  const sent = [];
+  const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
+  const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
+  const frame = (cols = 124, rows = 38) => { const f = D.drawBoard(bd.state, bd.ui, { cols, rows, now: b.m.now(), linesOf: () => [] }); for (const r of f) expect(D.rowWidth(r)).toBe(cols); return text(f); };
+  press(...'/loop run the tests every 10 min', 'enter');
+  const su = bd.ui.setup;
+  expect(D.stepOf(su)).toBe('start');
+  expect(D.planRows(su)).toEqual(['text', 'where', 'often', 'stop']);
+  let f = frame();
+  expect(f).toMatch(/This loop {4}↑↓ a row · type, or ←→ to change it/);
+  expect(f).toMatch(/Each run {8}run the tests/);
+  expect(f).toMatch(/How often {7}every 10 minutes/);
+  expect(f).toMatch(/Until {11}when I close the window/);
+  // The buttons and the keys still show in the smallest board.
+  const small = frame(D.MIN_COLS, D.MIN_ROWS);
+  expect(small).toMatch(/Start the loop/);
+  expect(small).toMatch(/enter start/);
+  // Its words, typed in place.
+  press('down');
+  press(...' and say what fails');
+  expect(su.text).toBe('run the tests and say what fails');
+  expect(frame()).toMatch(/type its words/);
+  // How often and until, ←→; the row you are on stays yours.
+  press('down', 'down', 'right');
+  expect(su.f.every).toBe('30m');
+  press('down', 'right');
+  expect(su.f).toMatchObject({ runs: '1', stopAt: 'none' });
+  press('enter');
+  expect(sent.pop()).toMatchObject({ op: 'add', fields: { message: 'run the tests and say what fails', every: '30m', runs: '1' } });
+  // A page typed into the words makes it a web loop: its Page row shows, and the row you are on is found again.
+  press(...'/loop check the news every hour', 'enter');
+  const s2 = bd.ui.setup;
+  expect(D.planRows(s2)).toEqual(['text', 'url', 'where', 'often', 'stop']); // "news" reads as the web
+  press('down', 'down');
+  press(...'https://bun.sh/blog');
+  expect(s2.url).toBe('https://bun.sh/blog');
+  press('up', ...' today');
+  expect(s2.text).toBe('check the news today');
+  press('enter');
+  expect(sent.pop()).toMatchObject({ op: 'add', fields: { kind: 'web', message: 'check the news today — the page to watch: https://bun.sh/blog', every: '1h' } });
+  b.m.close();
+});
+
 test('a paste on the board goes in as typed, its line breaks as spaces: it never presses enter', () => {
   const b = board();
   const sent = [];
