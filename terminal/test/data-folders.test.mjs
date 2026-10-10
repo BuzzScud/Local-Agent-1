@@ -136,6 +136,10 @@ test('a long heredoc script is saved as SCRIPTS/…; its failing line comes back
   expect(bad.text).toContain('File "SCRIPTS/1-script.py", line 2');
   expect(bad.text).not.toContain(scriptsDir());
   expect(bad.text).toContain('→ 2 | raise ValueError("bad")');
+  // A longer path that is not there, ending in SCRIPTS/…, means that saved file.
+  expect(resolvePath(dir, '/elsewhere/worktrees/x/SCRIPTS/1-script.py')).toMatchObject({ inside: true, scripts: true, rel: 'SCRIPTS/1-script.py', abs: at.abs });
+  expect(resolvePath(dir, 'other/SCRIPTS/1-script.py').abs).toBe(at.abs);
+  expect(resolvePath(dir, '/elsewhere/SCRIPTS/no-such.py').scripts).toBeUndefined();
   // A project with a SCRIPTS folder of its own keeps it.
   mkdirSync(join(dir, 'SCRIPTS'));
   expect(resolvePath(dir, 'SCRIPTS/1-script.py').abs).toBe(join(dir, 'SCRIPTS', '1-script.py'));

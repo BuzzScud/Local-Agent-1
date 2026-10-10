@@ -231,6 +231,8 @@ test('a command is one row with what it came to at its end: a test run\'s counts
   expect(outcome('grep -c x a.txt', { code: 1, lines: [] }).end).toBe('exit 1');
   // A search that found nothing (tools.mjs noMatch) is no failure: dim, not red.
   expect(outcome('grep x a.txt', { code: 1, lines: [], noMatch: true })).toEqual({ end: 'no lines matched', color: C.dim });
+  // So is a diff that found differences (tools.mjs differs).
+  expect(outcome('diff a b', { code: 1, lines: ['2c2', '< b', '---', '> c'], differs: true })).toEqual({ end: 'files differ · 4 lines', color: C.dim });
   expect(outcome('ls', { code: 0, lines: ['a', 'b', '… 120 lines cut …', 'y', 'z'] }).end).toBe('124 lines');
   expect(outcome('ls', { code: 0, lines: [] }).end).toBe('no output');
   // Words that look like counts in what a command that is no test printed are just its lines.

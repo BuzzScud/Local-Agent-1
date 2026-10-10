@@ -190,6 +190,7 @@ export function outcome(arg, v) {
   if (r.passed == null) { const p = /^\s*(\d+) pass$/m.exec(out); const f = /^\s*(\d+) fail$/m.exec(out); if (p && f) r = { passed: +p[1], failed: +f[1] }; }
   if (r.passed != null && /\btest\b|pytest|jest|vitest|mocha|unittest/.test(String(arg))) return { end: `${r.passed} pass · ${r.failed} fail${v.code ? ` · exit ${v.code}` : ''}`, color: r.failed || v.code ? C.bad : C.ok };
   if (v.noMatch) return { end: 'no lines matched', color: C.dim };
+  if (v.differs) return { end: `files differ · ${plural(n, 'line')}`, color: C.dim };
   if (v.code) return { end: `exit ${v.code}`, color: C.bad };
   return { end: n ? plural(n, 'line') : 'no output', color: C.dim };
 }
