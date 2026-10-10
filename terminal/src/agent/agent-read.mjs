@@ -15,6 +15,7 @@ import { CEILING, CODENAMES, SHARES, chars, createdNames, fixLike, gitChanges, s
 import { CUT, CodeIndex, MARGIN, partKey, sameAsIndexed } from '../tools/codeindex.mjs';
 import { choose, howChosen } from './search.mjs';
 import { MAP_MIN_FILES, PREFETCH_MAX_LINES, RANK_MAX_TOKENS, RANK_SHARE, TESTS_FIRST_MS, filesNamed, tokensOf } from './agent-said.mjs';
+import { noteSlow, slowRun } from './tests-first.mjs';
 
 export class ReadPart {
   // What Read first reads before the first step: the files a request names,
@@ -199,9 +200,19 @@ export class ReadPart {
     const skipped = [];
     let codeChosen = null; // how the code search chose, when not by meaning alone
     // The tests, on a fix-type request: the run a focused path made for this
-    // message, or one now (in a throwaway copy, 60 s at most).
+    // message, or one now (in a throwaway copy, 60 s at most). Not now in a folder
+    // whose run was cut off this week (tests-first.mjs), nor in a loop's run whose
+    // last run ran them (testsFirst false): the model runs them itself.
     if (on.has('tests') && !home && this.testCmd && fixLike(kind, text)) {
-      const run = this.happened?.testRun?.cmd === this.testCmd ? this.happened.testRun : await this.runTestsFirst(signal);
+      const made = this.happened?.testRun?.cmd === this.testCmd ? this.happened.testRun : null;
+      const slow = made || this.testsFirst === false ? null : slowRun(this.cwd, this.testCmd);
+      if (!made && this.testsFirst === false) skipped.push({ from: 'tests', text: this.testCmd, skipped: "the loop's last run ran them" });
+      else if (slow) {
+        skipped.push({ from: 'tests', text: this.testCmd, skipped: `cut off after ${TESTS_FIRST_MS / 1000} s here on ${slow.at.slice(0, 10)}` });
+        if (!this.slowTold) { this.slowTold = true; this.emit('note', { text: `Not running ${this.testCmd} first: it took over ${TESTS_FIRST_MS / 1000} s here, so the model runs it when it needs to.`, tone: 'dim' }); }
+      }
+      const run = made ?? (slow || this.testsFirst === false ? null : await this.runTestsFirst(signal));
+      if (run?.timedOut && !made) noteSlow(this.cwd, this.testCmd, run.secs);
       if (run) {
         const say = (maxChars) => `(Agentic Coder ran the tests before your first step; nothing has changed since.)\n${testReport(this.testCmd, run.out, run.code, { timedOut: run.timedOut, secs: run.secs, maxChars })}`;
         const res = readResults(run.out, run.code);

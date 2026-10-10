@@ -380,7 +380,7 @@ if (opts.print) {
     opts.prompt = spec.prompt;
     const { modeOf } = await import('./agent/permissions.mjs');
     const mode = modeOf(opts.mode) ?? 'ask';
-    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode, steps: Number(spec.steps) || null, rewind: null, points: [], resume: null, confirm: Boolean(spec.confirm) };
+    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode, steps: Number(spec.steps) || null, rewind: null, points: [], resume: null, confirm: Boolean(spec.confirm), testsFirst: spec.testsFirst !== false };
     // A follow-up (the web, terminal/src/web/runner.mjs): the conversation of the run before it, from its transcript.
     if (spec.resume) { try { loop.resume = JSON.parse((await import('node:fs')).readFileSync(spec.resume, 'utf8')).messages ?? null; } catch { /* starts fresh: said by the run's first note */ } }
     // Its copies for undo (rewind.mjs): one session a loop, kept apart from the window's own. Each message
@@ -527,7 +527,7 @@ if (opts.print) {
       answers: process.stdin.isTTY && !loop ? askOnTerminal : null,
       // A loop's run: its window's mode, its questions answered on the loop board, a note typed there sent
       // when the turn ends, and a half-fix kept when fewer tests fail (agent.mjs madeProgress).
-      ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, steering: loop.io.steering, signal: loop.io.signal, keepProgress: true, maxSteps: loop.steps, rewind: loop.rewind, resume: loop.resume } : {}),
+      ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, steering: loop.io.steering, signal: loop.io.signal, keepProgress: true, testsFirst: loop.testsFirst, maxSteps: loop.steps, rewind: loop.rewind, resume: loop.resume } : {}),
       helperJobs,
       // What the app read for it before its first step (the project map, the files a question names) ends " [app]".
       onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },

@@ -228,6 +228,20 @@ test('a fixing loop is done when the app\'s own run of the tests passes, not whe
   m.close();
 });
 
+test('a run whose last run ran the tests does not run them before its first step', () => {
+  const { m, runs, pass } = window();
+  m.add(L.parseLoop('debug'));
+  pass(1000);
+  expect(runs[0].spec.testsFirst).toBe(true); // nothing known yet
+  runs[0].emit({ t: 'end', reason: 'done', final: 'Fixed quoting.', tests: { ok: false, count: 2 } });
+  pass(15_000);
+  expect(runs[1].spec.testsFirst).toBe(false); // the loop knows: 2 failing
+  runs[1].emit({ t: 'end', reason: 'done', final: 'Looked at the export.' }); // it ran no tests
+  pass(15_000);
+  expect(runs[2].spec.testsFirst).toBe(true);
+  m.close();
+});
+
 test('a fixing loop that keeps saying done while the same tests fail stops getting runs and waits for you', () => {
   const { m, runs, pass } = window();
   const a = m.add(L.parseLoop('debug'));
