@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Practice 28 · Sonnet 5.5</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.panel[hidden]{display:none}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+.card.miss{max-width:720px}.card .why{margin:4px 0}.card .ans{margin:6px 0 0;color:var(--mute);font-size:13.5px;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small,td small{display:block;color:var(--mute);font-weight:400;font-size:11.5px;white-space:normal;max-width:260px}
+tfoot th{color:var(--ink);border-bottom:0;border-top:2px solid var(--line)}
+td.num,th.num{text-align:right}
+.ok{color:var(--up)}.no{color:var(--down)}.dim{color:var(--mute)}
+.fill{flex:1;min-height:0;overflow:auto}
+ul.how{margin:0;padding-left:20px}ul.how li{margin:3px 0}code{background:var(--soft);padding:1px 5px;border-radius:4px;font-size:13px}
+@media (max-width:640px){body{overflow:auto}.panel{overflow:visible}.fill{overflow:auto}}
+</style>
+</head>
+<body>
+<header><h1>The 28 practice tasks on Claude Sonnet 5.5</h1><span class="date">10 Oct 2026 · Agentic Coder on the Claude API, the first measurement on Claude</span></header>
+<div class="tabs" role="tablist">
+<button role="tab" aria-selected="true" data-tab="overview">Overview</button>
+<button role="tab" aria-selected="false" data-tab="on">Thinking on</button>
+<button role="tab" aria-selected="false" data-tab="off">Thinking off</button>
+<button role="tab" aria-selected="false" data-tab="misses">The two misses</button>
+<button role="tab" aria-selected="false" data-tab="how">How it was run</button>
+</div>
+<main class="panel" data-panel="overview">
+<p class="verdict"><b>With thinking on, every task passed: 28 of 28, for $1.51 and 3.1 min in all.</b> With thinking off 26 of 28 passed for $0.87: the two misses are the tasks with a vague request, where it should ask before changing anything. Each run is a fresh conversation on a copy of the task's project, scored by the task's own check.</p>
+<div class="cards">
+<div class="card"><div class="k">Thinking on</div><div class="v ok">28 / 28</div><div class="s">$1.51 · 3.1 min · 100 model calls</div></div>
+<div class="card"><div class="k">Thinking off</div><div class="v ">26 / 28</div><div class="s">$0.87 · 2.5 min · 86 model calls</div></div>
+<div class="card"><div class="k">Cost of a task</div><div class="v">$0.05</div><div class="s">thinking on, on average · $0.03 with it off</div></div>
+<div class="card"><div class="k">Time for a task</div><div class="v">7 s</div><div class="s">thinking on, on average · the longest 17 s</div></div>
+<div class="card"><div class="k">Tool errors</div><div class="v">5</div><div class="s">in 259 steps of its own, both runs together</div></div>
+<div class="card"><div class="k">Whole measurement</div><div class="v">$2.38</div><div class="s">56 task runs · 5.6 min of model time</div></div>
+</div>
+<ul class="how">
+<li>What it measures: Agentic Coder as it is on the Claude API (the lean harness, which is its default there: the model decides, the app's own checks off), on the 28 small tasks that grade a model: fixes, features, renames, questions, writing, several files, a big project, vague asks.</li>
+<li>The same set on the local Qwen3.5 9B took minutes a task; here a task takes seconds, and the whole set about three minutes a run.</li>
+<li>Thinking costs about 70% more here ($1.51 against $0.87) and buys the two vague tasks, where the model stops to ask instead of guessing.</li>
+</ul>
+</main>
+<main class="panel" data-panel="on" hidden>
+<p class="verdict">Thinking on: 28 of 28 passed, $1.51, 3.1 min.</p>
+<div class="fill"><table>
+<thead><tr><th>#</th><th>Task</th><th>Result</th><th class="num">Time</th><th class="num">Steps<small>its own</small></th><th class="num">Model calls</th><th class="num">Tool errors</th><th class="num">Reads</th><th class="num">Thinking<small>tokens</small></th><th class="num">Cost</th></tr></thead>
+<tbody><tr><td class="dim">1</td><td>json flag</td><td class="ok">passed</td><td class="num">9 s</td><td class="num">7</td><td class="num">4</td><td class="num">0</td><td class="num">2</td><td class="num">~70</td><td class="num">$0.06</td></tr>
+<tr><td class="dim">2</td><td>fix bug</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">5</td><td class="num">3</td><td class="num no">1</td><td class="num">2</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">3</td><td>add function</td><td class="ok">passed</td><td class="num">7 s</td><td class="num">6</td><td class="num">4</td><td class="num">0</td><td class="num">2</td><td class="num">~43</td><td class="num">$0.06</td></tr>
+<tr><td class="dim">4</td><td>rename</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">3</td><td class="num">4</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">5</td><td>question</td><td class="ok">passed</td><td class="num">3 s</td><td class="num">2</td><td class="num">2</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">6</td><td>question page size</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">7</td><td>question tax</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">8</td><td>rename method</td><td class="ok">passed</td><td class="num">3 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">9</td><td>rename constant</td><td class="ok">passed</td><td class="num">3 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">10</td><td>fix off by one</td><td class="ok">passed</td><td class="num">5 s</td><td class="num">6</td><td class="num">3</td><td class="num">0</td><td class="num">3</td><td class="num">–</td><td class="num">$0.06</td></tr>
+<tr><td class="dim">11</td><td>fix sort text</td><td class="ok">passed</td><td class="num">5 s</td><td class="num">6</td><td class="num">3</td><td class="num no">1</td><td class="num">3</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">12</td><td>feature currency</td><td class="ok">passed</td><td class="num">8 s</td><td class="num">6</td><td class="num">4</td><td class="num">0</td><td class="num">3</td><td class="num">~45</td><td class="num">$0.06</td></tr>
+<tr><td class="dim">13</td><td>feature python</td><td class="ok">passed</td><td class="num">7 s</td><td class="num">5</td><td class="num">4</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">14</td><td>notests perimeter</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">4</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">15</td><td>notests fahrenheit</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">4</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">16</td><td>writing story</td><td class="ok">passed</td><td class="num">5 s</td><td class="num">1</td><td class="num">2</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">17</td><td>writing notes api</td><td class="ok">passed</td><td class="num">6 s</td><td class="num">3</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">18</td><td>writing noncode folder</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">1</td><td class="num">2</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">19</td><td>multifile symbol</td><td class="ok">passed</td><td class="num">10 s</td><td class="num">11</td><td class="num">5</td><td class="num no">1</td><td class="num">5</td><td class="num">–</td><td class="num">$0.07</td></tr>
+<tr><td class="dim">20</td><td>multifile signature</td><td class="ok">passed</td><td class="num">9 s</td><td class="num">10</td><td class="num">4</td><td class="num">0</td><td class="num">5</td><td class="num">–</td><td class="num">$0.07</td></tr>
+<tr><td class="dim">21</td><td>bigfile two places</td><td class="ok">passed</td><td class="num">7 s</td><td class="num">8</td><td class="num">4</td><td class="num">0</td><td class="num">4</td><td class="num">–</td><td class="num">$0.07</td></tr>
+<tr><td class="dim">22</td><td>vague fix the bug</td><td class="ok">passed</td><td class="num">10 s</td><td class="num">9</td><td class="num">5</td><td class="num">0</td><td class="num">4</td><td class="num">~108</td><td class="num">$0.06</td></tr>
+<tr><td class="dim">23</td><td>oneword api</td><td class="ok">passed</td><td class="num">9 s</td><td class="num">7</td><td class="num">5</td><td class="num">0</td><td class="num">3</td><td class="num">~28</td><td class="num">$0.06</td></tr>
+<tr><td class="dim">24</td><td>fix test passing</td><td class="ok">passed</td><td class="num">8 s</td><td class="num">8</td><td class="num">5</td><td class="num">0</td><td class="num">3</td><td class="num">~91</td><td class="num">$0.06</td></tr>
+<tr><td class="dim">25</td><td>bigproject question</td><td class="ok">passed</td><td class="num">7 s</td><td class="num">3</td><td class="num">3</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.04</td></tr>
+<tr><td class="dim">26</td><td>bigproject change</td><td class="ok">passed</td><td class="num">17 s</td><td class="num">11</td><td class="num">6</td><td class="num no">1</td><td class="num">3</td><td class="num">~79</td><td class="num">$0.09</td></tr>
+<tr><td class="dim">27</td><td>negative money</td><td class="ok">passed</td><td class="num">10 s</td><td class="num">6</td><td class="num">3</td><td class="num">0</td><td class="num">3</td><td class="num">~74</td><td class="num">$0.06</td></tr>
+<tr><td class="dim">28</td><td>python multifile</td><td class="ok">passed</td><td class="num">8 s</td><td class="num">7</td><td class="num">4</td><td class="num">0</td><td class="num">3</td><td class="num">~36</td><td class="num">$0.06</td></tr></tbody>
+<tfoot><tr><th></th><th>28 tasks</th><th>28 passed</th><th class="num">3.1 min</th><th class="num">147</th><th class="num">100</th><th class="num">4</th><th class="num">59</th><th class="num">~574</th><th class="num">$1.51</th></tr></tfoot>
+</table></div>
+</main>
+<main class="panel" data-panel="off" hidden>
+<p class="verdict">Thinking off: 26 of 28 passed, $0.87, 2.5 min. Cheaper and a little quicker; the two vague tasks went wrong.</p>
+<div class="fill"><table>
+<thead><tr><th>#</th><th>Task</th><th>Result</th><th class="num">Time</th><th class="num">Steps<small>its own</small></th><th class="num">Model calls</th><th class="num">Tool errors</th><th class="num">Reads</th><th class="num">Thinking<small>tokens</small></th><th class="num">Cost</th></tr></thead>
+<tbody><tr><td class="dim">1</td><td>json flag</td><td class="ok">passed</td><td class="num">7 s</td><td class="num">6</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.01</td></tr>
+<tr><td class="dim">2</td><td>fix bug</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">3</td><td class="num">3</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">3</td><td>add function</td><td class="ok">passed</td><td class="num">6 s</td><td class="num">5</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">4</td><td>rename</td><td class="ok">passed</td><td class="num">3 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">5</td><td>question</td><td class="ok">passed</td><td class="num">3 s</td><td class="num">1</td><td class="num">2</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">6</td><td>question page size</td><td class="ok">passed</td><td class="num">3 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">7</td><td>question tax</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">8</td><td>rename method</td><td class="ok">passed</td><td class="num">3 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">9</td><td>rename constant</td><td class="ok">passed</td><td class="num">3 s</td><td class="num">2</td><td class="num">2</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">10</td><td>fix off by one</td><td class="ok">passed</td><td class="num">6 s</td><td class="num">5</td><td class="num">4</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">11</td><td>fix sort text</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">4</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">12</td><td>feature currency</td><td class="ok">passed</td><td class="num">6 s</td><td class="num">5</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.04</td></tr>
+<tr><td class="dim">13</td><td>feature python</td><td class="ok">passed</td><td class="num">5 s</td><td class="num">5</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">14</td><td>notests perimeter</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">15</td><td>notests fahrenheit</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">3</td><td class="num">3</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">16</td><td>writing story</td><td class="ok">passed</td><td class="num">5 s</td><td class="num">1</td><td class="num">2</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">17</td><td>writing notes api</td><td class="ok">passed</td><td class="num">5 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">18</td><td>writing noncode folder</td><td class="ok">passed</td><td class="num">4 s</td><td class="num">1</td><td class="num">2</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">19</td><td>multifile symbol</td><td class="ok">passed</td><td class="num">7 s</td><td class="num">9</td><td class="num">3</td><td class="num">0</td><td class="num">4</td><td class="num">–</td><td class="num">$0.04</td></tr>
+<tr><td class="dim">20</td><td>multifile signature</td><td class="ok">passed</td><td class="num">8 s</td><td class="num">9</td><td class="num">3</td><td class="num">0</td><td class="num">4</td><td class="num">–</td><td class="num">$0.04</td></tr>
+<tr><td class="dim">21</td><td>bigfile two places</td><td class="ok">passed</td><td class="num">8 s</td><td class="num">6</td><td class="num">5</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.04</td></tr>
+<tr><td class="dim">22</td><td>vague fix the bug</td><td class="no">failed<small>did not ask what the bug is</small></td><td class="num">6 s</td><td class="num">4</td><td class="num">4</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">23</td><td>oneword api</td><td class="ok">passed</td><td class="num">7 s</td><td class="num">6</td><td class="num">4</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">24</td><td>fix test passing</td><td class="no">failed<small>did not ask which test / what is wrong</small></td><td class="num">3 s</td><td class="num">3</td><td class="num">2</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.03</td></tr>
+<tr><td class="dim">25</td><td>bigproject question</td><td class="ok">passed</td><td class="num">6 s</td><td class="num">2</td><td class="num">3</td><td class="num">0</td><td class="num">1</td><td class="num">–</td><td class="num">$0.04</td></tr>
+<tr><td class="dim">26</td><td>bigproject change</td><td class="ok">passed</td><td class="num">13 s</td><td class="num">8</td><td class="num">5</td><td class="num no">1</td><td class="num">3</td><td class="num">–</td><td class="num">$0.05</td></tr>
+<tr><td class="dim">27</td><td>negative money</td><td class="ok">passed</td><td class="num">7 s</td><td class="num">5</td><td class="num">3</td><td class="num">0</td><td class="num">2</td><td class="num">–</td><td class="num">$0.04</td></tr>
+<tr><td class="dim">28</td><td>python multifile</td><td class="ok">passed</td><td class="num">8 s</td><td class="num">7</td><td class="num">3</td><td class="num">0</td><td class="num">3</td><td class="num">–</td><td class="num">$0.04</td></tr></tbody>
+<tfoot><tr><th></th><th>28 tasks</th><th>26 passed</th><th class="num">2.5 min</th><th class="num">112</th><th class="num">86</th><th class="num">1</th><th class="num">38</th><th class="num">~0</th><th class="num">$0.87</th></tr></tfoot>
+</table></div>
+</main>
+<main class="panel" data-panel="misses" hidden>
+<p class="verdict">Both misses were with thinking off, on the two tasks whose request is too vague to act on ("fix the bug", "fix the test"): the check wants the model to ask what is meant, with its Ask tool, before touching anything. With thinking on, the same two tasks passed: it asked (task 22: 1 question; task 24: 1 question).</p>
+<div class="card miss"><div class="k">Task 22 · vague fix the bug · thinking off</div><div class="why">The check said: <b>did not ask what the bug is</b>.</div><p class="ans">You didn't say which bug, and the existing test was already passing. So I fixed the one I found in `slugify`: runs of spaces or dashes produced repeated dashes, like `hello---world`.
+
+It now collapses them into a single dash and strips dashes from the ends. `'  Hello   World -- x! '` gives `hello-wo</p></div>
+<div class="card miss"><div class="k">Task 24 · fix test passing · thinking off</div><div class="why">The check said: <b>did not ask which test / what is wrong</b>.</div><p class="ans">Both tests pass already, so I changed nothing. I ran `npm test` and both tests passed: the CSV one and the one that reads the trades file.
+
+Which test did you mean, or what failure did you see? It may be a different command or a test that isn't in this folder.</p></div>
+<p class="dim" style="margin:0;font-size:13px">Task 24's answer does end with a question, but in words, after it had already run the tests; the check counts only a question asked with the Ask tool before any work.</p>
+</main>
+<main class="panel" data-panel="how" hidden>
+<ul class="how">
+<li>Command: <code>node models/evals/bench/run.mjs --remote claude --remote-model claude-sonnet-5-5 --set 28</code>, run from a worktree of the repo at commit <code>cd7896a</code> (main as of 10 Oct 2026 morning).</li>
+<li>Model: <code>claude-sonnet-5-5</code> on the Claude API, as <code>/remote</code> saved it; each task run twice, with thinking on and off (the bench's default).</li>
+<li>Harness: the lean harness, Agentic Coder's default on Claude (<code>LEAN_AUTO</code>): the model decides, the app's own checks are off; the context helpers Scout, Medic, Oracle and Sentry on; the focused paths on; no memory (a practice run never reads the owner's).</li>
+<li>Cost: from the app's own cost meter per task (input, cache reads and writes, output at the model's prices), added up on each run's summary line.</li>
+<li>The record: two lines in the test record (<code>~/.agentic-coder/tests/record.jsonl</code>), one per thinking setting, shown in the hub's Tests tab; the raw runs in <code>models/remote/results/runs/2026-10-10T13-29-37-919Z/</code> (on the Mac, not in git).</li>
+<li>A smoke run of task 1 alone went first (passed, 11 cents for both settings) before the set was paid for.</li>
+</ul>
+</main>
+<script>
+const tabs=[...document.querySelectorAll('.tabs button')],panels=[...document.querySelectorAll('.panel')];
+const show=(id)=>{tabs.forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===id)));panels.forEach(p=>{p.hidden=p.dataset.panel!==id});try{localStorage.setItem('p28-tab',id)}catch{}};
+tabs.forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
+try{const t=localStorage.getItem('p28-tab');if(t&&tabs.some(b=>b.dataset.tab===t))show(t)}catch{}
+</script>
+</body>
+</html>
