@@ -5,7 +5,7 @@ Every hour, the three changes that would most improve your page's design: hierar
 - Every: 1h
 - Until: no limit
 - Mode: plan
-- Picture: READ the page › SPOT 3 fixes › SAY each one
+- Picture: READ the page › WEIGH the design › PICK 3 fixes › SAY each one
 - Asks: page = index.html
 
 ## Each run

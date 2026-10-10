@@ -516,10 +516,10 @@ export function setupChecks(su, state = {}) {
 
 // ---- the picture of the loop ----
 export const CYCLE = {
-  debug: [['RUN', 'the tests'], ['FIND', 'the cause'], ['FIX', 'the code']],
-  test: [['RUN', 'the tests'], ['READ', 'what fails'], ['TELL', 'you']],
-  web: [['OPEN', 'the page'], ['READ', 'what is new'], ['TELL', 'you']],
-  task: [['LOOK', 'at the folder'], ['DO', 'what you asked'], ['TELL', 'you']],
+  debug: [['RUN', 'the tests'], ['FIND', 'the cause'], ['FIX', 'the code'], ['CHECK', 'they pass']],
+  test: [['RUN', 'the tests'], ['READ', 'what fails'], ['FIND', 'why'], ['TELL', 'you']],
+  web: [['OPEN', 'the page'], ['READ', 'what is new'], ['COMPARE', 'to last run'], ['TELL', 'you']],
+  task: [['LOOK', 'at the folder'], ['DO', 'what you asked'], ['CHECK', 'the result'], ['TELL', 'you']],
 };
 // When the runs fall, as the wizard has it now: [{ when, label }], whether more come, and the end.
 export function runsAhead(su, state = {}, now = Date.now(), most = 5) {
@@ -562,16 +562,20 @@ export function loopPicture(su, state, w, now) {
   // The steps of one run, in boxes, and the way back to the next run under them.
   const cyc = su.picture ?? CYCLE[kind] ?? CYCLE.task;
   const on = Boolean(f.message);
-  const bw = Math.max(12, Math.min(18, Math.floor((w - 2 * ARROW.length - 2) / 3)));
-  const span = 3 * bw + 2 * ARROW.length;
+  // As many boxes as the loop has steps (four, 10 Oct 2026; a loop kept with three still draws three);
+  // the arrows shorten before the boxes do.
+  const n = cyc.length;
+  const arrow = Math.floor((w - (n - 1) * ARROW.length - 2) / n) >= 16 ? ARROW : ' ▶ ';
+  const bw = Math.max(12, Math.min(20, Math.floor((w - (n - 1) * arrow.length - 2) / n)));
+  const span = n * bw + (n - 1) * arrow.length;
   const x = Math.max(0, Math.floor((w - span) / 2));
   const bs = dim(on, 'border');
   const line = (fn) => rows.push(fit([p(' '.repeat(x)), ...cyc.flatMap((c, i) => [...(i ? fn.gap(i) : []), ...fn.box(c, i)])], w));
-  line({ gap: () => [p(' '.repeat(ARROW.length))], box: () => [p(`┌${'─'.repeat(bw - 2)}┐`, bs)] });
-  line({ gap: () => [p(ARROW, dim(on, 'accent'))], box: ([verb], i) => [p('│', bs), p(` ${i + 1} `, 'faint'), p(pad(verb, bw - 5), dim(on, 'accent b')), p('│', bs)] });
-  line({ gap: () => [p(' '.repeat(ARROW.length))], box: ([, what]) => [p('│', bs), p(`   ${pad(cut(what, bw - 6), bw - 6)} `, dim(on, 'text')), p('│', bs)] });
-  const c1 = x + Math.floor(bw / 2), c3 = x + 2 * (bw + ARROW.length) + Math.floor(bw / 2);
-  line({ gap: () => [p(' '.repeat(ARROW.length))], box: () => [p(`└${'─'.repeat(bw - 2)}┘`, bs)] });
+  line({ gap: () => [p(' '.repeat(arrow.length))], box: () => [p(`┌${'─'.repeat(bw - 2)}┐`, bs)] });
+  line({ gap: () => [p(arrow, dim(on, 'accent'))], box: ([verb], i) => [p('│', bs), p(` ${i + 1} `, 'faint'), p(pad(cut(verb, bw - 5), bw - 5), dim(on, 'accent b')), p('│', bs)] });
+  line({ gap: () => [p(' '.repeat(arrow.length))], box: ([, what]) => [p('│', bs), p(`   ${pad(cut(what, bw - 6), bw - 6)} `, dim(on, 'text')), p('│', bs)] });
+  const c1 = x + Math.floor(bw / 2), c3 = x + (n - 1) * (bw + arrow.length) + Math.floor(bw / 2);
+  line({ gap: () => [p(' '.repeat(arrow.length))], box: () => [p(`└${'─'.repeat(bw - 2)}┘`, bs)] });
   const ev = readEvery(f.every, { kind });
   const known = seen('often');
   const waitFor = (secs) => (secs === 3600 ? 'an hour' : secs === 86_400 ? 'a day' : spokenEvery(secs));
@@ -704,7 +708,7 @@ function drawSetup(state, ui, { cols, rows, now }) {
   const wide = cols >= 118;
   su.wide = wide;
   const pic = su;
-  const WD = Math.min(cols - 4, 132);
+  const WD = Math.min(cols - 4, 164); // room for the picture's four boxes at full width
   const X = Math.floor((cols - WD) / 2);
   if (wide) {
     const LW = Math.min(58, Math.floor(WD * 0.44));

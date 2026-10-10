@@ -42,14 +42,14 @@ function windowIn({ projectLoop = true } = {}) {
   return { m, home, project, ui, bd, press, frame, sent, clock, toRow };
 }
 
-test('the fifteen ready-made loops: files that read back, each a loop the rules take, with three steps of its own', () => {
+test('the fifteen ready-made loops: files that read back, each a loop the rules take, with four steps of its own', () => {
   const ready = F.libraryOf({ home: join(root, 'nobody') });
   expect(ready.map((l) => l.name)).toEqual(['Watch the tests', 'Fix until green', 'Build and lint guard', 'Flaky test hunter', 'Watch CI', 'Release watch', 'Dev server check', 'Log watcher', 'Work digest', 'Docs keeper', 'Layout watch', 'Polish until clean', 'Theme guard', 'Accessibility pass', 'Design review']);
   for (const l of ready) {
     expect(l.from).toBe('ready');
     expect(l.about.length).toBeGreaterThan(20);
     expect(['test', 'debug', 'web', 'task']).toContain(l.fields.kind);
-    expect(l.picture).toHaveLength(3);
+    expect(l.picture).toHaveLength(4);
     // With its blanks answered, its rules read: how often, until when, its mode, its cap.
     const values = Object.fromEntries(l.fills.map((x) => [x.key, x.value || 'someone/repo']));
     const read = L.rulesOf({ ...l.fields, message: F.filledText(l.message, values), name: l.name, picture: l.picture });
@@ -67,6 +67,7 @@ test('the fifteen ready-made loops: files that read back, each a loop the rules 
   expect(F.filledText('Open {url}', { url: 'http://x' })).toBe('Open http://x');
   expect(F.filledText('Open {url}', {})).toBe('Open {url}');
   expect(F.pictureOf('CALL the API > COMPARE to last run > TELL you')).toEqual([['CALL', 'the API'], ['COMPARE', 'to last run'], ['TELL', 'you']]);
+  expect(F.pictureOf('OPEN the page › FIND what is new › COMPARE to last run › TELL you')).toEqual([['OPEN', 'the page'], ['FIND', 'what is new'], ['COMPARE', 'to last run'], ['TELL', 'you']]);
   expect(F.pictureOf('only two › parts')).toBe(null);
   // A name typed after /loop: case, spaces and punctuation aside.
   expect(F.findByName(ready, 'watch the tests')?.id).toBe('ready:watch-the-tests');
@@ -112,7 +113,7 @@ test('the Library: /loop with no loop opens it, cards in sections at every size,
   expect(f).toMatch(/Running 0 {3}Library 16/); // the 15 ready-made (Loops 11–15 came 9 Oct 2026) and the project's one
   expect(f).toMatch(/Yours {2}kept for you, in every project[\s\S]*\+ New loop/);
   expect(f).toMatch(/Projects {2}kept in a project, shared through git[\s\S]*TASK {2}Check the export[\s\S]*trades-export · asks once/);
-  expect(f).toMatch(/Ready-made {2}come with the app[\s\S]*TEST {2}Watch the tests[\s\S]*RUN › READ › TELL/);
+  expect(f).toMatch(/Ready-made {2}come with the app[\s\S]*TEST {2}Watch the tests[\s\S]*RUN › READ › FIND › TELL/);
   expect(f).toMatch(/A new loop {2}· {2}the wizard/);
   for (const [cols, rows] of [[96, 30], [124, 38], [200, 60]]) frame(cols, rows);
   // Typing finds one by its name or what it is about; enter loads it.
@@ -129,7 +130,7 @@ test('the Library: /loop with no loop opens it, cards in sections at every size,
   f = frame();
   expect(f).toMatch(/Loaded {4}Release watch {2}ready-made/);
   expect(f).toMatch(/▸ \{page\} {5}https:\/\/bun\.sh\/blog/);
-  expect(f).toMatch(/1 OPEN[\s\S]*2 FIND[\s\S]*3 TELL/);
+  expect(f).toMatch(/1 OPEN[\s\S]*2 FIND[\s\S]*3 COMPARE[\s\S]*4 TELL/);
   // Typing goes in the blank: the message follows it.
   press('^U', ...'https://example.com/news');
   expect(ui.setup.text).toMatch(/^Read https:\/\/example\.com\/news\./);
@@ -187,7 +188,7 @@ test('a project\'s loop asks once, a {repo} is read from git, /loop <name> loads
   let f = frame();
   expect(f).toMatch(/Kept for you · every field/);
   expect(f).toMatch(/▸ Name {9}CI of trades/);
-  expect(f).toMatch(/\{repo\}[\s\S]*Its steps {4}READ the CI run › CHECK each job › TELL/);
+  expect(f).toMatch(/\{repo\}[\s\S]*Its steps {4}READ the CI run › CHECK each job ›\s*│[^\n]*\n[^\n]*│ {17}FIND the cause › TELL red or green/); // four steps: the rest on a second line
   expect(f).toMatch(/\^D Remove[\s\S]*enter Save[\s\S]*\^G Save and start/);
   press('backspace', 'backspace', 'backspace', 'backspace', 'backspace', 'backspace', ...'API');
   for (let i = 0; i < 5; i++) press('down'); // from the name: message, {repo}, its steps, where, how often

@@ -5,7 +5,7 @@ Checks the newest CI run on GitHub every 5 minutes and ends once it has finished
 - Every: 5m
 - Until: 2h
 - Mode: ask
-- Picture: READ the CI run › CHECK each job › TELL red or green
+- Picture: READ the CI run › CHECK each job › FIND the cause › TELL red or green
 - Asks: repo =
 
 ## Each run

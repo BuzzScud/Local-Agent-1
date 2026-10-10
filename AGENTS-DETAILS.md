@@ -520,7 +520,7 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   untouched example starts your own words) · 2 Where (this window's folder and your recent projects, `places()` =
   store.mjs `recentFolders` less the home folder, each saying whether it has tests: `hasTests`; not asked when changing
   a loop) · 3 How often · 4 Until · 5 Start (the warnings, More rules: mode, cap, steps, ask first; Save as). Beside it
-  **Your loop** (`loopPicture`): the message, its three steps in boxes with the way back to the next run, a timeline of
+  **Your loop** (`loopPicture`): the message, its four steps in boxes (any count draws; older 3-step loops still read) with the way back to the next run, a timeline of
   the next runs (`runsAhead`) and where, how, on what and until when; parts not reached yet are faint. Under 118
   columns the two stand one above the other. With the model off Start turns it on (`wake` = the window's /start;
   the snapshot's `model.wake`), and a loop's runs wait while it loads.
@@ -542,7 +542,7 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   ready-made ones; the arrows move over the cards, typing finds one by its name or what it is about, enter loads it
   (`loadInto`: every step filled in, the wizard at Start with a "Loaded" line and a row for each blank) or opens the
   wizard for + New loop; esc in the wizard goes back to the Library. ^E on a kept loop opens **the form** (`drawEditor`,
-  `editorKey`): every field on one page (its name, what each run is told, its blanks, its three steps, where, how often,
+  `editorKey`): every field on one page (its name, what each run is told, its blanks, its four steps, where, how often,
   until, the rules, kept for you or in the project) with the picture beside it; enter saves (a new name replaces the
   old file), ^G saves and starts it, ^D removes it after a y. A loop runs under the name you kept it by.
 - **Tests**: `terminal/test/loop-library.test.mjs` (the ten files and their rules, a file written and read back, kept

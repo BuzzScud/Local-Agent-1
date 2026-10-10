@@ -17,7 +17,7 @@
 //   - Mode: ask · Cap: none · Steps: as /effort · Ask first: off
 //   - Page check: {page}                                      ← the page checked in a hidden browser before each run,
 //                                                               its findings above the message (· who can use it: and that)
-//   - Picture: RUN the tests › READ what fails › TELL you     ← the three boxes in the wizard's picture
+//   - Picture: RUN the tests › READ what fails › FIND why › TELL you  ← the four boxes in the wizard's picture
 //   - Asks: page = <its ready answer>                         ← a {page} in the message, and its ready answer
 //   ## Each run
 //   Read {page}. If there is …                                ← what each run is told
@@ -65,10 +65,11 @@ const fingerprint = (text) => createHash('sha256').update(String(text)).digest('
 export const fillsIn = (message) => [...new Set([...String(message ?? '').matchAll(/\{([a-z][a-z0-9_-]{0,30})\}/gi)].map((m) => m[1]))];
 // A message with its fill-ins answered; one with no answer keeps its {word}.
 export const filledText = (message, values = {}) => String(message ?? '').replace(/\{([a-z][a-z0-9_-]{0,30})\}/gi, (all, k) => (values[k] ?? '').trim() || all);
-// "RUN the tests › READ what fails › TELL you" → [['RUN', 'the tests'], …]; three parts or null.
+// "RUN the tests › READ what fails › FIND why › TELL you" → [['RUN', 'the tests'], …]; four parts (10 Oct
+// 2026, the owner: "i want to see 4 boxes in the loop"), or three as a loop kept before that has; else null.
 export function pictureOf(text) {
   const parts = String(text ?? '').split(/\s*(?:›|>|→)\s*/).map((s) => s.trim()).filter(Boolean);
-  if (parts.length !== 3) return null;
+  if (parts.length !== 4 && parts.length !== 3) return null;
   return parts.map((s) => { const [verb, ...rest] = s.split(/\s+/); return [verb.toUpperCase().slice(0, 10), rest.join(' ').slice(0, 14)]; });
 }
 export const pictureText = (pic) => (pic ? pic.map(([v, w]) => `${v} ${w}`.trim()).join(' › ') : '');
