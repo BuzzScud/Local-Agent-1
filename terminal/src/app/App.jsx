@@ -4,9 +4,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { join } from 'node:path';
-import { existsSync, statSync, writeSync, readdirSync, rmSync, mkdirSync, watch } from 'node:fs';
+import { existsSync, writeSync, mkdirSync, watch } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { Screen, permissionOptions, primeRows, heldRows, MENU_ROWS, menuHeight, shortcutRows, footerParts } from './screen.jsx';
+import { Screen, permissionOptions, primeRows, heldRows, menuHeight, shortcutRows, footerParts } from './screen.jsx';
 import { askState } from './app-ask.mjs';
 import { startTip, START_MIN, START_BIG } from './start.jsx';
 import { lookOf } from './home-looks.jsx';
@@ -22,22 +22,21 @@ import { warmUp, MODELS, DEFAULT_MODEL, thinkingLevel, readEditedAll, modelById,
 import { spendEvents, spendLabel, windowSpend, spendDir } from '../agent/spend.mjs';
 import { usageNow, usageEvents, askLimits, usageDir, adminKey, saveAdminKey, fetchBill, setOwn as setUsageOwn, dollarsOf, monthOf, clearBill } from '../agent/claude-usage.mjs';
 import { webSettings } from './web-form.mjs';
-import { walk } from '../tools/fs.mjs';
-import { mentionAt, selectedText } from './edit-input.mjs';
+import { selectedText } from './edit-input.mjs';
 import { MOUSE_ON, MOUSE_OFF, MOTION_ON, MOTION_OFF, isMouseText } from './mouse.mjs';
 import { botAllowed } from './bot-layer.jsx';
 import { stepsOf } from './rail.jsx';
 import { copyToClipboard } from './clipboard.mjs';
-import { matchCommands, COMMANDS } from './commands.mjs';
+import { COMMANDS } from './commands.mjs';
 import { openMemory } from '../agent/facts.mjs';
 import { claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, sinceLastTime, saveModeOf } from './autosave.mjs';
-import { loadSettings, saveSettings, loadSession, findSession, newSessionId, loadHistory, firstMode, keepsLastMode } from './store.mjs';
+import { loadSettings, saveSettings, newSessionId, loadHistory, firstMode, keepsLastMode } from './store.mjs';
 import { readRecord as sessionRecord } from './sessions.mjs';
 import { runReader } from './loops-board.mjs';
 import { drawBoard as drawLoops } from './loops-draw.mjs';
-import { Rewind, pruneRewind } from './rewind.mjs';
+import { Rewind } from './rewind.mjs';
 import { rulesFor } from './perm-store.mjs';
 import { openMcp } from './mcp-start.mjs';
 import { openInBrowser } from './mcp-auth.mjs';
@@ -57,6 +56,7 @@ import { slashPart } from './app-slash.mjs';
 import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
 import { savedWatch, repairNow } from './saved-services.mjs';
+import { promptMenu } from './app-menu.mjs';
 export { remoteConfOf } from './app-common.mjs';
 let seq = 0;
 
@@ -751,35 +751,12 @@ export function App({ opts, win, onRestart }) {
 
   // Keep a copy of what was shown, for /resume.
   useEffect(() => { sessionRef.current.items = items.filter((it) => it.type !== 'welcome'); }, [items]);
-  const { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey } = runPart(self);
+  const { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeSession, resumeAtStart, jobWake, cleanUpAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey } = runPart(self);
   const sendPrompt = useCallback(sendPromptFn, [agent, cwd, push]);
 
-  // A background job that ended after the reply (agent 'jobs-waiting', tools/jobs.mjs): the model is
-  // told and carries on by itself, as Claude Code does (the owner's pick, 3 Oct 2026). With a reply or
-  // a message on its way, the model off or loading, or /agents running, it waits: the news then goes
-  // with that message, or after /start.
   hookNoteRef.current = (text, tone) => push({ type: 'note', text, tone: tone ?? 'dim' });
-  jobWakeRef.current = () => {
-    if (!agent.idle() || queuedRef.current || modelOffNow() || S.current.starting || S.current.remoteState === 'loading' || agentsRef.current?.running) return;
-    const w = agent.jobWake();
-    if (!w) return;
-    push({ type: 'note', text: `↻ ${w.shown}: the model carries on (esc stops it)`, tone: 'dim' });
-    const ac = new AbortController();
-    abortRef.current = ac;
-    const plan = agent.mode === 'plan' ? '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]' : '';
-    agent.send(`${w.text}${plan}`, { signal: ac.signal, shown: w.shown, wake: true });
-  };
-
-  // /rewind's first copy of this folder, and the clean-up of copies no
-  // conversation has used for a week, both in the background.
-  useEffect(() => {
-    const rw = rewindRef.current;
-    if (!rw) return;
-    rw.warm(cwd).catch(() => {});
-    pruneRewind(HOME).catch(() => {});
-    // Pictures pasted with ctrl+v are kept a week, then let go.
-    try { const dir = join(HOME, 'attachments'); for (const f of readdirSync(dir)) { const p = join(dir, f); if (Date.now() - statSync(p).mtimeMs > 7 * 86_400_000) rmSync(p, { force: true }); } } catch { /* none yet */ }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  jobWakeRef.current = jobWake;
+  useEffect(cleanUpAtStart, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(agentEvents, [agent, push, saveNow, sendPrompt]);
 
   // The Arena wants the memory (it runs Gemma and Qwen one model at a time): once no
@@ -823,44 +800,6 @@ export function App({ opts, win, onRestart }) {
   // /weights: the viewer's little server, started once per window and closed with it.
   const weightsRef = useRef(null);
   useEffect(resumeAtStart, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // What a saved conversation shows again: not an earlier window's own lines (its resume line, the
-  // mode it started in, the remote it connected to: this window says its own), and a note only the
-  // first time (7 Oct 2026: a resumed conversation showed "resumed" twice and a note each turn).
-  function replayed(items) {
-    const seen = new Set();
-    return items.map(({ key, ...rest }) => rest).filter((x) => {
-      if (x.type === 'divider' && /^resumed: /.test(x.text ?? '')) return false;
-      if (x.type === 'startnotes') return false;
-      if (x.type !== 'note') return true;
-      if (/^Started in .*, as the last window left it|^On the remote: /.test(x.text ?? '')) return false;
-      if (seen.has(x.text)) return false;
-      seen.add(x.text);
-      return true;
-    });
-  }
-  function resumeSession(id) {
-    try {
-      let s;
-      try { s = loadSession(cwd, id); } catch (e) {
-        // Saved under another folder (the window had moved there): opened from there, and the window works there again.
-        s = e.code === 'ENOENT' ? findSession(id) : null;
-        if (!s) throw e;
-        if (s.cwd && s.cwd !== cwd && existsSync(s.cwd)) {
-          agent.moveTo(s.cwd);
-          push({ type: 'note', text: `Opened from ${short(s.cwd)}, where it was saved: this window works there again.`, tone: 'dim' });
-        }
-      }
-      agent.messages = s.messages;
-      agent.messages[0] = { role: 'system', content: agent.messages[0].content };
-      sessionRef.current = { id: s.id, title: s.title, items: s.items ?? [], open: s.open ?? [] };
-      setOpenGroups(new Set(s.open ?? []));
-      rewindRef.current?.setSession(s.id);
-      agent.startSession('resume').catch(() => {});
-      push({ type: 'divider', text: `resumed: ${s.title}` }, ...replayed(s.items ?? []));
-      if (s.mode) setMode(s.mode);
-    } catch (e) { push({ type: 'note', text: `Could not open that conversation: ${e.message}`, tone: 'error' }); }
-  }
   const quit = useCallback(quitFn, [exit, saveNow, agent]);
   const updateNow = useCallback(updateNowFn, [effort, exit, model, onRestart, opts.ctx, opts.flows, opts.url, opts.way, push, saveNow, thinking]);
   const interrupt = useCallback(interruptFn, []);
@@ -877,40 +816,7 @@ export function App({ opts, win, onRestart }) {
   const inputMode = input.value.startsWith('!') ? 'bash' : 'prompt';
   let menu = null;
   const btwShown = Boolean(btw && !perm && !answerWait);
-  if (!perm && !picker && !btwShown && input.value !== menuClosedFor) {
-    // The rows the / menu may take: 18 as ever, and more in a window with room for them (the box, the
-    // footer and their gaps take 5; the box's edge is the window's last line). Under the start page while
-    // it is still live, the rows it can give up and still show its bot (2 + START_BIG and its blank line;
-    // start.room, below, shrinks it to fit).
-    const fits = holdRef.current ? (rows ?? 40) - 7 - heldRows(items, measure.current) - 2 - START_BIG : (rows ?? 24) - 5;
-    const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
-    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined), remote: Boolean(model.remote), claude: Boolean(claudeModel) }) : [];
-    if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
-    // /shop: lists that MCP server's prompts (typed in full they run: /shop:review-pr 57).
-    const slashServer = inputMode === 'prompt' && mcpHub ? /^\/([A-Za-z0-9][A-Za-z0-9-]{0,31}):(\S*)$/.exec(input.value) : null;
-    if (!menu && slashServer && mcpHub.offers().prompts.includes(slashServer[1])) {
-      const q = slashServer[2].toLowerCase();
-      const list = offerList('prompts', slashServer[1]).filter((p) => p.name.toLowerCase().includes(q));
-      if (list.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...list.map((p) => slashServer[1].length + p.name.length + 4)), items: list.map((p) => ({ label: `/${slashServer[1]}:${p.name}`, desc: `${p.description ?? p.title ?? 'a prompt of this server'}${p.arguments?.length ? ` · ${p.arguments.map((a) => `${a.name}${a.required ? '' : '?'}`).join(' ')}` : ''}`, value: `${slashServer[1]}:${p.name}`, takesArg: Boolean(p.arguments?.length) })) };
-    }
-    const at = mentionAt(input);
-    // @shop: lists that MCP server's resources; @sh offers the servers that have them.
-    const offers = mcpHub && at ? mcpHub.offers().resources : [];
-    const atServer = at ? /^([A-Za-z0-9][A-Za-z0-9-]{0,31}):(.*)$/.exec(at.query) : null;
-    if (!menu && atServer && offers.includes(atServer[1])) {
-      const q = atServer[2].toLowerCase();
-      const list = offerList('resources', atServer[1]).filter((r) => `${r.uri} ${r.name ?? ''}`.toLowerCase().includes(q)).slice(0, 50);
-      const lw = Math.min(60, Math.max(16, ...list.map((r) => atServer[1].length + String(r.uri).length + 4)));
-      menu = { kind: 'files', pad: lw, at, items: list.length ? list.map((r) => ({ label: `@${atServer[1]}:${r.uri}`, desc: r.name ?? r.title ?? '', value: `${atServer[1]}:${r.uri}` })) : [{ label: `@${atServer[1]}:`, desc: mcpLists.current.resources[atServer[1]] === null ? 'loading its resources…' : 'it lists no resource that matches', value: `${atServer[1]}:` }] };
-    }
-    if (!menu && at && !atServer) for (const s of offers.filter((n) => n.toLowerCase().startsWith(at.query.toLowerCase()))) (menu ??= { kind: 'files', pad: 20, at, items: [] }).items.push({ label: `@${s}:`, desc: `the resources of your MCP server ${s}`, value: `${s}:`, open: true });
-    if (!menu && at) {
-      if (!filesRef.current) { filesRef.current = []; let n = 0; for (const f of walk(cwd)) { if (!f.dir) filesRef.current.push(f.path); if (++n > 5000) break; } }
-      const q = at.query.toLowerCase();
-      const hits = filesRef.current.filter((f) => f.toLowerCase().includes(q)).sort((a, b) => (a.toLowerCase().startsWith(q) ? 0 : 1) - (b.toLowerCase().startsWith(q) ? 0 : 1) || a.length - b.length).slice(0, 50);
-      if (hits.length) menu = { kind: 'files', pad: 0, at, items: hits.map((f) => ({ label: `@${f}`, value: f })) };
-    }
-  }
+  if (!perm && !picker && !btwShown && input.value !== menuClosedFor) menu = promptMenu(self, { inputMode, claudeModel, offerList, filesRef });
   const menuIdx = menu ? Math.min(menuIndex, menu.items.length - 1) : 0;
   useEffect(() => { setMenuIndex(0); setMenuClosedFor((v) => (v === input.value ? v : null)); }, [input.value]);
   usePaste(onPaste);

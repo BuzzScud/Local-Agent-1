@@ -2,16 +2,18 @@
 // updating, a side question, a shell line, the doctor, /agents and /loop's board.
 // The functions are the App's own, moved here word for word: the App's names (and App.jsx's) are read through
 // self, which App makes at each render, so a function sees the values of the render that made it.
-import { existsSync, statfsSync } from 'node:fs';
+import { existsSync, statfsSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { SESSION_MARK } from '../agent/prompt.mjs';
 import { terminalApp } from '../tools/screen.mjs';
-import { battleHold, runningServer, ModelServer, freeWithHandBack, stopServer, chooseContext, availableBytes, scanServers, contextCheck, hasDraft, searchBytes, LINGER_SECS, warmUp, stopIdleServers, remoteLabel, thinkingLevel, serverBinOf, modelPath, onDiskBytes, engineOf, visionPath, needBytes, DEFAULT_REMOTE, keyStore, remoteRisk } from '../../../models/index.mjs';
+import { battleHold, runningServer, ModelServer, freeWithHandBack, stopServer, chooseContext, availableBytes, scanServers, contextCheck, hasDraft, searchBytes, LINGER_SECS, warmUp, stopIdleServers, remoteLabel, thinkingLevel, serverBinOf, modelPath, onDiskBytes, engineOf, visionPath, needBytes, DEFAULT_REMOTE, keyStore, remoteRisk, HOME } from '../../../models/index.mjs';
 import { windowSpend } from '../agent/spend.mjs';
 import { updateWindow } from './copies.mjs';
 import { kindWord } from './remote-form.mjs';
 import { runCommand } from '../tools/run.mjs';
-import { listSessions } from './store.mjs';
+import { listSessions, loadSession, findSession } from './store.mjs';
+import { pruneRewind } from './rewind.mjs';
 import { newUi as newLoopsUi, openFromChat as openLoopsFrom, showReply as loopsReply, handleKey as loopsHandleKey, handlePaste as loopsHandlePaste } from './loops-board.mjs';
 import { saveTrust } from './trust.mjs';
 import { reloadMcp } from './mcp-start.mjs';
@@ -28,6 +30,22 @@ import { demoDriver } from '../agent/agents-demo.mjs';
 import { canResize, growTo, resizeSeq } from './agents-window.mjs';
 import { expandMentions, pick, PLACEHOLDERS, VERBS, IDLE, END_WORDS, exited, letGo, short, home } from './app-common.mjs';
 import { compactText, shortName, trayItems } from './attach.mjs';
+
+// What a saved conversation shows again: not an earlier window's own lines (its resume line, the
+// mode it started in, the remote it connected to: this window says its own), and a note only the
+// first time (7 Oct 2026: a resumed conversation showed "resumed" twice and a note each turn).
+function replayed(items) {
+  const seen = new Set();
+  return items.map(({ key, ...rest }) => rest).filter((x) => {
+    if (x.type === 'divider' && /^resumed: /.test(x.text ?? '')) return false;
+    if (x.type === 'startnotes') return false;
+    if (x.type !== 'note') return true;
+    if (/^Started in .*, as the last window left it|^On the remote: /.test(x.text ?? '')) return false;
+    if (seen.has(x.text)) return false;
+    seen.add(x.text);
+    return true;
+  });
+}
 
 export function runPart(self) {
   // fromServer: the message is a prompt of one of your MCP servers (/server:prompt), its own words.
@@ -428,6 +446,29 @@ export function runPart(self) {
     self.stopFnRef.current();
   };
 
+  const resumeSession = (id) => {
+    try {
+      let s;
+      try { s = loadSession(self.cwd, id); } catch (e) {
+        // Saved under another folder (the window had moved there): opened from there, and the window works there again.
+        s = e.code === 'ENOENT' ? findSession(id) : null;
+        if (!s) throw e;
+        if (s.cwd && s.cwd !== self.cwd && existsSync(s.cwd)) {
+          self.agent.moveTo(s.cwd);
+          self.push({ type: 'note', text: `Opened from ${short(s.cwd)}, where it was saved: this window works there again.`, tone: 'dim' });
+        }
+      }
+      self.agent.messages = s.messages;
+      self.agent.messages[0] = { role: 'system', content: self.agent.messages[0].content };
+      self.sessionRef.current = { id: s.id, title: s.title, items: s.items ?? [], open: s.open ?? [] };
+      self.setOpenGroups(new Set(s.open ?? []));
+      self.rewindRef.current?.setSession(s.id);
+      self.agent.startSession('resume').catch(() => {});
+      self.push({ type: 'divider', text: `resumed: ${s.title}` }, ...replayed(s.items ?? []));
+      if (s.mode) self.setMode(s.mode);
+    } catch (e) { self.push({ type: 'note', text: `Could not open that conversation: ${e.message}`, tone: 'error' }); }
+  };
+
   // Continue or resume a saved session given on the command line.
   const resumeAtStart = () => {
     const id = self.opts.resumeId ?? (self.opts.continueLast ? listSessions(self.cwd)[0]?.id : null);
@@ -440,6 +481,32 @@ export function runPart(self) {
     if (self.agent.userHooks?.error) self.push({ type: 'note', text: `Your hooks: ${self.agent.userHooks.error}. /hooks shows them.`, tone: 'warn' });
     const go = () => { if (self.starting) { self.queuedRef.current = self.opts.prompt; self.setQueued(self.opts.prompt); } else self.sendPrompt(self.opts.prompt); };
     if (self.opts.prompt) { if (!id && self.agent.userHooks?.has('SessionStart')) started.then(go); else go(); }
+  };
+
+  // A background job that ended after the reply (agent 'jobs-waiting', tools/jobs.mjs): the model is
+  // told and carries on by itself, as Claude Code does (the owner's pick, 3 Oct 2026). With a reply or
+  // a message on its way, the model off or loading, or /agents running, it waits: the news then goes
+  // with that message, or after /start.
+  const jobWake = () => {
+    if (!self.agent.idle() || self.queuedRef.current || self.modelOffNow() || self.S.current.starting || self.S.current.remoteState === 'loading' || self.agentsRef.current?.running) return;
+    const w = self.agent.jobWake();
+    if (!w) return;
+    self.push({ type: 'note', text: `↻ ${w.shown}: the model carries on (esc stops it)`, tone: 'dim' });
+    const ac = new AbortController();
+    self.abortRef.current = ac;
+    const plan = self.agent.mode === 'plan' ? '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]' : '';
+    self.agent.send(`${w.text}${plan}`, { signal: ac.signal, shown: w.shown, wake: true });
+  };
+
+  // /rewind's first copy of this folder, and the clean-up of copies no
+  // conversation has used for a week, both in the background.
+  const cleanUpAtStart = () => {
+    const rw = self.rewindRef.current;
+    if (!rw) return;
+    rw.warm(self.cwd).catch(() => {});
+    pruneRewind(HOME).catch(() => {});
+    // Pictures pasted with ctrl+v are kept a week, then let go.
+    try { const dir = join(HOME, 'attachments'); for (const f of readdirSync(dir)) { const p = join(dir, f); if (Date.now() - statSync(p).mtimeMs > 7 * 86_400_000) rmSync(p, { force: true }); } } catch { /* none yet */ }
   };
 
   const quitFn = async () => {
@@ -723,5 +790,5 @@ export function runPart(self) {
     if (ch && !key.ctrl && !key.meta && !key.return && !key.tab) { self.setAgentsView('chat'); return false; }
     return true;
   };
-  return { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey };
+  return { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeSession, resumeAtStart, jobWake, cleanUpAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey };
 }
