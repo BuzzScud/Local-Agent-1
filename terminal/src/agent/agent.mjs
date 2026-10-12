@@ -33,6 +33,8 @@ import { StepPart } from './agent-step.mjs';
 import { UndoPart } from './agent-undo.mjs';
 import { ModelPart } from './agent-model.mjs';
 import { WorkPart } from './agent-work.mjs';
+import { NotesPart } from './agent-notes.mjs';
+import { StartPart } from './agent-start.mjs';
 
 export class Agent extends EventEmitter {
   // whenFull: what happens when the conversation fills the model's memory.
@@ -613,7 +615,7 @@ export class Agent extends EventEmitter {
 // The Agent's other methods are in the agent-*.mjs files beside this one, a part each (7 Oct 2026: this file
 // had grown to 5,221 lines, more than a model can read at once). They are put on Agent.prototype here, as
 // they were written (getters stay getters), so every this.x() and every test works as before.
-for (const part of [McpPart, MemoryPart, ReadPart, PagesPart, ChecksPart, RoomPart, StepPart, UndoPart, ModelPart, WorkPart]) {
+for (const part of [McpPart, MemoryPart, ReadPart, PagesPart, ChecksPart, RoomPart, StepPart, UndoPart, ModelPart, WorkPart, NotesPart, StartPart]) {
   for (const [name, d] of Object.entries(Object.getOwnPropertyDescriptors(part.prototype))) {
     if (name === 'constructor') continue;
     if (Object.hasOwn(Agent.prototype, name)) throw new Error(`Agent.${name} is in two places`);

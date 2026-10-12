@@ -1,77 +1,37 @@
 // The Agent's loop (agent.mjs): one message worked through, step after step, until it answers.
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
 import { endpointOf } from '../../../models/index.mjs';
-import { readInstructions, replaceInstructionBlock } from './instructions.mjs';
-import { ASK_NOTE, questionLines, sameStepNote, wantsQuestions } from './questions.mjs';
+import { questionLines, sameStepNote } from './questions.mjs';
 import { casesBack, isTestPath, untested } from './cases.mjs';
 import { oldSteps, parseArgs } from './tools.mjs';
 import { readFileSync } from 'node:fs';
 import { isReadOnly } from './permissions.mjs';
 import { isHomeFolder } from './prompt.mjs';
-import { kindText, sortBug } from './rules.mjs';
-import { LOOK_BACKS, LOOK_NOTE, LOOK_NOTE_DATA, lookBackNote } from './look.mjs';
+import { sortBug } from './rules.mjs';
+import { LOOK_BACKS, lookBackNote } from './look.mjs';
 import { pageReadOn } from './page-read.mjs';
-import { pickSkill, readSkills, skillNote } from './prompt-files.mjs';
-import { mathIndex, mathNotes, sortMath } from './expertise.mjs';
-import { briefNote, designNotes, designSettings, isDesignRequest, mixTurn, pickCards } from './design.mjs';
-import { pickPieces, studioNotes, usesReact, pickLookFor } from './studio.mjs';
-import { lookCard } from './library.mjs';
+import { pickSkill, readSkills } from './prompt-files.mjs';
+import { mathIndex, sortMath } from './expertise.mjs';
 import { pagesToCheck } from '../flows/layoutcheck.mjs';
 import { basename, join, relative } from 'node:path';
-import { isSmallTalk, routeByRules, runFlows } from '../flows/index.mjs';
-import { LEAN_NOTE } from './way.mjs';
+import { isSmallTalk, routeByRules } from '../flows/index.mjs';
 import { STOP_BACKS } from './user-hooks.mjs';
 import { appCodeChanged } from './self.mjs';
 import { clarify } from '../flows/clarify.mjs';
 import { isFollowUp, wantsDesktop } from '../flows/words.mjs';
-import { checkInText } from '../flows/fix.mjs';
 import { SERVICE_REPLY } from './room.mjs';
-import { tallies } from '../flows/llm.mjs';
 import { isMemoryRequest } from './memory.mjs';
-import { alwaysRules } from './facts.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
-import { describePictures, describedNote } from './helper-models.mjs';
-import { MCP_TOOL, callHint, isMcpCall, mcpCallInText, requestHits, requestNote } from './mcp.mjs';
-import { BYPASS_OPEN, CALL_MARK, CORRECTS, EXPLAIN, LAYOUT_ROUNDS, LOOK_TOOLS, LOST_CALL, MAX_CALLS, MCP_BACKS, MENTIONS_WALL, READ_TIP, SAME_STEP, SELF_OPEN, aboutTheCode, announcesNextStep, asksForWork, commandInText, asksTheUser, asksTheUserDirectly, auto, bareCallInText, beforeCall, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, cutCallNote, emptyCutNote, kTok, keptPart, keptWriteNote, keyLines, lostCall, safeArgs, searchWords, tokensOf, toolCallInText, webAddresses, writesCodeInstead } from './agent-said.mjs';
+import { MCP_TOOL, callHint, isMcpCall, mcpCallInText } from './mcp.mjs';
+import { CALL_MARK, EXPLAIN, LAYOUT_ROUNDS, LOOK_TOOLS, LOST_CALL, MAX_CALLS, MCP_BACKS, MENTIONS_WALL, READ_TIP, SAME_STEP, aboutTheCode, announcesNextStep, asksForWork, commandInText, asksTheUser, asksTheUserDirectly, auto, bareCallInText, beforeCall, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, cutCallNote, emptyCutNote, kTok, keptPart, keptWriteNote, keyLines, lostCall, safeArgs, searchWords, tokensOf, toolCallInText, writesCodeInstead } from './agent-said.mjs';
 
 export class WorkPart {
   async work(text, { signal, images, wake = false } = {}) {
-    // A hub save applies between tasks; in-flight requests keep their snapshot.
-    const instructions = readInstructions();
-    this.workingInstructions = instructions.sections;
-    const before = this.messages[0].content;
-    const after = replaceInstructionBlock(before, instructions.sections);
-    if (after !== before) {
-      this.setSystem(after);
-      this.ctxUsed += tokensOf(after) - tokensOf(before);
-      this.emit('note', { text: 'Updated working instructions loaded.', tone: 'dim' });
-    }
-    // A save of AGENTS.md, TOOLS.md or SKILLS.md (the hub's Prompt files) applies between tasks too.
-    // Not in a helper: its one task keeps the prompt it was handed (the parent's, with its part).
-    if (!this.isHelper && this.promptFilesChanged()) {
-      const was = this.rulesSetUsed;
-      this.refreshNotes();
-      this.emit('note', { text: was === this.rulesSetUsed ? 'Updated prompt files loaded (AGENTS.md, TOOLS.md, SKILLS.md).' : this.setNote(), tone: 'dim' });
-    }
+    this.loadChanges();
     this.busy = true;
     const started = Date.now();
     const turnStart = this.messages.length;
-    // A picture this model cannot see, and a Pictures helper on the service: it describes
-    // the picture first, and the words go in its place (/subagents, 2 Oct 2026).
-    const lookUse = images?.length && !this.canSee ? this.helperUse('pictures') : undefined;
-    if (lookUse) {
-      this.emit('note', { text: `Pictures: ${lookUse.model} looks at ${images.length === 1 ? 'the picture' : `the ${images.length} pictures`} first…`, tone: 'dim' });
-      try {
-        const d = await describePictures({ url: this.url, use: lookUse, images, question: text, signal });
-        this.emit('note', { text: `Pictures: ${lookUse.model} described ${images.length === 1 ? 'it' : 'them'} (${d.secs.toFixed(0)} s): ${d.text.replace(/\s+/g, ' ').slice(0, 160)}${d.text.length > 160 ? '…' : ''}`, tone: 'dim' });
-        text = `${text}\n\n${describedNote(images, lookUse.model, d.text)}`;
-      } catch (e) {
-        if (signal?.aborted) throw e;
-        this.emit('note', { text: `Pictures: ${lookUse.model} could not look (${e.message}); the message goes with a line saying a picture was attached.`, tone: 'warn' });
-        text = `${text}\n\n(The user attached ${images.length === 1 ? 'a picture' : `${images.length} pictures`} (${images.map((i) => i.path).join(', ')}), but this model is not looking at pictures now.)`;
-      }
-      images = undefined;
-    }
+    ({ text, images } = await this.picturesFirst(text, images, signal));
     this.messages.push({ role: 'user', content: text, ...(images?.length ? { images } : {}) });
     if (images?.length) this.ctxUsed += images.length * IMAGE_TOKENS;
     if (this.happened) this.happened.message = this.messages.at(-1);
@@ -143,39 +103,8 @@ export class WorkPart {
     // (The model that decides calls them itself: Rename and TestFirst.)
     this.carried = null;
     if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length && !skill) {
-      // Every focused call's tokens, for the done line (the loop counts its own).
-      const counted = { steps: 0, tokens: 0, thinkTokens: 0 };
-      const tally = ({ tokens, thought }) => { counted.steps++; counted.tokens += tokens + thought; counted.thinkTokens += thought; this.stats.outTokens += tokens + thought; };
-      tallies.add(tally);
-      const fctx = this.flowContext(signal);
-      try {
-        const r = await runFlows(fctx, text);
-        if (r) {
-          this.emit('flow-step', null);
-          this.messages.push({ role: 'assistant', content: r.summary });
-          this.emit('assistant', { text: r.summary, reasoning: '', secs: 0, thinkSecs: 0, tokens: 0, final: true });
-          this.busy = false;
-          this.happened.flow = { done: r.done, summary: String(r.summary ?? '').slice(0, 300) };
-          const reason = signal?.aborted ? 'interrupted' : r.declined ? 'declined' : 'done';
-          if (reason === 'interrupted') this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
-          tallies.delete(tally);
-          this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, flow: true, done: r.done, steps: counted.steps, reads: 0, thinkTokens: counted.thinkTokens, tokens: counted.tokens });
-          return reason;
-        }
-        tallies.delete(tally);
-        this.carriedNotes = [...fctx.notes]; // notes a path read before it handed over go with the first step
-      } catch (e) {
-        tallies.delete(tally);
-        this.carriedNotes = [...fctx.notes]; // notes a path read before it gave up go with the first step
-        this.emit('flow-step', null);
-        if (signal?.aborted || e.name === 'AbortError') {
-          this.busy = false;
-          this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
-          this.emit('turn-end', { reason: 'interrupted', secs: (Date.now() - started) / 1000 });
-          return 'interrupted';
-        }
-        this.emit('note', { text: `The focused path failed (${e.message}); working step by step instead.`, tone: 'warn' });
-      }
+      const ended = await this.focusedPaths(text, started, signal);
+      if (ended) return ended;
     }
     // kindFor: what a /agents step is (agents-driver.mjs), so its words are not sorted again.
     const kind = follow || decides ? undefined : this.kindFor ?? this.lastRoute?.kind ?? routeByRules(text)?.kind;
@@ -223,125 +152,8 @@ export class WorkPart {
       type: kind ?? (follow ? this.lastRoute?.kind : routeByRules(text)?.kind) ?? null, skillSlug: skill?.slug ?? null,
       // A helper agent of yours with a model of its own (runHelper): every step on that model.
       ...(this.ownUse ? { use: this.ownUse } : {}) };
-    if (asksForWork(this.turn.request) && wantsDesktop(this.turn.request)) this.desktopAsked = true;
-    // A request about what one of the user's MCP servers reaches: a line naming its tools (mcp.mjs requestNote).
-    // Not for a message that brings a server's data with it (a resource you attached: @server:uri), or
-    // that is a server's own prompt (/server:prompt).
-    const mcpSays = this.mcpFrozen && request?.role === 'user' && typeof request.content === 'string' && !this.fromServer && !/<resource server="/.test(text) ? requestNote(text, this.mcpEntries(), { listed: this.mcpListed() }) : '';
-    if (mcpSays) this.turn.mcp = { request, notes: mcpSays, hits: requestHits(text, this.mcpEntries(), { listed: this.mcpListed() }) };
-    // Look first (look.mjs): a minimum of looking before the answer, on every task that goes step
-    // by step here; not a follow-up (it continues a turn that already looked), not in the home
-    // folder (a general question there needs no files), not for a helper (it is part of the looking),
-    // not for a request that names one of your MCP servers (its answer is there, not in the project).
-    // A folder that is not a code project (folder.mjs, 4 Oct 2026): what it says about itself (its
-    // README, its manifest) goes with the first request there, and the names the request uses are
-    // matched against it; when the folder does not settle which one is meant, you are asked.
-    const folder = !follow && !this.isHelper && request?.role === 'user' && typeof request.content === 'string' ? await this.folderNotes(text, request, signal) : null;
-    // Your standing rules ([always] facts) with the request itself, on a model on another machine: they are
-    // in the instructions' Memory lines too, far above a long conversation (4 Oct 2026: a 29-step run's
-    // answer went against "explain simply… no file names or code unless asked").
-    if (this.model?.remote && this.memory && !this.isHelper && request?.role === 'user' && typeof request.content === 'string') {
-      let rules = [];
-      try { rules = alwaysRules(this.cwd, { home: this.memory.home ?? this.home }); } catch { /* no memory to read */ }
-      if (rules.length) this.turn.rules = { request, notes: `Your standing rules, for this answer too:\n${rules.map((r) => `- ${r}`).join('\n')}` };
-    }
-    // A request that asks to be asked: the questions as choices in the window (questions.mjs ASK_NOTE).
-    if (!this.isHelper && request?.role === 'user' && typeof request.content === 'string' && wantsQuestions(text)) this.turn.asks = { request, notes: ASK_NOTE };
-    // A message that corrects it: Remember what was wrong, when it will matter again (rememberHint).
-    if (request?.role === 'user' && typeof request.content === 'string' && CORRECTS.test(String(text).trim())) {
-      const hint = this.rememberHint('corrected');
-      if (hint) this.turn.fixNote = { request, notes: hint.replace(/^\(|\)$/g, '') };
-    }
-    const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
+    const lookFloor = await this.turnNotes(text, request, signal, { follow, kind, bug, skill, math });
     let lookBacks = 0;
-    // said once a session, and again only after it was off (7 Oct 2026: it was printed every turn)
-    if (!this.isHelper && !follow) { if (this.lean && !this.leanSaid) this.emit('note', { text: LEAN_NOTE, tone: 'dim', fold: true }); this.leanSaid = this.lean; }
-    if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.look = { request, notes: folder?.kind === 'data' ? LOOK_NOTE_DATA : LOOK_NOTE };
-      this.emit('note', { text: `Looking first: at least ${lookFloor} s of searching and reading before it answers (/effort Look first).`, tone: 'dim', fold: true });
-    }
-    if (bug && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.bug = { request, steps: kindText(bug), kind: bug };
-      // A check the request names scores the change instead of the whole suite
-      // (the bug steps, step 7); for a kind the suite cannot see, with no
-      // check named, the suite is not run at all — it would only mislead.
-      this.turn.check = checkInText(text);
-    }
-    if (skill && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.skill = { request, notes: skillNote(skill), name: skill.name };
-      this.turn.fence = new Set(skill.fence ?? []);
-      this.ctxUsed += tokensOf(this.turn.skill.notes);
-      const fence = skill.fence?.length ? `; fence: ${skill.fence.join(', ')}` : '';
-      this.emit('note', { text: `Skill: ${skill.name} (SKILLS.md; its words here: ${skill.matched.join(', ')}${fence}; ≈${tokensOf(this.turn.skill.notes).toLocaleString('en-US')} tokens).`, tone: 'dim', skill: skill.name });
-    }
-    // A check the fix path made and what the browser found (flows/pagecheck.mjs).
-    if (this.carried && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.carried = { request, notes: this.carried.note };
-      this.turn.check = this.carried.check;
-      this.carried = null;
-    }
-    // A web address in the request, with WebFetch on: a line saying it is a page to read, not a
-    // file here. Qwen looked for "http://…/notes" in the project with Search, List and Read, and ran
-    // curl, twice in seven (the Web check, 30 Sep 2026).
-    const urls = webAddresses(text);
-    if (urls.length && this.webTools()?.fetch && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.web = { request, urls, notes: `${urls.length === 1 ? 'The request names a web page' : 'The request names web pages'} (${urls.slice(0, 3).join(', ')}): read ${urls.length === 1 ? 'it' : 'them'} with WebFetch. ${urls.length === 1 ? 'It is' : 'They are'} not a file in the project.` };
-    }
-    // Bypass permissions: the prompt's rules say commands stay in the folder, offline. They are
-    // kept word for word (the service's cache), so the request says what is true while it is on.
-    if (this.mode === 'bypass' && request?.role === 'user' && typeof request.content === 'string') {
-      // With where the user's own folders are: it does not know their name, and guessed /Users/Shared/Desktop (5 Oct 2026).
-      this.turn.open = { request, notes: `${this.selfOn() ? SELF_OPEN : BYPASS_OPEN} The user's home folder is ${this.home}; their Desktop is ${this.desktopDir}.` };
-    }
-    if (math && request?.role === 'user' && typeof request.content === 'string') {
-      try {
-        this.turn.math = { request, notes: mathNotes(math, text) };
-        this.emit('note', { text: math.browse ? 'Using the math notes (~/Desktop/MATH).' : `Using the math notes: ${math.area.name} (~/Desktop/MATH).`, tone: 'dim' });
-      } catch {}
-    }
-    // The design examples (src/agent/design.mjs): with a request to make or
-    // restyle a page, screen or widget, or any request sent with /design; never
-    // with a question, a bug fix or a rename.
-    const design = designSettings(this.designSaved);
-    const forced = this.designForce;
-    this.designForce = false;
-    // UI design · writes (/subagents): a page request runs on that helper, when it is not the main model.
-    if (this.turn && (forced || (!['question', 'fix', 'rename'].includes(kind) && isDesignRequest(text)))) {
-      this.turn.type = 'page';
-      const writer = this.helperUse('designWrite');
-      if (writer) { this.turn.use = { ...writer, keepAlive: undefined }; this.emit('note', { text: `UI design: ${writer.model} writes this page.`, tone: 'dim' }); }
-    }
-    if ((forced || (design.auto && !['question', 'fix', 'rename'].includes(kind) && isDesignRequest(text))) && request?.role === 'user' && typeof request.content === 'string') {
-      try {
-        // The design studio's pieces (studio.mjs) that fit take the example
-        // card's place; the rules card still comes. No piece fits: the cards as before.
-        // A page of your picks that says the thing asked for as well wins over the pieces (8 Oct 2026).
-        // The library's pieces come with the user's own (library.mjs); a React project gets React ones; a
-        // look the request names ("like Linear", or /design look) changes the colours the page is built in.
-        const pieces = design.studio ? pickPieces(text, { ctx: this.ctx, react: usesReact(this.cwd), library: design.library }) : null;
-        const look = design.studio ? pickLookFor(text, design.look) : null;
-        const peek = design.style === 'mix' ? mixTurn({ peek: true }) : design.style;
-        const pick = pickCards(text, { sets: design.sets, style: peek });
-        const yours = pick.examples[0]?.set === 'your picks' && pick.hits > 0 && pick.hits >= (pieces?.hits ?? 0);
-        const studio = pieces?.pieces.length && !yours ? studioNotes(pieces, undefined, { look }) : null;
-        // mix: opus and fable take turns, one page request each (the turn is taken only when the cards go).
-        const style = !studio && design.style === 'mix' ? mixTurn() : design.style;
-        const cards = designNotes(studio ? { ...pick, examples: [], more: [], look: null } : pick);
-        // A look with the cards (no pieces): its card, used in the page's own CSS.
-        const lookText = look && !studio ? `This page takes the ${look.name} look (asked for): use the colours, type and corners below in place of the rules card's look. Never the brand's name, logo or words on the page.\n${lookCard(look)}` : null;
-        const notes = cards || studio ? { text: [cards?.text, studio?.text, lookText].filter(Boolean).join('\n\n'), names: [...(cards?.cards ?? []).map((c) => c.file.replace(/\.md$/i, '')), ...(studio?.pieces ?? []).map((p) => `studio/${p.file.replace(/^components\//, '').replace(/^library\/(?:pieces|react)\//, '').replace(/\.(html?|tsx?)$/i, '')}`), ...(look ? [`look/${look.id}`] : [])] } : null;
-        if (notes) {
-          // The page plan: six lines from the model before it writes (agent-pages.mjs pageBrief).
-          const brief = await this.pageBrief(text, notes.text, signal);
-          if (brief) { notes.text += `\n\n${briefNote(brief)}`; this.turn.brief = brief; }
-          this.turn.design = { request, notes: notes.text, cards: notes.names };
-          if (studio) this.turn.studio = { pieces: studio.pieces.map((p) => p.file), look: studio.pieces.every((p) => p.react) ? null : look?.id ?? null };
-          this.ctxUsed += tokensOf(notes.text);
-          // `design` names the cards for the screen (it folds them into the line under your message).
-          this.emit('note', { text: `Design ${studio ? 'studio' : 'examples'}${!studio && design.style === 'mix' ? ` (mix: ${style}'s turn)` : !studio && design.style !== 'auto' ? ` (${style})` : ''}: ${notes.names.join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim', design: notes.names });
-        } else if (forced) this.emit('note', { text: 'No design examples found (the "design examples" folder is missing or has no cards in the sets that are on).', tone: 'warn' });
-      } catch {}
-    }
     // The opening read (opening.mjs): on the remote set, the memory whole and where the project
     // stands, before the first step of a conversation, on either way; again after it was trimmed away.
     this.giveOpening(text);
