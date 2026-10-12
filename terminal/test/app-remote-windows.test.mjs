@@ -90,3 +90,67 @@ test('two windows in one folder: the second asks, works in its own copy, and ask
   // Nothing left to put back: the copy went when the window closed.
   expect(existsSync(copyDir)).toBe(false);
 }, T);
+
+// 3 · /remote in a new window moves that window only (12 Oct 2026, the owner: "ensure that remote still works
+//     separately in a new window and doesnt overwrite all of them"). Two windows open at once on the Claude API
+//     (Main); the second one's /remote service, "Just this window", sends its message to the service while the first
+//     one's next message still goes to the Claude API; both services stay saved and Main stays where it was. A third
+//     window opened after them asks where to start, Main first (the second window's pick is the saved set-up).
+test('/remote in a second window, "Just this window": that window moves, the first stays on Main, both services stay saved; a new window asks, Main first', async () => {
+  const { fakeOllama } = await import('./fake-ollama.mjs');
+  const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
+  const { ON_REMOTE } = await import('./app-setup.mjs');
+  const { cpSync, mkdirSync: mk } = await import('node:fs');
+  const KEY = 'test-anthropic-key-0123456789';
+  const { base, cwd, env } = setup();
+  const two = join(base, 'demo-two');
+  cpSync(cwd, two, { recursive: true });
+  writeFileSync(join(base, 'home', 'trust.json'), JSON.stringify({ [cwd]: new Date().toISOString(), [two]: new Date().toISOString() }));
+  const svc = await fakeOllama();
+  const claude = await startFakeAnthropic(Array.from({ length: 12 }, () => ({ text: 'Answered by the Claude API.' })), { key: KEY });
+  const s = { source: 'openai', address: svc.url, port: null, connect: 'http', kind: 'openai', model: 'coder:30b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  const cl = { source: 'claude', address: claude.url, port: null, connect: 'http', kind: 'claude', model: 'claude-opus-5-5', context: 0, key: true, keyEnd: '6789', keyId: 'claude' };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...cl, use: true }, remotes: { openai: s, claude: cl } }));
+  const server = (r) => ({ kind: r.kind, source: r.source, address: r.address, port: null, connect: r.connect, keyId: r.keyId });
+  writeFileSync(join(base, 'home', 'profiles.json'), JSON.stringify({ profiles: { Main: { server: server(cl), model: 'claude-opus-5-5', backup: null, spillAfter: 30 } }, uses: { 'ai:main': 'Main' } }));
+  const e = { ...env, AGENTIC_MEMORY_SAVE: 'off', AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: KEY, ANTHROPIC_API_KEY: '' };
+  const footer = (t) => t.trimEnd().split('\n').filter((l) => /⏵⏵/.test(l)).at(-1) ?? '';
+  let switched;
+  const moved = new Promise((r) => { switched = r; });
+  const one = runInPty({ cwd, env: e, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 120_000, steps: [
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 500 },
+    { fn: () => moved }, { sleep: 2500 }, // past this window's 2 s look at the files, after the second window moved
+    { type: 'hello from one' }, { key: 'enter' }, { wait: 'Answered by the Claude API.', ms: 30_000 }, { sleep: 800 }, { snapshot: 'one' },
+    ...quit,
+  ] });
+  await new Promise((r) => setTimeout(r, 2500));
+  const second = await runInPty({ cwd: two, env: e, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 120_000, steps: [
+    { wait: ON_REMOTE, ms: 25_000 }, { sleep: 2500 },
+    { type: '/remote service' }, { key: 'enter' }, { wait: 'in which windows?', ms: 20_000 }, { sleep: 300 }, { snapshot: 'ask' }, { type: '1' },
+    { wait: 'This window → coder:30b', ms: 20_000 }, { sleep: 500 }, { fn: () => switched() },
+    { type: 'hello from two' }, { key: 'enter' }, { wait: 'From coder:30b.', ms: 30_000 }, { sleep: 800 }, { snapshot: 'two' },
+    { sleep: 6000 }, // the first window's message
+    ...quit,
+  ] });
+  const first = await one;
+  const settingsNow = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
+  const profilesNow = JSON.parse(readFileSync(join(base, 'home', 'profiles.json'), 'utf8'));
+  const third = await runInPty({ cwd, env: e, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 60_000, steps: [
+    { wait: /Where should this window start\?|(on the Claude API|on \S+), \d+ ms|answered in \d+ ms/, ms: 25_000 }, { sleep: 600 }, { snapshot: 'three' },
+    ...quit,
+  ] });
+  const toService = svc.chats().filter((b) => JSON.stringify(b.messages ?? '').includes('hello from')).map((b) => JSON.stringify(b.messages).includes('hello from one') ? 'one' : 'two');
+  const toClaude = claude.seen.filter((x) => x.body?.stream && JSON.stringify(x.body.messages ?? '').includes('hello from')).map((x) => JSON.stringify(x.body.messages).includes('hello from one') ? 'one' : 'two');
+  await svc.close(); await claude.close();
+  expect(second.snapshots.ask.replace(/\s+/g, ' ')).toMatch(/1\. Just this window.*2\. Every window/);
+  expect(toService).toEqual(['two']);
+  expect(toClaude).toEqual(['one']);
+  expect(footer(first.snapshots.one)).toContain('● Main · claude-opus-5-5');
+  expect(footer(second.snapshots.two)).toMatch(/● this window · coder:30b on /);
+  expect(Object.keys(settingsNow.remotes).sort()).toEqual(['claude', 'openai']);
+  expect(profilesNow.profiles.Main.model).toBe('claude-opus-5-5');
+  // The second window's pick is the saved set-up for the next start, not Main: a new window asks, Main first.
+  expect(third.snapshots.three).toContain('Where should this window start?');
+  expect(third.snapshots.three).toMatch(/❯ 1\. On Main: claude-opus-5-5 · Claude API\s+\(recommended\)/);
+  expect(third.snapshots.three).toContain('2. Just this window on coder:30b');
+}, T * 3);
