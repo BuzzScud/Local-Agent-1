@@ -51,7 +51,7 @@ export function readManifest(lib) {
 const UA = { 'user-agent': 'agentic-coder', accept: 'application/vnd.github+json' };
 
 // The newest commit of a source's default branch: { sha, date }.
-export async function latestRef(src, { fetchImpl = fetch, signal } = {}) {
+async function latestRef(src, { fetchImpl = fetch, signal } = {}) {
   const r = await fetchImpl(`https://api.github.com/repos/${src.repo}/commits/${src.branch ?? 'HEAD'}`, { headers: UA, signal });
   if (!r.ok) throw new Error(`GitHub answered ${r.status} for ${src.repo}${r.status === 403 ? ' (60 looks an hour without a sign-in: try again later)' : ''}`);
   const j = await r.json();
@@ -295,7 +295,7 @@ const GENERIC_TERMS = /^(?:cards?|sections?|pages?|components?|elements?|ui|layo
 const kindWords = (slug) => [words(slug), single(words(slug)), ...String(KIND_WORDS[slug] ?? '').split(',')];
 
 // HyperUI: public/examples/<category>/<slug>/<n>.html, named by src/content/collection/<category>/<slug>.mdx.
-export function fromHyperUI(tree) {
+function fromHyperUI(tree) {
   const out = [];
   const ex = join(tree, 'public', 'examples');
   for (const category of list(ex)) {
@@ -343,7 +343,7 @@ const FLOWBITE_JS = /\bdata-(?:modal|dropdown|collapse|accordion|tooltip|popover
 const NEEDS_LIB = /\b(?:ApexCharts|simpleDatatables|new\s+Datepicker|flowbite)\b/;
 
 // Flowbite: content/<group>/<kind>.md, each {{< example >}} … {{< /example >}} a piece, named by the heading above it.
-export function fromFlowbite(tree) {
+function fromFlowbite(tree) {
   const out = [];
   for (const group of ['components', 'forms', 'typography', 'plugins']) {
     for (const f of list(join(tree, 'content', group))) {
@@ -382,7 +382,7 @@ export function fromFlowbite(tree) {
 }
 
 // shadcn/ui: React files as they are (a React project uses its own shadcn colours), for React projects only.
-export function fromShadcn(tree) {
+function fromShadcn(tree) {
   const out = [];
   const reg = join(tree, 'apps', 'v4', 'registry', 'new-york-v4');
   const blockInfo = read(join(reg, 'blocks', '_registry.ts')) ?? '';
@@ -417,7 +417,6 @@ export function fromShadcn(tree) {
 
 // ── Looks ─────────────────────────────────────────────────────────────────
 
-const HEX = /#[0-9a-f]{6}\b|#[0-9a-f]{3}\b/i;
 const long = (h) => (h.length === 4 ? `#${[...h.slice(1)].map((c) => c + c).join('')}` : h).toLowerCase();
 const lum = (h) => { const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const mix = (a, b, t) => `#${[1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('')}`;
@@ -548,7 +547,7 @@ export const lookName = (id) => NAMES[id] ?? title(id.replace(/\.(app|ai|com)$/,
 // The words a request names a look by: "like Linear", "Stripe style", "in the style of Notion". A name
 // that is also a common word (together, cal, wise, clay) only with its full name.
 const COMMON = new Set(['together.ai', 'cal', 'wise', 'clay', 'expo', 'sanity', 'meta', 'warp', 'resend', 'lovable', 'uber', 'x.ai', 'hp', 'wired']);
-export function lookNames(look) {
+function lookNames(look) {
   const names = new Set([look.id, words(look.name)]);
   if (!COMMON.has(look.id)) names.add(words(look.id.replace(/\.(app|ai|com)$/, '')));
   if (look.id === 'x.ai') names.add('xai');

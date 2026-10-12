@@ -49,7 +49,7 @@ const SHINE = new Map([[BLUE, 195], [AMBER, 230], [RED, 224]]);
 const C = { diamond: 173, value: 255, text: 252, dim: 245, sep: 240, faint: 237, today: 94, warn: 215, bad: 203, ok: HUE.accent, label: 244, border: 240 };
 
 // The limits as of now: each part's room (a bucket past its reset is full again), and the tightest.
-export function rateOf(limits, now = Date.now()) {
+function rateOf(limits, now = Date.now()) {
   if (!limits) return null;
   const parts = ['requests', 'input', 'output'].filter((k) => limits[k]).map((k) => {
     const p = limits[k];
@@ -63,7 +63,7 @@ export function rateOf(limits, now = Date.now()) {
 }
 
 // The fuel line, w cells. left/today: shares of the cap. live: a reply is running (the shine).
-export function fuelLine(w, left, today, { now = Date.now(), live = false } = {}) {
+function fuelLine(w, left, today, { now = Date.now(), live = false } = {}) {
   const f = Math.max(0, Math.min(1, left));
   const ramp = rampOf(f);
   const filled = f * w;
@@ -121,7 +121,7 @@ function spark(values) {
 // limit), then where the numbers come from. Every row is exactly `width` cells.
 export const LABEL_W = 14;
 // edit: a value being typed ({ id: 'limit' | 'spent' | 'key', value, cursor }), shown as the card's last row.
-export const USAGE_EDITS = {
+const USAGE_EDITS = {
   limit: 'Your limit, as set in the Console ($ a month; 0 takes it out)',
   spent: 'Spent this month, as the Console’s Cost page shows it ($)',
   key: 'Admin key (sk-ant-admin…, Console → Settings → Admin keys; empty takes it out)',

@@ -157,9 +157,9 @@ export function InputBox({ text, width, placeholder = 'Try "write a test for mai
   );
 }
 
-export const MODE_TEXT = { auto: '⏵⏵ auto mode on', edits: '⏵⏵ accept edits on', plan: '⏸ plan mode on', bypass: '⏵⏵ bypass permissions on' };
+const MODE_TEXT = { auto: '⏵⏵ auto mode on', edits: '⏵⏵ accept edits on', plan: '⏸ plan mode on', bypass: '⏵⏵ bypass permissions on' };
 const MODE_COLOR = { auto: C.auto, edits: C.edits, plan: C.plan, bypass: C.bypass };
-export const CYCLE_HINT = ' (shift+tab to cycle)';
+const CYCLE_HINT = ' (shift+tab to cycle)';
 // The app's footer names the mode short, with no hint (the owner's pick "1 · Tidy", 9 Oct 2026; the
 // ? list has shift+tab).
 export const MODE_SHORT = { auto: '⏵⏵ auto', edits: '⏵⏵ accept edits', plan: '⏸ plan', bypass: '⏵⏵ bypass' };

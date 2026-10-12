@@ -23,11 +23,11 @@ import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { webHome, loadSettings } from './config.mjs';
 
-export const HEARTBEAT_MS = 20_000;
+const HEARTBEAT_MS = 20_000;
 const ALIVE_EVERY_MS = 60_000;
 const TIMEOUT_MS = 15_000;
 
-export const linkDir = () => join(webHome(), 'calc-link');
+const linkDir = () => join(webHome(), 'calc-link');
 // macOS keeps a socket's path under 104 bytes: a long web home's socket goes in /tmp under its hash.
 export function sockPath(dir = linkDir()) {
   const p = join(dir, 'link.sock');

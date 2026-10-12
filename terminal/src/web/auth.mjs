@@ -13,7 +13,7 @@
 //   - The first account: with nobody yet, the server prints a one-time setup link (an admin invite).
 import { createHash, randomBytes } from 'node:crypto';
 
-export const cookieName = (id) => `acw_${String(id ?? 'session').replace(/[^A-Za-z0-9]/g, '')}`;
+const cookieName = (id) => `acw_${String(id ?? 'session').replace(/[^A-Za-z0-9]/g, '')}`;
 const SESSION_DAYS = 30;
 const TRIES = 5;
 const LOCK_MS = 60_000;
@@ -24,10 +24,10 @@ const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 export const randomWord = (n = 32) => Array.from(randomBytes(n), (b) => ALPHA[b % ALPHA.length]).join('');
 export const validName = (name) => /^[a-z0-9][a-z0-9._-]{1,31}$/i.test(String(name ?? ''));
 
-export const hashPassword = (p) => Bun.password.hash(String(p), { algorithm: 'argon2id' });
-export const checkPassword = (p, hash) => Bun.password.verify(String(p ?? ''), String(hash ?? '')).catch(() => false);
+const hashPassword = (p) => Bun.password.hash(String(p), { algorithm: 'argon2id' });
+const checkPassword = (p, hash) => Bun.password.verify(String(p ?? ''), String(hash ?? '')).catch(() => false);
 
-export function cookieOf(req, name) {
+function cookieOf(req, name) {
   const raw = req.headers.get('cookie') ?? '';
   for (const part of raw.split(';')) { const [k, ...v] = part.trim().split('='); if (k === name) return decodeURIComponent(v.join('=')); }
   return null;

@@ -34,9 +34,6 @@ function pull(sp, target, k, c, dt) {
 }
 const bez = (a, b, c, u) => (1 - u) * (1 - u) * a + 2 * (1 - u) * u * b + u * u * c;
 
-// The rows each size takes on the screen (10 and 6 pixels tall, two to a row).
-export const BOT_ROWS = { full: 5, mini: 3 };
-
 export function makeBrain({ seed = 7, napAfter = 120, emptyBack = 3 } = {}) {
   const rnd = rng(seed);
   const s = {

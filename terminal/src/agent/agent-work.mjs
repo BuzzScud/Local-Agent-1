@@ -14,7 +14,7 @@ import { pageReadOn } from './page-read.mjs';
 import { pickSkill, readSkills, skillNote } from './prompt-files.mjs';
 import { mathIndex, mathNotes, sortMath } from './expertise.mjs';
 import { briefNote, designNotes, designSettings, isDesignRequest, mixTurn, pickCards } from './design.mjs';
-import { pickPieces, studioNotes, usesReact, pickLookFor, lookNote } from './studio.mjs';
+import { pickPieces, studioNotes, usesReact, pickLookFor } from './studio.mjs';
 import { lookCard } from './library.mjs';
 import { pagesToCheck } from '../flows/layoutcheck.mjs';
 import { basename, join, relative } from 'node:path';

@@ -100,7 +100,7 @@ test('/remote in a second window, "Just this window": that window moves, the fir
   const { fakeOllama } = await import('./fake-ollama.mjs');
   const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
   const { ON_REMOTE } = await import('./app-setup.mjs');
-  const { cpSync, mkdirSync: mk } = await import('node:fs');
+  const { cpSync } = await import('node:fs');
   const KEY = 'test-anthropic-key-0123456789';
   const { base, cwd, env } = setup();
   const two = join(base, 'demo-two');

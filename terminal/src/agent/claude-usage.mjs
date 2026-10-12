@@ -152,7 +152,7 @@ export function noteCapped(kind, now = Date.now()) {
 
 // The tiers by the requests a minute a reply says (Fable has its own numbers; Opus, Sonnet and
 // Haiku 4.5 and later share the rest), and each one's monthly cap in dollars.
-export const TIERS = [
+const TIERS = [
   { name: 'Start', cap: 500, fable: 1000, other: 1000 },
   { name: 'Build', cap: 1000, fable: 2000, other: 5000 },
   { name: 'Scale', cap: 200_000, fable: 4000, other: 10_000 },
@@ -162,7 +162,7 @@ export function tierOf(model, requestsLimit) {
   return TIERS.find((t) => (fable ? t.fable : t.other) === requestsLimit) ?? null;
 }
 
-export const TYPED_STALE_DAYS = 3;
+const TYPED_STALE_DAYS = 3;
 
 // Everything /usage and the footer show, as of `now`. model: the window's Claude model.
 //   cap: your limit, else the tier's (tierCap); left: null with neither (a Custom tier has no cap)

@@ -162,7 +162,7 @@ Practice runs (`bun run eval`) never read your rules. Code: `src/agent/permissio
   three answers to pick from (different kinds of work: explain, fix, add); you answer by
   number or type a line. A short request the rules already understand ("rename test to
   check", "explain the tests") starts without being asked about.
-- **Sorting** (`src/flows/words.mjs`, `index.mjs`; `sort.mjs` puts it in order): thanks,
+- **Sorting** (`src/flows/words.mjs`, `index.mjs`; `test/sort.test.mjs` puts it in order): thanks,
   praise and "I need help with something" get a short reply with no tools; a short line
   that continues the last turn ("can you add it to my desktop?", "why") carries on with
   the conversation, with no question and no focused path; plain commands ("run the

@@ -72,8 +72,6 @@ export function cleanChoices(list, question = '') {
   }
   return out.length >= 2 ? out : [];
 }
-export const cleanOptions = (list, question = '') => cleanChoices(list, question).map((c) => c.label);
-
 // The question to ask for this request ({ question, options }), or null. The
 // set questions have no answers to offer; the model's question comes with two
 // or three (measured on the 27B, 2026-09-27: asked for "different kinds of

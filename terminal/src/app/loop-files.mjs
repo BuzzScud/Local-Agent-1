@@ -54,7 +54,7 @@ async function shippedText() {
   } catch { return SHIPPED_IDS.map(() => ''); }
 }
 const SHIPPED = (await shippedText()).map((text, i) => [SHIPPED_IDS[i], text]);
-export const yoursDir = (home = HOME) => join(home, 'loop-library');
+const yoursDir = (home = HOME) => join(home, 'loop-library');
 export const projectDir = (folder) => join(folder, '.agentic', 'loops');
 const trustFile = (home) => join(yoursDir(home), 'trusted.json');
 
