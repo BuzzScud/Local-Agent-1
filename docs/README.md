@@ -8,7 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 637 KB | 2026-10-12 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 641 KB | 2026-10-12 |
 | [tests/agentic-coder-practice-28-claude-sonnet-5-5-2026-10-10.html](tests/agentic-coder-practice-28-claude-sonnet-5-5-2026-10-10.html) | page | Practice 28 · Sonnet 5.5 | 24 KB | 2026-10-10 |
 | [diagrams/agentic-coder-memory-flow-2026-10-09.html](diagrams/agentic-coder-memory-flow-2026-10-09.html) | page | How Agentic Coder's memory works | 8 KB | 2026-10-09 |
 | [reports/agentic-coder-big-files-split-2026-10-09.html](reports/agentic-coder-big-files-split-2026-10-09.html) | page | Big files split · before and after | 15 KB | 2026-10-09 |
