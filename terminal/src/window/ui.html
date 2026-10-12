@@ -153,7 +153,12 @@ button { font: inherit; color: inherit; }
 .menu .mi .l { color: var(--text); min-width: 160px; } .menu .mi .d { color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
 .menu .mi.on { background: var(--accent-bg); } .menu .mi.on .l { color: var(--accent); }
 .modes { display: flex; align-items: center; gap: 10px; padding: 9px 2px 12px; font-size: 12.5px; color: var(--faint); white-space: nowrap; overflow: hidden; }
-.modes .sep { color: #45454b; } .modes .sp { flex: 1; } .modes .bad { color: var(--bad); }
+.modes .sep { color: #45454b; } .modes .sp { flex: 1; min-width: 6px; } .modes .bad { color: var(--bad); }
+/* a narrow window (fitModes): "shift+tab" goes first, then the model's name ends in … (the loops' words a little
+   too); the folder keeps its name (22 letters at most), and the mode and its chips always show whole */
+.modes > span, .modes .chips { flex-shrink: 0; }
+.modes .mn, .modes .mf, .modes .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.modes .mn { flex-shrink: 6; min-width: 48px; } .modes .mf { max-width: 22ch; } .modes .lb { flex-shrink: 1; } .modes.tight .hk2 { display: none; }
 .chips { display: flex; gap: 4px; }
 .chip { border: 1px solid transparent; background: var(--raise2); color: var(--dim); border-radius: 7px; padding: 2px 9px; cursor: pointer; font: 12px var(--mono); }
 .chip.on { border-color: var(--accent-line); background: var(--accent-bg); color: var(--accent); }
@@ -386,7 +391,7 @@ const MODES = [['ask', 'manual'], ['edits', 'accept edits'], ['plan', 'plan'], [
 const MODE_LINE = { ask: 'manual: asks before each change', edits: '⏵⏵ accept edits on', plan: '⏸ plan mode on', auto: '⏵⏵ auto mode on', bypass: '⏵⏵ bypass permissions on' };
 function modesHtml(st) {
   const m = st.mode || 'ask';
-  return '<div class="modes"><span>' + esc(st.modelName || '') + '</span><span class="sep">│</span><span>' + esc(String(st.cwdShort || S.folder).split('/').pop() || '~') + '</span><span class="sep">·</span><span class="' + (m === 'bypass' ? 'bad' : '') + '" style="' + (m === 'bypass' ? '' : 'color:var(--sand)') + '">' + (MODE_LINE[m] || m) + '</span><span>shift+tab</span>' + (st.loopsBadge ? '<span style="color:var(--accent)">' + esc(st.loopsBadge) + '</span>' : '') + '<span class="sp"></span><div class="chips">' + MODES.map(([k, w]) => '<button class="chip' + (m === k ? ' on' : '') + (k === 'bypass' ? ' bypass' : '') + '" data-mode="' + k + '">' + w + '</button>').join('') + '</div></div>';
+  return '<div class="modes"><span class="mn" title="' + esc(st.modelName || '') + '">' + esc(st.modelName || '') + '</span><span class="sep">│</span><span class="mf">' + esc(String(st.cwdShort || S.folder).split('/').pop() || '~') + '</span><span class="sep">·</span><span class="' + (m === 'bypass' ? 'bad' : '') + '" style="' + (m === 'bypass' ? '' : 'color:var(--sand)') + '">' + (MODE_LINE[m] || m) + '</span><span class="hk2">shift+tab</span>' + (st.loopsBadge ? '<span class="lb" style="color:var(--accent)">' + esc(st.loopsBadge) + '</span>' : '') + '<span class="sp"></span><div class="chips">' + MODES.map(([k, w]) => '<button class="chip' + (m === k ? ' on' : '') + (k === 'bypass' ? ' bypass' : '') + '" data-mode="' + k + '">' + w + '</button>').join('') + '</div></div>';
 }
 function homeHtml(st) {
   const recent = (st.start?.recent ?? []).slice(0, 3);
@@ -514,6 +519,14 @@ function fitBar() {
   tb.classList.remove('f1', 'f2', 'f3', 'f4');
   for (const f of ['f1', 'f2', 'f3', 'f4']) { if (apart()) return; tb.classList.add(f); }
 }
+// The mode row at any width: "shift+tab" gives way first, before the model's name has to end in ….
+function fitModes() {
+  const row = body.querySelector('.modes');
+  if (!row) return;
+  row.classList.remove('tight');
+  const mn = row.querySelector('.mn');
+  if (row.scrollWidth > row.clientWidth + 1 || (mn && mn.scrollWidth > mn.clientWidth + 1)) row.classList.add('tight');
+}
 // The card under the usage pill, kept inside the window.
 function placeCard() {
   const c = document.getElementById('ucard'), p = document.querySelector('#uslot .upill');
@@ -557,6 +570,7 @@ function render() {
   if (html === lastConvo) return;
   lastConvo = html;
   body.innerHTML = html;
+  fitModes();
   const c = document.getElementById('convo');
   if (c) c.scrollTop = atBottom ? c.scrollHeight : keepTop;
   document.getElementById('menu')?.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
@@ -655,7 +669,7 @@ document.addEventListener('click', (e) => {
 // The pretend terminal is as wide as the conversation, so what the app draws itself fits the window.
 let fitTimer = null;
 function fit() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { const probe = document.createElement('span'); probe.style.cssText = 'position:absolute;visibility:hidden;font:13px var(--mono)'; probe.textContent = 'M'.repeat(100); document.body.append(probe); const cw = probe.getBoundingClientRect().width / 100; probe.remove(); send({ t: 'resize', cols: Math.floor((innerWidth - 60) / cw), rows: Math.floor((innerHeight - 52) / 18) }); }, 150); }
-addEventListener('resize', () => { fit(); fitBar(); placeCard(); });
+addEventListener('resize', () => { fit(); fitBar(); fitModes(); placeCard(); });
 connect();
 </script>
 </body></html>
