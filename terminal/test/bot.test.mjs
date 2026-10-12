@@ -6,7 +6,9 @@ import { test, expect } from 'bun:test';
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { rigPixels, trimmed, POSE } from '../src/ui/bot-rig.mjs';
-import { makeBrain, BOT_ROWS } from '../src/ui/bot-brain.mjs';
+import { makeBrain } from '../src/ui/bot-brain.mjs';
+// The rows each size takes on the screen (10 and 6 pixels tall, two to a row).
+const BOT_ROWS = { full: 5, mini: 3 };
 import { botCellsAt } from '../src/ui/bot-paint.mjs';
 import { matchCommands } from '../src/app/commands.mjs';
 import { parseMouse, MOTION_ON } from '../src/app/mouse.mjs';

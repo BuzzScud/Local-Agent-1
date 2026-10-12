@@ -6,7 +6,7 @@
 // backups, a window following another's saves and writing back one it lost, the repair at a window's start, the
 // key store of a copy, and a preview's services; then two real windows.
 import { test, expect, beforeEach } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';

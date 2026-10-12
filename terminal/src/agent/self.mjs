@@ -32,7 +32,7 @@ export function keepOwnCopy(abs, { now = new Date() } = {}) {
 }
 
 // Day folders older than KEEP_DAYS go.
-export function pruneOwnCopies(now = new Date()) {
+function pruneOwnCopies(now = new Date()) {
   const root = selfBackupDir();
   if (!existsSync(root)) return;
   const cutoff = new Date(now.getTime() - KEEP_DAYS * 86_400_000).toISOString().slice(0, 10);

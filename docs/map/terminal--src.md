@@ -25,7 +25,7 @@ Every folder under terminal/src/ with a plain line, its main files with a line e
   - terminal/src/flows/layoutcheck.mjs (453) — The layout check: after a request that made or changed a page, the page is opened in a real browser (headless Chrome: the Mac's own, or the one Playwright keep…
   - terminal/src/flows/llm.mjs (126) — One focused model call: a short system prompt, one user message, no tools.
   - terminal/src/flows/scratch.mjs (173) — A scratch copy of the project where tries are written and tested, so your real files change only after you approve.
-  - also: apply.mjs, blocks.mjs, change.mjs, excerpts.mjs, explain.mjs, fix.mjs, localize.mjs, multi.mjs, pagecheck.mjs, pagescripts.mjs, rename.mjs, rescue.mjs, results.mjs, sort.mjs, testfile.mjs, testfirst.mjs, tries.mjs, units.mjs, words.mjs
+  - also: apply.mjs, blocks.mjs, change.mjs, excerpts.mjs, explain.mjs, fix.mjs, localize.mjs, multi.mjs, pagecheck.mjs, pagescripts.mjs, rename.mjs, rescue.mjs, results.mjs, testfile.mjs, testfirst.mjs, tries.mjs, units.mjs, words.mjs
 - terminal/src/morning/ — Morning brief shell commands for gathering, picking, and rendering daily reports
   - terminal/src/morning/cli.mjs (40) — Shell entry point defining commands to gather facts, pick highlights, and render the HTML page
   - terminal/src/morning/config.mjs (39) — The morning brief's settings.

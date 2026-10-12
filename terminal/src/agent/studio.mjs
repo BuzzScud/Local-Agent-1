@@ -151,7 +151,7 @@ export function readPieces(dir = studioDir(), { library = true } = {}) {
 // read once for each version of the library. kind: the folder after the source's (pieces/hyperui/stats/…).
 // A React piece's head is "// - Key:" lines; a page is named, never pasted.
 let kept = { key: null, pieces: [] };
-export function libraryPieces(dir = studioDir()) {
+function libraryPieces(dir = studioDir()) {
   if (!dir) return [];
   const key = `${dir}:${libraryStamp(dir)}`;
   if (kept.key === key) return kept.pieces;

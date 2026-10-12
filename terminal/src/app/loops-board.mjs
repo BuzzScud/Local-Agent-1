@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 import { attachDropped, attachClipboard, chipOf } from './attach.mjs';
-import { droppedFiles, ATTACH_TOKEN } from '../agent/images.mjs';
+import { droppedFiles } from '../agent/images.mjs';
 import { listBoards, readState, readRun, sendCommand, runFile, rulesOf, fieldsOf, unclearOf, isLoopCommand, STEPS_WORD, PRESET, readSentence, readEvery, readRuns, readStopAt } from './loops.mjs';
 import { drawBoard, ansiRow, setupChoices, setupPick, setupFields, kindOfSetup, wizardSteps, stepOf, templateOf, TEMPLATES, MORE_ROWS, buttonsOf, watchButtonsOf, splitAddress, wantsAddress, needsAddress } from './loops-draw.mjs';
 import { canResize, resizeSeq } from './agents-window.mjs';

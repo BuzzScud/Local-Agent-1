@@ -13,11 +13,11 @@ import { spawnSync } from 'node:child_process';
 import { loadSettings, saveSettings } from './config.mjs';
 import { linkHost, askLink, linkWhere, savedState } from './calc-link.mjs';
 
-export const CALC_LABEL = 'com.agentic-coder.calc-link';
+const CALC_LABEL = 'com.agentic-coder.calc-link';
 // AGENTIC_LAUNCH_DIR: another folder for the LaunchAgent's file (the tests'; never the real one there).
 const launchDir = () => process.env.AGENTIC_LAUNCH_DIR ?? join(homedir(), 'Library', 'LaunchAgents');
 const plistPath = () => join(launchDir(), `${CALC_LABEL}.plist`);
-export const calcLog = () => join(process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder'), 'logs', 'calc-link.log');
+const calcLog = () => join(process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder'), 'logs', 'calc-link.log');
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export function calcPlist({ program, webHome = process.env.AGENTIC_WEB_HOME }) {

@@ -18,7 +18,7 @@ export function askOptions(a = {}) {
 }
 
 // The questions a request holds: the model's come all together (questions); the app's are one.
-export const askQuestions = (req) => (Array.isArray(req?.args?.questions) && req.args.questions.length ? req.args.questions : [req?.args ?? {}]);
+const askQuestions = (req) => (Array.isArray(req?.args?.questions) && req.args.questions.length ? req.args.questions : [req?.args ?? {}]);
 const together = (req) => Array.isArray(req?.args?.questions) && req.args.questions.length > 0;
 
 // The box as it opens: a tab per question, on the first row of the first.

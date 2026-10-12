@@ -8,7 +8,6 @@
 // formulas on its session, and the hub's Calculator tab.
 import { test, expect, afterAll } from 'bun:test';
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.AGENTIC_MEMORY_SAVE = 'off';

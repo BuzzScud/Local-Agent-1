@@ -78,7 +78,7 @@ export function picture(chrome, page, out) {
 }
 
 // What the app said about the design (the "· Design …" line) and the page sent back unwritten.
-export function notesOf(log) {
+function notesOf(log) {
   const lines = String(log ?? '').split('\n').map((l) => l.replace(/^·\s*/, '').trim());
   return {
     design: lines.find((l) => /^Design (studio|examples)\b/.test(l)) ?? null,

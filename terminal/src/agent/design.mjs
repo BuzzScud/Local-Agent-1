@@ -533,7 +533,7 @@ function skeletonOf(html, max = 34) {
 }
 
 // The card a kept page becomes (≤ CARD_CHARS), named by the thing asked for.
-export function pickCard({ html, request, page, thing = askedThing(request), day = new Date().toLocaleDateString('en-CA') }) {
+function pickCard({ html, request, page, thing = askedThing(request), day = new Date().toLocaleDateString('en-CA') }) {
   const name = thing ? thing.phrase.replace(/^./, (c) => c.toUpperCase()) : titleOf(html) || page.replace(/\.html?$/i, '');
   const words = pickWords(thing);
   const first = String(request).replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s/)[0].slice(0, 160);

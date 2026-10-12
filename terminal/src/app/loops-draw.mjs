@@ -57,7 +57,7 @@ export function dur(ms) {
 const countdown = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return s >= 3600 ? `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const spin = (now) => SPIN[Math.floor(now / 120) % SPIN.length];
 export const chip = (kind) => [` ${(KIND[kind] ?? KIND.task)[0]} `, `white b on ${(KIND[kind] ?? KIND.task)[1]}`];
-export const chipW = (kind) => (KIND[kind] ?? KIND.task)[0].length + 2;
+const chipW = (kind) => (KIND[kind] ?? KIND.task)[0].length + 2;
 const over = (l) => Boolean(l) && (l.state === 'done' || l.state === 'stopped');
 const paceWord = (l) => (l.until ? 'until done' : l.every ? `every ${secsWord(l.every)}` : 'its own pace');
 // Words wrapped to w cells; a word longer than w is cut where it must.
@@ -430,8 +430,8 @@ export const TEMPLATES = [
   { kind: 'test', name: 'Check the build', about: 'and the lint', text: 'check the build and the lint, change nothing' },
   { kind: null, name: 'Something else', about: 'type it below', text: '' },
 ];
-export const MODE_NOTE = { ask: 'asks before each change', edits: 'edits without asking, asks before commands', auto: 'Auto decides what to ask', plan: 'plans only, changes nothing', bypass: 'never asks' };
-export const STEP_NAME = { what: 'What', where: 'Where', often: 'How often', stop: 'Until', start: 'Start' };
+const MODE_NOTE = { ask: 'asks before each change', edits: 'edits without asking, asks before commands', auto: 'Auto decides what to ask', plan: 'plans only, changes nothing', bypass: 'never asks' };
+const STEP_NAME = { what: 'What', where: 'Where', often: 'How often', stop: 'Until', start: 'Start' };
 export const wizardSteps = (su) => ['what', ...(su.id ? [] : ['where']), 'often', 'stop', 'start'];
 export const stepOf = (su) => wizardSteps(su)[Math.min(su.step ?? 0, wizardSteps(su).length - 1)];
 export const MORE_ROWS = ['mode', 'cap', 'steps', 'ask'];
@@ -440,8 +440,8 @@ export const MORE_ROWS = ['mode', 'cap', 'steps', 'ask'];
 // Each run is told it after its words, on the same line; a loop's Rules and a kept loop take it
 // back out into its box (splitAddress).
 const ADDRESS_WORDS = ' — the page to watch: ';
-export const ADDRESS_EXAMPLE = 'https://github.com/oven-sh/bun/releases';
-export const joinAddress = (words, url) => { const w = String(words ?? '').trim(), u = String(url ?? '').trim(); return u ? `${w}${ADDRESS_WORDS}${u}` : w; };
+const ADDRESS_EXAMPLE = 'https://github.com/oven-sh/bun/releases';
+const joinAddress = (words, url) => { const w = String(words ?? '').trim(), u = String(url ?? '').trim(); return u ? `${w}${ADDRESS_WORDS}${u}` : w; };
 export function splitAddress(message) {
   const t = String(message ?? '');
   const m = /\s*— the page to watch: (\S+)\s*$/.exec(t);
@@ -521,7 +521,7 @@ export function setupFields(su, state = {}) {
 }
 const placeOf = (su, state) => (state.places ?? []).find((x) => x.path === setupFields(su, state).folder) ?? { shown: state.folder ?? '', tests: false };
 // What to look at before Start: [mark, words, style]; warnings only (the picture says the rest).
-export function setupChecks(su, state = {}) {
+function setupChecks(su, state = {}) {
   const m = state.model ?? {};
   const where = placeOf(su, state);
   const kind = kindOfSetup(su);

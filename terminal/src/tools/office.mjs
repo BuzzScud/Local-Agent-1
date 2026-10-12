@@ -4,7 +4,7 @@
 // what is inside; anything else that is text as text. No package, nothing downloaded.
 import { closeSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { basename, extname, join } from 'node:path';
+import { extname, join } from 'node:path';
 import { isImage, isPdf } from './media.mjs';
 
 // A Mac "file" that is really a folder (a document package): dropped, it counts as one file.

@@ -11,13 +11,32 @@ import { join } from 'node:path';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
-import { sortOf } from '../src/flows/sort.mjs';
 import { routeByRules, isSmallTalk } from '../src/flows/index.mjs';
-import { needsClarifying, cleanOptions } from '../src/flows/clarify.mjs';
+import { needsClarifying, cleanChoices, wantsWhere } from '../src/flows/clarify.mjs';
 import { isQuit, isFollowUp, isCommand, isPageRequest, sortLine } from '../src/flows/words.mjs';
 import { permissionOptions } from '../src/app/screen.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { LINES } from './sort-lines.mjs';
+import { isMemoryRequest } from '../src/agent/memory.mjs';
+
+// Step 2 in one place, in the order the agent takes it (agent.mjs send): a greeting, "update memory", a line that
+// continues the last turn, the question first, then the kind. Words only: no files are read and no model is
+// called. It lived in src/flows/sort.mjs until 12 Oct 2026, used by nothing but this test.
+// { path, ask, line }
+//   path: quit · chat · memory · follow-up · rename · fix · change · question · other · unsorted (the model sorts it)
+//   ask:  null · fixed (a set question) · model (the model is asked whether it is clear) · where
+function sortOf(text, { hasPrior = false } = {}) {
+  const t = String(text).trim();
+  if (isQuit(t)) return { path: 'quit', ask: null, line: null };
+  if (isSmallTalk(t)) return { path: 'chat', ask: null, line: null };
+  if (isMemoryRequest(t)) return { path: 'memory', ask: null, line: null };
+  if (isFollowUp(t, hasPrior)) return { path: 'follow-up', ask: null, line: sortLine('follow-up') };
+  const c = needsClarifying(t);
+  const ask = c === 'fix' ? 'fixed' : c === 'model' ? 'model' : wantsWhere(t) ? 'where' : null;
+  const kind = routeByRules(t)?.kind;
+  return { path: kind ?? 'unsorted', ask, line: kind ? sortLine(kind, { shortcut: true }) : null };
+}
+const cleanOptions = (list, question = '') => cleanChoices(list, question).map((c) => c.label);
 
 const model = MODELS[DEFAULT_MODEL];
 const project = () => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-sort-')), 'project'); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
