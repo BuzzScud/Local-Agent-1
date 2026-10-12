@@ -1449,9 +1449,20 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   capability lets that page move its window). Closing it ends the app as closing its terminal did (it saves first); the
   app ending closes it. `coding window [--folder <path>]` opens one with no terminal (the Agentic Coder app and the
   window's "Open another folder…" use it); `coding --terminal` keeps the terminal.
+- **The pill beside the model** (12 Oct 2026; the owner, on a screenshot of the window: "add another info pill, to
+  the right of the model in the top center to show the api usage like before"; of two designs drawn on the real page,
+  `docs/private/design rounds/agentic-coder-window-usage-pill-2-designs-2026-10-12.html`, their pick "option 2 and
+  ensure remote models from another service show context and memory here / same for local models / since those are
+  free"). On the Claude API (`usageOf`): a fuel line and the footer's words, "$43.16 left of $200" in its tones; a click
+  drops a card (the /usage card's sections drawn by the page, Open /usage for its keys). On a free model (`meterOf`):
+  the context used (amber at 70%, red at 85%) and the memory, the Mac's for a model on this Mac (pressure colours, what
+  the model holds) or the service's GPU from Ollama's /api/ps (amber while it spills onto the CPU); its card adds the
+  speed, Compact now and Switch model. The model's pill stays in the middle (the usage pill hangs off its right), and a
+  narrow window drops the buttons' words, then the pill's details, then shortens the model's name (`fitBar`): before,
+  the left buttons ran into the model's pill under about 1,290 px.
 - **Tests**: `terminal/test/window.test.mjs` (the screen, the view items, when it opens, the bridge's changes and
-  actions, and the server with a stand-in app: its key, the state, keys back, the end). The app tests keep the
-  terminal (`AGENTIC_WINDOW=off` in test-env.mjs).
+  actions, the pill's numbers, and the server with a stand-in app: its key, the state, keys back, the end). The app
+  tests keep the terminal (`AGENTIC_WINDOW=off` in test-env.mjs).
 
 ## The public repo
 
