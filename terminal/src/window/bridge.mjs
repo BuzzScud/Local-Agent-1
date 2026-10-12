@@ -9,6 +9,9 @@ import React from 'react';
 import { renderToString } from 'ink';
 import { printedOf, ItemFrame, PanelArea, panelOpen } from '../app/screen.jsx';
 import { usageChip, textOf } from '../app/usage-bar.mjs';
+import { ctxWord } from '../app/remote-models.mjs';
+import { pressureWord, used as macUsed } from '../app/mac-memory.mjs';
+import { gib } from '../../../models/index.mjs';
 import { AgentsView } from '../app/agents-view.jsx';
 import { LoopsView } from '../app/loops-view.jsx';
 import { viewItem, heldView, ansiRows } from './view.mjs';
@@ -98,8 +101,10 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK) {
       for (const h of v.hunk ?? []) { if (h.type === '+') was.add++; else if (h.type === '-') was.del++; }
       files.delete(name); files.set(name, was);
     }
-    let usageText = null;
-    try { usageText = app.usage ? textOf(usageChip(app.usage)) : null; } catch { usageText = null; }
+    let usageText = null, usage = null;
+    try { usageText = app.usage ? textOf(usageChip(app.usage)) : null; usage = usageOf(app.usage); } catch { usageText = null; usage = null; }
+    let meter = null;
+    try { meter = meterOf(app); } catch { meter = null; }
     return {
       t: 'state', now: Date.now(),
       order: order.join('\n') === sentOrder ? undefined : order, items: changed,
@@ -110,7 +115,7 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK) {
       perm, panel, full,
       mode: app.mode, modelName: app.modelName, modelOff: Boolean(app.modelOff), starting: Boolean(app.starting), cwd: app.cwd, cwdShort: app.cwdShort,
       hold: Boolean(app.hold), start: app.hold ? { model: app.start?.model, effort: app.start?.effort, cwd: app.start?.cwd, git: app.start?.git ?? null, recent: (app.start?.recent ?? []).slice(0, 12).map((r) => ({ id: r.id, title: String(r.title ?? '').replace(/\s+/g, ' ').slice(0, 140), updated: r.updated ?? null, turns: r.turns ?? 0 })) } : null,
-      queued: app.queued ?? null, notice: app.notice ?? null, tip: app.tip ?? null, usageText, files: [...files.values()].reverse(), todos, spend: app.spend ?? '', loopsBadge: app.loopsBadge ?? null,
+      queued: app.queued ?? null, notice: app.notice ?? null, tip: app.tip ?? null, usageText, usage, meter, files: [...files.values()].reverse(), todos, spend: app.spend ?? '', loopsBadge: app.loopsBadge ?? null,
       stats: { ctxUsed: app.stats?.ctxUsed ?? null, ctx: app.ctx ?? null },
     };
   }
@@ -130,6 +135,44 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK) {
     }, SEND_MS);
   }
   return { publish, close: () => { try { sock.end(); } catch {} } };
+}
+
+// The Claude API's usage for the title bar's pill beside the model (12 Oct 2026): the footer's words ("$43.16 left",
+// usageChip) and its tone, and the numbers of the /usage card (claude-usage.mjs usageNow). null off the Claude API.
+export function usageOf(u) {
+  if (!u) return null;
+  const tone = u.capped ? 'bad' : u.low ? 'bad' : u.pace?.beforeReset ? 'warn' : null;
+  const lim = (p) => (p ? { limit: p.limit, remaining: p.remaining, reset: p.reset } : null);
+  return {
+    text: textOf(usageChip(u)), tone, capped: Boolean(u.capped), modelName: u.modelName ?? null,
+    left: u.left, cap: u.cap, spent: u.spent, own: Boolean(u.ownLimit), tier: u.tier ?? null, tierCap: u.tierCap ?? null,
+    month: u.monthName, resetsOn: u.resetsOn, today: u.today?.usd ?? 0, window: u.window ?? 0, last14: u.last14 ?? [],
+    perDay: u.pace?.perDay ?? 0, runsOut: u.pace?.runsOut ?? null, beforeReset: Boolean(u.pace?.beforeReset),
+    source: { kind: u.source?.kind ?? 'meter', usd: u.source?.usd ?? null, at: u.source?.at ?? null, since: u.source?.since ?? 0, days: u.source?.days ?? null, stale: Boolean(u.source?.stale) },
+    limits: u.limits ? { at: u.limits.at, requests: lim(u.limits.requests), input: lim(u.limits.input), output: lim(u.limits.output) } : null,
+  };
+}
+
+// Context and memory for the same pill on a model that costs nothing (12 Oct 2026, the owner: "ensure remote models
+// from another service show context and memory here / same for local models / since those are free"): how full the
+// conversation's context is, and the memory: the Mac's for a model on this Mac (and what the model holds), the
+// service's GPU for one on Ollama (its /api/ps, as the footer's gauge). null on the Claude API (its pill is the month's
+// dollars, usageOf) and with --url.
+export function meterOf(app) {
+  const ms = app?.modelState;
+  if (!ms || app.usage) return null;
+  const st = app.stats ?? {};
+  const ctx = app.ctx ?? st.ctx ?? null, ctxUsed = st.ctxUsed ?? null;
+  const sv = ms.remote && app.server?.loaded ? app.server : null;
+  const m = !ms.remote && app.mac ? app.mac : null;
+  return {
+    remote: Boolean(ms.remote), state: ms.state ?? 'on', name: ms.name ?? app.modelName ?? null, where: ms.where ?? null,
+    ctx, ctxUsed, pct: ctx && ctxUsed != null ? Math.min(100, Math.max(0, Math.round((ctxUsed / ctx) * 100))) : null, ctxWord: ctxWord(ctx),
+    modelGb: ms.gb ?? null,
+    mac: m ? { used: gib(macUsed(m)), total: gib(m.total), pressure: pressureWord(m) } : null,
+    gpu: sv ? { size: sv.size ?? null, vram: sv.vram ?? null, pct: sv.gpuPct ?? null, until: sv.until ?? null, ms: sv.ms ?? null } : null,
+    tps: st.tps ?? null, ttft: st.ttft ?? null, speeds: (st.speeds ?? []).slice(-8),
+  };
 }
 
 export const windowBridge = makeBridge();

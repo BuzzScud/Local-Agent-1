@@ -1,7 +1,7 @@
 // Agentic Coder in its own window (terminal/src/window/, 12 Oct 2026): the pretend terminal's screen (vt.mjs), the
 // conversation as the window draws it (view.mjs), when `coding` opens the window, the app's side of the line
 // (bridge.mjs) and the window server end to end with a stand-in app (server.mjs): its key, the state passed on,
-// keys passed back, the app's end.
+// keys passed back, the app's end; and the pill beside the model (bridge.mjs usageOf, meterOf).
 import { test, expect } from 'bun:test';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,7 +10,7 @@ import net from 'node:net';
 import { VtScreen } from '../src/window/vt.mjs';
 import { viewItem, ansiRows, cellRows, xterm } from '../src/window/view.mjs';
 import { windowWanted, runWindow } from '../src/window/server.mjs';
-import { makeBridge } from '../src/window/bridge.mjs';
+import { makeBridge, usageOf, meterOf } from '../src/window/bridge.mjs';
 import { printedOf } from '../src/app/screen.jsx';
 
 test('the pretend screen keeps text, moves, erasing, wide letters, the other screen, and answers where the cursor is', () => {
@@ -105,6 +105,29 @@ test("the app's side: each redraw as data, only what changed, and the window's c
   expect(toggled).toEqual(['row-1']);
   bridge.close();
   srv.close();
+});
+
+test("the pill beside the model: the Claude API's month as the footer said it, a free model's context and memory", () => {
+  const GB = 2 ** 30;
+  const month = { model: 'claude-opus-5-5', modelName: 'Opus 5.5', cap: 200, tierCap: 500, ownLimit: 200, tier: 'Start', spent: 156.84, left: 43.16, low: false, monthName: 'October', last14: [0, 9.85, 66.81], today: { usd: 1.2 }, window: 0.4, pace: { perDay: 26, runsOut: Date.UTC(2026, 9, 14), beforeReset: true }, limits: null, resetsOn: Date.UTC(2026, 10, 1), capped: null, source: { kind: 'typed', usd: 102.35, at: 1, since: 54.49, days: 1, stale: false } };
+  expect(usageOf(null)).toBeNull();
+  // amber when it runs out before the 1st, red under a tenth, "paused" at the cap, the month's dollars with no cap known
+  expect(usageOf(month)).toMatchObject({ text: '$43.16 left', tone: 'warn', left: 43.16, cap: 200, own: true, today: 1.2, beforeReset: true, source: { kind: 'typed', usd: 102.35 } });
+  expect(usageOf({ ...month, left: 14.2, low: true })).toMatchObject({ text: '$14.20 left', tone: 'bad' });
+  expect(usageOf({ ...month, pace: { perDay: 2, runsOut: null, beforeReset: false } })).toMatchObject({ tone: null });
+  expect(usageOf({ ...month, capped: { kind: 'own', until: 9e15 } })).toMatchObject({ text: 'paused', tone: 'bad', capped: true });
+  expect(usageOf({ ...month, cap: null, left: null, spent: 138.32 })).toMatchObject({ text: '$138.32 this month' });
+  // on the Claude API the pill is the month's; with --url there is no model to speak of
+  expect(meterOf({ usage: month, modelState: { remote: true, state: 'on' } })).toBeNull();
+  expect(meterOf({ modelState: null })).toBeNull();
+  // a model on this Mac: the context, the Mac's memory in Activity Monitor's units, what the model holds
+  const local = meterOf({ modelState: { state: 'on', name: 'Qwen3.5 9B', gb: 6.9 }, ctx: 32768, stats: { ctxUsed: 8192, tps: 21, ttft: 0.6, speeds: [20, 21] }, mac: { total: 16 * GB, avail: 6 * GB, level: 1 } });
+  expect(local).toMatchObject({ remote: false, name: 'Qwen3.5 9B', ctx: 32768, ctxUsed: 8192, pct: 25, ctxWord: '32k', modelGb: 6.9, mac: { used: 10, total: 16, pressure: 'fine' }, gpu: null, tps: 21 });
+  expect(meterOf({ modelState: { state: 'off' }, ctx: 32768, stats: {}, mac: { total: 16 * GB, avail: 1 * GB, level: 4 } })).toMatchObject({ state: 'off', pct: null, mac: { pressure: 'critical' } });
+  // a model on another service: its GPU from Ollama's /api/ps once loaded, never the Mac's memory
+  const svc = { modelState: { remote: true, state: 'on', name: 'Qwen3.6:35B-A3B', where: 'server-1' }, ctx: 65536, stats: { ctxUsed: 48650 }, mac: { total: 16 * GB, avail: 6 * GB, level: 1 } };
+  expect(meterOf({ ...svc, server: { loaded: true, size: 31.2e9, vram: 24.3e9, gpuPct: 78, until: null, ms: 44 } })).toMatchObject({ remote: true, where: 'server-1', pct: 74, ctxWord: '64k', mac: null, gpu: { size: 31.2e9, vram: 24.3e9, pct: 78, ms: 44 } });
+  expect(meterOf({ ...svc, server: { loaded: false } })).toMatchObject({ gpu: null, mac: null });
 });
 
 test('the window server: its page only with its key, the state passed on, keys passed back, and the end of the app', async () => {
