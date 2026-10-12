@@ -1,0 +1,17 @@
+{
+  "identifier": "window-page",
+  "description": "The window server's page on this Mac may move and resize its own window (the title bar it draws).",
+  "windows": [
+    "main"
+  ],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:*/*"
+    ]
+  },
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-internal-toggle-maximize"
+  ]
+}

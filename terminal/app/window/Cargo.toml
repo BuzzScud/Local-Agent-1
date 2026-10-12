@@ -1,0 +1,20 @@
+# Agentic Coder's window (12 Oct 2026, the owner's pick: its own Mac window, built with Tauri, in
+# place of the terminal). A thin shell: it opens one window on the page the window server serves
+# (terminal/src/window/), which runs the real app and draws it in design 2. No logic lives here.
+[package]
+name = "agentic-coder-window"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

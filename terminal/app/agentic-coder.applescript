@@ -27,6 +27,13 @@ end open
 
 on launchIn(p)
 	do shell script "mkdir -p \"$HOME/.agentic-coder\" && printf %s " & quoted form of p & " > \"$HOME/.agentic-coder/last-folder\""
+	-- Its own window (12 Oct 2026): coding window opens the folder in Agentic Coder's window (terminal/src/window/).
+	-- Without the window built (bun run window), Terminal as before.
+	try
+		do shell script "test -d \"$HOME/.agentic-coder/app/Agentic Coder Window.app\""
+		do shell script "\"$HOME/.local/bin/coding\" window --folder " & quoted form of p & " > /dev/null 2>&1 &"
+		return
+	end try
 	tell application "Terminal"
 		activate
 		do script "cd " & quoted form of p & " && clear && exec \"$HOME/.local/bin/coding\""

@@ -56,7 +56,7 @@ const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `
 // foldSteps); while a turn works, a run still open at the end is held for the live area. view (/steps,
 // App.jsx): grouped, the model's lines and their steps as task rows (task-rows.jsx; open: the ones you
 // opened; the task row under way held); words, only what the model says; open (or none), every step as before.
-function printedOf(items, working = false, view = null) {
+export function printedOf(items, working = false, view = null) {
   if (!view || view.steps === 'open') return foldSteps(items, working);
   const g = groupWork(foldSteps(items).printed, { working });
   if (view.steps === 'words') return { printed: g.printed.filter((it) => it.type !== 'group'), held: g.held };
@@ -135,6 +135,53 @@ function usedRows(app, list) {
   return Math.min(n, app.rows);
 }
 
+// The panel in the prompt box's place: a picker, a permission question, /btw (null: the prompt box shows). Its own
+// component so the window (terminal/src/window/bridge.mjs) can draw the same panel alone.
+export const panelOpen = (app) => Boolean(app.picker || app.perm || app.btw);
+export function PanelArea({ app }) {
+  return (
+    app.picker?.kind === 'model' ? (
+      <ModelPicker app={app} />
+    ) : app.picker?.kind === 'usage' ? (
+      <UsagePanel app={app} />
+    ) : app.picker?.kind === 'service' ? (
+      <ServicePicker app={app} />
+    ) : app.picker?.kind === 'profile-step' ? (
+      <ProfileStep app={app} />
+    ) : app.picker?.kind === 'profiles' ? (
+      <ProfilesPanel app={app} />
+    ) : app.picker?.kind === 'jump' ? (
+      <JumpPicker app={app} />
+    ) : app.picker?.kind === 'choice' ? (
+      <ChoicePicker app={app} />
+    ) : app.picker?.kind === 'limits' ? (
+      <LimitsPicker app={app} />
+    ) : app.picker?.kind === 'remote' || app.picker?.kind === 'web' ? (
+      <RemotePicker app={app} />
+    ) : app.picker?.kind === 'mcp' ? (
+      <McpPicker app={app} />
+    ) : app.picker?.kind === 'hooks' ? (
+      <HooksPicker app={app} />
+    ) : app.picker?.kind === 'settings' ? (
+      <SettingsPicker app={app} />
+    ) : app.picker?.kind === 'rewind' ? (
+      <RewindPicker app={app} />
+    ) : app.picker ? (
+      <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+        <Text bold>{app.picker.title}</Text>
+        {app.picker.items.slice(0, 12).map((p, i) => (
+          <Text key={p.key}><Text color={i === app.picker.index ? C.accent : undefined}>{i === app.picker.index ? '❯' : ' '} {p.label}</Text><Text color={C.dim}>  {p.desc}</Text></Text>
+        ))}
+        <Text color={C.dim}>↑↓ to choose · enter to open · esc to cancel</Text>
+      </Box>
+    ) : app.perm ? (
+      <PermissionPrompt app={app} />
+    ) : app.btw ? (
+      <BtwPanel app={app} />
+    ) : null
+  );
+}
+
 export function Screen({ app }) {
   const { width, modelName, cwd } = app;
   // The live part's height as last drawn, and how many items were printed then.
@@ -209,45 +256,7 @@ export function Screen({ app }) {
       <Box flexGrow={1} />
       {app.popup ? <><Popup app={app} /><Box flexGrow={1} /></> : null}
       <Box flexDirection="column" flexShrink={0}>
-      {app.picker?.kind === 'model' ? (
-        <ModelPicker app={app} />
-      ) : app.picker?.kind === 'usage' ? (
-        <UsagePanel app={app} />
-      ) : app.picker?.kind === 'service' ? (
-        <ServicePicker app={app} />
-      ) : app.picker?.kind === 'profile-step' ? (
-        <ProfileStep app={app} />
-      ) : app.picker?.kind === 'profiles' ? (
-        <ProfilesPanel app={app} />
-      ) : app.picker?.kind === 'jump' ? (
-        <JumpPicker app={app} />
-      ) : app.picker?.kind === 'choice' ? (
-        <ChoicePicker app={app} />
-      ) : app.picker?.kind === 'limits' ? (
-        <LimitsPicker app={app} />
-      ) : app.picker?.kind === 'remote' || app.picker?.kind === 'web' ? (
-        <RemotePicker app={app} />
-      ) : app.picker?.kind === 'mcp' ? (
-        <McpPicker app={app} />
-      ) : app.picker?.kind === 'hooks' ? (
-        <HooksPicker app={app} />
-      ) : app.picker?.kind === 'settings' ? (
-        <SettingsPicker app={app} />
-      ) : app.picker?.kind === 'rewind' ? (
-        <RewindPicker app={app} />
-      ) : app.picker ? (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={width}>
-          <Text bold>{app.picker.title}</Text>
-          {app.picker.items.slice(0, 12).map((p, i) => (
-            <Text key={p.key}><Text color={i === app.picker.index ? C.accent : undefined}>{i === app.picker.index ? '❯' : ' '} {p.label}</Text><Text color={C.dim}>  {p.desc}</Text></Text>
-          ))}
-          <Text color={C.dim}>↑↓ to choose · enter to open · esc to cancel</Text>
-        </Box>
-      ) : app.perm ? (
-        <PermissionPrompt app={app} />
-      ) : app.btw ? (
-        <BtwPanel app={app} />
-      ) : (
+      {panelOpen(app) ? <PanelArea app={app} /> : (
         <Box flexDirection="column">
           {app.agentsLine ? <AgentsLine segs={app.agentsLine} /> : null}
           {app.loopsLine ? <LoopsLine segs={app.loopsLine} /> : null}
