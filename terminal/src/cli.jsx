@@ -124,6 +124,8 @@ function parse(argv) {
     else if (a === '--folder') { o.folder = true; o.cwd = resolve(val() ?? '.'); }
     // --bg: start in the background, with no window (app/sessions.mjs); coding attach opens it.
     else if (a === '--bg') o.bg = true;
+    // --terminal: this window shows the app in the terminal, not in its own window (terminal/src/window/).
+    else if (a === '--terminal') o.terminal = true;
     // --loop-events: one run of a loop (/loop). Its window starts it, reads what happens as JSON lines and
     // answers its questions (app/loop-run.mjs); the message comes in AGENTIC_LOOP_SPEC.
     else if (a === '--loop-events') { o.loopEvents = true; o.print = true; }
@@ -266,6 +268,17 @@ if (process.argv[2] === 'serve') {
     s.server.on('crash', ({ code, signal }) => { process.stderr.write(`coding serve: the model stopped (code ${code ?? signal}); see ~/.agentic-coder/logs/server.log\n`); process.exit(1); });
   } catch (e) { process.stderr.write(`coding serve: ${e.message}\n`); await s?.stop().catch(() => {}); process.exit(1); }
   await new Promise(() => {});
+}
+// coding window [--folder <path>] [app arguments]: the app in its own window, with no terminal needed (the window's
+// "Open another folder…" and the Agentic Coder app start it this way; `coding` in a terminal does the same itself).
+if (process.argv[2] === 'window') {
+  const { runWindow, windowApp } = await import('./window/server.mjs');
+  if (!windowApp()) { process.stderr.write('coding window: the window is not built yet. Build it with: bun run window\n'); process.exit(1); }
+  const a = process.argv.slice(3);
+  const at = a.indexOf('--folder');
+  const folder = at >= 0 ? resolve(a[at + 1] ?? '.') : process.cwd();
+  const rest = at >= 0 ? [...a.slice(0, at), ...a.slice(at + 2)] : a;
+  process.exit(await runWindow({ folder, args: rest, say: () => {} }));
 }
 // coding session-host: the keeper of one background session (app/sessions.mjs). coding starts it, not you.
 if (process.argv[2] === 'session-host') {
@@ -571,6 +584,13 @@ if (opts.print) {
   }
 } else {
   if (!process.stdin.isTTY) { process.stderr.write('coding needs a terminal. For scripts use: coding -p "…"\n'); process.exit(2); }
+  // Its own window (12 Oct 2026, the owner's pick: a Mac window in the terminal's place, Tauri): the window server
+  // runs this app in a pretend terminal and the window draws it (terminal/src/window/). Not with --terminal, over
+  // SSH, inside a session or the window's own copy, or where the window is not built.
+  if (!process.env.AGENTIC_WINDOW_CHILD && !process.env.AGENTIC_IN_HOST && process.stdout.isTTY) {
+    const { windowWanted, runWindow } = await import('./window/server.mjs');
+    if (windowWanted(opts)) process.exit(await runWindow({ folder: opts.cwd, args: process.argv.slice(2) }));
+  }
   // The app runs in a background session and this window shows it (app/sessions.mjs), so
   // ctrl+b can leave it running. Not inside a session already, and not where this Bun cannot.
   if (!process.env.AGENTIC_IN_HOST && process.stdout.isTTY) {

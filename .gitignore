@@ -50,3 +50,6 @@ models/evals/dev/experiments/*.log
 models/evals/dev/experiments/julia-recall/
 models/evals/dev/experiments/*/*.log
 __pycache__/
+# The window's build (terminal/app/window/): Tauri writes its schemas here as it builds; the build itself goes to <home>/build/window-target.
+terminal/app/window/gen/
+terminal/app/window/target/

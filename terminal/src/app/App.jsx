@@ -57,6 +57,7 @@ import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
 import { savedWatch, repairNow } from './saved-services.mjs';
 import { promptMenu } from './app-menu.mjs';
+import { windowBridge } from '../window/bridge.mjs';
 export { remoteConfOf } from './app-common.mjs';
 let seq = 0;
 
@@ -1026,5 +1027,7 @@ export function App({ opts, win, onRestart }) {
   app.trayLayout = trayLayout(app.tray, { width: app.width, rows: app.rows, mouse });
   app.mouse = mouse;
   trayRef.current = app.trayLayout;
+  // The window (terminal/src/window/): every redraw goes to it as data too, when the window server runs the app.
+  windowBridge?.publish(app, self);
   return <Screen app={app} />;
 }

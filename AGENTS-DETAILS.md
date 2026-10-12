@@ -1428,6 +1428,31 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   following and writing back, the repair on their own case, the key store of a copy, a preview's home, and the real
   window: Save only keeps the Claude API saved elsewhere, and one another window dropped comes back).
 
+## Its own window (12 Oct 2026)
+
+- **What and why.** The owner, on a screenshot of `coding`: "why is it still the terminal? didnt we change the entire
+  ui?" (the design rounds of that day had only drawn it). Their picks: Tauri, everything the terminal does, the window
+  in the terminal's place, see it running before a push. The design is `docs/design rounds/agentic-coder-window-design-2026-10-12.html`.
+- **How** (`terminal/src/window/`): `coding` in a terminal (cli.jsx, `windowWanted`: a Mac, the window built, not
+  `--terminal`, `-p`, `--bg`, SSH, tmux, `AGENTIC_WINDOW=off` or the tests) starts the window server (`server.mjs`
+  `runWindow`), which runs the real app in a pretend terminal (as the keeper does) with `AGENTIC_WINDOW_SOCK`, so every
+  redraw also goes out as data (`bridge.mjs`, called last in App.jsx's render; only what changed is sent): the
+  conversation through the app's own grouping (`printedOf`) as view items (`view.mjs`), the turn under way, the prompt as
+  typed, the open menu, a permission question, the mode and the model. A panel the window has no view of its own for
+  (`PanelArea`: the pickers, /btw) and the full-window screens (/agents' tree, /loop's board) go as the app draws them
+  (ANSI rows), and before the app draws as data (the folder question, the safety check) the window shows the pretend
+  terminal's screen (`vt.mjs`). So everything the terminal does works in the window from the start. The page
+  (`ui.html`, design 2) sends keys as the terminal would and clicks as actions (a task row opened, the mode, a
+  conversation resumed). It is served on 127.0.0.1 with a key in its address; the bridge's socket is the user's own (0600).
+- **The window** (`terminal/app/window/`, Tauri 2, `bun run window` builds it into `<home>/app/Agentic Coder Window.app`;
+  needs Rust): one webview on the server's page, its title bar drawn by the page under the Mac's own lights (a
+  capability lets that page move its window). Closing it ends the app as closing its terminal did (it saves first); the
+  app ending closes it. `coding window [--folder <path>]` opens one with no terminal (the Agentic Coder app and the
+  window's "Open another folder…" use it); `coding --terminal` keeps the terminal.
+- **Tests**: `terminal/test/window.test.mjs` (the screen, the view items, when it opens, the bridge's changes and
+  actions, and the server with a stand-in app: its key, the state, keys back, the end). The app tests keep the
+  terminal (`AGENTIC_WINDOW=off` in test-env.mjs).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
