@@ -109,7 +109,7 @@ export async function connectCli(argv, { settings, ask = terminalAsker(), out = 
     if (res.ok || o.saveAnyway) {
       const risk = remoteRisk(toProfile(form));
       if (risk) err(`  ! ${risk}.\n`);
-      keepPlan(savePlan(form, settings, { connect: true }), settings);
+      keepPlan(form, settings);
       err(`  ✓ Saved: Agentic Coder uses ${sourceWord('machine')} ${remoteLabel(toProfile(form))}. /remote changes it later.\n`);
       return 0;
     }
@@ -118,7 +118,7 @@ export async function connectCli(argv, { settings, ask = terminalAsker(), out = 
     if (/^n/i.test(again)) {
       const keepIt = await ask.line('  Save it anyway (fix it later with /remote)? [y/N] ');
       if (!/^y/i.test(keepIt)) { err('  Nothing saved.\n'); return 1; }
-      keepPlan(savePlan(form, settings, { connect: true }), settings);
+      keepPlan(form, settings);
       err(`  ✓ Saved, not reached yet. /remote shows it.\n`);
       return 0;
     }
@@ -129,10 +129,12 @@ export async function connectCli(argv, { settings, ask = terminalAsker(), out = 
   }
 }
 
-// The keys first (nothing is written when one cannot be kept), then settings.json: as the app's Connect does.
-function keepPlan(plan, settings) {
-  for (const k of plan.keys) { if (k.op === 'save') saveKey(k.key, k.id, `Agentic Coder · ${sourceWord(k.source)}`); else removeKey(k.id); }
-  const next = saveSettings({ remotes: plan.remotes, ...(plan.remote ? { remote: plan.remote } : {}) });
+// The keys first (nothing is written when one cannot be kept), then settings.json: as the app's Connect does, on
+// the file as it is when it saves (a window may have saved a service while this asked).
+function keepPlan(form, settings) {
+  for (const k of savePlan(form, settings, { connect: true }).keys) { if (k.op === 'save') saveKey(k.key, k.id, `Agentic Coder · ${sourceWord(k.source)}`); else removeKey(k.id); }
+  let plan;
+  const next = saveSettings((now) => { plan = savePlan(form, now, { connect: true }); return { remotes: plan.remotes, ...(plan.remote ? { remote: plan.remote } : {}) }; });
   settings.remotes = next.remotes;
   if (plan.remote) settings.remote = next.remote;
 }

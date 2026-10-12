@@ -5,7 +5,7 @@ import { jobsOf, MAIN } from './subagents.mjs';
 import { serverOf } from './profiles.mjs';
 import { RemoteEmbedder } from '../agent/helper-models.mjs';
 import { serviceKey, readTryouts } from './tryouts.mjs';
-import { saveSettings } from './store.mjs';
+import { saveUse } from './store.mjs';
 
 export function panelsHelpers(self, own) {
   // The /subagents jobs as saved (settings.json `helperModels`, by service address): today's helpers, and
@@ -33,7 +33,7 @@ export function panelsHelpers(self, own) {
   // A model on this Mac picked while on a remote: back to this Mac with it (the remote stays saved, off).
   const pickHere = (picked) => {
     self.localModelRef.current = picked;
-    self.settings.remote = saveSettings({ model: picked.id, remote: { ...(self.settings.remote ?? DEFAULT_REMOTE), use: false } }).remote;
+    self.settings.remote = saveUse(self.settings.remote ?? DEFAULT_REMOTE, false, { model: picked.id }).remote;
     self.useLocal({ note: `Now on ${picked.name}, on this Mac. /remote turns the remote back on.` });
   };
   return { subagentsKey, applyHelpers, serviceOf, serviceProps, pickHere };

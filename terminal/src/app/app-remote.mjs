@@ -13,7 +13,8 @@ import { ctxWord, suggestModel, openService } from './remote-models.mjs';
 import { MAIN } from './subagents.mjs';
 import { tryOut } from '../agent/tryout.mjs';
 import { readTryouts, saveTryout } from './tryouts.mjs';
-import { saveSettings, loadSettings, recentFolders } from './store.mjs';
+import { saveSettings, loadSettings, recentFolders, saveService, saveUse } from './store.mjs';
+import { followSaved } from './saved-services.mjs';
 import { askJump, DETACH_LABEL } from './sessions.mjs';
 import { openJumpBox as jumpBox, jumpKey } from './jump-box.mjs';
 import { Loops } from './loops.mjs';
@@ -51,7 +52,10 @@ export function remotePart(self) {
         self.setModel(before.model);
         self.setRemoteState(null);
         // Kept, but off: the next start does not try a remote that just failed.
-        if (self.settings.remote?.use) self.settings.remote = saveSettings({ remote: { ...self.settings.remote, use: false } }).remote;
+        if (self.settings.remote?.use) {
+          saveSettings((now) => (now.remote?.use && sourceOf(now.remote) === sourceOf(r) ? { remote: { ...now.remote, use: false } } : {}));
+          self.settings.remote = { ...self.settings.remote, use: false };
+        }
         self.push({ type: 'note', text: `The remote at ${remoteLabel(r)} did not answer, so nothing changed: ${e.message}. Still on ${before.model.name}, on this Mac; the remote is saved but off (/remote to fix it and try again).`, tone: 'error' });
         return false;
       }
@@ -156,6 +160,7 @@ export function remotePart(self) {
   // The form opens on the service in use in this window (This Mac when none is),
   // or on `source`; ask: a row to start typing in (/remote claude with no key yet).
   const openRemoteForm = ({ source = null, ask = null } = {}) => {
+    followSaved(self.settings);
     const f = openForm(self.settings, { on: Boolean(self.remoteRef.current.on), source, mac: self.sharedRef.current });
     if (!ask) { self.setPicker(f); return; }
     self.setPicker({ ...startEdit({ ...f, index: remoteRows(f).findIndex((r) => r.id === ask) }, ask), ask });
@@ -234,17 +239,19 @@ export function remotePart(self) {
   // Saves what the form changed: the keys first (nothing is written when one
   // cannot be kept), then settings.json. Answers the plan, or null.
   const keepForm = (pk, { connect }) => {
-    const plan = savePlan(pk, self.settings, { connect });
+    const plan = savePlan(pk, loadSettings(), { connect });
     if (formWarning(pk)?.tone === 'error' && pk.source !== 'here') { self.setPicker({ ...pk, tried: true, error: 'Nothing was saved: fix the line above first.' }); return null; }
     try {
       for (const k of plan.keys) { if (k.op === 'save') saveKey(k.key, k.id, `Agentic Coder · ${sourceWord(k.source)}`); else removeKey(k.id); }
     } catch (e) { self.setPicker({ ...pk, error: `Nothing was saved: the key could not be kept (${e.message}).` }); return null; }
-    const next = saveSettings({ remotes: plan.remotes, ...(plan.remote ? { remote: plan.remote } : {}), ...(plan.memoryToRemote ? { memoryToRemote: plan.memoryToRemote } : {}), ...('remoteCleanAt' in plan ? { remoteCleanAt: plan.remoteCleanAt } : {}) });
+    // Worked out again on the file as it is under the save's lock (the keys are the form's, whatever the file).
+    let kept = plan;
+    const next = saveSettings((now) => { kept = savePlan(pk, now, { connect }); return { remotes: kept.remotes, ...(kept.remote ? { remote: kept.remote } : {}), ...(kept.memoryToRemote ? { memoryToRemote: kept.memoryToRemote } : {}), ...('remoteCleanAt' in kept ? { remoteCleanAt: kept.remoteCleanAt } : {}) }; });
     self.settings.remotes = next.remotes;
     if (plan.remote) self.settings.remote = next.remote;
     if (plan.memoryToRemote) self.settings.memoryToRemote = next.memoryToRemote;
     if ('remoteCleanAt' in plan) { self.settings.remoteCleanAt = next.remoteCleanAt; self.agent.workRoom = Number(next.remoteCleanAt) || 0; }
-    return plan;
+    return kept;
   };
   // Connect: the shown service's rows are checked as they are (the tunnel opened
   // and closed for it); only when that works are they saved and the window
@@ -345,10 +352,11 @@ export function remotePart(self) {
   // /remote claude, /remote computer, /remote service: straight to that saved
   // service; one not set up yet opens the form on it, typing in its first row.
   const remoteTo = (source) => {
+    followSaved(self.settings);
     const r = remotesOf(self.settings)[source];
     if (!readyRemote(r)) { openRemoteForm({ source, ask: source === 'claude' ? 'key' : 'address' }); return; }
     if (self.remoteRef.current.on && self.remoteRef.current.conn && sourceOf(self.settings.remote) === source) { self.push({ type: 'note', text: `Already on ${sourceWord(source)} (${remoteLabel(self.settings.remote)}).`, tone: 'dim' }); return; }
-    self.settings.remote = saveSettings({ remote: { ...r, use: true } }).remote;
+    self.settings.remote = saveUse(r, true).remote;
     useRemote(self.settings.remote);
   };
   // An Ollama service's list (ollama.mjs), read in the background: after a connect, and as /model opens.
@@ -364,8 +372,8 @@ export function remotePart(self) {
   const setServiceCtx = (name, v) => {
     const src = sourceOf(self.settings.remote);
     const put = (p) => { const contexts = { ...(p?.contexts ?? {}) }; if (v) contexts[name] = v; else delete contexts[name]; return { ...p, contexts }; };
-    const saved = saveSettings({ remote: put(self.settings.remote), ...(self.settings.remotes?.[src] ? { remotes: { ...self.settings.remotes, [src]: put(self.settings.remotes[src]) } } : {}) });
-    self.settings.remote = saved.remote;
+    const saved = saveService(src, put);
+    self.settings.remote = put(self.settings.remote);
     self.settings.remotes = saved.remotes;
   };
   // A message that waited while a model loaded on the service goes now.
@@ -535,7 +543,7 @@ export function remotePart(self) {
     self.lendConn(r, conn);
     self.agent.remoteConf = remoteConfOf(r);
     const src = sourceOf(r);
-    const saved = saveSettings({ remote: r, ...(self.settings.remotes?.[src] ? { remotes: { ...self.settings.remotes, [src]: { ...self.settings.remotes[src], model: id } } } : {}) });
+    const saved = saveService(src, (p) => ({ ...p, model: id }), { remote: r });
     self.settings.remote = saved.remote;
     self.settings.remotes = saved.remotes;
     const m = conn.model;

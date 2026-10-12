@@ -10,7 +10,7 @@ import { thinkingLevel, battleHold, otherCopies, freeAfterQuit, serverProcesses,
 import { copyAt, registerWindow, projectOf, othersIn, keptCopies, unregisterWindow, copyChanges, removeCopy, makeCopy, changeLines, putBack } from './copies.mjs';
 import { startWeightsServer } from './weights.mjs';
 import { MODE_OPTIONS } from './help.mjs';
-import { loadSettings, saveSettings } from './store.mjs';
+import { loadSettings, saveService } from './store.mjs';
 import { startModeFor } from './perm-store.mjs';
 import { modeWord } from './perms.mjs';
 import { modelWithLimits, readLimits, OWN_ROWS, ownOf, limitChanges, applyLimits } from './limits.mjs';
@@ -453,8 +453,8 @@ export function modelPart(self) {
   const setOwn = (name, own) => {
     const src = sourceOf(self.settings.remote);
     const put = (p) => { const tuned = { ...(p?.tuned ?? {}) }; if (own) tuned[name] = own; else delete tuned[name]; return { ...p, tuned }; };
-    const saved = saveSettings({ remote: put(self.settings.remote), ...(self.settings.remotes?.[src] ? { remotes: { ...self.settings.remotes, [src]: put(self.settings.remotes[src]) } } : {}) });
-    self.settings.remote = saved.remote;
+    const saved = saveService(src, put);
+    self.settings.remote = put(self.settings.remote);
     self.settings.remotes = saved.remotes;
   };
   return { pickLevels, pickLevel, waitForBattle, waitForOthers, modelKey, timeLoad, timeLoaded, timeWarmed, timeDone, listOtherWindows, pushFn, fold, flashFn, setModeFn, openHub, switchModel, openChoice, startCopy, askCopyBack, doPutBack, relimit, applyKeep, saveOwnLevel, setOwn, ownLevel };

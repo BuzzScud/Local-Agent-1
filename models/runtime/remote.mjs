@@ -18,7 +18,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
-import { HOME, MODELS } from '../registry.mjs';
+import { HOME, MODELS, isRealHome } from '../registry.mjs';
 import { CLAUDE_HOST, CLAUDE_CTX, CLAUDE_MODELS, claudeProbe } from './claude.mjs';
 import { ollamaModel, ollamaCtx, floorCtx, isOutOfMemory, OPEN_KEEP } from './ollama.mjs';
 
@@ -147,10 +147,29 @@ export function modelFetch(url, path, init = {}) {
 // conversation). AGENTIC_REMOTE_KEY wins over it (a script, a test);
 // AGENTIC_REMOTE_KEYSTORE=file keeps it in ~/.agentic-coder/remote-keys.json
 // (readable by you only), which is also the fallback off macOS.
+// The Keychain is the whole Mac's, not a home's: a copy of the app with a home of its own (a test, a preview, a
+// worktree's try-out) had written its keys over yours there (12 Oct 2026: the Claude key in the Keychain was not
+// the one settings.json named, and the owner kept typing it in again). Such a copy keeps its keys in its own key
+// file, and reads yours from the Keychain when it has none of its own (`readsYours`), never writing them.
+// AGENTIC_REMOTE_KEYSTORE=keychain is the Keychain whatever the home.
 const SERVICE = 'agentic-coder-remote';
 const SECURITY = '/usr/bin/security';
 const keyFile = () => join(HOME, 'remote-keys.json');
-export const keyStore = () => (process.platform === 'darwin' && process.env.AGENTIC_REMOTE_KEYSTORE !== 'file' && existsSync(SECURITY) ? 'keychain' : 'file');
+const hasKeychain = () => process.platform === 'darwin' && existsSync(SECURITY);
+export const keyStore = () => {
+  const asked = process.env.AGENTIC_REMOTE_KEYSTORE;
+  if (asked === 'file' || !hasKeychain()) return 'file';
+  return asked === 'keychain' || isRealHome() ? 'keychain' : 'file';
+};
+// A copy with a home of its own reads your keys when it has none: never in a test run (bun test sets NODE_ENV
+// for every process it starts), never with the key file asked for, and not with AGENTIC_YOUR_KEYS=off.
+export const readsYours = () => keyStore() === 'file' && hasKeychain() && !process.env.AGENTIC_REMOTE_KEYSTORE
+  && process.env.NODE_ENV !== 'test' && process.env.AGENTIC_YOUR_KEYS !== 'off';
+const fromKeychain = (id) => {
+  const r = spawnSync(SECURITY, ['find-generic-password', '-a', id, '-s', SERVICE, '-w'], { encoding: 'utf8', timeout: 10_000 });
+  return r.status === 0 ? r.stdout.replace(/\n$/, '') || null : null;
+};
+const fromFile = (id) => { try { return JSON.parse(readFileSync(keyFile(), 'utf8'))[id] ?? null; } catch { return null; } };
 // A key the server can take in a header: printable, no spaces or line breaks.
 export const validKey = (key) => typeof key === 'string' && /^[\x21-\x7e]{1,4096}$/.test(key);
 
@@ -159,11 +178,8 @@ export const validKey = (key) => typeof key === 'string' && /^[\x21-\x7e]{1,4096
 const envKey = (id) => (process.env.AGENTIC_REMOTE_KEY && !/^(search|mcp)-|^claude-admin$/.test(String(id)) ? process.env.AGENTIC_REMOTE_KEY : null);
 export function readKey(id = 'default') {
   if (envKey(id)) return envKey(id);
-  if (keyStore() === 'keychain') {
-    const r = spawnSync(SECURITY, ['find-generic-password', '-a', id, '-s', SERVICE, '-w'], { encoding: 'utf8', timeout: 10_000 });
-    return r.status === 0 ? r.stdout.replace(/\n$/, '') || null : null;
-  }
-  try { return JSON.parse(readFileSync(keyFile(), 'utf8'))[id] ?? null; } catch { return null; }
+  if (keyStore() === 'keychain') return fromKeychain(id);
+  return fromFile(id) ?? (readsYours() ? fromKeychain(id) : null);
 }
 
 // label: what Keychain Access shows for it (the web search keys have their own).
@@ -217,8 +233,8 @@ export function saveSecret(text, id, label = 'Agentic Coder') {
 }
 export function readSecret(id) {
   let b64 = null;
-  if (keyStore() === 'keychain') { const r = spawnSync(SECURITY, ['find-generic-password', '-a', id, '-s', SERVICE, '-w'], { encoding: 'utf8', timeout: 10_000 }); b64 = r.status === 0 ? r.stdout.replace(/\n$/, '') : null; }
-  else { try { b64 = JSON.parse(readFileSync(keyFile(), 'utf8'))[id] ?? null; } catch { b64 = null; } }
+  if (keyStore() === 'keychain') b64 = fromKeychain(id);
+  else b64 = fromFile(id) ?? (readsYours() ? fromKeychain(id) : null);
   if (!b64) return null;
   try { return Buffer.from(b64, 'base64url').toString('utf8'); } catch { return null; }
 }

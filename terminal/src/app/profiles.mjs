@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from '
 import { join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 import { readSkills } from '../agent/prompt-files.mjs';
+import { keepCopy } from './store.mjs';
 
 export const PROFILES_FILE = () => join(HOME, 'profiles.json');
 export const MAIN_PROFILE = 'Main';
@@ -131,11 +132,16 @@ export function readProfiles(settings, jobs = null) {
   return seedProfiles(settings, jobs);
 }
 
-// Written whole through a file beside it, so a window reading it never sees half of it.
+// Written whole through a file beside it, so a window reading it never sees half of it. The file before a change
+// is kept in <home>/backups/profiles (store.mjs keepCopy): it names your servers too.
 export function writeProfiles(data) {
   mkdirSync(HOME, { recursive: true });
+  const text = `${JSON.stringify({ profiles: data.profiles, uses: data.uses }, null, 2)}\n`;
+  let before = null;
+  try { before = readFileSync(PROFILES_FILE(), 'utf8'); } catch {}
+  if (before !== null && before !== text) keepCopy(PROFILES_FILE(), 'profiles');
   const tmp = `${PROFILES_FILE()}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify({ profiles: data.profiles, uses: data.uses }, null, 2)}\n`);
+  writeFileSync(tmp, text);
   renameSync(tmp, PROFILES_FILE());
   return data;
 }

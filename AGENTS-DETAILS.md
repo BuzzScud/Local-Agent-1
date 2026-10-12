@@ -1391,6 +1391,43 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the fall back to the default, and a web run's side jobs on the Helper). `terminal/test/web.test.mjs` is the web
   *tools* (WebFetch, WebSearch).
 
+## Your services stay saved (12 Oct 2026)
+
+- **What and why.** The owner: "i want to ensure my data is saved. i keep having to add the other service address
+  and the claude api in every time we fix or change something". Three causes, found on their Mac: (1) a window kept
+  the services it read when it opened and wrote them all back with any change (a model's context, a model's own
+  settings, a model picked on a service, the /remote form), so a service saved in another window since was lost
+  (proven in a throwaway home: window B connects the Claude API, window A changes a model, the Claude API is gone);
+  (2) the Keychain is the whole Mac's, so a copy of the app with a home of its own (a test, a preview, a worktree's
+  try-out) wrote its keys over theirs and started with no services (their settings.json named a Claude key whose end
+  was not the end of the key the Keychain held); (3) nothing put back what was lost. Their picks: A · Full, previews start
+  with their services and key, build, test, push.
+- **Saves** (`terminal/src/app/store.mjs`): `saveSettings(patch)` takes a patch or a function of the file as it is,
+  reads and writes under a short lock beside the file (`withLock`: an exclusive create, 1 s at most, a lock older
+  than 5 s taken over) and writes the file whole (`writeWhole`: a file beside it, renamed over it).
+  `saveService(source, change, { remote })` changes one service on the file's copy; `saveUse(r, use, more)` switches
+  the one in use for the next start with the file's set-up of it. The /remote form's `savePlan(form, settings)` is
+  given the file as it is and writes what the form changed field by field over the file's copy
+  (`terminal/src/app/remote-form.mjs`); `coding connect` does the same.
+- **Backups**: the file before each change of the services (settings.json's `remote`/`remotes`), and profiles.json
+  before each change, in `<home>/backups/settings|profiles/`, the newest 20 (`keepCopy`, `readCopies`).
+- **Windows stay in step** (`terminal/src/app/saved-services.mjs`, App.jsx): every 2 s a window whose settings.json
+  changed takes the services from it (`followSaved`: its own service keeps its model and on/off), and a service it
+  knows that the file lost is written back with a warn line (nothing removes a whole service on purpose). At a
+  window's start (`repairNow`, `repairServices`): a service settings.json lost that profiles.json still uses, or a
+  Claude key still kept, comes back from the newest backup that has it, else from the profile; a key's end that is
+  not the key kept is set right; a key named but not kept is said. `AGENTIC_SERVICES_REPAIR=off` in the tests.
+- **Keys** (`models/runtime/remote.mjs`): `keyStore()` is the Keychain only for your own home (`isRealHome`,
+  `REAL_HOME` in registry.mjs) or with `AGENTIC_REMOTE_KEYSTORE=keychain`; a copy with a home of its own keeps its
+  keys in its key file and reads yours from the Keychain when it has none (`readsYours`: never in a test run, nor with
+  the key file asked for or `AGENTIC_YOUR_KEYS=off`). The benches' throwaway homes still reach the Claude API so.
+- **Previews** (`seedCopy`, cli.jsx): a window (not `coding -p`) whose home is not yours and has no settings.json yet
+  starts with your services and profiles.json, copied once; it says so in one line. `AGENTIC_SEED=off` for a preview
+  that must start empty (screens drawn on stand-in models).
+- **Tests**: `terminal/test/saved-services.test.mjs` (each old path, the form, eight processes at once, the backups,
+  following and writing back, the repair on their own case, the key store of a copy, a preview's home, and the real
+  window: Save only keeps the Claude API saved elsewhere, and one another window dropped comes back).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
