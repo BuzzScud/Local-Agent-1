@@ -6,7 +6,7 @@
 // backups, a window following another's saves and writing back one it lost, the repair at a window's start, the
 // key store of a copy, and a preview's services; then two real windows.
 import { test, expect, beforeEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -218,4 +218,42 @@ test('the real window: Save only in /remote keeps the Claude API saved elsewhere
   expect(s.remotes.claude).toEqual(CLAUDE);
   expect(s.remotes.openai.address).toBe(svc.url);
   expect(r.snapshots.kept.replace(/\s+/g, ' ')).toContain('Kept the Claude API set-up: another window had saved settings without it.');
+}, T);
+
+// The two parts the tests above call directly, through the real window (12 Oct 2026, found by planting: taking either
+// call out of App.jsx or cli.jsx failed no test). At the start, a service settings.json lost but profiles.json uses
+// comes back and is said; a preview's home (not yours, no settings yet) starts with your services, read from a pretend
+// home here (HOME), with the real Keychain never read (AGENTIC_YOUR_KEYS=off).
+test('the real window: at its start a service settings.json lost comes back and is said', async () => {
+  const { cwd, env, base } = setup();
+  const svc = await fakeOllama();
+  const home = join(base, 'home');
+  writeFileSync(join(home, 'settings.json'), JSON.stringify({ remotes: {} }));
+  const server = { kind: 'openai', source: 'openai', address: svc.url, port: null, connect: 'http', keyId: 'openai' };
+  writeFileSync(join(home, 'profiles.json'), JSON.stringify({ profiles: { Fast: { server, model: 'coder:30b', backup: null, spillAfter: 0 } }, uses: { 'ai:side': 'Fast' } }));
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_MODEL_AT_START: 'off', AGENTIC_SERVICES_REPAIR: 'on' }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
+    { wait: '? for shortcuts' }, { wait: 'Brought back the other service set-up', ms: 10_000 }, { sleep: 300 }, { snapshot: 'start' },
+    ...quit,
+  ] });
+  await svc.close();
+  expect(r.snapshots.start.replace(/\s+/g, ' ')).toContain(`Brought back the other service set-up (${svc.url}): settings.json had lost it; taken from your profiles.`);
+  expect(JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')).remotes.openai).toMatchObject({ address: svc.url, model: 'coder:30b' });
+}, T);
+
+test('the real window: a preview\'s home starts with your services and profiles, and says so', async () => {
+  const { cwd, env, base } = setup();
+  const you = join(base, 'you');
+  mkdirSync(join(you, '.agentic-coder'), { recursive: true });
+  const service = { ...SVC, address: 'http://10.0.0.20:60009' };
+  writeFileSync(join(you, '.agentic-coder', 'settings.json'), JSON.stringify({ remote: { ...service, use: false }, remotes: { openai: service, claude: CLAUDE }, lastMode: 'bypass' }));
+  writeFileSync(join(you, '.agentic-coder', 'profiles.json'), JSON.stringify({ profiles: {}, uses: {} }));
+  const r = await runInPty({ cwd, env: { ...env, HOME: you, NODE_ENV: '', AGENTIC_YOUR_KEYS: 'off', AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '', AGENTIC_MODEL_AT_START: 'off' }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
+    { wait: '? for shortcuts' }, { wait: 'This copy has a home of its own', ms: 10_000 }, { sleep: 300 }, { snapshot: 'start' },
+    ...quit,
+  ] });
+  const seeded = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
+  expect(r.snapshots.start.replace(/\s+/g, ' ')).toContain('This copy has a home of its own and started with your services; it reads your keys from the Keychain and never writes there.');
+  expect(seeded.remotes).toEqual({ openai: service, claude: CLAUDE });
+  expect(seeded.lastMode).not.toBe('bypass'); // only the services come over
+  expect(existsSync(join(base, 'home', 'profiles.json'))).toBe(true);
 }, T);
