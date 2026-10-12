@@ -366,6 +366,12 @@ if (opts.bg) {
 }
 // Commands run where the agent works, as if coding had been typed there.
 if (opts.folder) { try { process.chdir(opts.cwd); } catch { process.stderr.write(`coding: no folder ${opts.cwd}\n`); process.exit(2); } }
+// A copy of the app with a home of its own (a preview, a worktree's try-out) starts with your services
+// (saved-services.mjs seedCopy); a run of coding -p keeps the home it was given as it is.
+if (!opts.print) {
+  const { seedCopy } = await import('./app/saved-services.mjs');
+  if (seedCopy()) process.env.AGENTIC_SEEDED = '1';
+}
 // The model picked last time (kept by /model) — the edited copy included,
 // when its file and manifest are still there.
 opts.modelId = (modelById(opts.modelId) ?? modelById(loadSettings(opts.cwd).model) ?? MODELS[DEFAULT_MODEL]).id;

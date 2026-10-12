@@ -5,7 +5,7 @@ import { screenAccess, terminalApp, askScreenAccess } from '../tools/screen.mjs'
 import { remoteLabel, DEFAULT_REMOTE, sourceOf } from '../../../models/index.mjs';
 import { othersIn, projectOf } from './copies.mjs';
 import { readyRemote, remotesOf } from './remote-form.mjs';
-import { listSessions, saveSettings } from './store.mjs';
+import { listSessions, saveUse } from './store.mjs';
 import { changePermissions } from './perms.mjs';
 
 export const PANELS_COMMANDS = ['settings', 'permissions', 'copy', 'rewind', 'resume', 'web', 'mcp', 'screen', 'remote'];
@@ -84,14 +84,14 @@ export function slashPanels(self) {
         const to = { claude: 'claude', computer: 'machine', machine: 'machine', service: 'openai', openai: 'openai' }[w];
         if (to) { self.remoteFnRef.current.to(to); break; }
         if (w === 'off' || w === 'here') {
-          if (self.settings.remote) self.settings.remote = saveSettings({ remote: { ...r, use: false } }).remote;
+          if (self.settings.remote) self.settings.remote = saveUse(r, false).remote;
           if (self.remoteRef.current.on) self.remoteFnRef.current.useLocal();
           else self.push({ type: 'note', text: 'Already on the model on this Mac. The remote stays off for next time too.', tone: 'dim' });
           break;
         }
         if (w === 'on') {
           if (!readyRemote(self.settings.remote ? remotesOf(self.settings)[sourceOf(r)] : null)) { self.push({ type: 'note', text: 'No remote is set up yet: pick Run on, fill in its rows, then Connect.', tone: 'dim' }); self.remoteFnRef.current.openForm(); break; }
-          self.settings.remote = saveSettings({ remote: { ...r, use: true } }).remote;
+          self.settings.remote = saveUse(r, true).remote;
           if (!self.remoteRef.current.conn) self.remoteFnRef.current.useRemote(self.settings.remote);
           else self.push({ type: 'note', text: `Already on the remote (${remoteLabel(r)}).`, tone: 'dim' });
           break;

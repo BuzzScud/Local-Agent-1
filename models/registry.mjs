@@ -12,6 +12,10 @@ const CHOSEN = process.env.AGENTIC_HOME ?? NEW_HOME;
 // after another in one process deleted the real settings.json). terminal/test/test-env.mjs gives every
 // test process its own throwaway first, so this is the last line, not the usual one.
 export const HOME = process.env.NODE_ENV === 'test' && resolve(CHOSEN) === NEW_HOME ? mkdtempSync(join(tmpdir(), 'agentic-test-home-')) : CHOSEN;
+// Your own home, whatever AGENTIC_HOME says: a copy of the app with a home of its own (a test, a preview, a
+// worktree's try-out) is not you, and keeps its keys to itself (runtime/remote.mjs keyStore, 12 Oct 2026).
+export const REAL_HOME = NEW_HOME;
+export const isRealHome = (home = HOME) => resolve(home) === NEW_HOME;
 // The model servers (engines) Agentic Coder builds from source, one folder
 // each under ~/.agentic-coder/engine/<tag>, so a new build never replaces the
 // one in use (models/runtime/engine). A model names the one it runs on

@@ -1,8 +1,8 @@
 // Settings, saved sessions and prompt history, all under ~/.agentic-coder.
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync, statSync, openSync, readSync, fstatSync, closeSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync, statSync, openSync, readSync, fstatSync, closeSync, renameSync, copyFileSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HOME, DEFAULT_MODEL } from '../../../models/index.mjs';
+import { HOME, DEFAULT_MODEL, sourceOf } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
 import { startModeFor } from './perm-store.mjs';
 import { modeOf } from '../agent/permissions.mjs';
@@ -56,13 +56,98 @@ export function firstMode(asked, settings = {}) {
   return { mode: modeOf(settings.mode) ?? 'ask', from: 'default' };
 }
 
+// patch: what changes, or a function given the file as it is now that answers it (a change worked out from what
+// another window saved a moment ago, not from what this one read when it opened). The file is read and written under
+// a short lock and written whole through a file beside it, so two windows saving together never lose one's change
+// and a window reading it never sees half of it (12 Oct 2026, the owner's ask: "i keep having to add the other
+// service address and the claude api in"). When your services change, the file before is kept (`keepCopy`).
 export function saveSettings(patch) {
-  const next = { ...loadSettings(), ...patch };
-  delete next.fromFolder;
-  delete next.modeFrom;
   mkdirSync(HOME, { recursive: true });
-  writeFileSync(SETTINGS, `${JSON.stringify(next, null, 2)}\n`);
-  return next;
+  return withLock(SETTINGS, () => {
+    const now = loadSettings();
+    const next = { ...now, ...(typeof patch === 'function' ? patch(now) : patch) };
+    delete next.fromFolder;
+    delete next.modeFrom;
+    if (existsSync(SETTINGS) && servicesOf(now) !== servicesOf(next)) keepCopy(SETTINGS, 'settings');
+    writeWhole(SETTINGS, `${JSON.stringify(next, null, 2)}\n`);
+    return next;
+  });
+}
+const servicesOf = (s) => JSON.stringify([s.remote ?? null, s.remotes ?? null]);
+
+// One service's set-up changed (its model, a model's context or own settings): `change` is given the file's copy,
+// as another window may have saved since, and every other service stays as the file has it. The one in use for the
+// next start (remote) follows when it is that service, or is `remote` when given (this window's pick).
+export function saveService(source, change, { remote = null } = {}) {
+  return saveSettings((now) => ({
+    ...(remote ? { remote } : now.remote && sourceOf(now.remote) === source ? { remote: change(now.remote) } : {}),
+    ...(now.remotes?.[source] ? { remotes: { ...now.remotes, [source]: change(now.remotes[source]) } } : {}),
+  }));
+}
+
+// The service in use for the next start (remote), switched on or off: its set-up as the file has it now (an address
+// or key saved in another window since stays), this window's model, and `use`. more: other settings saved with it.
+export function saveUse(r, use, more = {}) {
+  return saveSettings((now) => {
+    const saved = now.remotes?.[sourceOf(r)] ?? {};
+    return { ...more, remote: { ...r, ...saved, ...(r.model ? { model: r.model } : {}), use } };
+  });
+}
+
+// A file written whole: a copy beside it, then moved over it in one step.
+export function writeWhole(file, text) {
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, file);
+}
+
+// A short lock beside a file, for a read and a write that must not cross another process's: taken with an
+// exclusive create, given up by the code that holds it; one older than LOCK_STALE_MS was left by a process that
+// ended and is taken over; after LOCK_WAIT_MS the save goes on without it rather than hang a window.
+const LOCK_WAIT_MS = 1000;
+const LOCK_STALE_MS = 5000;
+const pause = new Int32Array(new SharedArrayBuffer(4));
+function withLock(file, fn) {
+  const lock = `${file}.lock`;
+  const until = Date.now() + LOCK_WAIT_MS;
+  let held = false;
+  for (;;) {
+    try { closeSync(openSync(lock, 'wx')); held = true; break; } catch (e) {
+      if (e.code !== 'EEXIST') break;
+      try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) { unlinkSync(lock); continue; } } catch { continue; }
+      if (Date.now() > until) break;
+      Atomics.wait(pause, 0, 0, 5);
+    }
+  }
+  try { return fn(); } finally { if (held) try { unlinkSync(lock); } catch {} }
+}
+
+// A copy of a file of yours before it changes (settings.json when your services change, profiles.json), in
+// <home>/backups/<kind>/, the newest KEEP_COPIES kept. Answers the copy's path, or null.
+export const KEEP_COPIES = 20;
+export const backupsDir = (kind) => join(HOME, 'backups', kind);
+let copies = 0;
+export function keepCopy(file, kind, { keep = KEEP_COPIES } = {}) {
+  try {
+    const dir = backupsDir(kind);
+    mkdirSync(dir, { recursive: true });
+    const name = `${new Date().toISOString().replace(/[:.]/g, '-')}-${String(copies++).padStart(6, '0')}-${process.pid}.json`;
+    copyFileSync(file, join(dir, name));
+    const all = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+    for (const old of all.slice(0, Math.max(0, all.length - keep))) rmSync(join(dir, old), { force: true });
+    return join(dir, name);
+  } catch { return null; }
+}
+// The copies kept, the newest first: [{ file, at, data }] (one that cannot be read is left out).
+export function readCopies(kind) {
+  const dir = backupsDir(kind);
+  let names = [];
+  try { names = readdirSync(dir).filter((f) => f.endsWith('.json')).sort().reverse(); } catch { return []; }
+  const out = [];
+  for (const f of names) {
+    try { out.push({ file: join(dir, f), at: statSync(join(dir, f)).mtimeMs, data: JSON.parse(readFileSync(join(dir, f), 'utf8')) }); } catch {}
+  }
+  return out;
 }
 
 const SESSIONS = join(HOME, 'sessions');

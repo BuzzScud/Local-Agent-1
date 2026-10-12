@@ -355,19 +355,30 @@ export function connectionChanged(before, after, keyChanged) {
   return keyChanged || sourceOf(b) !== sourceOf(after) || ['address', 'port', 'connect', 'kind', 'model', 'context'].some((k) => (b[k] ?? null) !== (after[k] ?? null));
 }
 
-// What Connect or Save only writes. remotes: every service saved before or
-// changed in the form (and the one shown). remote, the one in use next: on
-// Connect the one shown (This Mac: the last remote, off); on Save only, with
-// no remote on, the one just saved (so /remote on finds it), else the one in
-// use, with its rows as now. keys: what goes in or out of the Keychain.
+// What Connect or Save only writes. settings: the file as it is now, not as this window read it when the form
+// opened: another window may have saved a service since (12 Oct 2026: a form opened before the Claude API was saved
+// elsewhere wrote the services back as it had them, and the Claude API was gone). remotes: the file's, with what
+// the form changed written over each service field by field, and the one shown (an old single "remote" kept in its
+// service's place, as before). remote, the one in use next: on Connect the one shown (This Mac: the last remote,
+// off); on Save only, with no remote on, the one just saved (so /remote on finds it), else the one in use, with its
+// rows as now. keys: what goes in or out of the Keychain.
+const savedProfile = (r, s) => toProfile({ profiles: { [s]: r }, keys: { [s]: null } }, s);
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 export function savePlan(form, settings, { connect = false } = {}) {
+  const file = remotesOf(settings);
   const remotes = { ...(settings?.remotes ?? {}) };
   const keys = [];
   for (const s of REMOTE_SOURCES) {
     const k = form.keys[s];
     const changed = k !== null || LAYOUT[s].main.concat(LAYOUT[s].more).some((id) => id !== 'memory' && id !== 'cleanAt' && (form.profiles[s][id] ?? null) !== ((form.saved[s] ?? FRESH[s])[id] ?? null));
-    if (!changed && !form.saved[s] && s !== form.source) continue;
-    remotes[s] = toProfile(form, s);
+    if (!changed && s !== form.source) {
+      if (!remotes[s] && file[s]) remotes[s] = savedProfile(file[s], s);
+      continue;
+    }
+    const mine = toProfile(form, s);
+    const opened = form.saved[s] ? savedProfile(form.saved[s], s) : null;
+    const base = remotes[s] ?? (file[s] ? savedProfile(file[s], s) : null);
+    remotes[s] = base && opened ? { ...base, ...Object.fromEntries(Object.entries(mine).filter(([f, v]) => !same(v, opened[f]))) } : { ...(base ?? {}), ...mine };
     const old = form.saved[s];
     if (k) {
       keys.push({ op: 'save', id: s, key: k, source: s });

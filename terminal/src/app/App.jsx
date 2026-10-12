@@ -56,6 +56,7 @@ import { runPart } from './app-run.mjs';
 import { slashPart } from './app-slash.mjs';
 import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
+import { savedWatch, repairNow } from './saved-services.mjs';
 export { remoteConfOf } from './app-common.mjs';
 let seq = 0;
 
@@ -410,6 +411,24 @@ export function App({ opts, win, onRestart }) {
   // The App tool's command (app-self.mjs appBridge) listens for the notes it causes: a list while it runs, else null.
   const tapRef = useRef(null);
   const push = useCallback(pushFn, []);
+  // Your services stay saved (saved-services.mjs, 12 Oct 2026): what another window saves in settings.json is this
+  // window's too within 2 s, and a service it knows that the file lost is written back; at the start, a service
+  // settings.json lost (profiles.json still uses it, or its key is still kept) comes back, and a key's end is set right.
+  useEffect(() => {
+    const tick = savedWatch(settings);
+    const say = (lines, tone) => { for (const text of lines) push({ type: 'note', text, tone }); };
+    const t = setInterval(() => say(tick(), 'warn'), 2000);
+    t.unref?.();
+    const first = setTimeout(() => {
+      say(repairNow(), 'warn');
+      if (process.env.AGENTIC_SEEDED === '1') {
+        delete process.env.AGENTIC_SEEDED;
+        say(['This copy has a home of its own and started with your services; it reads your keys from the Keychain and never writes there.'], 'dim');
+      }
+    }, 1500);
+    first.unref?.();
+    return () => { clearInterval(t); clearTimeout(first); };
+  }, []);
   const serverRef = useRef(null);
   const restartRef = useRef(null);
   // The remote in use (/remote): its connection ({ url, stop, … } from
