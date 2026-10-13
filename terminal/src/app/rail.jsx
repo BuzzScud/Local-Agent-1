@@ -584,7 +584,8 @@ export function EndLine({ it, counts = '' }) {
 }
 function EndWords({ it }) {
   // What the request cost on a paid service (/remote, spend.mjs).
-  const cost = it.usd > 0 ? <Text color={C.dim}> · {money(it.usd)} for this request</Text> : null;
+  // With the share of what it sent that came from the prompt cache (the Claude API), when known.
+  const cost = it.usd > 0 ? <Text color={C.dim}> · {money(it.usd)} for this request{it.cached != null ? ` · ${it.cached}% from the cache` : ''}</Text> : null;
   if (it.reason === 'interrupted') return <Text><Text color={C.warn}>■ {it.text ?? 'Interrupted · What should Agentic Coder do instead?'}</Text>{cost}</Text>;
   if (it.reason && it.reason !== 'done') return <Text><Text color={it.left ? C.warn : C.dim}>{it.text ?? `Stopped (${it.reason})`}{it.left ? ` · ${plural(it.left, 'layout problem')} left` : ''}</Text><Text color={C.dim}>{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''} · {clock(it.at)}</Text>{cost}</Text>;
   const left = it.left ? <Text color={C.warn}>✗ Ended with {plural(it.left, 'layout problem')} left · </Text> : null;

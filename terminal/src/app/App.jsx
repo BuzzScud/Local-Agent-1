@@ -317,8 +317,8 @@ export function App({ opts, win, onRestart }) {
   // then printed as one line; the turn's last layout check is kept for its end line.
   const railOn = useRef(false);
   // The cost meter (/remote, spend.mjs): the footer's words, after each answer and every 15 s
-  // (today's total counts the other windows too); turnSpend: the window's dollars as a request began.
-  const turnSpend = useRef(0);
+  // (today's total counts the other windows too); turnSpend: the window's spend as a request began (windowSpend(): dollars and the cache's tokens).
+  const turnSpend = useRef(null);
   // Every token the model wrote since the window opened: the spinner line and each end line
   // say it (the owner's pick, 4 Oct 2026: "add the total tokens … i cant see it").
   const sessionTokens = useRef(0);

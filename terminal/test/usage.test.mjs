@@ -4,7 +4,7 @@
 // cap's stop said plainly and not tried again, and the card with the prompt box's ends. Against a stand-in
 // Claude API: no key, no bill.
 import { test, expect, afterEach } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeAnthropic } from './fake-anthropic.mjs';
@@ -12,8 +12,8 @@ import { startFakeAnthropic } from './fake-anthropic.mjs';
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-usage-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
 const { limitsFrom, noteLimits, tierOf, capOf, noteCapped, usageNow, resetOf, setOwn, fetchBill, readBill, dollarsOf, monthOf } = await import('../src/agent/claude-usage.mjs');
-const { recordSpend, daySpend, dayOf, costOf, claudeSince } = await import('../src/agent/spend.mjs');
-const { usagePanel, usageChip, sourceWords, textOf, widthOf, LABEL_W } = await import('../src/app/usage-bar.mjs');
+const { recordSpend, daySpend, dayOf, costOf, claudeSince, cacheOf, dayCache, windowSpend } = await import('../src/agent/spend.mjs');
+const { usagePanel, usageChip, sourceWords, textOf, widthOf, LABEL_W, cacheWords } = await import('../src/app/usage-bar.mjs');
 const { streamChat } = await import('../src/agent/client.mjs');
 const { setEndpoint, dropEndpoint, GENERIC_REMOTE, CLAUDE_HOST } = await import('../../models/index.mjs');
 const { matchCommands } = await import('../src/app/commands.mjs');
@@ -105,7 +105,7 @@ test('stopped at the cap: paused until the 1st (UTC); the next reply that comes 
 });
 
 // The numbers the drawing tests use: 8 Oct, the owner's own.
-const U = { model: OPUS, modelName: 'Opus 5.5', cap: 500, tier: 'Start', spent: 66.56, left: 433.44, monthName: 'October', days: [0, 0, 0, 0, 0, 0, 9.85, 56.71], last14: [...Array(12).fill(0), 9.85, 56.71], today: { usd: 56.71, windows: 2 }, window: 8.82, pace: { perDay: 33.28, runsOut: new Date(2026, 9, 22).getTime(), beforeReset: true }, limits: limitsFrom(startHeaders(new Date(NOW - 599_000).toISOString()), OPUS, NOW - 600_000), resetsOn: Date.parse('2026-11-01T00:00:00Z'), capped: null };
+const U = { model: OPUS, modelName: 'Opus 5.5', cap: 500, tier: 'Start', spent: 66.56, left: 433.44, monthName: 'October', days: [0, 0, 0, 0, 0, 0, 9.85, 56.71], last14: [...Array(12).fill(0), 9.85, 56.71], today: { usd: 56.71, windows: 2 }, window: 8.82, cache: { today: { sent: 2_000_000, hit: 1_720_000, wrote: 200_000, saved: 6.02 }, last14: { sent: 9_000_000, hit: 7_380_000, wrote: 900_000, saved: 25.75 } }, pace: { perDay: 33.28, runsOut: new Date(2026, 9, 22).getTime(), beforeReset: true }, limits: limitsFrom(startHeaders(new Date(NOW - 599_000).toISOString()), OPUS, NOW - 600_000), resetsOn: Date.parse('2026-11-01T00:00:00Z'), capped: null };
 const WIDTHS = [60, 72, 80, 100, 120, 152, 177];
 
 // "3 · One row" (9 Oct 2026): no row of its own; "$433.44 left" in the footer's right side, after the model.
@@ -137,7 +137,7 @@ test('the /usage card has the prompt box’s ends: the whole width, round corner
     expect(at('THIS MONTH').trimEnd().endsWith('$433.44 left of $500')).toBe(true);
     expect(at('THIS MONTH').trimEnd().length).toBe(W - 4); // to the inner edge
     expect(inner.find((r) => /^[━╸─]+$/.test(r))).toHaveLength(W - 4); // the line: the whole inner width
-    for (const label of ['TODAY', '14 DAYS', 'THIS MINUTE', 'requests', 'input', 'output']) expect(at(label)[LABEL_W - 1]).toBe(' '), expect(at(label)[LABEL_W]).not.toBe(' ');
+    for (const label of ['TODAY', '14 DAYS', 'CACHE', 'THIS MINUTE', 'requests', 'input', 'output']) expect(at(label)[LABEL_W - 1]).toBe(' '), expect(at(label)[LABEL_W]).not.toBe(' ');
     const meters = ['requests', 'input', 'output'].map((k) => at(k));
     const ends = meters.map((r) => r.slice(LABEL_W).search(/[━╸─](?![━╸─])/));
     expect(new Set(ends).size).toBe(1);
@@ -150,6 +150,51 @@ test('the /usage card has the prompt box’s ends: the whole width, round corner
   expect(wide).toContain('▲ at ~$33 a day it runs out around Oct 22, and the API stops until Nov 1');
   expect(wide).toContain('1,000 of 1,000');
   expect(wide).toContain('limits from Anthropic’s last reply, 10 min ago');
+  expect(wide).toContain('CACHE         86% of what was sent today came from the cache · saved $6.02 · 14 days 82%, saved $25.75');
+});
+
+// 13 Oct 2026 (the owner's pick "1 · Track cache re-use"): Claude tells each answer how much of what was sent it
+// read from its prompt cache; the app kept only the dollars, so nobody could tell whether the cache worked.
+test('the prompt cache of each Claude answer is kept: the window, the day by kind of service, each answer’s line; a service with no cache keeps none', () => {
+  const home = freshHome();
+  const claude = { remote: true, kind: 'claude', label: CLAUDE_HOST, price: { in: 4, out: 20, hit: 0.2 } };
+  const other = { remote: true, kind: 'openai', label: 'openrouter.ai', price: { in: 1, out: 1 } };
+  const now = new Date(NOW);
+  // 100k sent: 90k read from the cache, 8k written to it, 2k plain
+  const one = { prompt_tokens: 100_000, cached_tokens: 90_000, cache_write_tokens: 8_000, completion_tokens: 1_000 };
+  expect(cacheOf(one, claude.price)).toEqual({ sent: 100_000, hit: 90_000, wrote: 8_000, saved: expect.any(Number) });
+  // saved: 90k at $3.80 less than plain, less 8k written at a quarter more ($1 a million): $0.342 - $0.008
+  expect(cacheOf(one, claude.price).saved).toBeCloseTo(0.334, 6);
+  expect(cacheOf({ prompt_tokens: 5000, completion_tokens: 10 }, other.price)).toBe(null);
+  const before = windowSpend().cache;
+  recordSpend(claude, one, { now, pid: 1 });
+  recordSpend(claude, { prompt_tokens: 50_000, cached_tokens: 0, cache_write_tokens: 50_000, completion_tokens: 500 }, { now, pid: 2 });
+  recordSpend(other, { prompt_tokens: 1_000_000, completion_tokens: 0 }, { now, pid: 1 });
+  const win = windowSpend().cache;
+  expect(win.sent - before.sent).toBe(150_000);
+  expect(win.hit - before.hit).toBe(90_000);
+  expect(dayCache(dayOf(now), { kind: 'claude' })).toMatchObject({ sent: 150_000, hit: 90_000, wrote: 58_000 });
+  expect(dayCache(dayOf(now), { kind: 'openai' })).toEqual({ sent: 0, hit: 0, wrote: 0, saved: 0 });
+  expect(dayCache('2026-01-01', { kind: 'claude' })).toEqual({ sent: 0, hit: 0, wrote: 0, saved: 0 });
+  // each answer's line has its tokens after its dollars, and the dollars after a figure still add up
+  const line = readFileSync(join(home, 'spend', dayOf(now), '1.claude'), 'utf8').trim().split(' ');
+  expect(line.slice(2)).toEqual(['100000', '90000', '8000']);
+  expect(claudeSince(NOW - 1, { dir: join(home, 'spend'), now })).toBeCloseTo(costOf(one, claude.price) + costOf({ prompt_tokens: 50_000, cache_write_tokens: 50_000, completion_tokens: 500 }, claude.price), 6);
+  // the month's numbers carry today's and the 14 days'
+  spendFile(home, new Date(2026, 9, 3), 9, { usd: 1, byKind: { claude: 1 }, cacheByKind: { claude: { sent: 50_000, hit: 40_000, wrote: 0, saved: 0.15 } } });
+  const u = usageNow({ model: OPUS, now: NOW });
+  expect(u.cache.today).toMatchObject({ sent: 150_000, hit: 90_000 });
+  expect(u.cache.last14).toMatchObject({ sent: 200_000, hit: 130_000 });
+});
+
+test('the CACHE row: today’s share in amber under half, the 14 days beside it, plain words before the first kept answer', () => {
+  const words = (c, wide) => textOf(cacheWords(c, wide));
+  expect(words(null)).toBe('the share of each request read from Claude’s cache shows here after the next reply');
+  const all = { sent: 1000, hit: 900, wrote: 0, saved: 1.5 };
+  expect(words({ today: { sent: 0, hit: 0, wrote: 0, saved: 0 }, last14: all })).toBe('nothing sent today · 14 days 90%, saved $1.50');
+  const low = cacheWords({ today: { sent: 1000, hit: 300, wrote: 600, saved: -0.2 }, last14: all });
+  expect(low[0]).toMatchObject({ t: '30%', fg: 215 });
+  expect(words({ today: { sent: 1000, hit: 300, wrote: 600, saved: 0.1 }, last14: all }, false)).toBe('30% from the cache today · saved $0.10 · 14 d 90%');
 });
 
 test('on the stand-in Claude API: each reply’s limits are kept for every window; at the cap the request stops with a plain reason and is not tried again', async () => {

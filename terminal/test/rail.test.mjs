@@ -40,6 +40,8 @@ test('the end line closes the turn: how it went in one row, its counts in a row 
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Cooked', secs: 252, at, left: 0 }, counts: ' · 5 steps' }))).toBe('  ╰─ ⠿ Cooked for 4m 12s · done 10:30 PM\n     5 steps');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Cooked', secs: 252, at, left: 2 }, counts: ' · 5 steps' }))).toBe('  ╰─ ✗ Ended with 2 layout problems left · Cooked for 4m 12s · done 10:30 PM\n     5 steps');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Juggled', secs: 2059, at, usd: 4.84 }, counts: ' · 60 steps · 31 reads' }))).toBe('  ╰─ ⠿ Juggled for 34m 19s · done 10:30 PM · $4.84 for this request\n     60 steps · 31 reads');
+  // with the share of what it sent that came from Claude's prompt cache (13 Oct 2026)
+  expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Juggled', secs: 2059, at, usd: 4.84, cached: 91 }, counts: ' · 60 steps · 31 reads' }))).toBe('  ╰─ ⠿ Juggled for 34m 19s · done 10:30 PM · $4.84 for this request · 91% from the cache\n     60 steps · 31 reads');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'interrupted', text: 'Interrupted · What should Agentic Coder do instead?', at } }))).toBe('  ╰─ ■ Interrupted · What should Agentic Coder do instead?');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'stuck', text: 'Stopped: it was stuck', secs: 61, at } }))).toBe('  ╰─ Stopped: it was stuck · 1m 01s · 10:30 PM');
   expect(draw(h(EndLine, { it: { type: 'done', reason: 'done', past: 'Worked', secs: 0.4, at } }))).toBe('  ╰─ ⠿ done 10:30 PM');
