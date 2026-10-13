@@ -9,7 +9,10 @@ export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5';
 // The context used when the form leaves it to the server: Claude takes up to
 // 1M tokens, but every step sends the conversation again, so a session is
 // kept to this much (the Context row can raise it).
-export const CLAUDE_CTX = 200_000;
+// 400k since 13 Oct 2026 (the owner's pick, "Raise it to 400k now"): at 200k a long job reached its notes at about
+// 156k and started over from them 16 times in two weeks; with the prompt cache working, a step reads what it sent
+// before at 5% of the price, and Opus 5.5 and Sonnet 5.5 cost the same per token up to their 1M (no long-context rate).
+export const CLAUDE_CTX = 400_000;
 // The models /remote's Model row steps through for the Claude API (←→), most
 // used first; a Test or a connect adds any other the key lists. Prices are per
 // million tokens in / out, and hit: a read from the prompt cache, as Anthropic lists them
