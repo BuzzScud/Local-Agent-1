@@ -154,10 +154,12 @@ const SESSIONS = join(HOME, 'sessions');
 const slug = (cwd) => cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root';
 export const newSessionId = () => new Date().toISOString().replace(/[:.]/g, '-');
 
+// Written whole (a file beside it, renamed over it): it is saved while a reply works too (app-run.mjs stepSave), and a
+// crash in the middle of a write must not leave half a conversation that /resume cannot read.
 export function saveSession(cwd, id, data) {
   const dir = join(SESSIONS, slug(cwd));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${id}.json`), JSON.stringify({ ...data, cwd, id, updated: new Date().toISOString() }));
+  writeWhole(join(dir, `${id}.json`), JSON.stringify({ ...data, cwd, id, updated: new Date().toISOString() }));
 }
 
 export function listSessions(cwd) {
