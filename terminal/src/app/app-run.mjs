@@ -730,7 +730,10 @@ export function runPart(self) {
     const m = self.loopsRef.current, ui = self.loopsUi.current;
     if (!m || !ui) { closeLoops(); return; }
     const keys = key.return ? ['enter'] : key.escape ? ['esc'] : key.backspace || key.delete ? ['backspace'] : key.upArrow ? ['up'] : key.downArrow ? ['down'] : key.leftArrow ? ['left'] : key.rightArrow ? ['right']
-      : key.tab ? [key.shift ? 'shiftTab' : 'tab'] : key.ctrl && /^[a-z]$/i.test(ch) ? [`^${ch.toUpperCase()}`] : key.meta ? [] : [...String(ch ?? '')].filter((c) => c >= ' ');
+      : key.tab ? [key.shift ? 'shiftTab' : 'tab'] : key.ctrl && /^[a-z]$/i.test(ch) ? [`^${ch.toUpperCase()}`] : key.meta ? []
+      // Text and enter that arrive together (a busy Mac reads them as one chunk) are the letters, then enter: the enter
+      // was dropped with the other control characters, so the wizard stayed on its step (13 Oct 2026, app-loops).
+      : [...String(ch ?? '')].map((c) => (c === '\r' ? 'enter' : c)).filter((c) => c === 'enter' || c >= ' ');
     const b = loopsBoard(m, ui);
     for (const k of keys) { loopsHandleKey(b, k); b.state = m.snapshot(); }
     self.setLoopsTick((x) => x + 1);
