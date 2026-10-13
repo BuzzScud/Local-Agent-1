@@ -31,7 +31,7 @@ const only = opt('only', '31,37,39');
 const look = args.includes('--no-record');
 const from = opt('from', null);
 const name = opt('remote-model', null);
-export const HIT_BAR = 0.8; // each reply after a task's first reads at least this much of what it sends from the cache
+const HIT_BAR = 0.8; // each reply after a task's first reads at least this much of what it sends from the cache
 
 const pad = (n) => String(n).padStart(2, '0');
 const now = new Date();
