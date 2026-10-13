@@ -159,7 +159,7 @@ test('a JSON answer through complete(): held to the schema and parsed', async ()
   } finally { dropEndpoint(fake.url); await fake.close(); }
 });
 
-test('the check (/remote’s Test, connecting): the key, the model list and its context, one word back; the context kept to 200k', async () => {
+test('the check (/remote’s Test, connecting): the key, the model list and its context, one word back; the context kept to 400k', async () => {
   const fake = await startFakeAnthropic([{ text: 'ready' }]);
   const url = fake.url;
   const ok = await probe({ url, kind: 'claude', key: fake.key, reply: true });
@@ -172,7 +172,7 @@ test('the check (/remote’s Test, connecting): the key, the model list and its 
   const other = await probe({ url, kind: 'claude', key: fake.key, model: 'claude-made-up-9' });
   expect(other.steps[1].text).toBe('"claude-made-up-9" is not in its list of 2; it is asked for anyway');
   const c = await connectRemote(R({ address: url, key: true }), { key: fake.key });
-  expect([c.ctx, c.slots, c.model.name]).toEqual([200_000, 1, `claude-opus-5-5 · 127.0.0.1:${fake.port}`]);
+  expect([c.ctx, c.slots, c.model.name]).toEqual([400_000, 1, `claude-opus-5-5 · 127.0.0.1:${fake.port}`]);
   c.stop();
   await fake.close();
 });
@@ -191,6 +191,6 @@ test('the form: Run on ◀ Claude API ▶ shows Anthropic’s address, https, th
     expect(showValue(f, 'key')).toBe('ANTHROPIC_API_KEY');
     expect(rowNote(f, 'key')).toMatch(/^sk-ant-… from console\.anthropic\.com → API keys · kept in the .+ · blank: ANTHROPIC_API_KEY$/);
   } finally { if (env === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = env; }
-  expect(rowNote(f, 'context')).toMatch(/at most 200k/);
+  expect(rowNote(f, 'context')).toMatch(/at most 400k/);
   expect(rowNote(f, 'source')).toBe('Anthropic’s models · billed to your API key');
 });
