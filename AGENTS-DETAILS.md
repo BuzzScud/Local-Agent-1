@@ -1115,6 +1115,26 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   `send-after-end.test.mjs` (a message sent as the reply ends), `resize.test.mjs` (the wizard's chunk), `models/test/cache-check.test.mjs` (the check from a
   made-up run: holds, a reply under the bar, one reply only).
 
+## Saved as it goes, 400k on Claude, and every file readable whole (13 Oct 2026, afternoon)
+
+- **What and why.** The owner: "i meant to optimize the agentic coder code or mechanics or functions". Measured: the app's
+  own work is tiny (0.1 s to start, under 0.3 s of a task, 0.5% CPU at rest); what it adds is waiting and risk. Their
+  picks: save after every step, split the four big files, raise Claude's summary point to 400k now, build, test, push
+  (the second opinion in the background was offered and not picked; their answer for it: a line with "fix it").
+- **Saved as it goes** (app-run.mjs `stepSave`, store.mjs `saveSession`): a conversation was saved only when a reply
+  ended, and a job runs 20 to 80 minutes. Now before each model reply ('waiting': the step before it finished whole,
+  every tool result in), at most every `STEP_SAVE_MS` (10 s; `AGENTIC_STEP_SAVE_MS` for the tests), written whole
+  (`writeWhole`: a file beside it renamed over it). `terminal/test/app-step-save.test.mjs`.
+- **400k on Claude** (models/runtime/claude.mjs `CLAUDE_CTX`): at 200k a long job reached its notes at about 156k and
+  started over 16 times in two weeks. Opus 5.5 and Sonnet 5.5 have 1M at their normal price; Haiku 4.5 keeps its 200k.
+  The rules sent with each request stay as they were (measured in this repo, MAIN2026 and Model-Lab at both sizes).
+- **Every file under the repo check's size** ("Files a model can read": 1,000 lines, 20k tokens): loops.mjs → the words
+  of a loop in `loops-words.mjs`; permissions.mjs → what a shell command does in `command-words.mjs`; agent-work.mjs's
+  work() → the answer's checks in `agent-answer.mjs` (`AnswerPart.answerChecks`: work()'s counters travel in `st` and
+  are copied back in a finally; 'continue' and 'break' are its answers); App.jsx → `app-usage.mjs` (the cost meter and
+  /usage) and `app-watch.mjs` (saved services, the memory meter, copying a selection, two start notes). Each old file
+  gives the moved names on, so no import changed; nothing behaves differently (the full suite, 1,964 of 1,964).
+
 ## The bottom of the window: Tidy and flush (9 Oct 2026)
 
 - **What and why.** The owner, on a screenshot of the prompt box, footer and usage line: "can we clean this up
