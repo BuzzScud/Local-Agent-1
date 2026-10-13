@@ -89,6 +89,21 @@ test.skipIf(needs('python3'))('text and enter arriving together (a busy app) sti
   } finally { await t.close(); await fake.close(); }
 }, T);
 
+test.skipIf(needs('python3'))('in /loop\'s wizard too: text and enter arriving together still go on to the next step', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  const t = openTerm({ cwd, env, cols: 124, rows: 40, args: ['--url', fake.url, '--no-flows'] });
+  try {
+    await t.waitFor('? for shortcuts');
+    t.key('/loop'); await sleep(200); t.key('\r');
+    await t.waitFor('+ New loop'); await sleep(300); t.key('\r');
+    await t.waitFor('What should each run do?'); await sleep(300);
+    t.key('test5m\r'); // one write: the app reads it as one chunk (13 Oct 2026: app-loops lost the enter so on a busy Mac)
+    await t.waitFor('looks like two things typed together');
+    t.key('\x1b'); await sleep(300); t.key('\x1b'); await sleep(300);
+  } finally { await t.close(); await fake.close(); }
+}, T);
+
 test.skipIf(needs('python3'))('the footer fits narrow windows: the right side drops words, never runs into "? for shortcuts"; the mode is its short name at every width', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
