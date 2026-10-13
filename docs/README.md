@@ -8,6 +8,8 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0918.html](tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0918.html) | page | Cache check · claude-opus-5-5 | 11 KB | 2026-10-13 |
+| [tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0914.html](tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0914.html) | page | Cache check · claude-opus-5-5 | 12 KB | 2026-10-13 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 653 KB | 2026-10-13 |
 | [design rounds/agentic-coder-app-icon-4-designs-2026-10-13.html](design%20rounds/agentic-coder-app-icon-4-designs-2026-10-13.html) | page | Agentic Coder app icon · 4 designs | 19 KB | 2026-10-13 |
 | [design rounds/agentic-coder-window-design-2026-10-12.html](design%20rounds/agentic-coder-window-design-2026-10-12.html) | page | Agentic Coder window | 151 KB | 2026-10-12 |
