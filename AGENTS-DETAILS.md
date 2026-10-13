@@ -1077,6 +1077,44 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   typed figure, the bill over three pages, once a minute, a refused key, dollars typed) and `app-usage.test.mjs` (the
   real window: the footer before and after a reply, the card's keys, `/usage limit 200`).
 
+## The prompt cache, kept and checked (13 Oct 2026)
+
+- **What and why.** The owner: "can we optimize the agentic coder further? how?". Measured first: the app starts in
+  0.1 s and a tool runs in under 0.1 s, so the time and the money go to the model; $155 had gone to the Claude API since
+  26 Sep, and the app kept only each answer's dollars, so nobody could say whether Claude's prompt cache worked (a read
+  from it costs 5% of the input price on Opus 5.5, a write a quarter more than plain). Their picks: track the cache's
+  share, faster and steadier tests, up to $3 of real Claude runs, build, test, push.
+- **Kept** (`terminal/src/agent/spend.mjs` `cacheOf`, `dayCache`): each answer that says what it read from the cache
+  (the Claude API) adds its tokens sent, read and written, and the dollars that saved against no cache, to the window
+  (`windowSpend().cache`), to the day's file by kind of service (`cacheByKind`) and to its line in `<pid>.claude`
+  ("<ms> <usd> <sent> <hit> <wrote>"; `claudeSince` still reads the first two). Shown: /usage's CACHE row (`cacheWords`:
+  today's share, amber under half, and the 14 days', with what each saved; `usageNow().cache`) and the request's end
+  line ("$0.60 for this request · 91% from the cache", app-run.mjs from `turnSpend`).
+- **What it found** (the Arena's **Cache check**, `models/evals/tools/cache-check.mjs`, `/test cache`: three hard tasks
+  on the Claude API, each reply's share from the spend lines under the run's own `AGENTIC_SPEND_PID`; it holds when
+  every reply after a task's first reads at least 80% from the cache): the step after a task's first change read 0%
+  and wrote the whole conversation again. `stepEffort` took High to Medium there, and on the Claude API a new effort is
+  a new cache, as it was a new prompt for Bonsai's template; the next message's first step, back at High, missed once
+  more. Now a turn on the Claude API keeps one effort (agent-model.mjs). Before: 80% after each first reply, two of
+  three tasks under the bar, $0.42; after: 94%, three of three, $0.19 for the same three tasks.
+- **A message sent as the reply ends** (agent.mjs `send` → `sendNow`, `finishing`): the window shows a reply done
+  ('turn-end') while its message still finishes (/rewind's copy, the memory's note: 70–150 ms on a busy Mac). A message
+  sent then (one queued during the reply goes at that moment) overlapped it: the older one's `settle` wiped the newer
+  one's record and the newer one ended at once, its window on "reading" for ever. A send now waits for the one before
+  to finish. This was app-btw's failure in 18 of 111 full runs (8 copies at once: 7 of 8 failed before, 0 after).
+- **The suite's time**: run-suite.mjs already starts the longest files first, six at once, so a run takes the files'
+  total over six (1,624 s of files, 271 s); splitting a file would not shorten it. 78% of the total is the 86 files that
+  drive the real app (about 1.2 s each to start and quit); the written sleeps add up to 336 s. Eight at once
+  (`AGENTIC_TEST_JOBS=8`) took 207 s twice on 13 Oct, with the Mac's load at 15 of its 10 cores; the default stays
+  six (the owner's Mac crashed under full load on 10 Oct).
+- **Text and enter together in /loop's wizard** (app-run.mjs `loopsKey`): a busy Mac can hand the app the letters and
+  the enter after them as one chunk; the board dropped that enter with the other control characters, so the wizard
+  stayed on its step (app-loops' failure in 8 full runs). A carriage return in a chunk is now enter, after the letters.
+- **Tests**: `usage.test.mjs` (kept per window, day and line; the CACHE row), `rail.test.mjs` (the end line),
+  `app-usage.test.mjs` (the real window on the stand-in Claude API), `step-effort.test.mjs` (one effort on Claude),
+  `send-after-end.test.mjs` (a message sent as the reply ends), `resize.test.mjs` (the wizard's chunk), `models/test/cache-check.test.mjs` (the check from a
+  made-up run: holds, a reply under the bar, one reply only).
+
 ## The bottom of the window: Tidy and flush (9 Oct 2026)
 
 - **What and why.** The owner, on a screenshot of the prompt box, footer and usage line: "can we clean this up
