@@ -448,7 +448,17 @@ export class Agent extends EventEmitter {
   // fromServer: the message is an MCP server's own prompt (/server:prompt): no MCP note goes with it.
   // wake: the app's own message for a background job that ended after the reply (jobWake): it carries
   // on the last turn, so nothing sorts it or reads ahead for it, as when the model decides.
-  async send(text, { signal, shown, images, fromServer = null, wake = false } = {}) {
+  // A message sent while the one before is still finishing (its reply on the screen, /rewind's copy of the folder
+  // and the memory's note of it still to come) waits for that. Overlapping, the older one's end wiped the newer
+  // one's record and the newer one ended at once with no reply, waiting on the screen for ever (13 Oct 2026: a
+  // message queued during a reply is sent the moment it ends; the /btw test failed so in 18 of 111 full runs).
+  async send(text, opts = {}) {
+    while (this.finishing) await this.finishing;
+    let finished;
+    this.finishing = new Promise((r) => { finished = r; });
+    try { return await this.sendNow(text, opts); } finally { this.finishing = null; finished(); }
+  }
+  async sendNow(text, { signal, shown, images, fromServer = null, wake = false } = {}) {
     this.sending = true;
     this.leanNow();
     // Your hooks for a message you send (not the app's own wake): exit 2 stops it; what one prints
