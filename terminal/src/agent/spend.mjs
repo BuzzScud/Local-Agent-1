@@ -30,9 +30,23 @@ export function costOf(usage, price) {
   return ((all - cached - written) * price.in + cached * (price.hit ?? price.in * 0.1) + written * price.in * 1.25 + (usage.completion_tokens ?? 0) * price.out) / 1e6;
 }
 
-// This window since it opened: dollars, and the tokens of answers whose price is not known.
-const mine = { usd: 0, tokensIn: 0, tokensOut: 0, unpriced: 0, requests: 0 };
-export const windowSpend = () => ({ ...mine });
+// This window since it opened: dollars, and the tokens of answers whose price is not known; and
+// the prompt cache's share of what was sent (cacheOf): sent, hit (read from it), wrote, saved ($).
+const mine = { usd: 0, tokensIn: 0, tokensOut: 0, unpriced: 0, requests: 0, cache: { sent: 0, hit: 0, wrote: 0, saved: 0 } };
+export const windowSpend = () => ({ ...mine, cache: { ...mine.cache } });
+
+// What the prompt cache did for one answer: the tokens sent, read from the cache (hit) and written to it,
+// and the dollars it saved against sending it all at the plain price (a hit costs the price's hit, a write a
+// quarter more than plain). null when the answer says nothing of a cache (a service that keeps none).
+export function cacheOf(usage, price) {
+  if (!usage || (usage.cached_tokens == null && usage.cache_write_tokens == null)) return null;
+  const sent = usage.prompt_tokens ?? 0;
+  const hit = Math.min(usage.cached_tokens ?? 0, sent);
+  const wrote = Math.min(usage.cache_write_tokens ?? 0, sent - hit);
+  const saved = price ? (hit * (price.in - (price.hit ?? price.in * 0.1)) - wrote * price.in * 0.25) / 1e6 : 0;
+  return { sent, hit, wrote, saved };
+}
+const addCache = (a = {}, b) => ({ sent: (a.sent ?? 0) + b.sent, hit: (a.hit ?? 0) + b.hit, wrote: (a.wrote ?? 0) + b.wrote, saved: (a.saved ?? 0) + b.saved });
 
 // One answer from a remote: counted, written to today's file, and told to the screen.
 // ep: the remote's endpoint (models remote.mjs: price, free). Returns its dollars (null: not known; 0: free).
@@ -41,7 +55,9 @@ export function recordSpend(ep, usage, { dir = spendDir(), pid = process.env.AGE
   if (!ep?.remote || !usage) return null;
   if (ep.free && !Number.isFinite(usage.cost)) return 0;
   const usd = costOf(usage, ep.price);
+  const cache = cacheOf(usage, ep.price);
   mine.requests++;
+  if (cache) mine.cache = addCache(mine.cache, cache);
   if (usd == null) { mine.unpriced++; mine.tokensIn += usage.prompt_tokens ?? 0; mine.tokensOut += usage.completion_tokens ?? 0; }
   else mine.usd += usd;
   try {
@@ -57,18 +73,22 @@ export function recordSpend(ep, usage, { dir = spendDir(), pid = process.env.AGE
     const kinds = { ...(kept.byKind ?? (kept.service === CLAUDE_HOST && kept.usd ? { claude: kept.usd } : {})) };
     if (label && usd) by[label] = (by[label] ?? 0) + usd;
     if (ep.kind && usd) kinds[ep.kind] = (kinds[ep.kind] ?? 0) + usd;
+    // The prompt cache's tokens and savings by kind of service too (since 13 Oct 2026): /usage's CACHE row.
+    const caches = { ...(kept.cacheByKind ?? {}) };
+    if (ep.kind && cache) caches[ep.kind] = addCache(caches[ep.kind], cache);
     const next = {
       usd: (kept.usd ?? 0) + (usd ?? 0),
       tokensIn: (kept.tokensIn ?? 0) + (usd == null ? usage.prompt_tokens ?? 0 : 0),
       tokensOut: (kept.tokensOut ?? 0) + (usd == null ? usage.completion_tokens ?? 0 : 0),
-      service: label, byService: by, byKind: kinds, updated: now.toISOString(),
+      service: label, byService: by, byKind: kinds, ...(Object.keys(caches).length ? { cacheByKind: caches } : {}), updated: now.toISOString(),
     };
     writeFileSync(`${file}.tmp`, JSON.stringify(next));
     renameSync(`${file}.tmp`, file);
     // The Claude API's answers one by one, with their moment ("<ms> <usd>" a line, <pid>.claude), so what
     // was spent after Anthropic's bill was read (or the month's total typed in) can be added to it
-    // (claudeSince, claude-usage.mjs).
-    if (ep.kind === 'claude' && usd) appendFileSync(join(day, `${pid}.claude`), `${now.getTime()} ${usd}\n`);
+    // (claudeSince, claude-usage.mjs). Since 13 Oct 2026 the line goes on with the answer's tokens sent, read
+    // from the cache and written to it ("<ms> <usd> <sent> <hit> <wrote>"), so each step's cache can be looked at.
+    if (ep.kind === 'claude' && usd) appendFileSync(join(day, `${pid}.claude`), `${now.getTime()} ${usd}${cache ? ` ${cache.sent} ${cache.hit} ${cache.wrote}` : ''}\n`);
   } catch { /* the meter only shows less */ }
   spendEvents.emit('change', { usd });
   return usd;
@@ -105,6 +125,21 @@ export function daySpend(day, { kind = null, service = kind === 'claude' ? CLAUD
     } catch {}
   }
   return { usd, windows };
+}
+
+// The prompt cache over one day's windows, of one kind of service: { sent, hit, wrote, saved } (zeros when
+// nothing was kept: before 13 Oct 2026, or no answer that day).
+export function dayCache(day, { kind = 'claude' } = {}, { dir = spendDir() } = {}) {
+  let out = { sent: 0, hit: 0, wrote: 0, saved: 0 };
+  let files = [];
+  try { files = readdirSync(join(dir, day)).filter((f) => f.endsWith('.json')); } catch {}
+  for (const f of files) {
+    try {
+      const c = JSON.parse(readFileSync(join(dir, day, f), 'utf8')).cacheByKind?.[kind];
+      if (c) out = addCache(out, { sent: c.sent ?? 0, hit: c.hit ?? 0, wrote: c.wrote ?? 0, saved: c.saved ?? 0 });
+    } catch {}
+  }
+  return out;
 }
 
 // The Claude API's dollars of this Mac's windows answered after `ms` (to now): their lines in each day's

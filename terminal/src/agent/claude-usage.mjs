@@ -19,7 +19,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { HOME, CLAUDE_MODELS, claudeName, claudeClient, claudeCaps, readKey, saveKey, removeKey } from '../../../models/index.mjs';
-import { daySpend, dayOf, windowSpend, recordSpend, claudeSince } from './spend.mjs';
+import { daySpend, dayOf, windowSpend, recordSpend, claudeSince, dayCache } from './spend.mjs';
 
 export const usageEvents = new EventEmitter();
 export const usageDir = () => join(process.env.AGENTIC_HOME ?? HOME, 'usage');
@@ -172,6 +172,7 @@ const TYPED_STALE_DAYS = 3;
 //   the first day with any, and the day the cap runs out at that pace (null when it does not); low: under a tenth left
 //   limits: the newest reply's for this model (null before the first); capped: stopped at the cap
 //   admin: an Admin key is kept (the caller knows: reading the Keychain is a process)
+//   cache: the prompt cache on the Claude API, today and over the last 14 days ({ sent, hit, wrote, saved }, dayCache)
 export function usageNow({ model, now = Date.now(), admin = false } = {}) {
   const all = readAll();
   const limits = all.models?.[model] ?? null;
@@ -190,6 +191,9 @@ export function usageNow({ model, now = Date.now(), admin = false } = {}) {
   }
   const last14 = [];
   for (let i = 13; i >= 0; i--) last14.push(i < today ? days[today - 1 - i] : spentOn(new Date(y, m, today - i)).usd);
+  const cacheToday = dayCache(dayOf(d), { kind: 'claude' });
+  const cache14 = { sent: 0, hit: 0, wrote: 0, saved: 0 };
+  for (let i = 0; i < 14; i++) { const c = i ? dayCache(dayOf(new Date(y, m, today - i)), { kind: 'claude' }) : cacheToday; for (const k in cache14) cache14[k] += c[k]; }
   const meter = spent;
   const own = readOwn();
   const bill = readBill();
@@ -214,7 +218,7 @@ export function usageNow({ model, now = Date.now(), admin = false } = {}) {
     model, modelName: claudeName(model), cap, tierCap, ownLimit: own.limit > 0 ? own.limit : null, tier: tier?.name ?? null,
     spent, meter, source, admin, left, low: cap != null && left < cap * 0.1,
     monthName: d.toLocaleString('en-US', { month: 'long' }), days, last14,
-    today: spentOn(d), window: windowSpend().usd,
+    today: spentOn(d), window: windowSpend().usd, cache: { today: cacheToday, last14: cache14 },
     pace: { perDay, runsOut, beforeReset: runsOut != null && runsOut < resetsOn },
     limits, resetsOn,
     capped: all.capped && all.capped.until > now ? all.capped : null,

@@ -116,6 +116,18 @@ function spark(values) {
   return values.map((v, i) => S(v > 0 ? SPARK[Math.max(1, Math.min(7, Math.round((v / max) * 7)))] : '▁', i === values.length - 1 ? 221 : v > 0 ? 179 : 238));
 }
 
+// The CACHE row (13 Oct 2026): how much of what went to Claude came from its prompt cache (a read from it
+// costs 5% on Opus 5.5), today and over 14 days, and the dollars that saved. Amber under half: a cache
+// that keeps missing is worth a look. Before the first kept answer it says what the row will show.
+const share = (c) => Math.round((100 * c.hit) / c.sent);
+export function cacheWords(cache, wide = true) {
+  const today = cache?.today, all = cache?.last14;
+  if (!all?.sent) return [S(wide ? 'the share of each request read from Claude’s cache shows here after the next reply' : 'shows after the next reply', C.dim)];
+  const days = wide ? ` · 14 days ${share(all)}%, saved ${money(all.saved)}` : ` · 14 d ${share(all)}%`;
+  if (!today?.sent) return [S('nothing sent today', C.dim), S(days, C.dim)];
+  return [S(`${share(today)}%`, share(today) < 50 ? C.warn : C.value, null, true), S(wide ? ` of what was sent today came from the cache · saved ${money(today.saved)}` : ` from the cache today · saved ${money(today.saved)}`, C.dim), S(days, C.dim)];
+}
+
 // The /usage card: the whole width, round corners, the title in the top border, text one cell in.
 // Sections a blank row apart: THIS MONTH (the line), TODAY and 14 DAYS, THIS MINUTE (a meter a
 // limit), then where the numbers come from. Every row is exactly `width` cells.
@@ -152,6 +164,7 @@ export function usagePanel(u, width, { now = Date.now(), live = false, asking = 
   blank();
   line([label('TODAY'), S(money(u.today.usd), C.value, null, true), S(` on this Mac · ${u.today.windows} window${u.today.windows === 1 ? '' : 's'} · this window ${money(u.window)}`, C.dim)]);
   line([label('14 DAYS'), ...spark(u.last14), S(`  ${money(u.last14.reduce((a, b) => a + b, 0))}`, C.dim)]);
+  line([label('CACHE'), ...cacheWords(u.cache, wide)]);
   blank();
   line([label('THIS MINUTE'), S(wide ? `Anthropic’s limits for ${u.modelName} · they refill all the time` : 'Anthropic’s limits · they refill all the time', C.dim)]);
   const r = rateOf(u.limits, now);

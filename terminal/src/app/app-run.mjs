@@ -118,7 +118,7 @@ export function runPart(self) {
       on('busy', ({ until }) => self.setLive((l) => (l.phase ? { ...l, busyUntil: until } : l))),
       // The conversation moved to another profile's model between steps (app-profiles.mjs onRoute).
       on('profile-route', (ev) => self.onRoute(ev)),
-      on('turn-start', () => { try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend().usd; self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
+      on('turn-start', () => { try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend(); self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
       on('waiting', ({ room, thinkCap, whole } = {}) => self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null }))),
       // A reply that will not run as it was (cut off, repeating itself): its live lines go.
@@ -193,13 +193,17 @@ export function runPart(self) {
         const left = self.lastCheck.current?.problems?.length ?? 0;
         const at = Date.now();
         // What this request cost on a paid service (spend.mjs), for its end line.
-        const spent = windowSpend().usd - (self.turnSpend.current ?? 0);
+        const spentNow = windowSpend();
+        const spent = spentNow.usd - (self.turnSpend.current?.usd ?? 0);
         const usd = spent > 0 ? spent : undefined;
-        if (reason === 'interrupted') { self.push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd, session }); self.setPlaceholder('Tell Agentic Coder what to do instead'); }
-        else if (reason === 'done') self.push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left, usd, session });
+        // How much of what this request sent came from the prompt cache (Claude API), for its end line too.
+        const sent = spentNow.cache.sent - (self.turnSpend.current?.cache?.sent ?? 0);
+        const cached = usd && sent > 0 ? Math.round((100 * (spentNow.cache.hit - (self.turnSpend.current?.cache?.hit ?? 0))) / sent) : undefined;
+        if (reason === 'interrupted') { self.push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd, cached, session }); self.setPlaceholder('Tell Agentic Coder what to do instead'); }
+        else if (reason === 'done') self.push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left, usd, cached, session });
         // Esc in the question box after some answers: they went to the model, which waits for you.
-        else if (reason === 'declined' && self.agentRef.current?.happened?.answersSent) self.push({ type: 'done', reason, text: 'Stopped after your answers · it waits for your next message', secs, at, left, usd, session });
-        else self.push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd, session });
+        else if (reason === 'declined' && self.agentRef.current?.happened?.answersSent) self.push({ type: 'done', reason, text: 'Stopped after your answers · it waits for your next message', secs, at, left, usd, cached, session });
+        else self.push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd, cached, session });
         self.railOn.current = false;
         self.pre.current = null;
         // In its own copy: changed files are offered back to the real folder (copies.mjs).

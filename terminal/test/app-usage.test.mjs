@@ -62,6 +62,10 @@ test('on the Claude API: what is left in the footer, /usage in the menu, its car
   expect(card.slice(top + 1, bottom).every((l) => l.length === 152 && l.startsWith('│ ') && l.endsWith(' │'))).toBe(true);
   expect(r.snapshots.card).toMatch(/THIS MONTH\s+October|THIS MONTH\s+\w+/);
   expect(r.snapshots.card).toContain('999 of 1,000');
+  // The prompt cache (13 Oct 2026): the stand-in reads 900 tokens of each answer's ~2,100 from it, so under half, on
+  // the request's end line and in the card's CACHE row
+  expect(r.snapshots.after.replace(/\s+/g, ' ')).toMatch(/for this request · 4\d% from the cache/);
+  expect(r.snapshots.card).toMatch(/CACHE {9}4\d% of what was sent today came from the cache · saved \$0\.00 · 14 days 4\d%/);
   // r: one tiny request, its limits kept
   const tiny = claude.seen.filter((s) => s.path.startsWith('/v1/messages') && s.body?.max_tokens === 64);
   expect(tiny).toHaveLength(1);

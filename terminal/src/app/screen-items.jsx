@@ -263,7 +263,7 @@ export function Item({ it, width, model, cwd, loaded, start }) {
     case 'machine': return <MachineLine it={it} />;
     case 'thinking': return it.rail ? <ThoughtNode it={it} /> : <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
     // The line a finished turn leaves behind: "⠿ Worked for 41s · done 12:58 PM".
-    case 'done': return it.rail ? <EndLine it={it} counts={doneCounts(it)} /> : <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}{it.usd > 0 ? ` · ${money(it.usd)} for this request` : ''}</Text></Text>;
+    case 'done': return it.rail ? <EndLine it={it} counts={doneCounts(it)} /> : <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}{it.usd > 0 ? ` · ${money(it.usd)} for this request${it.cached != null ? ` · ${it.cached}% from the cache` : ''}` : ''}</Text></Text>;
     case 'text': return it.rail ? <ReplyNode text={it.text} /> : <Row><Markdown text={it.text} /></Row>;
     case 'tool': return it.rail ? <ToolNode it={it} cwd={cwd} /> : <ToolView it={it} width={width} />;
     // Reads, lists and searches in a row, as one row (rail.jsx foldSteps).
