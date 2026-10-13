@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Coder app icon · 4 designs</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f6f2;--card:#fff;--ink:#1c1b18;--mute:#6b675e;--line:#e3dfd5;--accent:#1f66bd;--on-accent:#fff;--sel:#e8f0fa}
+@media (prefers-color-scheme: dark){:root{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#34363e;--accent:#6aa5ec;--on-accent:#0e1726;--sel:#1f2a3a}}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+main{height:100vh;display:flex;flex-direction:column;padding:20px 24px 16px;max-width:1800px;margin:0 auto;gap:12px}
+h1{font-size:24px;margin:0;line-height:1.2}
+.lede{color:var(--mute);margin:4px 0 0;max-width:78ch}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tabs button{font:inherit;font-size:14px;padding:6px 14px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer}
+.tabs button:hover{border-color:var(--mute)}
+.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+.tabs .keys{align-self:center;color:var(--mute);font-size:13px;margin-left:4px}
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 24px;min-height:0}
+.view{display:flex;flex-direction:column;gap:16px;overflow:hidden}
+.hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:32px;align-items:center;flex:1;min-height:0}
+.hero .big{width:min(40vh,380px);height:min(40vh,380px)}
+.sizes{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap}
+.sizes figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.sizes figcaption,.dock-cap{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+.docks{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.desk{border-radius:12px;padding:28px 16px 14px;display:flex;justify-content:center;border:1px solid var(--line)}
+.desk.light{background:#dfe5ec}.desk.dark{background:#20242c}
+.dock{display:flex;gap:10px;align-items:flex-end;padding:8px 12px;border-radius:20px}
+.desk.light .dock{background:rgba(255,255,255,.55);border:1px solid rgba(0,0,0,.08)}
+.desk.dark .dock{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12)}
+.dock .slot{width:56px;height:56px;border-radius:13px}
+.desk.light .slot.blank{background:rgba(0,0,0,.10)}.desk.dark .slot.blank{background:rgba(255,255,255,.12)}
+.dock svg{width:56px;height:56px;display:block}
+.dock .on{position:relative}
+.dock .on::after{content:"";position:absolute;left:50%;bottom:-6px;width:4px;height:4px;margin-left:-2px;border-radius:50%}
+.desk.light .on::after{background:#1c1b18}.desk.dark .on::after{background:#ecebe6}
+.side{overflow:auto;scrollbar-width:thin}
+.side h2{font-size:20px;margin:0 0 4px;line-height:1.25}
+.side .says{margin:0 0 12px;color:var(--mute)}
+.side h3{font-size:15px;margin:16px 0 4px}
+.side ul{margin:0;padding-left:18px}.side li{margin:4px 0}
+.tag{display:inline-block;font-size:13px;padding:1px 8px;border-radius:999px;background:var(--sel);color:var(--ink);margin-right:6px}
+.how{font-size:13px;color:var(--mute);border-top:1px solid var(--line);margin-top:16px;padding-top:10px}
+.all{display:grid;grid-template-columns:150px repeat(5,minmax(0,1fr));align-items:center;row-gap:12px;column-gap:8px;overflow:hidden}
+.all .h{font-size:14px;font-weight:600;text-align:center}
+.all .h.now{color:var(--mute);font-weight:400}
+.all .r{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+.all .c{display:flex;justify-content:center;align-items:center}
+.all .c.pad{padding:8px 0;border-radius:10px}
+.all .c.pad.light{background:#dfe5ec}.all .c.pad.dark{background:#20242c}
+[hidden]{display:none!important}
+@media (max-width:1100px){body{overflow:auto}main{height:auto}.stage{grid-template-columns:minmax(0,1fr)}.hero{grid-template-columns:minmax(0,1fr);justify-items:center}.docks{grid-template-columns:minmax(0,1fr)}.all{grid-template-columns:90px repeat(5,minmax(0,1fr))}}
+@media (prefers-reduced-motion: no-preference){.tabs button{transition:background .12s,border-color .12s}}
+</style></head><body>
+
+<!-- The five icons, drawn once: today's and the four new ones (each on Apple's 1024 grid, an 824 tile with a 185 corner). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-today" viewBox="0 0 1024 1024">
+    <circle cx="512" cy="512" r="456" fill="#2f8a4c"/>
+    <g fill="none" stroke="#4f4f4f" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M512 700 C 500 640, 440 610, 452 548 C 462 496, 540 470, 548 410 C 553 372, 540 350, 530 330" stroke-width="58"/>
+      <path d="M458 560 C 420 540, 390 520, 360 500" stroke-width="34"/>
+      <path d="M536 450 C 590 470, 640 490, 690 520" stroke-width="34"/>
+    </g>
+    <g fill="#fff">
+      <ellipse cx="536" cy="300" rx="178" ry="74"/><circle cx="470" cy="276" r="70"/><circle cx="560" cy="250" r="78"/><circle cx="640" cy="290" r="60"/>
+      <ellipse cx="344" cy="484" rx="132" ry="54"/><circle cx="300" cy="470" r="52"/><circle cx="372" cy="452" r="58"/>
+      <ellipse cx="700" cy="516" rx="124" ry="52"/><circle cx="668" cy="492" r="54"/><circle cx="740" cy="504" r="46"/>
+    </g>
+    <rect x="316" y="690" width="392" height="44" rx="14" fill="#4f4f4f"/>
+    <path d="M348 734 L 676 734 L 640 812 L 384 812 Z" fill="#4f4f4f"/>
+    <path d="M466 752 L 496 773 L 466 794" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="512" y="786" width="44" height="12" rx="4" fill="#fff"/>
+  </symbol>
+
+  <!-- 1 · Visor bot: the start page's bot, happy (its ready face), on deep navy -->
+  <symbol id="i-bot" viewBox="0 0 1024 1024">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="#13263f"/>
+    <rect x="100" y="100" width="824" height="412" rx="185" fill="#183152"/>
+    <rect x="100" y="330" width="824" height="182" fill="#183152"/>
+    <rect x="500" y="212" width="24" height="56" rx="10" fill="#cfd8e3"/>
+    <circle cx="512" cy="200" r="34" fill="#5fafff"/>
+    <rect x="190" y="372" width="48" height="148" rx="24" fill="#dfe6ee"/>
+    <rect x="786" y="372" width="48" height="148" rx="24" fill="#c9d3df"/>
+    <circle cx="214" cy="446" r="12" fill="#5fafff"/><circle cx="810" cy="446" r="12" fill="#5fafff"/>
+    <rect x="226" y="262" width="572" height="380" rx="150" fill="#fff"/>
+    <rect x="226" y="540" width="572" height="102" rx="60" fill="#eef2f6"/>
+    <rect x="226" y="460" width="572" height="120" fill="#fff"/>
+    <rect x="290" y="334" width="444" height="232" rx="100" fill="#141b26"/>
+    <path d="M338 392 Q 352 364 388 360" fill="none" stroke="#3a4656" stroke-width="16" stroke-linecap="round"/>
+    <g fill="none" stroke="#87d7ff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M378 482 Q 420 414 462 482"/><path d="M562 482 Q 604 414 646 482"/>
+    </g>
+    <rect x="466" y="640" width="92" height="36" fill="#cfd8e3"/>
+    <rect x="322" y="672" width="380" height="176" rx="64" fill="#f2f5f9"/>
+    <rect x="392" y="738" width="240" height="40" rx="20" fill="#5fafff"/>
+  </symbol>
+
+  <!-- 2 · Prompt: the app's ❯ and a cursor on Terminal's dark grey -->
+  <symbol id="i-prompt" viewBox="0 0 1024 1024">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="#1e1e1e"/>
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="none" stroke="#3a3a3a" stroke-width="8"/>
+    <path d="M318 330 L 528 512 L 318 694" fill="none" stroke="#5fafff" stroke-width="100" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="590" y="612" width="170" height="84" rx="14" fill="#ecebe6"/>
+  </symbol>
+
+  <!-- 3 · Blue bonsai: today's tree, on the Mac tile, in the app's blue -->
+  <symbol id="i-bonsai" viewBox="0 0 1024 1024">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="#1f5fae"/>
+    <g transform="translate(512 520) scale(.82) translate(-512 -492)">
+      <g fill="none" stroke="#0f2a4d" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M512 700 C 500 640, 440 610, 452 548 C 462 496, 540 470, 548 410 C 553 372, 540 350, 530 330" stroke-width="60"/>
+        <path d="M458 560 C 420 540, 390 520, 360 500" stroke-width="36"/>
+        <path d="M536 450 C 590 470, 640 490, 690 520" stroke-width="36"/>
+      </g>
+      <g fill="#fff">
+        <ellipse cx="536" cy="300" rx="178" ry="74"/><circle cx="470" cy="276" r="70"/><circle cx="560" cy="250" r="78"/><circle cx="640" cy="290" r="60"/>
+        <ellipse cx="344" cy="484" rx="132" ry="54"/><circle cx="300" cy="470" r="52"/><circle cx="372" cy="452" r="58"/>
+        <ellipse cx="700" cy="516" rx="124" ry="52"/><circle cx="668" cy="492" r="54"/><circle cx="740" cy="504" r="46"/>
+      </g>
+      <rect x="316" y="690" width="392" height="48" rx="16" fill="#0f2a4d"/>
+      <path d="M348 738 L 676 738 L 640 824 L 384 824 Z" fill="#0f2a4d"/>
+      <path d="M456 756 L 494 781 L 456 806" fill="none" stroke="#87d7ff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="512" y="792" width="56" height="16" rx="5" fill="#87d7ff"/>
+    </g>
+  </symbol>
+
+  <!-- 4 · Chip: the prompt on a chip, on a light tile: it runs on this Mac -->
+  <symbol id="i-chip" viewBox="0 0 1024 1024">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="#eef1f5"/>
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="none" stroke="#d3d9e1" stroke-width="8"/>
+    <g fill="#8a96a6">
+      <rect x="364" y="226" width="44" height="90" rx="14"/><rect x="450" y="226" width="44" height="90" rx="14"/><rect x="530" y="226" width="44" height="90" rx="14"/><rect x="616" y="226" width="44" height="90" rx="14"/>
+      <rect x="364" y="708" width="44" height="90" rx="14"/><rect x="450" y="708" width="44" height="90" rx="14"/><rect x="530" y="708" width="44" height="90" rx="14"/><rect x="616" y="708" width="44" height="90" rx="14"/>
+      <rect x="226" y="364" width="90" height="44" rx="14"/><rect x="226" y="450" width="90" height="44" rx="14"/><rect x="226" y="530" width="90" height="44" rx="14"/><rect x="226" y="616" width="90" height="44" rx="14"/>
+      <rect x="708" y="364" width="90" height="44" rx="14"/><rect x="708" y="450" width="90" height="44" rx="14"/><rect x="708" y="530" width="90" height="44" rx="14"/><rect x="708" y="616" width="90" height="44" rx="14"/>
+    </g>
+    <rect x="290" y="290" width="444" height="444" rx="72" fill="#1c2430"/>
+    <rect x="322" y="322" width="380" height="380" rx="48" fill="none" stroke="#2e3a4a" stroke-width="10"/>
+    <path d="M396 420 L 494 512 L 396 604" fill="none" stroke="#5fafff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="530" y="560" width="104" height="48" rx="10" fill="#ecebe6"/>
+  </symbol>
+</svg>
+
+<main>
+  <header>
+    <h1>App icon · 4 new designs</h1>
+    <p class="lede">Today's icon is the green bonsai from the Bonsai Code days, in a circle. The app itself is blue now (the bot, the ❯, the wordmark), so each new design uses that blue and Apple's rounded square. Nothing is built yet.</p>
+  </header>
+  <nav class="tabs" role="tablist" aria-label="Designs">
+    <button role="tab" data-v="bot">1 · Visor bot</button>
+    <button role="tab" data-v="prompt">2 · Prompt</button>
+    <button role="tab" data-v="bonsai">3 · Blue bonsai</button>
+    <button role="tab" data-v="chip">4 · Chip</button>
+    <button role="tab" data-v="all">5 · All four and today's</button>
+    <span class="keys">Keys 1–5 or ← →</span>
+  </nav>
+  <div class="stage">
+    <section class="card view" id="one">
+      <div class="hero">
+        <svg class="big" role="img" id="bigIcon"><use id="bigUse" href="#i-bot"/></svg>
+        <div>
+          <div class="sizes" id="sizes"></div>
+        </div>
+      </div>
+      <div class="docks">
+        <div><div class="desk light"><div class="dock" id="dockL"></div></div><p class="dock-cap">In the Dock, light desktop: today's icon is second, the new one fourth.</p></div>
+        <div><div class="desk dark"><div class="dock" id="dockD"></div></div><p class="dock-cap">In the Dock, dark desktop, the same row.</p></div>
+      </div>
+    </section>
+    <section class="card all" id="allv" hidden></section>
+    <aside class="card side" id="side"></aside>
+  </div>
+</main>
+
+<script>
+const D = {
+  bot: { n: '1 · Visor bot', says: 'The bot from the start page, now in the Dock.',
+    why: ['The same white helmet, dark visor and blue eyes you see when coding opens, with its happy “ready” face.',
+          'Deep navy behind it, so the white helmet stands out on a light or a dark desktop.',
+          'The Dock and the app finally look like one thing: today the Dock shows a green tree and the app shows a blue bot.'],
+    cost: 'The most detail of the four. At 16 px (the menu bar, Finder lists) it reads as a white helmet with a dark band; the eyes are gone.',
+    small: 'Good at 64 px and up, fair at 32, a shape at 16.' },
+  prompt: { n: '2 · Prompt', says: 'The ❯ you type after, made big.',
+    why: ['The app\u2019s blue prompt sign and a cursor, on Terminal\u2019s own dark grey (#1e1e1e).',
+          'Two shapes only, so it stays sharp at every size, down to 16 px.',
+          'Says what the app is in one look: you type, it codes.'],
+    cost: 'Many terminal apps use a prompt mark, so it is the least its own of the four.',
+    small: 'The clearest at 16 px of the four.' },
+  bonsai: { n: '3 · Blue bonsai', says: 'Today\u2019s tree, kept, in the app\u2019s blue and the Mac\u2019s shape.',
+    why: ['The same tree and pot you know, so nobody has to learn a new icon.',
+          'Moves from a circle to Apple\u2019s rounded square, so it sits in line with the other apps in the Dock.',
+          'The prompt on the pot turns light blue, like the bot\u2019s eyes.'],
+    cost: 'The tree is a leftover from the Bonsai Code name (renamed 28 Sep). The prompt on the pot is lost below 64 px.',
+    small: 'Fine at 64 px and up; at 16 px the tree is three white blobs.' },
+  chip: { n: '4 · Chip', says: 'A chip with the prompt on it: it runs on this Mac.',
+    why: ['Tells the README\u2019s first promise in a picture: the model runs here, nothing leaves the machine.',
+          'The only light tile of the four, so it is easy to find in a dark Dock.',
+          'The ❯ in the app\u2019s blue keeps it about coding, not just hardware.'],
+    cost: 'A chip on its own says “AI” or “hardware” to many people; the ❯ only shows at 32 px and up.',
+    small: 'Good at 32 px and up; at 16 px the pins blur into a dark square.' },
+};
+const order = ['bot', 'prompt', 'bonsai', 'chip', 'all'];
+const icon = (id, px, label) => `<svg width="${px}" height="${px}" role="img" aria-label="${label}"><use href="#i-${id}"/></svg>`;
+const dock = (id) => {
+  const s = (c, inner = '') => `<div class="slot ${c}">${inner}</div>`;
+  return s('blank') + `<div class="on">${icon('today', 56, 'Today\u2019s icon')}</div>` + s('blank') +
+    `<div class="on">${icon(id, 56, D[id].n)}</div>` + s('blank') + s('blank');
+};
+function side(id) {
+  const d = D[id];
+  return `<h2>${d.n}</h2><p class="says">${d.says}</p>
+    <h3>Why</h3><ul>${d.why.map((w) => `<li>${w}</li>`).join('')}</ul>
+    <h3>The cost</h3><p style="margin:0">${d.cost}</p>
+    <h3>Small sizes</h3><p style="margin:0"><span class="tag">16–32 px</span>${d.small}</p>
+    <p class="how">Every icon here is drawn as a picture of its own, the same way today\u2019s is (terminal/app/icon.svg). The one you pick replaces it, and the Mac sizes are made from it for both apps: the launcher and the window.</p>`;
+}
+function sideAll() {
+  return `<h2>All four, next to today\u2019s</h2><p class="says">The same icons at the sizes a Mac shows them, on a light and a dark desktop.</p>
+    <h3>At a glance</h3><ul>
+    <li><b>1 · Visor bot</b>: the app\u2019s own face; most detail.</li>
+    <li><b>2 · Prompt</b>: clearest when small; least its own.</li>
+    <li><b>3 · Blue bonsai</b>: no new icon to learn; an old name\u2019s tree.</li>
+    <li><b>4 · Chip</b>: says “runs on this Mac”; reads as hardware.</li></ul>
+    <p class="how">128 px is the Dock when you hover it; 64 px the Dock at its usual size; 32 px Launchpad and Finder icons; 16 px the menu bar and Finder lists.</p>`;
+}
+function all() {
+  const ids = ['today', 'bot', 'prompt', 'bonsai', 'chip'];
+  const names = ['Today', '1 · Visor bot', '2 · Prompt', '3 · Blue bonsai', '4 · Chip'];
+  let h = '<div></div>' + names.map((n, i) => `<div class="h${i ? '' : ' now'}">${n}</div>`).join('');
+  for (const [px, where, bg] of [[128, '128 px · Dock, hovered', ''], [64, '64 px · light desktop', 'light'], [64, '64 px · dark desktop', 'dark'], [32, '32 px · Finder', ''], [16, '16 px · menu bar', '']]) {
+    h += `<div class="r">${where}</div>` + ids.map((id, i) => `<div class="c${bg ? ' pad ' + bg : ''}">${icon(id, px, names[i] + ' at ' + px + ' px')}</div>`).join('');
+  }
+  return h;
+}
+function show(v) {
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.v === v)));
+  const isAll = v === 'all';
+  document.getElementById('one').hidden = isAll;
+  document.getElementById('allv').hidden = !isAll;
+  if (isAll) { document.getElementById('allv').innerHTML = all(); document.getElementById('side').innerHTML = sideAll(); }
+  else {
+    document.getElementById('bigUse').setAttribute('href', '#i-' + v);
+    document.getElementById('bigIcon').setAttribute('aria-label', D[v].n + ', large');
+    document.getElementById('sizes').innerHTML = [128, 64, 32, 16].map((px) => `<figure>${icon(v, px, D[v].n + ' at ' + px + ' px')}<figcaption>${px} px</figcaption></figure>`).join('');
+    document.getElementById('dockL').innerHTML = dock(v);
+    document.getElementById('dockD').innerHTML = dock(v);
+    document.getElementById('side').innerHTML = side(v);
+  }
+  cur = order.indexOf(v);
+}
+let cur = 0;
+document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => show(b.dataset.v)));
+addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const n = Number(e.key);
+  if (n >= 1 && n <= order.length) show(order[n - 1]);
+  else if (e.key === 'ArrowRight') show(order[(cur + 1) % order.length]);
+  else if (e.key === 'ArrowLeft') show(order[(cur + order.length - 1) % order.length]);
+});
+show('bot');
+</script>
+</body></html>
