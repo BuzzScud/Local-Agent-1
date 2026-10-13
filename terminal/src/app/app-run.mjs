@@ -47,6 +47,9 @@ function replayed(items) {
   });
 }
 
+// How often a conversation is saved while a reply works (agentEvents' stepSave); AGENTIC_STEP_SAVE_MS for the tests.
+const STEP_SAVE_MS = () => Number(process.env.AGENTIC_STEP_SAVE_MS ?? 10_000);
+
 export function runPart(self) {
   // fromServer: the message is a prompt of one of your MCP servers (/server:prompt), its own words.
   const sendPromptFn = (value, shown = value, { visionAsked = false, mcpRead = null, fromServer = null } = {}) => {
@@ -102,6 +105,16 @@ export function runPart(self) {
 
   // Agent events → screen.
   const agentEvents = () => {
+    // The conversation is saved as it goes, not only when a reply ends (13 Oct 2026, the owner's pick "Save after every
+    // step"): before each model reply, when the step before it has finished whole (every tool result in), at most every
+    // STEP_SAVE_MS. A job runs 20 to 80 minutes; a crash or a closed window lost all of it from /resume.
+    let stepSavedAt = 0;
+    const stepSave = () => {
+      const now = Date.now();
+      if (now - stepSavedAt < STEP_SAVE_MS()) return;
+      stepSavedAt = now;
+      self.saveNow();
+    };
     const on = (name, fn) => { self.agent.on(name, fn); return () => self.agent.off(name, fn); };
     // add: the tokens this event brought (one a streamed piece; a tool call's whole size when it comes in
     // one piece, as an Ollama service sends it: 4 Oct 2026, "↓ 4.1k tokens this session" for 52.7k written).
@@ -120,7 +133,7 @@ export function runPart(self) {
       on('profile-route', (ev) => self.onRoute(ev)),
       on('turn-start', () => { try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend(); self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
-      on('waiting', ({ room, thinkCap, whole } = {}) => self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null }))),
+      on('waiting', ({ room, thinkCap, whole } = {}) => { stepSave(); self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null })); }),
       // A reply that will not run as it was (cut off, repeating itself): its live lines go.
       on('reply-dropped', () => self.setLive((l) => ({ ...l, thinking: null, text: null, writing: null }))),
       // The app working between replies (notes, a summary): the working line says so.
