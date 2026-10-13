@@ -58,8 +58,12 @@ export class ModelPart {
   // a new effort is a new prompt from its first word, so the server reads the whole conversation
   // again (1 Oct 2026, Bonsai at 16k: 3 minutes each time, three times in one turn). The notes
   // call takes the same, so the conversation it reads is the one already read.
+  // The Claude API too: a new effort makes its prompt cache miss from the first message on, so the step after the
+  // first change wrote the whole conversation again (a quarter more than plain input, where a read from the cache is
+  // 5%), and the next message's first step once more, back at High (13 Oct 2026, the Cache check: both steps that
+  // went to Medium read 0% from the cache).
   stepEffort() {
-    return this.effort === 'high' && this.turn?.changed && !this.model?.effortAtTop && !this.levelInPrompt() ? 'medium' : this.effort;
+    return this.effort === 'high' && this.turn?.changed && !this.model?.effortAtTop && !this.levelInPrompt() && endpointOf(this.url)?.kind !== 'claude' ? 'medium' : this.effort;
   }
   // gpt-oss on an Ollama service: its thinking level is written into the system message (the
   // harmony format's "Reasoning: …"), so a new level is a new prompt from its first lines and the
