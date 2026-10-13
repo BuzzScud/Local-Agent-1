@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { join } from 'node:path';
-import { existsSync, writeSync, mkdirSync, watch } from 'node:fs';
+import { existsSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, heldRows, menuHeight, shortcutRows, footerParts } from './screen.jsx';
 import { askState } from './app-ask.mjs';
@@ -18,20 +18,18 @@ import { hooksFrom, leanFrom } from '../agent/way.mjs';
 import { UserHooks } from '../agent/user-hooks.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, thinkingLevel, readEditedAll, modelById, Embedder, embedderReady, HOME, remoteLabel, remoteModel, withVision, visionPath, authHeaders, endpointOf } from '../../../models/index.mjs';
-import { spendEvents, spendLabel, windowSpend, spendDir } from '../agent/spend.mjs';
-import { usageNow, usageEvents, askLimits, usageDir, adminKey, saveAdminKey, fetchBill, setOwn as setUsageOwn, dollarsOf, monthOf, clearBill } from '../agent/claude-usage.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, thinkingLevel, readEditedAll, modelById, Embedder, embedderReady, HOME, remoteLabel, remoteModel, withVision, visionPath, authHeaders } from '../../../models/index.mjs';
+import { windowSpend } from '../agent/spend.mjs';
+import { usageNow, adminKey } from '../agent/claude-usage.mjs';
 import { webSettings } from './web-form.mjs';
-import { selectedText } from './edit-input.mjs';
 import { MOUSE_ON, MOUSE_OFF, MOTION_ON, MOTION_OFF, isMouseText } from './mouse.mjs';
 import { botAllowed } from './bot-layer.jsx';
 import { stepsOf } from './rail.jsx';
-import { copyToClipboard } from './clipboard.mjs';
 import { COMMANDS } from './commands.mjs';
 import { openMemory } from '../agent/facts.mjs';
 import { claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
-import { AutoSave, memoryOn, sinceLastTime, saveModeOf } from './autosave.mjs';
+import { AutoSave, memoryOn, saveModeOf } from './autosave.mjs';
 import { loadSettings, saveSettings, newSessionId, loadHistory, firstMode, keepsLastMode } from './store.mjs';
 import { readRecord as sessionRecord } from './sessions.mjs';
 import { runReader } from './loops-board.mjs';
@@ -55,7 +53,8 @@ import { runPart } from './app-run.mjs';
 import { slashPart } from './app-slash.mjs';
 import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
-import { savedWatch, repairNow } from './saved-services.mjs';
+import { usagePart } from './app-usage.mjs';
+import { watchPart } from './app-watch.mjs';
 import { promptMenu } from './app-menu.mjs';
 import { windowBridge } from '../window/bridge.mjs';
 export { remoteConfOf } from './app-common.mjs';
@@ -65,7 +64,7 @@ export function App({ opts, win, onRestart }) {
   // The App's names the functions in its parts use (app-model.mjs and the others beside this file), read at
   // the moment a function uses them, from this render (app-common.mjs liveView).
   const self = liveView({
-    MCP_EXTRAS: () => MCP_EXTRAS, S: () => S, abortRef: () => abortRef, agent: () => agent, agentRef: () => agentRef,
+    MCP_EXTRAS: () => MCP_EXTRAS, adminRef: () => adminRef, copiedRef: () => copiedRef, claudeModel: () => claudeModel, hasAdmin: () => hasAdmin, setSpend: () => setSpend, setUsage: () => setUsage, S: () => S, abortRef: () => abortRef, agent: () => agent, agentRef: () => agentRef,
     agentsKey: () => agentsKey, agentsRef: () => agentsRef, agentsSize: () => agentsSize, aliveRef: () => aliveRef,
     answerRef: () => answerRef, applyChoice: () => applyChoice, applyKeep: () => applyKeep, botPointer: () => botPointer, setBotOn: () => setBotOn,
     stepsView: () => stepsView, setSteps: () => setSteps, toggleGroup: () => toggleGroup, setOpenGroups: () => setOpenGroups, liveBoxRef: () => liveBoxRef,
@@ -88,12 +87,12 @@ export function App({ opts, win, onRestart }) {
     mcpSigning: () => mcpSigning, mcpTests: () => mcpTests, measure: () => measure,
     memoryForRestart: () => memoryForRestart, memoryNote: () => memoryNote, menu: () => menu, menuIdx: () => menuIdx,
     model: () => model, modelOff: () => modelOff, modelOffNow: () => modelOffNow, mouse: () => mouse,
-    mouseRef: () => mouseRef, noteModels: () => noteModels, onRestart: () => onRestart, onService: () => onService,
+    mouseRef: () => mouseRef, onRestart: () => onRestart, onService: () => onService,
     openAgentsTree: () => openAgentsTree, openChoice: () => openChoice, openEffortLimits: () => openEffortLimits,
     openHub: () => openHub, openJumpBox: () => openJumpBox, openLoops: () => openLoops,
     openMcpPicker: () => openMcpPicker, openModelPicker: () => openModelPicker, openOwnSettings: () => openOwnSettings,
     openPermissions: () => openPermissions, openRemoteForm: () => openRemoteForm, openRewind: () => openRewind,
-    openSettings: () => openSettings, askUsage: () => askUsage, saveUsageEdit: () => saveUsageEdit, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, followProfiles: () => followProfiles, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, mainToRemote: () => mainToRemote, windowToRemote: () => windowToRemote, mainMoves: () => mainMoves, mainNow: () => mainNow, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
+    openSettings: () => openSettings, askUsage: () => askUsage, saveUsageEdit: () => saveUsageEdit, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, mainToRemote: () => mainToRemote, windowToRemote: () => windowToRemote, mainMoves: () => mainMoves, mainNow: () => mainNow, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
     pendingContext: () => pendingContext, pendingSaveRef: () => pendingSaveRef, pickHere: () => pickHere,
     pickLevel: () => pickLevel, pickLevels: () => pickLevels, pre: () => pre, preloadRemote: () => preloadRemote,
@@ -323,79 +322,15 @@ export function App({ opts, win, onRestart }) {
   // say it (the owner's pick, 4 Oct 2026: "add the total tokens … i cant see it").
   const sessionTokens = useRef(0);
   const [spend, setSpend] = useState('');
-  useEffect(() => {
-    const show = () => setSpend(spendLabel());
-    spendEvents.on('change', show);
-    const t = setInterval(() => { if (windowSpend().requests) show(); }, 15_000);
-    t.unref?.();
-    return () => { spendEvents.off('change', show); clearInterval(t); };
-  }, []);
-  // The Claude API's usage (claude-usage.mjs): "$61.68 left" in the footer and /usage, while this window
-  // runs on the Claude API (9 Oct 2026, the owner: "updated in real time and is true"). Worked out again the
-  // moment anything spends: this window's answers (spendEvents), another window's or Anthropic's bill (their
-  // files change: a watch on the spend and usage folders), and every 15 s for a new day or a missed change.
-  // With an Admin key the bill is read once a minute over every window. Only a change of what shows
-  // redraws (a redraw at rest breaks copying text off the screen). Read at once, for the first frame.
+  // The cost meter, "$ left" and /usage (app-usage.mjs): the footer's words after each answer and every 15 s, and the
+  // Claude API's usage worked out again whenever anything spends; read at once, for the first frame.
+  const { spendWatch, usageWatch, askUsage, saveUsageEdit } = usagePart(self);
+  useEffect(spendWatch, []); // eslint-disable-line react-hooks/exhaustive-deps
   const claudeModel = model.remote?.kind === 'claude' ? model.remote.model : null;
   const adminRef = useRef(null); // an Admin key is kept (the Keychain is read once, and again after k in /usage)
   const hasAdmin = () => { if (adminRef.current == null) adminRef.current = Boolean(adminKey()); return adminRef.current; };
   const [usage, setUsage] = useState(() => (claudeModel ? usageNow({ model: claudeModel, admin: hasAdmin() }) : null));
-  useEffect(() => {
-    if (!claudeModel) { setUsage(null); return undefined; }
-    let shown = '';
-    const show = () => {
-      const u = usageNow({ model: claudeModel, admin: hasAdmin() });
-      const key = JSON.stringify([u.spent.toFixed(2), u.left, u.cap, u.tierCap, u.capped, u.low, u.pace.beforeReset, u.pace.runsOut, u.today, u.window.toFixed(2), u.source, u.limits?.at, u.admin]);
-      if (key !== shown) { shown = key; setUsage(u); }
-    };
-    const bill = () => { if (hasAdmin()) fetchBill().catch(() => {}); };
-    let soon = null;
-    const later = () => { if (!soon) soon = setTimeout(() => { soon = null; show(); }, 150); };
-    const watches = [];
-    for (const dir of [spendDir(), usageDir()]) {
-      try { mkdirSync(dir, { recursive: true }); const w = watch(dir, { recursive: true }, later); w.on('error', () => {}); watches.push(w); } catch { /* the 15 s look still finds it */ }
-    }
-    show();
-    bill();
-    usageEvents.on('change', show);
-    spendEvents.on('change', show);
-    const t = setInterval(() => { show(); bill(); }, 15_000);
-    t.unref?.();
-    return () => { usageEvents.off('change', show); spendEvents.off('change', show); clearInterval(t); clearTimeout(soon); for (const w of watches) { try { w.close(); } catch {} } };
-  }, [claudeModel]);
-  // r in /usage: one tiny request for the limits now, and Anthropic's bill with an Admin key.
-  const askUsage = async () => {
-    const url = agent.url;
-    const ep = endpointOf(url);
-    if (!claudeModel || ep?.kind !== 'claude') return;
-    setPicker((p) => (p?.kind === 'usage' ? { ...p, asking: true } : p));
-    try { await Promise.all([askLimits({ url, ep }), hasAdmin() ? fetchBill({ force: true }) : null]); } catch (e) { flash(`could not ask Anthropic: ${String(e.message ?? e).slice(0, 120)}`, 4000); }
-    setPicker((p) => (p?.kind === 'usage' ? { ...p, asking: false } : p));
-  };
-  // enter on a value typed in /usage (l your limit, s the month's spend as the Console shows it, k an Admin key),
-  // and /usage limit 200 · /usage spent 112.40. Returns the words said, or null when the value was refused
-  // (the box stays open to type it again).
-  const saveUsageEdit = (e) => {
-    const said = (text, tone = 'dim') => { setPicker((p) => (p?.kind === 'usage' ? { ...p, editing: null } : p)); push({ type: 'note', text, tone }); return text; };
-    const v = e.value.trim();
-    if (e.id === 'key') {
-      if (v && !/^sk-ant-admin/.test(v)) { flash('An Admin key starts sk-ant-admin… (Console → Settings → Admin keys)', 4000); return null; }
-      try { saveAdminKey(v || null); } catch (err) { flash(`could not keep it: ${String(err.message ?? err).slice(0, 120)}`, 4000); return null; }
-      adminRef.current = Boolean(v);
-      if (!v) { clearBill(); return said('/usage: Admin key taken out. The month’s spend is this Mac’s meter again (or the figure you typed).'); }
-      fetchBill({ key: v, force: true }).catch(() => {});
-      return said('/usage: Admin key kept in the Keychain. Anthropic’s bill is read once a minute; this Mac’s answers are added the moment they come.');
-    }
-    const off = !v || /^(off|none|clear)$/i.test(v);
-    const usd = off ? null : dollarsOf(v);
-    if (!off && usd == null) { flash('Type dollars, like 200 or 112.40', 3000); return null; }
-    if (e.id === 'limit') {
-      setUsageOwn({ limit: usd > 0 ? usd : null });
-      return said(usd > 0 ? `/usage: your limit is $${usd.toFixed(2)} a month. "$ left" counts down from it.` : '/usage: your own limit taken out; the tier’s cap counts again.');
-    }
-    setUsageOwn({ spent: off ? null : { usd, at: Date.now(), month: monthOf() } });
-    return said(off ? '/usage: the typed figure taken out; the month’s spend is this Mac’s meter again.' : `/usage: this month’s spend is $${usd.toFixed(2)} as of now; this Mac’s answers are added to it as they come.`);
-  };
+  useEffect(usageWatch, [claudeModel]); // eslint-disable-line react-hooks/exhaustive-deps
   // Several windows in one project (copies.mjs): this window's own copy (null: the folder itself),
   // the other windows found there as it opened, and the changes last asked about.
   const copyRef = useRef(null);
@@ -412,24 +347,10 @@ export function App({ opts, win, onRestart }) {
   // The App tool's command (app-self.mjs appBridge) listens for the notes it causes: a list while it runs, else null.
   const tapRef = useRef(null);
   const push = useCallback(pushFn, []);
-  // Your services stay saved (saved-services.mjs, 12 Oct 2026): what another window saves in settings.json is this
-  // window's too within 2 s, and a service it knows that the file lost is written back; at the start, a service
-  // settings.json lost (profiles.json still uses it, or its key is still kept) comes back, and a key's end is set right.
-  useEffect(() => {
-    const tick = savedWatch(settings);
-    const say = (lines, tone) => { for (const text of lines) push({ type: 'note', text, tone }); };
-    const t = setInterval(() => say(tick(), 'warn'), 2000);
-    t.unref?.();
-    const first = setTimeout(() => {
-      say(repairNow(), 'warn');
-      if (process.env.AGENTIC_SEEDED === '1') {
-        delete process.env.AGENTIC_SEEDED;
-        say(['This copy has a home of its own and started with your services; it reads your keys from the Keychain and never writes there.'], 'dim');
-      }
-    }, 1500);
-    first.unref?.();
-    return () => { clearInterval(t); clearTimeout(first); };
-  }, []);
+  // Your services stay saved, the model's memory, text copied as you select it, a permissions file that cannot be
+  // read (app-watch.mjs): each in the background, as before.
+  const { servicesWatch, ramWatch, copySelection, savedSinceNote, permissionsNote } = watchPart(self);
+  useEffect(servicesWatch, []); // eslint-disable-line react-hooks/exhaustive-deps
   const serverRef = useRef(null);
   const restartRef = useRef(null);
   // The remote in use (/remote): its connection ({ url, stop, … } from
@@ -582,16 +503,7 @@ export function App({ opts, win, onRestart }) {
   // selection settles, like Claude Code's copy on select. Not the whole of it
   // selected by a key (⌥A): that is for deleting it or pasting over it.
   const copiedRef = useRef('');
-  useEffect(() => {
-    const text = selectedText(input);
-    if (!text || input.all) { copiedRef.current = ''; return undefined; }
-    const t = setTimeout(() => {
-      if (text === copiedRef.current) return;
-      copiedRef.current = text;
-      if (copyToClipboard(text)) flash(`copied ${text.length.toLocaleString()} char${text.length === 1 ? '' : 's'} to clipboard`, 2500);
-    }, 250);
-    return () => clearTimeout(t);
-  }, [input, flash]);
+  useEffect(copySelection, [input, flash]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMode = useCallback(setModeFn, [agent]);
   // The mode the window is left in is the next window's (store.mjs firstMode): kept in settings.json
   // as it changes, so a quit, a closed window or /update's restart all keep it.
@@ -740,14 +652,7 @@ export function App({ opts, win, onRestart }) {
   const psKey = psConn ? `${psConn.url} ${model.remote.model}` : null;
   useEffect(readServicePs, [psKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Memory the model really uses (for the Live thinking meter line).
-  useEffect(() => {
-    // A copy shared with another window is measured too (its process is that window's).
-    const read = () => { const s = serverRef.current; if (s?.port && (s.child || s.shared)) setRamGb((s.footprintBytes() + model.bytes) / 1e9); };
-    const id = setInterval(read, 5000);
-    const first = setTimeout(read, 1500);
-    return () => { clearInterval(id); clearTimeout(first); };
-  }, [model]);
+  useEffect(ramWatch, [model]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveNow = useCallback(saveNowFn, [agent, cwd]);
 
   // Keep a copy of what was shown, for /resume.
@@ -788,16 +693,8 @@ export function App({ opts, win, onRestart }) {
   const toggleArmed = useRef(0);
   const toggleFnRef = useRef(null);
   toggleFnRef.current = toggleModel;
-  // What the memory saved after the last window here had closed, said once.
-  useEffect(() => {
-    if (!agent.memory) return;
-    for (const line of sinceLastTime(cwd)) push({ type: 'note', text: line, tone: 'dim' });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // A permissions file that cannot be read turns every saved rule off: said once.
-  useEffect(() => {
-    const r = rulesFor(cwd);
-    if (r.broken) push({ type: 'note', text: `~/.agentic-coder/permissions.json cannot be read (${r.broken}), so none of your saved rules apply until it is fixed or deleted.`, tone: 'warn' });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(savedSinceNote, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(permissionsNote, []); // eslint-disable-line react-hooks/exhaustive-deps
   // /weights: the viewer's little server, started once per window and closed with it.
   const weightsRef = useRef(null);
   useEffect(resumeAtStart, []); // eslint-disable-line react-hooks/exhaustive-deps
