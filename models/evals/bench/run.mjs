@@ -181,6 +181,9 @@ try {
       if (stopping) ac.abort(); // a stop that came while the task was set up
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       const spent0 = windowSpend().usd;
+      // The prompt cache's tokens before the task, and when it started: the Cache check (tools/cache-check.mjs) reads them.
+      const cache0 = windowSpend().cache;
+      const startedAt = Date.now();
       let run;
       try {
         run = await runHeadless({ prompt, cwd: work, url: server.url, model: runOn, thinking, effort, ctx: ctxUsed, lean: leanArg || LEAN_AUTO, limits: limitsUsed, subagents: Boolean(conn), hooks: conn ? MODEL_HOOKS : undefined, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000, way: wayArg ?? undefined,
@@ -209,7 +212,9 @@ try {
         // The lean harness (on Claude by itself unless --lean or a choice says otherwise: way.mjs LEAN_AUTO).
         lean: Boolean(run.lean),
         // What it cost on a paid service (null on a free one).
-        usd: conn?.model?.price || windowSpend().usd > spent0 ? Math.round((windowSpend().usd - spent0) * 10000) / 10000 : null };
+        usd: conn?.model?.price || windowSpend().usd > spent0 ? Math.round((windowSpend().usd - spent0) * 10000) / 10000 : null,
+        // What of it the prompt cache held (tokens sent, read from it, written to it), on a service that says (the Claude API).
+        startedAt, cache: windowSpend().cache.sent > cache0.sent ? Object.fromEntries(['sent', 'hit', 'wrote', 'saved'].map((k) => [k, Math.round((windowSpend().cache[k] - cache0[k]) * 1e4) / 1e4])) : null };
       // The memory's save comes after the check: its own files are not the task's.
       if (withMemory && run.save) { const s = await run.save(); if (s) { row.saved = s.added.map((f) => `${f.kind}: ${f.text}`); row.refused = s.refused.map((r) => r.why); row.saveSecs = Math.round(s.secs); saves.push(s); } }
       results.push(row);
