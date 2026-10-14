@@ -9,9 +9,11 @@ import { join } from 'node:path';
 import net from 'node:net';
 import { VtScreen } from '../src/window/vt.mjs';
 import { viewItem, ansiRows, cellRows, xterm } from '../src/window/view.mjs';
-import { windowWanted, runWindow } from '../src/window/server.mjs';
+import { windowWanted, runWindow, dropText, openWindowFree } from '../src/window/server.mjs';
+import { droppedFiles, pathsOnly } from '../src/agent/images.mjs';
 import { makeBridge, usageOf, meterOf } from '../src/window/bridge.mjs';
 import { printedOf } from '../src/app/screen.jsx';
+import { HOME } from '../../models/index.mjs';
 
 test('the pretend screen keeps text, moves, erasing, wide letters, the other screen, and answers where the cursor is', () => {
   const said = [];
@@ -79,6 +81,20 @@ test('coding opens the window only on a Mac with it built, never with --terminal
   expect(windowWanted({}, { AGENTIC_WINDOW_APP: join(dir, 'not-there'), HOME: dir })).toBe(false);
 });
 
+test('coding in a terminal starts the window on its own (detached), so that Terminal can be closed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'window-free-'));
+  const started = [];
+  const run = (cmd, args, o) => { started.push({ cmd, args, o }); return { unref: () => { started.at(-1).unref = true; } }; };
+  const cmd = openWindowFree({ folder: dir, args: ['--terminal', '--mode', 'auto'], env: { X: '1' }, run });
+  expect(started.length).toBe(1);
+  const [{ args, o, unref }] = started;
+  expect(args.slice(-5)).toEqual(['window', '--folder', dir, '--mode', 'auto']);
+  expect(cmd.slice(1)).toEqual(args);
+  expect(o).toMatchObject({ cwd: dir, detached: true, env: { X: '1' } });
+  expect(o.stdio[0]).toBe('ignore');
+  expect(unref).toBe(true);
+});
+
 test("the app's side: each redraw as data, only what changed, and the window's clicks back as actions", async () => {
   const dir = mkdtempSync(join(tmpdir(), 'window-bridge-'));
   const path = join(dir, 'b.sock');
@@ -86,20 +102,22 @@ test("the app's side: each redraw as data, only what changed, and the window's c
   let conn = null;
   const srv = net.createServer((s) => { conn = s; let buf = ''; s.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } }); });
   await new Promise((r) => srv.listen(path, r));
-  const bridge = makeBridge(path);
+  const bridge = makeBridge(path, 'the-window-key');
   const toggled = [];
   const self = { toggleGroup: (id) => toggled.push(id), setMode: () => {}, resumeSession: () => {} };
   const app = { items: [{ key: 'u1', type: 'user', text: 'hi', cards: [] }, { key: 'x1', rail: true, type: 'text', text: 'hello back' }], live: { phase: 'idle' }, input: { value: '/he', cursor: 3 }, menu: { kind: 'slash', index: 0, items: [{ label: '/help', desc: 'Help' }] }, mode: 'auto', modelName: 'Stand-in', width: 100, columns: 100, rows: 30, stepsView: { steps: 'grouped', open: new Set() } };
   bridge.publish(app, self);
-  for (let i = 0; i < 40 && !lines.length; i++) await Bun.sleep(25);
-  expect(lines[0]).toMatchObject({ t: 'state', mode: 'auto', modelName: 'Stand-in', input: { value: '/he', cursor: 3 }, menu: { index: 0, items: [{ label: '/help', desc: 'Help' }] } });
-  // the keys are the printed ones (the grouping names a reply after its item: x1:t)
-  expect(lines[0].order).toEqual(['u1', 'x1:t']);
-  expect(Object.keys(lines[0].items)).toEqual(['u1', 'x1:t']);
-  bridge.publish({ ...app, input: { value: '/hel', cursor: 4 } }, self);
   for (let i = 0; i < 40 && lines.length < 2; i++) await Bun.sleep(25);
-  expect(lines[1].items).toEqual({});
-  expect(lines[1].order).toBeUndefined();
+  // first the window's key (server.mjs hears only the app that has it), then the state
+  expect(lines[0]).toEqual({ t: 'hi', key: 'the-window-key' });
+  expect(lines[1]).toMatchObject({ t: 'state', mode: 'auto', modelName: 'Stand-in', input: { value: '/he', cursor: 3 }, menu: { index: 0, items: [{ label: '/help', desc: 'Help' }] } });
+  // the keys are the printed ones (the grouping names a reply after its item: x1:t)
+  expect(lines[1].order).toEqual(['u1', 'x1:t']);
+  expect(Object.keys(lines[1].items)).toEqual(['u1', 'x1:t']);
+  bridge.publish({ ...app, input: { value: '/hel', cursor: 4 } }, self);
+  for (let i = 0; i < 40 && lines.length < 3; i++) await Bun.sleep(25);
+  expect(lines[2].items).toEqual({});
+  expect(lines[2].order).toBeUndefined();
   conn.write(`${JSON.stringify({ t: 'act', do: 'toggle', id: 'row-1' })}\n`);
   for (let i = 0; i < 40 && !toggled.length; i++) await Bun.sleep(25);
   expect(toggled).toEqual(['row-1']);
@@ -130,6 +148,42 @@ test("the pill beside the model: the Claude API's month as the footer said it, a
   expect(meterOf({ ...svc, server: { loaded: false } })).toMatchObject({ gpu: null, mac: null });
 });
 
+test('files dropped on the window are typed as Terminal types a drop, so the app finds each one again', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'window-drop-'));
+  const shot = join(dir, 'Screenshot 2026-10-14 at 9.41.07\u202fAM.png');
+  const odd = join(dir, "it's (v2) & [final].pdf");
+  writeFileSync(shot, '');
+  writeFileSync(odd, '');
+  const text = dropText([shot, odd, '', 7]);
+  expect(text).toBe(`${shot.replace(/ |\u202f/g, '\\$&')} ${odd.replace(/[ '()&[\]]/g, '\\$&')} `);
+  expect(pathsOnly(text)).toBe(true);
+  expect(droppedFiles(text, dir, { any: true }).map((d) => d.path)).toEqual([shot, odd]);
+  expect(dropText([])).toBe('');
+});
+
+test('the window\'s socket is the app\'s alone: once the bridge has it, nothing the app starts (a command, a test) gets it', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'window-sock-'));
+  const sock = join(dir, 'w.sock');
+  const got = [];
+  const server = net.createServer((c) => got.push(c)).listen(sock);
+  await new Promise((r) => server.once('listening', r));
+  // An app in the window: the bridge loads (App.jsx imports it), then the app runs a command.
+  const app = join(dir, 'app.mjs');
+  writeFileSync(app, `
+    const { windowBridge } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'window', 'bridge.mjs'))});
+    // As the Bash tool and background jobs start one (tools/run.mjs): with a copy of process.env.
+    const child = Bun.spawnSync(['/bin/sh', '-c', 'printf %s "$AGENTIC_WINDOW_SOCK$AGENTIC_WINDOW_KEY"'], { env: { ...process.env } });
+    console.log(JSON.stringify({ bridge: Boolean(windowBridge), child: String(child.stdout) }));
+    windowBridge?.close();
+  `);
+  const p = Bun.spawn([process.execPath, app], { env: { ...process.env, AGENTIC_WINDOW_SOCK: sock, AGENTIC_WINDOW_KEY: 'the-window-key' }, stdout: 'pipe', stderr: 'pipe' });
+  const out = await new Response(p.stdout).text();
+  await p.exited;
+  for (const c of got) c.destroy();
+  server.close();
+  expect(JSON.parse(out.trim().split('\n').pop())).toEqual({ bridge: true, child: '' });
+});
+
 test('the window server: its page only with its key, the state passed on, keys passed back, and the end of the app', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'window-server-'));
   // The stand-in app: says one state over the bridge, prints what it is typed, and ends at q.
@@ -137,7 +191,7 @@ test('the window server: its page only with its key, the state passed on, keys p
   writeFileSync(stand, `
     import net from 'node:net';
     const s = net.connect(process.env.AGENTIC_WINDOW_SOCK);
-    s.on('connect', () => s.write(JSON.stringify({ t: 'state', now: Date.now(), order: ['a'], items: { a: { t: 'text', key: 'a', text: 'hi from the app' } }, mode: 'plan', modelName: 'Stand-in', input: { value: '', cursor: 0 }, live: { phase: 'idle' } }) + '\\n'));
+    s.on('connect', () => s.write(JSON.stringify({ t: 'hi', key: process.env.AGENTIC_WINDOW_KEY }) + '\\n' + JSON.stringify({ t: 'state', now: Date.now(), order: ['a'], items: { a: { t: 'text', key: 'a', text: 'hi from the app' } }, mode: 'plan', modelName: 'Stand-in', input: { value: '', cursor: 0 }, live: { phase: 'idle' } }) + '\\n'));
     process.stdin.setRawMode?.(true);
     process.stdin.on('data', (d) => { const t = String(d); if (t.includes('q')) process.exit(3); s.write(JSON.stringify({ t: 'typed', text: t }) + '\\n'); });
   `);
@@ -160,6 +214,23 @@ test('the window server: its page only with its key, the state passed on, keys p
   ws.send(JSON.stringify({ t: 'keys', data: 'x' }));
   for (let i = 0; i < 80 && !got.some((m) => m.t === 'typed'); i++) await Bun.sleep(25);
   expect(got.find((m) => m.t === 'typed').text).toBe('x');
+  // Another copy of the app with the socket but not the key (a test's app started from inside the window, 14 Oct
+  // 2026): not heard. Before, the window took it for the app started again, dropped the conversation and drew it.
+  const resets = got.filter((m) => m.t === 'reset').length;
+  const stray = net.connect(join(HOME, 'window', `${process.pid}.sock`));
+  await new Promise((r) => stray.on('connect', r));
+  stray.write(`${JSON.stringify({ t: 'state', now: Date.now(), order: ['b'], items: { b: { t: 'text', key: 'b', text: 'a stray copy' } } })}\n`);
+  const strayGone = new Promise((r) => stray.on('close', r));
+  const typedNow = got.filter((m) => m.t === 'typed').length;
+  ws.send(JSON.stringify({ t: 'keys', data: 'y' }));
+  for (let i = 0; i < 80 && got.filter((m) => m.t === 'typed').length === typedNow; i++) await Bun.sleep(25);
+  await strayGone;
+  expect(got.filter((m) => m.t === 'reset').length).toBe(resets);
+  expect(JSON.stringify(got)).not.toContain('a stray copy');
+  // a screenshot dropped on the window (main.rs hands the page its path) reaches the app as a pasted drop
+  ws.send(JSON.stringify({ t: 'drop', paths: ['/Users/me/Desktop/Screenshot 2026-10-14 at 9.41.07\u202fAM.png'] }));
+  for (let i = 0; i < 80 && !got.some((m) => m.t === 'typed' && m.text.includes('200~')); i++) await Bun.sleep(25);
+  expect(got.filter((m) => m.t === 'typed').map((m) => m.text).join('')).toContain('\x1b[200~/Users/me/Desktop/Screenshot\\ 2026-10-14\\ at\\ 9.41.07\\\u202fAM.png \x1b[201~');
   ws.send(JSON.stringify({ t: 'keys', data: 'q' }));
   expect(await done).toBe(3);
   for (let i = 0; i < 40 && !got.some((m) => m.t === 'exit'); i++) await Bun.sleep(25);

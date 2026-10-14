@@ -58,6 +58,12 @@ process.env.AGENTIC_OPEN ??= 'off';
 process.env.AGENTIC_SESSIONS ??= 'off';
 // The app the tests drive stays in its pretend terminal: never its own window (terminal/src/window/).
 process.env.AGENTIC_WINDOW ??= 'off';
+// Run from inside the window, an app a test starts never reaches that window's socket (bridge.mjs): each one that
+// did made the real window drop its conversation and flash the raw terminal (14 Oct 2026).
+delete process.env.AGENTIC_WINDOW_SOCK;
+delete process.env.AGENTIC_WINDOW_KEY;
+// Nor are they started as the window's own copy (cli.jsx: that copy keeps its folder, whatever settings.json's startFolder says).
+delete process.env.AGENTIC_WINDOW_CHILD;
 // A window starts in Manual, not in the mode another test's window was left in (store.mjs firstMode).
 process.env.AGENTIC_LAST_MODE ??= 'off';
 // Lost services brought back at a window's start (saved-services.mjs repairNow): off unless a test turns it on,
