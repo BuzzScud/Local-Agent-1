@@ -74,7 +74,10 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
   const sendAll = (m) => { const s = JSON.stringify(m); for (const ws of clients) ws.send(s); };
 
   // The app's side (bridge.mjs): one line of JSON per state; a new connection is the app started again (/update).
-  let appSock = null, inbox = '';
+  // Only a connection whose first line is this window's key is the app (14 Oct 2026): a test's copy of the app that
+  // had the socket in its environment connected too, and the window dropped the conversation for that copy's drawing.
+  const appKey = randomBytes(18).toString('hex');
+  let appSock = null;
   const onLine = (line) => {
     let m; try { m = JSON.parse(line); } catch { return; }
     if (m.t === 'state') {
@@ -88,9 +91,19 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
   const bridge = Bun.listen({
     unix: sockPath,
     socket: {
-      open(s) { appSock = s; st.items = {}; st.order = []; st.last = null; inbox = ''; sendAll({ t: 'reset' }); },
-      data(_s, d) { inbox += Buffer.from(d).toString('utf8'); let i; while ((i = inbox.indexOf('\n')) >= 0) { const l = inbox.slice(0, i); inbox = inbox.slice(i + 1); onLine(l); } },
-      close() { appSock = null; },
+      open(s) { s.data = { inbox: '', app: false }; },
+      data(s, d) {
+        s.data.inbox += Buffer.from(d).toString('utf8');
+        let i;
+        while ((i = s.data.inbox.indexOf('\n')) >= 0) {
+          const l = s.data.inbox.slice(0, i); s.data.inbox = s.data.inbox.slice(i + 1);
+          if (s.data.app) { if (s === appSock) onLine(l); continue; }
+          let m; try { m = JSON.parse(l); } catch { m = null; }
+          if (m?.t !== 'hi' || m.key !== appKey) { s.end(); return; }
+          s.data.app = true; appSock = s; st.items = {}; st.order = []; st.last = null; sendAll({ t: 'reset' });
+        }
+      },
+      close(s) { if (s === appSock) appSock = null; },
     },
   });
   try { chmodSync(sockPath, 0o600); } catch {}
@@ -107,7 +120,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
       for (const ws of clients) if (ws.data.screen) ws.send(m);
     }, 50);
   };
-  const childEnv = { ...env, AGENTIC_WINDOW_SOCK: sockPath, AGENTIC_WINDOW_CHILD: '1', AGENTIC_SESSIONS: 'off', TERM: env.TERM && env.TERM !== 'dumb' ? env.TERM : 'xterm-256color' };
+  const childEnv = { ...env, AGENTIC_WINDOW_SOCK: sockPath, AGENTIC_WINDOW_KEY: appKey, AGENTIC_WINDOW_CHILD: '1', AGENTIC_SESSIONS: 'off', TERM: env.TERM && env.TERM !== 'dumb' ? env.TERM : 'xterm-256color' };
   delete childEnv.AGENTIC_IN_HOST;
   // command: what runs in the pretend terminal instead of the app (the tests' stand-in).
   proc = Bun.spawn(command ?? appCommand(args.filter((a) => a !== '--terminal'), env), {

@@ -13,6 +13,7 @@ import { clarify } from '../flows/clarify.mjs';
 import { isFollowUp } from '../flows/words.mjs';
 import { isMemoryRequest } from './memory.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
+import { RESTARTED_PROMPT } from './self.mjs';
 import { MCP_TOOL, callHint, isMcpCall, mcpCallInText } from './mcp.mjs';
 import { CALL_MARK, EXPLAIN, LOOK_TOOLS, MAX_CALLS, MCP_BACKS, READ_TIP, SAME_STEP, asksTheUserDirectly, auto, bareCallInText, beforeCall, cutCallNote, kTok, keptPart, keptWriteNote, keyLines, safeArgs, toolCallInText } from './agent-said.mjs';
 
@@ -46,8 +47,10 @@ export class WorkPart {
       return reason;
     };
     // Started outside a project (the home folder, say): a request that names
-    // one goes into it once you say yes (src/agent/projects.mjs).
-    const into = await this.offerProject(text, signal);
+    // one goes into it once you say yes (src/agent/projects.mjs). Not the app's own note after a restart
+    // (14 Oct 2026): its words "Agentic Coder" named the app's repo, so a window restarted in the home
+    // folder stopped on "Work in …/agentic-coder?" with the reply's timer running, and looked frozen.
+    const into = text === RESTARTED_PROMPT ? null : await this.offerProject(text, signal);
     if (into?.stop) return stopNow(into.stop);
     // A short line that continues the last turn ("can you add it to my
     // desktop?", "why") is clear with the conversation in view and means

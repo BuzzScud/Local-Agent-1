@@ -167,6 +167,7 @@ button { font: inherit; color: inherit; }
 .perm { border: 1px solid var(--accent-line); border-radius: 12px; background: #1b1d22; padding: 14px 16px; margin: 8px 0 10px; }
 .perm .h { font: 600 13px var(--sans); color: #afafff; margin-bottom: 8px; }
 .perm .what { font: 13px var(--mono); white-space: pre-wrap; word-break: break-word; margin-bottom: 8px; color: var(--text); }
+.perm .q { font: 14px/1.5 var(--sans); white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; color: var(--text); }
 .perm .diff { font: 12px/1.45 var(--mono); background: var(--win); border: 1px solid var(--hair); border-radius: 8px; padding: 6px 0; max-height: 34vh; overflow: auto; margin-bottom: 10px; }
 .perm .diff div { padding: 0 10px; white-space: pre; } .perm .diff .add { background: rgba(0,95,135,.35); } .perm .diff .del { background: rgba(95,0,0,.45); } .perm .diff .n { color: var(--faint); display: inline-block; width: 42px; }
 .perm .opt { display: flex; gap: 8px; padding: 5px 8px; border-radius: 7px; cursor: pointer; } .perm .opt:hover { background: rgba(255,255,255,.04); }
@@ -358,6 +359,8 @@ function spark(vals, w, h) {
 }
 const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 function statusHtml(L) {
+  // A question open below: the reply waits for you, so no timer runs over "↓ 0 tokens" as if it were stuck.
+  if (L.phase === 'working' && S.last?.perm) return '<span class="ac">Waiting for your answer below</span>';
   if (L.phase === 'working') {
     const now = Date.now() - S.skew, secs = L.turnStart ? (now - L.turnStart) / 1000 : 0;
     const tps = L.tps ? Math.round(L.tps) : null;
@@ -380,9 +383,9 @@ function menuHtml(menu) {
   return '<div class="menu" id="menu">' + menu.items.map((x, i) => '<div class="mi' + (i === menu.index ? ' on' : '') + '" data-menu="' + i + '"><span class="l">' + esc(x.label) + '</span><span class="d">' + esc(x.desc) + '</span></div>').join('') + '</div>';
 }
 function permHtml(p) {
-  const what = p.command ? '<div class="what">$ ' + esc(p.command) + '</div>' : p.path ? '<div class="what">' + (p.created ? 'Create ' : 'Edit ') + esc(p.path) + '</div>' : '';
+  const what = p.question ? '<div class="q">' + esc(p.question) + '</div>' : p.command ? '<div class="what">$ ' + esc(p.command) + '</div>' : p.path ? '<div class="what">' + (p.created ? 'Create ' : 'Edit ') + esc(p.path) + '</div>' : '';
   const diff = p.hunk?.length ? '<div class="diff">' + p.hunk.map((h) => '<div class="' + (h.type === '+' ? 'add' : h.type === '-' ? 'del' : '') + '"><span class="n">' + esc(h.newNo ?? h.oldNo ?? '') + '</span>' + esc(h.type === ' ' ? ' ' : h.type) + ' ' + esc(h.text) + '</div>').join('') + '</div>' : '';
-  return '<div class="perm"><div class="h">' + esc(p.title || p.name || 'Agentic Coder asks') + (p.helper ? ' <span style="color:var(--faint)">· asked by the ' + esc(p.helper) + ' helper</span>' : '') + '</div>' + what + diff
+  return '<div class="perm"><div class="h">' + esc(p.title || (p.name === 'Ask' ? 'Agentic Coder asks' : p.name) || 'Agentic Coder asks') + (p.helper ? ' <span style="color:var(--faint)">· asked by the ' + esc(p.helper) + ' helper</span>' : '') + '</div>' + what + diff
     + (p.autoReason ? '<div class="foot">Auto asks you: ' + esc(p.autoReason) + '</div>' : '')
     + p.options.map((o, i) => '<div class="opt' + (i === p.selected ? ' on' : '') + '" data-opt="' + i + '">' + (i === p.selected ? '❯' : ' ') + ' ' + (i + 1) + '. ' + esc(o) + '</div>').join('')
     + '<div class="foot">↑↓ to choose · enter to answer · esc to say no</div></div>';

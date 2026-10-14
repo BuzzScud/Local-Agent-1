@@ -6,9 +6,7 @@ import { readFileSync } from 'node:fs';
 import { thinkingLevel } from '../../../models/index.mjs';
 import { saveSettings, SETTINGS_FILE } from './store.mjs';
 import { canRestart, folderArgs } from './update.mjs';
-
-// What a resumed conversation is told after the restart (its first message, from the app).
-const RESTARTED_PROMPT = '(Agentic Coder restarted on the code you changed, and this conversation picked up where it was. Say in one or two lines what you changed and that it works; if the start showed a problem, fix it.)';
+import { RESTARTED_PROMPT } from '../agent/self.mjs';
 // Keys the model does not set here: the mode has /mode (and the permission checks around it).
 const NOT_SET = new Set(['mode', 'lastMode']);
 

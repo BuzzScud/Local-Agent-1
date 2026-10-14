@@ -67,6 +67,25 @@ test('the model asked for the restart itself with the App tool: the end of the t
   expect(r.restarts).toEqual(['new.mjs, test passes']);
 }, 30_000);
 
+test('restarted in the home folder: the app\'s own note goes to the model; a request that names the repo still asks "Work in …?" (14 Oct 2026)', async () => {
+  // The window looked frozen after a restart: the note's words "Agentic Coder" named the app's repo, and the window waited on that question.
+  const { RESTARTED_PROMPT } = await import('../src/agent/self.mjs');
+  const home = mkdtempSync(join(tmpdir(), 'self-restart-fakehome-'));
+  mkdirSync(join(home, 'Desktop', 'PROJECTS', 'agentic-coder'), { recursive: true });
+  writeFileSync(join(home, 'Desktop', 'PROJECTS', 'agentic-coder', 'package.json'), '{}');
+  const asked = [];
+  const ask = async (req) => { asked.push(String(req.args?.question ?? '')); return { choice: 'no' }; };
+  const fake = await startFakeAnthropic([{ text: 'Back on the new code; the window test passes.' }]);
+  setEndpoint(fake.url, { key: fake.key, kind: 'claude', model: 'claude-opus-5-5' });
+  try {
+    const agent = new Agent({ url: fake.url, model, cwd: home, home, system: systemPrompt({ cwd: home, git: 'test' }), thinking: false, ctx: 32768, mode: 'bypass', flows: false, way: 'model', verify: false, ask });
+    expect(await agent.send(RESTARTED_PROMPT)).toBe('done');
+    expect(asked).toEqual([]);
+    expect(await agent.send('run the Agentic Coder tests')).toBe('declined');
+    expect(asked).toEqual([expect.stringMatching(/^Work in ~\/Desktop\/PROJECTS\/agentic-coder\?/)]);
+  } finally { dropEndpoint(fake.url); await fake.close(); }
+}, 30_000);
+
 test('outside self (Auto on the Claude API) nothing restarts, even with the same change and passing tests', async () => {
   const cwd = repoLike();
   const r = await turn([{ tools: [write('terminal/src/agent/new.mjs')] }, { tools: [tests()] }, { text: 'Done.' }], { cwd, mode: 'auto' });

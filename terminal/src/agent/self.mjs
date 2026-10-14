@@ -10,6 +10,8 @@ import { basename, join, relative, resolve } from 'node:path';
 import { findRepo, isAppCode } from '../app/update.mjs';
 
 export const KEEP_DAYS = 14;
+// What a resumed conversation is told after the App tool's restart (app/app-self.mjs), its first message, from the app.
+export const RESTARTED_PROMPT = '(Agentic Coder restarted on the code you changed, and this conversation picked up where it was. Say in one or two lines what you changed and that it works; if the start showed a problem, fix it.)';
 const home = () => process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
 export const selfBackupDir = () => join(home(), 'memory-backups', 'self');
 

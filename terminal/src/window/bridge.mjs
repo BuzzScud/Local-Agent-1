@@ -18,7 +18,8 @@ import { viewItem, heldView, ansiRows } from './view.mjs';
 
 const SEND_MS = 33; // at most 30 states a second; a burst of redraws is sent as the last of them
 
-export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK) {
+// key: the window server's word for its own app (AGENTIC_WINDOW_KEY), said first, so the window listens to this app only.
+export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process.env.AGENTIC_WINDOW_KEY) {
   if (!path) return null;
   let sock = null, open = false, timer = null, last = null, self = null, inbox = '';
   const sentItems = new Map(); // key → the JSON last sent for it
@@ -29,7 +30,7 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK) {
   try {
     sock = connect(path);
     sock.setEncoding('utf8');
-    sock.on('connect', () => { open = true; for (const l of pendingWrites.splice(0)) sock.write(l); });
+    sock.on('connect', () => { open = true; sock.write(`${JSON.stringify({ t: 'hi', key: key ?? '' })}\n`); for (const l of pendingWrites.splice(0)) sock.write(l); });
     sock.on('data', (d) => {
       inbox += d;
       let i;
@@ -83,6 +84,8 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK) {
       command: app.perm.req?.args?.command ?? null, path: app.perm.req?.prepared?.rel ?? null, created: Boolean(app.perm.req?.prepared?.created),
       hunk: (app.perm.req?.prepared?.hunk ?? []).slice(0, 80), rule: app.perm.req?.rule ?? null, autoReason: app.perm.req?.autoReason ?? null,
       options: (app.perm.options ?? []).map((o) => o?.label ?? String(o)), selected: app.perm.selected ?? 0, ask: Boolean(app.perm.ask),
+      // What an Ask asks ("Work in …?", the model's own question): before, the window showed its choices under "Ask" alone.
+      question: app.perm.req?.name === 'Ask' ? String(app.perm.req?.args?.question ?? '') || null : null,
     } : null;
     // A panel in the prompt box's place: the app's own drawing of it (the window draws a permission question itself).
     const panel = panelOpen(app) ? { kind: app.picker?.kind ?? (app.perm ? 'perm' : app.btw ? 'btw' : 'picker'), rows: ansiRows(renderToString(React.createElement(PanelArea, { app }), { columns: width })) } : null;
@@ -176,3 +179,11 @@ export function meterOf(app) {
 }
 
 export const windowBridge = makeBridge();
+// The socket is this app's alone (14 Oct 2026, a screen recording of the window flashing): read once above, it is
+// taken out of the env, so what the app starts (its commands, the tests it runs, a coding typed in Bash) never
+// connects too. Each copy that did was a new connection, and the window (server.mjs) took it for the app started
+// again: it dropped the conversation, showed the raw terminal for a moment, then took that copy's drawing.
+// Its key goes too; a copy that still has the socket (one started before this fix) is not heard without it.
+// Bun.spawn with no env of its own still hands a child what was taken out here: start an app copy with { env }.
+delete process.env.AGENTIC_WINDOW_SOCK;
+delete process.env.AGENTIC_WINDOW_KEY;
