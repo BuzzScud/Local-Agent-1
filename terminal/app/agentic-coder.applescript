@@ -1,11 +1,11 @@
 -- Agentic Coder launcher (like XMR Miner.app): opens Terminal and runs coding in a
--- project folder. Double-click: pick the folder (starts at the last one used).
+-- project folder. Double-click: pick the folder (starts at the Desktop; 14 Oct 2026, the owner's ask).
 -- Drop a folder (or a file in it) on the icon: opens that folder.
 -- Built by app/make-app.sh.
 
 on run
 	if not installed() then return
-	set startAt to lastFolder()
+	set startAt to path to desktop folder
 	try
 		if startAt is missing value then
 			set f to choose folder with prompt "Open Agentic Coder in which project folder?"

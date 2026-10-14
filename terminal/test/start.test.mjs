@@ -14,7 +14,7 @@ import { HUE } from '../src/ui/theme.mjs';
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { startFolders, folderOption, folderFacts } from '../src/app/start-folder.mjs';
+import { startFolders, folderOption, folderFacts, startFolderOf } from '../src/app/start-folder.mjs';
 import { FolderPage } from '../src/app/folder-page.jsx';
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
@@ -291,6 +291,41 @@ test('where to start is asked only in the home folder, with Agentic Coder\'s fol
   expect(startFolders({ cwd: home }, { home, repo: home })).toBe(null);
   expect(startFolders({ cwd: home }, { home, repo: '/opt/agentic-coder' }).map(folderOption)[1]).toBe('/opt/agentic-coder · Agentic Coder');
 });
+
+test('settings.json "startFolder" (~/Desktop) is where coding starts, wherever it was typed; unset or not a folder, where it was typed', () => {
+  const base = mkdtempSync(join(tmpdir(), 'agentic-start-at-'));
+  const home = join(base, 'home'), desk = join(home, 'Desktop'), other = join(home, 'project');
+  mkdirSync(desk, { recursive: true });
+  mkdirSync(other);
+  writeFileSync(join(home, 'notes.txt'), '');
+  for (const want of ['~/Desktop', ' ~/Desktop ', 'Desktop', desk]) expect(startFolderOf({ startFolder: want }, { home, cwd: other })).toBe(desk);
+  expect(startFolderOf({ startFolder: '~' }, { home, cwd: other })).toBe(home);
+  for (const s of [{}, null, { startFolder: '' }, { startFolder: 3 }, { startFolder: '~/Nowhere' }, { startFolder: '~/notes.txt' }]) expect(startFolderOf(s, { home, cwd: other })).toBe(other);
+  // Picked there, the home-folder question is not asked: coding is no longer in the home folder.
+  expect(startFolders({ cwd: startFolderOf({ startFolder: '~/Desktop' }, { home, cwd: home }) }, { home, repo: join(home, 'agentic-coder') })).toBe(null);
+});
+
+test('"startFolder" never moves coding -p (a loop\'s run, a script) nor the window\'s own copy: they work where they were started', async () => {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-start-at-p-')));
+  const home = join(base, 'home'), desk = join(base, 'Desktop'), project = join(base, 'project');
+  for (const d of [home, desk, project]) mkdirSync(d, { recursive: true });
+  writeFileSync(join(home, 'settings.json'), JSON.stringify({ startFolder: desk }));
+  writeFileSync(join(home, 'trust.json'), JSON.stringify({ [project]: new Date().toISOString(), [desk]: new Date().toISOString() }));
+  // Each folder's AGENTS.md goes to the model with the request: it says which folder the run works in.
+  writeFileSync(join(project, 'AGENTS.md'), '# Rules\n- marker: in-the-project\n');
+  writeFileSync(join(desk, 'AGENTS.md'), '# Rules\n- marker: on-the-desktop\n');
+  const cli = join(import.meta.dir, '..', 'src', 'cli.jsx');
+  const folderOf = async (extra) => {
+    const fake = await startFakeServer([{ text: 'Here.' }]);
+    const p = Bun.spawn(['bun', cli, '-p', 'where are you?', '--url', fake.url, '--no-flows'], { cwd: project, env: { ...process.env, AGENTIC_HOME: home, AGENTIC_MEMORY_SAVE: 'off', ...extra }, stdout: 'pipe', stderr: 'pipe' });
+    await p.exited;
+    await fake.close();
+    const sent = JSON.stringify(fake.requests[0] ?? {});
+    return sent.includes('in-the-project') && !sent.includes('on-the-desktop') ? 'project' : sent.includes('on-the-desktop') ? 'Desktop' : 'neither';
+  };
+  expect(await folderOf({})).toBe('project');
+  expect(await folderOf({ AGENTIC_WINDOW_CHILD: '1' })).toBe('project');
+}, T);
 
 test('the real app: the tip on the page under Try until the first message, the footer "? for shortcuts"', async () => {
   const { cwd, env } = setup();
