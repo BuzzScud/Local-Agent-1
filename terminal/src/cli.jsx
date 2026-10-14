@@ -588,8 +588,14 @@ if (opts.print) {
   // runs this app in a pretend terminal and the window draws it (terminal/src/window/). Not with --terminal, over
   // SSH, inside a session or the window's own copy, or where the window is not built.
   if (!process.env.AGENTIC_WINDOW_CHILD && !process.env.AGENTIC_IN_HOST && process.stdout.isTTY) {
-    const { windowWanted, runWindow } = await import('./window/server.mjs');
-    if (windowWanted(opts)) process.exit(await runWindow({ folder: opts.cwd, args: process.argv.slice(2) }));
+    // The window starts on its own (openWindowFree), so this Terminal can be closed while it stays open.
+    const { windowWanted, openWindowFree } = await import('./window/server.mjs');
+    if (windowWanted(opts)) {
+      const { homedir } = await import('node:os');
+      openWindowFree({ folder: opts.cwd, args: process.argv.slice(2) });
+      process.stdout.write(`Agentic Coder is opening in its own window (${opts.cwd.replace(homedir(), '~')}). You can close this Terminal; closing the window quits. \`coding --terminal\` runs it here instead.\n`);
+      process.exit(0);
+    }
   }
   // The app runs in a background session and this window shows it (app/sessions.mjs), so
   // ctrl+b can leave it running. Not inside a session already, and not where this Bun cannot.
