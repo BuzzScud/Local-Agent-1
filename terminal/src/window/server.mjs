@@ -5,10 +5,10 @@
 // else has. The window (terminal/app/window/, a Tauri shell) opens that page. Keys and clicks come back the same
 // way. Closing the window ends the app as closing its terminal did (it saves first); the app ending closes it.
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, chmodSync, openSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import UI from './ui.html' with { type: 'text' };
 import { VtScreen } from './vt.mjs';
 import { cellRows, xterm } from './view.mjs';
@@ -32,6 +32,19 @@ export function windowWanted(opts = {}, env = process.env) {
   if (process.platform !== 'darwin') return false;
   return Boolean(windowApp(env));
 }
+// `coding` in a terminal (14 Oct 2026, the owner's pick: the window lets Terminal go): the window starts as
+// `coding window` in a session of its own (detached), so closing that Terminal leaves it open. What it prints
+// goes to ~/.agentic-coder/logs/window.log. Returns the command it started.
+export function openWindowFree({ folder = process.cwd(), args = [], env = process.env, run = spawn } = {}) {
+  const cmd = [...selfCommand(), 'window', '--folder', folder, ...args.filter((a) => a !== '--terminal')];
+  const logs = join(HOME, 'logs');
+  let out = 'ignore';
+  try { mkdirSync(logs, { recursive: true }); out = openSync(join(logs, 'window.log'), 'a'); } catch {}
+  const child = run(cmd[0], cmd.slice(1), { cwd: folder, env, detached: true, stdio: ['ignore', out, out] });
+  child.unref?.();
+  if (typeof out === 'number') try { closeSync(out); } catch {}
+  return cmd;
+}
 // What runs in the pretend terminal: the installed `coding` (so /update restarts it there), else this program.
 function appCommand(args, env) {
   if (env.AGENTIC_LAUNCHER && existsSync(env.AGENTIC_LAUNCHER)) return [env.AGENTIC_LAUNCHER, ...args];
@@ -39,6 +52,9 @@ function appCommand(args, env) {
   if (process.execPath === join(homedir(), '.agentic-coder', 'app', 'agentic-coder') && existsSync(launcher)) return [launcher, ...args];
   return [...selfCommand(), ...args];
 }
+// Files dropped on the window (main.rs hands the page their paths): typed as Terminal types a drop, each path
+// with its spaces and marks escaped by \ and a space after, so the app makes each one a chip (app/attach.mjs).
+export const dropText = (paths) => paths.filter((p) => typeof p === 'string' && p).map((p) => `${p.replace(/[\s!"#$&'()*,;<>?[\\\]^`{|}~=]/g, '\\$&')} `).join('');
 const tilde = (p) => String(p ?? '').replace(homedir(), '~');
 const clamp = (n, a, b) => Math.max(a, Math.min(b, Math.round(Number(n) || a)));
 const bot = (pose) => trimmed(rigPixels(pose)).px.map((row) => row.map((c) => (c == null ? null : xterm(c))));
@@ -130,6 +146,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
         let m; try { m = JSON.parse(String(raw)); } catch { return; }
         if (m.t === 'keys' && typeof m.data === 'string') proc.terminal.write(m.data);
         else if (m.t === 'paste' && typeof m.text === 'string') proc.terminal.write(`\x1b[200~${m.text}\x1b[201~`);
+        else if (m.t === 'drop' && Array.isArray(m.paths) && dropText(m.paths)) proc.terminal.write(`\x1b[200~${dropText(m.paths)}\x1b[201~`);
         else if (m.t === 'resize') { const c = clamp(m.cols, 80, 320), r = clamp(m.rows, 24, 140); if (c !== vt.cols || r !== vt.rows) { proc.terminal.resize(c, r); vt.resize(c, r); } }
         else if (m.t === 'act') appSock?.write(`${JSON.stringify(m)}\n`);
         else if (m.t === 'screen') { ws.data.screen = Boolean(m.on); if (m.on) pushScreen(); }

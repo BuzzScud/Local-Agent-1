@@ -644,6 +644,13 @@ addEventListener('paste', (e) => {
   const text = e.clipboardData?.getData('text/plain');
   if (text) { e.preventDefault(); send({ t: 'paste', text }); }
 });
+// Files dragged onto the window (a screenshot, say): the window (main.rs) hands their paths here, and they go to the
+// app as Terminal types a drop (server.mjs dropText), so each becomes [Image #n] with its card over the box.
+window.agenticDropped = (paths) => {
+  if (!Array.isArray(paths) || !paths.length) return;
+  if (!S.last) return toast('Agentic Coder is still starting');
+  send({ t: 'drop', paths });
+};
 document.addEventListener('input', (e) => {
   if (e.target.id === 'fq' || e.target.id === 'sq') { S.q = e.target.value; const pos = e.target.selectionStart; if (e.target.id === 'fq') renderDrops(); else { renderSide(); const el = document.getElementById('sq'); el?.focus(); el?.setSelectionRange(pos, pos); } }
 });
