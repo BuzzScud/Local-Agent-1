@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
 import { pickOnTerminal } from './app/pick.mjs';
 import { TrustPage, TRUST_OPTIONS } from './app/start.jsx';
 import { FolderPage } from './app/folder-page.jsx';
-import { startFolders, folderOption, folderFacts } from './app/start-folder.mjs';
+import { startFolders, folderOption, folderFacts, startFolderOf } from './app/start-folder.mjs';
 
 // coding -p: a question from Agentic Coder is printed and answered on the same
 // terminal. Its choices are a menu like the app's (arrows, enter, or the
@@ -131,6 +131,10 @@ function parse(argv) {
     else if (a === '--loop-events') { o.loopEvents = true; o.print = true; }
     else rest.push(a);
   }
+  // settings.json "startFolder" (~/Desktop), else here; --folder wins. Only where a start picks its folder:
+  // never coding -p or a loop's run (they work where they were started), nor the copy a window or a background
+  // session runs (its folder was picked already, and a restart inside it comes back there).
+  if (!o.folder && !o.print && !process.env.AGENTIC_WINDOW_CHILD && !process.env.AGENTIC_IN_HOST) o.cwd = startFolderOf(loadSettings());
   if (rest.length) o.prompt = rest.join(' ');
   return o;
 }
@@ -276,7 +280,7 @@ if (process.argv[2] === 'window') {
   if (!windowApp()) { process.stderr.write('coding window: the window is not built yet. Build it with: bun run window\n'); process.exit(1); }
   const a = process.argv.slice(3);
   const at = a.indexOf('--folder');
-  const folder = at >= 0 ? resolve(a[at + 1] ?? '.') : process.cwd();
+  const folder = at >= 0 ? resolve(a[at + 1] ?? '.') : startFolderOf(loadSettings());
   const rest = at >= 0 ? [...a.slice(0, at), ...a.slice(at + 2)] : a;
   process.exit(await runWindow({ folder, args: rest, say: () => {} }));
 }
@@ -377,8 +381,8 @@ if (opts.bg) {
     process.exit(0);
   } catch (e) { process.stderr.write(`coding --bg: ${e.message}\n`); process.exit(1); }
 }
-// Commands run where the agent works, as if coding had been typed there.
-if (opts.folder) { try { process.chdir(opts.cwd); } catch { process.stderr.write(`coding: no folder ${opts.cwd}\n`); process.exit(2); } }
+// Commands run where the agent works, as if coding had been typed there (--folder, or settings.json "startFolder").
+if (opts.folder || opts.cwd !== process.cwd()) { try { process.chdir(opts.cwd); } catch { process.stderr.write(`coding: no folder ${opts.cwd}\n`); process.exit(2); } }
 // A copy of the app with a home of its own (a preview, a worktree's try-out) starts with your services
 // (saved-services.mjs seedCopy); a run of coding -p keeps the home it was given as it is.
 if (!opts.print) {

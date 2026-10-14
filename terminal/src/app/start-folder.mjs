@@ -4,14 +4,27 @@
 // notes.txt, and Read found one seven folders down in a test project. Typed anywhere else,
 // or with -c, --resume or --folder, nothing is asked. The safety check then asks about the
 // folder picked (cli.jsx), and a restart after /update comes back to it (--folder).
-import { realpathSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import { findRepo } from './update.mjs';
 import { listSessions } from './store.mjs';
 import { isTrusted } from './trust.mjs';
 
 const real = (p) => { try { return realpathSync(p); } catch { return p; } };
 const short = (p, home) => (p === home ? '~' : p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p);
+
+// The folder coding starts in when none is named (14 Oct 2026, the owner's ask: "make sure that the default
+// folder is always the desktop"): settings.json "startFolder" (~/Desktop; ~ and a path under the home folder
+// work), wherever coding was typed, so the home-folder question above is not asked either. --folder still
+// wins: the Dock app's pick or a dropped folder, a restart after /update, "Open another folder…". Unset, or
+// not a folder: where coding was typed, as before (the tests, which run in folders of their own).
+export function startFolderOf(settings, { home = homedir(), cwd = process.cwd() } = {}) {
+  const want = typeof settings?.startFolder === 'string' ? settings.startFolder.trim() : '';
+  if (!want) return cwd;
+  const at = resolve(home, want.replace(/^~(?=\/|$)/, home));
+  try { return statSync(at).isDirectory() ? at : cwd; } catch { return cwd; }
+}
 
 // The folders to offer, [{ path, shown, what, good }], or null when nothing is asked. Compared with
 // links resolved (a Terminal's folder is the real path); offered as spelled, so the start page
