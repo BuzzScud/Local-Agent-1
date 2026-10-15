@@ -174,6 +174,9 @@ button { font: inherit; color: inherit; }
 .perm .opt.on { background: var(--accent-bg); color: var(--accent); }
 .perm .foot { color: var(--faint); font-size: 12px; margin-top: 8px; }
 .panel { border: 1px solid var(--hair2); border-radius: 12px; background: #19191c; padding: 8px 10px; margin: 8px 0 10px; max-height: 62vh; overflow: auto; }
+/* a choice in a list the app draws (/model, /remote, /settings…): a click picks it, a click on the picked one opens it */
+.panel .pi { cursor: pointer; border-radius: 4px; }
+.panel .pi:hover { background: rgba(255,255,255,.06); }
 .full { position: absolute; inset: 0; background: var(--win); overflow: auto; padding: 12px 22px; z-index: 3; }
 /* home: a new conversation */
 .home { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 100%; text-align: center; padding: 20px 0; }
@@ -254,6 +257,14 @@ const send = (m) => { if (ws?.readyState === 1) ws.send(JSON.stringify(m)); };
 let screenWanted = null;
 function wantScreen() { const w = !S.last; if (w !== screenWanted) { screenWanted = w; send({ t: 'screen', on: w }); } }
 const keys = (data) => send({ t: 'keys', data });
+// d arrows (down when d > 0), then the key that answers: one key a write, a little apart (15 Oct 2026: the app takes
+// "↓↓↓" in one write as a single ↓, so a click on the third choice only moved one row).
+let moving = Promise.resolve();
+function moveThen(d, last) {
+  const seq = Array(Math.abs(d)).fill(d > 0 ? '\x1b[B' : '\x1b[A');
+  if (last) seq.push(last);
+  moving = moving.then(async () => { for (const k of seq) { keys(k); await new Promise((r) => setTimeout(r, 25)); } });
+}
 // A command run as if typed: only with an empty prompt (what you typed is never lost).
 function run(cmd) {
   if (S.last?.input?.value) return toast('Your prompt has text: send it or clear it first');
@@ -299,6 +310,23 @@ function runsHtml(rows) {
     if (a) st += 'color:' + a + ';'; if (b) st += 'background:' + b + ';'; if (f & 1) st += 'font-weight:700;'; if (f & 2) st += 'opacity:.6;'; if (f & 4) st += 'font-style:italic;'; if (f & 8) st += 'text-decoration:underline;';
     return st ? '<span style="' + st + '">' + esc(t) + '</span>' : esc(t);
   }).join('') + '</div>').join('');
+}
+// The choices in a list the app draws as text (15 Oct 2026: a click on /model's or /settings' rows did nothing, only
+// the arrows worked). The picked row has ❯; a choice is a row with ❯ or a space in that column and its words two after
+// it (a heading starts in ❯'s column, a note further in). Answers { rows: the choices' row numbers, at: the picked one }.
+const rowText = (runs) => runs.map((r) => r[0]).join('');
+function panelChoices(rows) {
+  const texts = rows.map(rowText);
+  const at = texts.findIndex((t) => t.includes('❯'));
+  if (at < 0) return null;
+  const col = texts[at].indexOf('❯');
+  const list = [];
+  texts.forEach((t, i) => { if (/^[\s│┃|]*$/.test(t.slice(0, col)) && (t[col] === '❯' || t[col] === ' ') && t[col + 1] === ' ' && /[^\s─│]/.test(t[col + 2] ?? ' ')) list.push(i); });
+  return list.includes(at) ? { rows: list, at } : null;
+}
+function panelHtml(rows) {
+  const ch = panelChoices(rows), on = new Set(ch?.rows ?? []);
+  return '<div class="panel ansi" id="panel">' + rows.map((r, i) => (on.has(i) ? runsHtml([r]).replace('<div>', '<div class="pi" data-prow="' + i + '">') : runsHtml([r]))).join('') + '</div>';
 }
 const KIND = { bash: 'Ran', job: 'Ran', diff: 'Changed', read: 'Read', search: 'Searched', list: 'Listed', thought: 'Thought', said: 'Said', todos: 'To-do', answer: 'Asked', opening: 'Opened', note: 'Note', fetched: 'Fetched', websearch: 'Web', you: 'You' };
 function ends(f, parts) {
@@ -567,7 +595,7 @@ function render() {
   }
   let bottom = '';
   if (st.perm) bottom = permHtml(st.perm);
-  else if (st.panel) bottom = '<div class="panel ansi">' + runsHtml(st.panel.rows) + '</div>';
+  else if (st.panel) bottom = panelHtml(st.panel.rows);
   else bottom = menuHtml(st.menu) + promptHtml(st);
   const html = '<div class="convo-wrap"><div class="convo" id="convo">' + convo + '</div></div><div class="status" id="status">' + statusHtml(st.live || {}) + '</div>' + bottom + modesHtml(st) + (st.full ? '<div class="full ansi">' + runsHtml(st.full.rows) + '</div>' : '');
   if (html === lastConvo) return;
@@ -672,8 +700,9 @@ document.addEventListener('click', (e) => {
   const md_ = t.closest('[data-mode]'); if (md_) { send({ t: 'act', do: 'mode', mode: md_.dataset.mode }); return; }
   const task = t.closest('[data-task]'); if (task) { send({ t: 'act', do: 'toggle', id: task.dataset.task }); return; }
   const row = t.closest('[data-row]'); if (row) { const k = row.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); lastConvo = ''; render(); return; }
-  const opt = t.closest('[data-opt]'); if (opt && S.last?.perm) { const d = Number(opt.dataset.opt) - S.last.perm.selected; keys((d > 0 ? '\x1b[B' : '\x1b[A').repeat(Math.abs(d)) + '\r'); return; }
-  const mi = t.closest('[data-menu]'); if (mi && S.last?.menu) { const d = Number(mi.dataset.menu) - S.last.menu.index; keys((d > 0 ? '\x1b[B' : '\x1b[A').repeat(Math.abs(d)) + '\t'); return; }
+  const opt = t.closest('[data-opt]'); if (opt && S.last?.perm) { moveThen(Number(opt.dataset.opt) - S.last.perm.selected, '\r'); return; }
+  const pr = t.closest('[data-prow]'); if (pr && S.last?.panel) { const ch = panelChoices(S.last.panel.rows), to = ch ? ch.rows.indexOf(Number(pr.dataset.prow)) : -1; if (to < 0) return; const d = to - ch.rows.indexOf(ch.at); if (d === 0) keys('\r'); else moveThen(d, ''); return; }
+  const mi = t.closest('[data-menu]'); if (mi && S.last?.menu) { moveThen(Number(mi.dataset.menu) - S.last.menu.index, '\t'); return; }
   if ((S.find || S.folderMenu || S.usageCard) && !t.closest('.drop') && !t.closest('.ucard')) { S.find = false; S.folderMenu = false; S.usageCard = false; renderUsage(S.last); renderDrops(); }
 });
 // The pretend terminal is as wide as the conversation, so what the app draws itself fits the window.
