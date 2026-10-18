@@ -654,36 +654,88 @@ test('a new launcher on main is installed, used from the next start', () => {
   expect(statSync(launcher).mode & 0o111).toBeTruthy();
 });
 
-// The window (a Tauri shell, terminal/app/window) is built again from main's copy when main changed its code: in the
-// background, so the start does not wait, and only on a Mac that has the window. A stand-in cargo here.
-test("a window on this Mac is built again from main in the background when main changed it; a stamp says which", async () => {
-  const { local, other } = github();
-  const c = launcherOn(local);
+// The window (a Tauri shell, terminal/app/window) is built from main's copy by coding itself: the first time on a Mac
+// with Rust (18 Oct 2026, the owner: "make coding build the window by itself"), and again when main changes its code.
+// In the background, so the start does not wait. A stand-in cargo here, which fails on a main.rs that says BREAK.
+function windowOn(c) {
   const win = join(c.user, '.agentic-coder', 'app', 'Agentic Coder Window.app');
   const exe = join(win, 'Contents', 'MacOS', 'agentic-coder-window');
+  const build = join(c.user, '.agentic-coder', 'build');
   const cargo = join(dirname(c.bin), 'cargo-bin');
-  mkdirSync(cargo);
-  writeFileSync(join(cargo, 'cargo'), '#!/bin/sh\nmkdir -p "$CARGO_TARGET_DIR/release" && cp src/main.rs "$CARGO_TARGET_DIR/release/agentic-coder-window"\n');
+  mkdirSync(cargo, { recursive: true });
+  writeFileSync(join(cargo, 'cargo'), '#!/bin/sh\nif grep -q BREAK src/main.rs; then echo "error: it does not build" >&2; exit 1; fi\nmkdir -p "$CARGO_TARGET_DIR/release" && cp src/main.rs "$CARGO_TARGET_DIR/release/agentic-coder-window"\n');
   chmodSync(join(cargo, 'cargo'), 0o755);
-  const sys = '/usr/bin:/bin:/usr/sbin:/sbin';
-  const withRust = { PATH: `${c.bin}:${cargo}:${sys}` }, noRust = { PATH: `${c.bin}:${sys}` };
+  // The tests turn the window off (test-env.mjs) and may run inside a session: a start as you type it.
+  const sys = '/usr/bin:/bin:/usr/sbin:/sbin', typed = { AGENTIC_WINDOW: '', AGENTIC_IN_HOST: '', AGENTIC_WINDOW_CHILD: '' };
   const shell = (v) => ({ 'terminal/app/window/build.sh': readFileSync(join(import.meta.dir, '..', 'app', 'window', 'build.sh'), 'utf8'), 'terminal/app/window/icons/icon.icns': 'icns', 'terminal/app/window/src/main.rs': `// window ${v}\n` });
-  commit(other, shell(1), 'the window'); git(other, 'push', '-q', 'origin', 'main');
-  expect(c.run(withRust).out).not.toContain('The window is being built'); // no window on this Mac: none is made
-  mkdirSync(dirname(exe), { recursive: true });
-  writeFileSync(exe, '// the window from before\n');
-  const r = c.run(withRust);
-  expect(r.out).toContain("The window is being built from GitHub's main in the background");
+  // The build has ended: its lock gone and the stamp or the note of a failure written.
+  const ended = async (file) => { for (let i = 0; i < 100 && (!existsSync(file) || existsSync(join(build, 'window.lock'))); i++) await new Promise((r) => setTimeout(r, 100)); };
+  return { win, exe, build, shell, ended, withRust: { ...typed, PATH: `${c.bin}:${cargo}:${sys}` }, noRust: { ...typed, PATH: `${c.bin}:${sys}` } };
+}
+
+test('coding builds the window by itself on a Mac with Rust, the first time too; without Rust it says how; turned off or in a session, nothing', async () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  const w = windowOn(c);
+  commit(other, w.shell(1), 'the window'); git(other, 'push', '-q', 'origin', 'main');
+  const none = c.run(w.noRust);
+  expect(none.out).toContain('Agentic Coder opens in its own window once Rust is installed (rustup.rs): the next coding builds it.');
+  expect(none.out).toContain('APP RAN x');
+  expect(c.run({ ...w.withRust, AGENTIC_WINDOW: 'off' }).out.trim()).toBe('APP RAN x'); // turned off: nothing at all
+  expect(c.run({ ...w.withRust, AGENTIC_IN_HOST: 'quiet-otter' }).out.trim()).toBe('APP RAN x'); // the session coding opens
+  expect(existsSync(w.win)).toBe(false);
+  const r = c.run(w.withRust);
+  expect(r.out).toContain("Building Agentic Coder's window for the first time, in the background");
   expect(r.out).toContain('APP RAN x'); // the start did not wait for it
-  for (let i = 0; i < 100 && !existsSync(`${win}.tree`); i++) await new Promise((res) => setTimeout(res, 100));
-  expect(readFileSync(`${win}.tree`, 'utf8')).toBe(git(local, 'rev-parse', 'refs/remotes/origin/main:terminal/app/window'));
-  expect(readFileSync(exe, 'utf8')).toBe('// window 1\n');
-  expect(existsSync(join(c.user, '.agentic-coder', 'build', 'window.lock'))).toBe(false);
-  expect(c.run(withRust).out).not.toContain('The window is being built'); // started again: nothing to build
-  // Main changes the window on a Mac without Rust: a note, and the window it has stays.
-  commit(other, shell(2), 'the window, again'); git(other, 'push', '-q', 'origin', 'main');
-  expect(c.run(noRust).out).toContain('building it needs Rust');
-  expect(readFileSync(exe, 'utf8')).toBe('// window 1\n');
+  await w.ended(`${w.win}.tree`);
+  expect(readFileSync(w.exe, 'utf8')).toBe('// window 1\n');
+  expect(readFileSync(`${w.win}.tree`, 'utf8')).toBe(git(local, 'rev-parse', 'refs/remotes/origin/main:terminal/app/window'));
+  expect(c.run(w.withRust).out.trim()).toBe('APP RAN x'); // started again: nothing to build or say
+});
+
+test("a window from before is built again when main changes it; a build that failed is not run again until main changes it", async () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  const w = windowOn(c);
+  commit(other, w.shell(1), 'the window'); git(other, 'push', '-q', 'origin', 'main');
+  mkdirSync(dirname(w.exe), { recursive: true });
+  writeFileSync(w.exe, '// the window from before\n'); // from bun run window: no stamp
+  expect(c.run(w.withRust).out).toContain("The window is being built from GitHub's main in the background");
+  await w.ended(`${w.win}.tree`);
+  expect(readFileSync(w.exe, 'utf8')).toBe('// window 1\n');
+  const good = readFileSync(`${w.win}.tree`, 'utf8');
+  // Main's window code breaks: built once, failed, written down, and not run again at the next start.
+  commit(other, { 'terminal/app/window/src/main.rs': '// BREAK\n' }, 'a broken window'); git(other, 'push', '-q', 'origin', 'main');
+  expect(c.run(w.withRust).out).toContain('The window is being built');
+  await w.ended(join(w.build, 'window.failed'));
+  expect(readFileSync(join(w.build, 'window.failed'), 'utf8')).toBe(git(local, 'rev-parse', 'refs/remotes/origin/main:terminal/app/window'));
+  expect(readFileSync(w.exe, 'utf8')).toBe('// window 1\n'); // the window it had stays
+  expect(readFileSync(`${w.win}.tree`, 'utf8')).toBe(good);
+  expect(c.run(w.withRust).out.trim()).toBe('APP RAN x');
+  // Main changes it again: built, and the note of the failure goes.
+  commit(other, w.shell(3), 'the window, fixed'); git(other, 'push', '-q', 'origin', 'main');
+  expect(c.run(w.withRust).out).toContain('The window is being built');
+  for (let i = 0; i < 100 && readFileSync(`${w.win}.tree`, 'utf8') === good; i++) await new Promise((res) => setTimeout(res, 100));
+  await w.ended(`${w.win}.tree`);
+  expect(readFileSync(w.exe, 'utf8')).toBe('// window 3\n');
+  expect(existsSync(join(w.build, 'window.failed'))).toBe(false);
+  // Changed again on a Mac without Rust: said, and the window it has stays.
+  commit(other, w.shell(4), 'the window, again'); git(other, 'push', '-q', 'origin', 'main');
+  expect(c.run(w.noRust).out).toContain('building it needs Rust (rustup.rs)');
+  expect(readFileSync(w.exe, 'utf8')).toBe('// window 3\n');
+});
+
+test('a first build that failed is said at each start, and not run again until main changes the window', async () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  const w = windowOn(c);
+  commit(other, { ...w.shell(1), 'terminal/app/window/src/main.rs': '// BREAK\n' }, 'a broken window'); git(other, 'push', '-q', 'origin', 'main');
+  expect(c.run(w.withRust).out).toContain("Building Agentic Coder's window for the first time");
+  await w.ended(join(w.build, 'window.failed'));
+  expect(existsSync(w.win)).toBe(false);
+  const again = c.run(w.withRust);
+  expect(again.out).toContain('The window did not build (see ~/.agentic-coder/logs/window-build.log; bun run window in');
+  expect(again.out).not.toContain('Building');
 });
 
 // 9 Oct 2026: a window moved by "Work in …? → Yes" saves its conversation under that folder; its restart came back

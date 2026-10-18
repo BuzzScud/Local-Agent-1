@@ -12,6 +12,8 @@ const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` 
 const git = async (repo, args) => { const r = await runGit(repo, args); return r.ok ? r.out : null; };
 const alive = (pid) => { try { process.kill(Number(pid), 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 const n = (k, one, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+// Rust's cargo where the launcher looks for it (window_shell): on the PATH, or in rustup's own folder.
+const hasRust = () => [...String(process.env.PATH ?? '').split(':').filter(Boolean).map((d) => join(d, 'cargo')), join(homedir(), '.cargo', 'bin', 'cargo')].some((p) => existsSync(p));
 
 // The rows: { mark: ✓ (as main), ! (not: what happens next is said), · (not here, nothing to do), what, text }.
 // Every place can be pointed elsewhere, for the tests.
@@ -24,6 +26,8 @@ export async function statusRows({
   macs = savedMacs,
   version = macVersion,
   fetch = true,
+  rust = hasRust(),
+  windowOff = /^(off|0|no|false|terminal)$/i.test(String(process.env.AGENTIC_WINDOW ?? '')),
 } = {}) {
   if (!repo) return { head: 'Agentic Coder runs here without its repo, so there is no GitHub main to compare with.', rows: [] };
   const fetched = fetch ? await fetchMain(repo, 8000).catch(() => ({ ok: false })) : { ok: false };
@@ -46,14 +50,20 @@ export async function statusRows({
   else if (theirs && `${have}`.trim() === theirs.replace('__REPO__', at).trim()) row('✓', 'coding command', "main's launcher");
   else row('!', 'coding command', "not main's launcher yet: the next coding start puts main's in its place");
 
-  // The window: the stamp beside it names main's terminal/app/window it was built from.
+  // The window: the stamp beside it names main's terminal/app/window it was built from. The coding command builds it
+  // by itself on a Mac with Rust, the first time too, and notes a build that failed (launcher window_shell).
   const tree = main ? await git(repo, ['rev-parse', '-q', '--verify', `${main}:terminal/app/window`]) : null;
   const stamp = read(`${window}.tree`)?.trim();
-  const lock = join(window, '..', '..', 'build', 'window.lock');
-  if (!existsSync(window)) row('·', 'Window', 'not on this Mac (bun run window makes it once; it needs Rust)');
-  else if (tree && stamp === tree) row('✓', 'Window', "GitHub's main");
-  else if (existsSync(lock) && alive(read(join(lock, 'pid')))) row('!', 'Window', `being built from main now (${tilde(join(window, '..', '..', 'logs', 'window-build.log'))}); the next start uses it`);
-  else row('!', 'Window', `${stamp ? 'behind main' : 'built before 18 Oct 2026'}: the next coding start builds it again from main (it needs Rust)`);
+  const whome = join(window, '..', '..');
+  const lock = join(whome, 'build', 'window.lock');
+  const log = tilde(join(whome, 'logs', 'window-build.log'));
+  const there = existsSync(window);
+  if (there && tree && stamp === tree) row('✓', 'Window', "GitHub's main");
+  else if (windowOff) row('·', 'Window', 'turned off here (AGENTIC_WINDOW=off): coding stays in the terminal');
+  else if (existsSync(lock) && alive(read(join(lock, 'pid')))) row('!', 'Window', there ? `being built from main now (${log}); the next start uses it` : `being built for the first time (${log}); a start after that opens it`);
+  else if (tree && read(join(whome, 'build', 'window.failed'))?.trim() === tree) row('!', 'Window', `main's window did not build (${log}; bun run window shows why); coding tries again when main changes it`);
+  else if (!there) row('!', 'Window', rust ? 'not built yet: the next coding start builds it in the background (a few minutes)' : 'not on this Mac: install Rust (rustup.rs) and the next coding start builds it');
+  else row('!', 'Window', `${stamp ? 'behind main' : 'built before 18 Oct 2026'}: the next coding start builds it again from main${rust ? '' : ' once Rust is installed (rustup.rs)'}`);
 
   // The door: it runs the installed app, so it is that app's version.
   const d = door();
