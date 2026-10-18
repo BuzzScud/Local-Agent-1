@@ -257,12 +257,25 @@ function stepsLine(loading, room, k = 0) {
   const fit = ways.find((p) => p.reduce((n, [t]) => n + t.length, 0) <= room) ?? ways.at(-1);
   return <Text wrap="truncate-end">{fit.map(([t, c], i) => <Text key={i} color={c}>{t}</Text>)}</Text>;
 }
+// What the start can say of a model on a service (s.svc, App.jsx modelState): until the service answers, its thinking
+// levels are a stand-in's, and until the model has loaded there, its context is the 32k planned for, not the size the
+// service runs it at (18 Oct 2026, the owner: the window said "high effort" then "on effort", and "17% of 32k" for the
+// ~12 s before "2% of 256k"). Neither is said till known. loading: { gb } while it loads there (what is typed waits).
+export function knownOf(s) {
+  const state = s?.svc?.remote ? s.svc.state : 'on';
+  return { effort: state === 'connecting' ? null : s?.effort ?? null, ctx: state === 'connecting' || state === 'loading' ? null : s?.ctx ?? null, loading: state === 'loading' ? { gb: s.svc.gb ?? null } : null };
+}
 function stateLine(s, loading, room, k, wide) {
   if (loading) return stepsLine(loading, room, k);
   // off: the model is not loaded; it waits for /start
   if (s.off) return <Text wrap="truncate-end"><Text color={C.faint}>○ </Text><Text color={C.dim}>off · </Text><Text color={C.accent}>{room >= 26 ? '/start wakes it up' : '/start'}</Text></Text>;
-  const ctxK = s.ctx ? `${Math.round(s.ctx / 1024)}k` : '';
-  return <Text wrap="truncate-end"><Text color={C.accent}>● ready</Text><Text color={C.dim}>{s.effort ? ` · ${wide ? `effort ${s.effort}` : s.effort}` : ''}{ctxK ? ` · ${ctxK}${wide ? ' context' : ''}` : ''}</Text></Text>;
+  const known = knownOf(s);
+  if (known.loading) {
+    const gb = known.loading.gb ? ` · ${known.loading.gb.toFixed(1)} GB` : '', wait = ' · what you type waits for it';
+    return <Text wrap="truncate-end"><Text color={C.accent}>◐ loading on the service</Text><Text color={C.dim}>{gb}{24 + gb.length + wait.length <= room ? wait : ''}</Text></Text>;
+  }
+  const ctxK = known.ctx ? `${Math.round(known.ctx / 1024)}k` : '';
+  return <Text wrap="truncate-end"><Text color={C.accent}>● ready</Text><Text color={C.dim}>{known.effort ? ` · ${wide ? `effort ${known.effort}` : known.effort}` : ''}{ctxK ? ` · ${ctxK}${wide ? ' context' : ''}` : ''}</Text></Text>;
 }
 // How long the start takes (start-times.mjs), under its steps: while it loads, a bar with what is
 // left; with the model off, how long /start usually takes; once ready, how long this one took.
@@ -356,7 +369,8 @@ function SmallPage({ s, width, room, loading, k }) {
 // start: { model, effort, ctx, cwd, git, notes, also, recent, now, off, room, … } (off: the model is
 // not loaded; also: this folder's own settings file and a start-up mode saved with /permissions, a
 // line each; recent: every conversation here, the newest first; room: the rows the page may use,
-// worked out by App from the window, START_ROOM when not given). And, each shown when it is there:
+// worked out by App from the window, START_ROOM when not given; svc: App's modelState, read by knownOf).
+// And, each shown when it is there:
 // news ([{ at, text }]: the app's newest changes, from its git history), places (other folders you
 // worked in, from your home folder: [{ folder, convs, updated }]), folders (how many in all), memory
 // ({ you, project }: facts), running (sessions in the background: [{ name, folder }]), tip.

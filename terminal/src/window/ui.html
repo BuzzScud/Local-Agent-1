@@ -399,6 +399,19 @@ function spark(vals, w, h) {
 }
 const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const STILL = matchMedia('(prefers-reduced-motion: reduce)');
+// How the model stands (bridge.mjs modelNowOf), in the terminal footer's words (screen-footer.jsx modelLabels): a model
+// on the service still loading there is not Ready, and what is typed meanwhile waits for it (app-keys.mjs). dot: the
+// dot's class; wait: what a queued message waits for; hint: the line on the right while nothing is queued.
+function modelNow(st) {
+  const m = st?.model;
+  if (st?.modelOff) return { dot: 'off', words: 'Model off · /start loads it', wait: 'sends once /start has loaded the model' };
+  if (st?.starting) return { dot: 'busy', words: 'Starting ' + st.modelName + '…', wait: 'sends as soon as the model is ready' };
+  if (m?.remote && m.state === 'loading') return { dot: 'busy', words: 'Loading ' + m.name + ' on the service' + (m.gb ? ' · ' + m.gb.toFixed(1) + ' GB' : '') + '…', wait: 'sends once the model has loaded on the service', hint: 'You can type now: it sends once the model has loaded' };
+  if (m?.remote && m.state === 'connecting') return { dot: 'busy', words: 'Connecting to ' + (m.where || 'the service') + '…' };
+  if (m?.remote && m.state === 'reconnecting') return { dot: 'busy', words: 'Reconnecting to ' + (m.where || 'the service') + '…' };
+  if (m?.remote && m.state === 'down') return { dot: 'off', words: (m.where || 'The service') + ' is not answering · /remote' };
+  return { dot: '', words: 'Ready' };
+}
 function statusHtml(L) {
   // A question open below: the reply waits for you, so no timer runs over "↓ 0 tokens" as if it were stuck.
   if (L.phase === 'working' && S.last?.perm) return '<span class="ac">Waiting for your answer below</span>';
@@ -408,11 +421,11 @@ function statusHtml(L) {
     return '<span class="ac">' + (STILL.matches ? '⠿' : SPIN[Math.floor(now / 120) % 10]) + ' ' + esc(L.verb || 'Working') + '…</span><span>⏱ <span class="v">' + fmtSecs(secs) + '</span></span>' + (tps ? '<span><span class="v">' + tps + '</span> tok/s</span>' + bar10(tps / 80) + spark(S.tps.slice(-30), 200, 18) : '') + '<span>↓ <span class="v">' + (L.tokens || 0) + '</span> tokens</span><span class="r">esc to interrupt</span>';
   }
   const lastDone = [...S.order].reverse().map((k) => S.items[k]).find((v) => v?.t === 'done');
-  const st = S.last;
-  return (st.modelOff ? '<span class="dot off"></span><span>Model off · /start loads it</span>' : st.starting ? '<span class="dot busy"></span><span>Starting ' + esc(st.modelName) + '…</span>' : '<span class="dot"></span><span>Ready</span>')
+  const st = S.last, now = modelNow(st);
+  return '<span class="dot' + (now.dot ? ' ' + now.dot : '') + '"></span><span>' + esc(now.words) + '</span>'
     + (lastDone ? '<span>· last answer ⏱ <span class="v">' + fmtSecs(lastDone.secs) + '</span>' + (lastDone.steps ? ' · ' + plural(lastDone.steps, 'step') : '') + (lastDone.usd > 0 ? ' · ' + money(lastDone.usd) : '') + '</span>' : '')
-    + (st.queued ? '<span style="color:var(--sand)">⏵ Queued: ' + esc(st.queued.slice(0, 60)) + '</span>' : '')
-    + '<span class="r">' + esc(st.notice || st.tip || (st.usage ? '' : st.usageText || st.spend) || '') + '</span>';
+    + (st.queued ? '<span style="color:var(--sand)">⏵ Queued: ' + esc(st.queued.slice(0, 60)) + (now.wait ? ' · ' + now.wait : '') + '</span>' : '')
+    + '<span class="r">' + esc(st.notice || (!st.queued && now.hint) || st.tip || (st.usage ? '' : st.usageText || st.spend) || '') + '</span>';
 }
 function promptHtml(st) {
   const v = st.input.value, c = Math.min(st.input.cursor, v.length);
@@ -439,7 +452,7 @@ function modesHtml(st) {
 }
 function homeHtml(st) {
   const recent = (st.start?.recent ?? []).slice(0, 3);
-  return '<div class="home">' + bot('happy', 64) + '<div class="ttl">New conversation</div><div class="sub">in ' + esc(st.start?.cwd || st.cwdShort) + ' · ' + esc(st.start?.model || st.modelName) + (st.start?.effort ? ' · ' + esc(st.start.effort) + ' effort' : '') + '</div>'
+  return '<div class="home">' + bot('happy', 64) + '<div class="ttl">New conversation</div><div class="sub">in ' + esc(st.start?.cwd || st.cwdShort) + ' · ' + esc(st.start?.model || st.modelName) + (st.start?.effort ? ' · ' + esc(st.start.effort) : '') + '</div>'
     + (recent.length ? '<div class="lbl" style="margin-top:18px">Pick up where you left off</div><div class="pick">' + recent.map((r) => '<div class="card" data-resume="' + esc(r.id) + '"><span class="lbl">' + esc(ago(r.updated)) + ' ago · ' + plural(r.turns || 0, 'message') + '</span><span class="val">' + esc(r.title) + '</span></div>').join('') + '</div>' : '')
     + '<div class="sub" style="margin-top:14px;font-size:12px;color:var(--faint)">Type below to start · / for commands · @ for files</div></div>';
 }
@@ -477,9 +490,12 @@ function ctxBar(pct, w) {
   const t = ctxTone(pct), ramp = t === 'bad' ? 'red' : t === 'warn' ? 'amber' : 'blue';
   return '<span class="fuel" style="width:' + w + '"><i class="left ' + ramp + '" style="width:' + Math.max(pct > 0 ? 3 : 0, pct) + '%"></i></span>';
 }
+// A model on the service not loaded yet: its context size is not known (bridge.mjs meterOf), so none is shown.
+const sizing = (m) => m.remote && !m.ctx && (m.state === 'connecting' || m.state === 'loading');
 function meterPill(m) {
   const parts = [];
-  if (m.ctx) parts.push((m.pct != null ? ctxBar(m.pct, '44px') : '') + '<span>ctx <b' + (ctxTone(m.pct) ? ' class="' + ctxTone(m.pct) + '"' : '') + '>' + (m.pct != null ? m.pct + '%' : '–') + '</b><span class="of"> of ' + esc(m.ctxWord) + '</span></span>');
+  if (sizing(m)) parts.push('<span>ctx <span class="of">once loaded</span></span>');
+  else if (m.ctx) parts.push((m.pct != null ? ctxBar(m.pct, '44px') : '') + '<span>ctx <b' + (ctxTone(m.pct) ? ' class="' + ctxTone(m.pct) + '"' : '') + '>' + (m.pct != null ? m.pct + '%' : '–') + '</b><span class="of"> of ' + esc(m.ctxWord) + '</span></span>');
   if (m.mac) parts.push('<span>Mac <b' + (macTone(m.mac) ? ' class="' + macTone(m.mac) + '"' : '') + '>' + m.mac.used.toFixed(1) + '</b>/' + Math.round(m.mac.total) + ' GB</span>');
   else if (m.gpu) parts.push('<span>GPU <b' + (spills(m.gpu) ? ' class="warn"' : '') + '>' + (spills(m.gpu) ? m.gpu.pct + '%' : m.gpu.size ? gb(m.gpu.size) : m.gpu.pct + '%') + '</b>' + (spills(m.gpu) ? '<span class="of"> · rest on CPU</span>' : '') + '</span>');
   if (!parts.length) return '';
@@ -525,7 +541,7 @@ function meterCardHtml(m) {
     ctx = '<div class="ln"><span class="lbl">Context</span><span class="v">' + (m.ctxUsed != null ? Number(m.ctxUsed).toLocaleString('en-US') : '–') + '</span><span>of ' + Number(m.ctx).toLocaleString('en-US') + ' tokens</span><span class="r"><span class="big' + (ct ? ' ' + ct : '') + '">' + (m.pct != null ? m.pct + '%' : '–') + '</span></span></div>'
       + (m.pct != null ? '<div style="margin:8px 0 6px">' + ctxBar(m.pct, '100%').replace('class="fuel"', 'class="fuel" style="height:8px;border-radius:4px"').replace('style="width:100%"', '') + '</div>' : '')
       + '<div class="ln' + (ct ? ' ' + ct : '') + '">' + (ct === 'bad' ? '▲ nearly full: the oldest steps are summed up soon; /compact does it now' : ct === 'warn' ? '▲ filling up: /compact sums up the conversation to free room' : '<span style="color:var(--faint)">amber at 70%, red at 85% · /compact frees room</span>') + '</div>';
-  }
+  } else if (sizing(m)) ctx = '<div class="ln"><span class="lbl">Context</span><span style="color:var(--faint)">its size shows once the model has loaded on the service</span></div>';
   let mem = '';
   if (m.mac) {
     const mt = macTone(m.mac);
@@ -642,7 +658,8 @@ function render() {
   const st = S.last;
   const pn = document.getElementById('pillname'), name = st?.modelName || 'Agentic Coder';
   if (pn.textContent !== name) { pn.textContent = name; pn.parentElement.title = name; fitBar(); }
-  document.getElementById('pilldot').className = 'dot' + (st?.modelOff ? ' off' : st?.starting ? ' busy' : '');
+  const dot = modelNow(st).dot;
+  document.getElementById('pilldot').className = 'dot' + (dot ? ' ' + dot : '');
   document.getElementById('folderbtn').title = S.folder;
   renderUsage(st);
   if (S.usageCard || S.find) renderDrops();

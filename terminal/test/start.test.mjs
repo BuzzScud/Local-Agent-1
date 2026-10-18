@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 const h = React.createElement;
-import { StartPage, TrustPage, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP, subjectOf, headline, recentRows, tidySubject, walkCells, blockWord, launcherPad } from '../src/app/start.jsx';
+import { StartPage, knownOf, TrustPage, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP, subjectOf, headline, recentRows, tidySubject, walkCells, blockWord, launcherPad } from '../src/app/start.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { setup, T, quit, quitTyped as quitTypedSteps } from './app-setup.mjs';
@@ -56,6 +56,29 @@ test('the Launcher: the greeting, the name in block letters, the model, this fol
   const narrow = draw(h(StartPage, { start: { ...START, room: 12 }, width: 80 }), 80).join('\n');
   expect(narrow).toContain('Agentic Coder v');
   expect(narrow).not.toContain(blockWord('AGENTIC')[0]);
+});
+
+// 18 Oct 2026: a model still loading on the service said "● ready · 32k context" here too (only the footer said loading),
+// and the 32k was the size planned for, not the service's.
+test('a model still loading on the service: the page says so, with no context size until the service says it', () => {
+  // App.jsx's start: the stand-in's effort and the 32k planned for, with the model's state beside them
+  const at = (state) => ({ remote: true, state, name: 'Qwen3.6:35B-A3B', where: '203.0.113.9:60009', gb: state === 'loading' ? 26.1 : null });
+  expect(knownOf({ effort: 'high', ctx: 32768, svc: at('connecting') })).toEqual({ effort: null, ctx: null, loading: null });
+  expect(knownOf({ effort: 'on', ctx: 32768, svc: at('loading') })).toEqual({ effort: 'on', ctx: null, loading: { gb: 26.1 } });
+  expect(knownOf({ effort: 'on', ctx: 262144, svc: at('on') })).toEqual({ effort: 'on', ctx: 262144, loading: null });
+  expect(knownOf({ effort: 'high', ctx: 32768, svc: { state: 'loading', name: 'Qwen3.5 9B' } })).toEqual({ effort: 'high', ctx: 32768, loading: null }); // this Mac's: its own steps line
+  const svc = { ...START, model: 'Qwen3.6:35B-A3B · 203.0.113.9:60009', effort: 'on', ctx: 32768, svc: at('loading') };
+  const text = draw(h(StartPage, { start: svc, width: 107 }), 107).join('\n');
+  expect(text).toContain('◐ loading on the service · 26.1 GB   '); // the Launcher's line has no room to say more
+  expect(text).not.toContain('waits for');
+  // the small page's line has: what you type waits for the model, whole or not at all
+  const small = draw(h(StartPage, { start: { ...svc, room: 6 }, width: 107 }), 107).join('\n');
+  expect(small).toContain('◐ loading on the service · 26.1 GB · what you type waits for it');
+  expect(draw(h(StartPage, { start: { ...svc, room: 6 }, width: 80 }), 80).join('\n')).toMatch(/◐ loading on the service · 26\.1 GB\n/);
+  expect(text).not.toContain('● ready');
+  expect(text).not.toContain('32k');
+  const loaded = draw(h(StartPage, { start: { ...svc, svc: at('on'), ctx: 262144 }, width: 107 }), 107).join('\n');
+  expect(loaded).toContain('● ready · effort on · 256k context');
 });
 
 test('loading and ready take the same rows, so nothing moves when the page is printed', () => {
