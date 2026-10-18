@@ -81,6 +81,10 @@ test('the step: the memory, git (branch, changed files, the last commits) and th
   const atHome = openingRead(home, { memory: { home }, home });
   expect(atHome.body).not.toContain('Git');
   expect(atHome.body).not.toContain('At the top');
+  // The call it goes in as: a List of a project; in the home folder a Read of the memory's index, not a List of the home folder.
+  expect(r.call).toEqual({ name: 'List', args: { path: '.' } });
+  expect(loose.call).toEqual({ name: 'List', args: { path: '.' } });
+  expect(atHome.call).toEqual({ name: 'Read', args: { path: '.agentic/memory/index.md' } });
   expect(openingRead(home, { memory: null, home })).toBe(null);
 });
 

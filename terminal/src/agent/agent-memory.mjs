@@ -177,7 +177,8 @@ export class MemoryPart {
   // because Qwen3.6 writes its first call as plain JSON text ({"file": "convert.mjs"}) when the
   // conversation has no call in it to follow (3 Oct 2026: every hard task, with the read written into
   // the request instead). A List, not the Bash it stands for: given a Bash, it ran git log and ls -la
-  // itself twice more and copied the Bash's "description" into its Reads. A trim, the notes or /rewind
+  // itself twice more and copied the Bash's "description" into its Reads. In the home folder a Read of
+  // the memory's index instead (opening.mjs: the call it gives). A trim, the notes or /rewind
   // can take it away: then it comes again.
   giveOpening(text = '') {
     if (this.isHelper || !openingOn() || !this.remoteSet()) return;
@@ -191,10 +192,10 @@ export class MemoryPart {
     try { r = openingRead(this.cwd, { memory: sent === 'none' ? null : this.memory, home: this.memory?.home ?? this.home, you: sent === 'all', maps }); } catch { return; }
     if (!r) return;
     const id = `opening_${Date.now()}`;
-    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'List', arguments: JSON.stringify({ path: '.' }) } }] });
+    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: r.call.name, arguments: JSON.stringify(r.call.args) } }] });
     this.messages.push({ role: 'tool', tool_call_id: id, content: r.body, opening: true });
     this.ctxUsed += tokensOf(r.body) + 30;
-    this.emit('tool', { id, name: 'List', label: r.view.title, arg: r.args.command, view: r.view, given: true });
+    this.emit('tool', { id, name: r.call.name, label: r.view.title, arg: r.args.command, view: r.view, given: true });
   }
 
   // The files an answer names that are not in this project: not at that path, and no file of the

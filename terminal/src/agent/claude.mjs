@@ -22,8 +22,11 @@ const imageBlock = (img, kept) => (kept.has(img) ? { type: 'image', source: { ty
 
 // Anthropic's own web tools, for WebSearch and WebFetch on the Claude API: they run on
 // Anthropic's side, so they are not asked about here (/web's Claude row turns them off).
+// The newer ones are called direct: left to their default, they run from code execution
+// (dynamic filtering) and the API hands the model its sandbox tools (bash_code_execution…) too.
+const DIRECT = { allowed_callers: ['direct'] };
 const WEB_SERVER = {
-  '20260209': { WebSearch: { type: 'web_search_20260209', name: 'web_search', max_uses: 5 }, WebFetch: { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5 } },
+  '20260209': { WebSearch: { type: 'web_search_20260209', name: 'web_search', max_uses: 5, ...DIRECT }, WebFetch: { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5, ...DIRECT } },
   basic: { WebSearch: { type: 'web_search_20250305', name: 'web_search', max_uses: 5 }, WebFetch: { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 5 } },
 };
 const SERVER_BLOCK = /^(server_tool_use|mcp_tool_use|mcp_tool_listing|web_search_tool_result|web_fetch_tool_result|.*_tool_result)$/;
@@ -146,9 +149,9 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
     const defer = own.some((t) => t.defer) && !drop.has('toolsearch');
     params.tools = [...own.map((t) => ({ name: t.function.name, description: t.function.description ?? '', input_schema: t.function.parameters ?? { type: 'object', properties: {} }, ...(defer && t.defer ? { defer_loading: true } : {}), ...(drop.has('eager') ? {} : { eager_input_streaming: true }) })), ...web, ...(defer ? [TOOL_SEARCH] : [])];
     // Several calls a reply only when the model decides (agent/way.mjs), as with the local models.
-    // The newer web tools run code on Anthropic's side (programmatic tool calling), which refuses
-    // one call a reply: with them in the list, or once a model refused it, several are allowed.
-    const serial = !parallel && !drop.has('serial') && !web.some((t) => /_2026/.test(t.type));
+    // The web tools are called direct (no programmatic tool calling), so one call a reply holds
+    // with them too; once a model refused it, several are allowed.
+    const serial = !parallel && !drop.has('serial');
     params.tool_choice = toolChoice === 'none' ? { type: 'none' } : { type: 'auto', disable_parallel_tool_use: serial };
   }
   if (connector.length) {

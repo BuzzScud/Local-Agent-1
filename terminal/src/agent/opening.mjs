@@ -149,8 +149,13 @@ export function openingRead(cwd, { memory = null, home = homedir(), you = true, 
   if (!parts.length) return null;
   const command = commands.join('; ');
   const body = `Agentic Coder read these for you before your first step; nothing has changed since, so do not read them again.\n\n${parts.join('\n\n')}`;
+  // The call it goes in as: a List of the project; in the home folder (no project, only the memory and
+  // the notes map) a Read of the memory's index, not a List of the home folder whose answer lists
+  // nothing (15 Oct 2026, on the Claude API in the home folder).
+  const call = !isHomeFolder(cwd, home) ? { name: 'List', args: { path: '.' } } : { name: 'Read', args: { path: memory ? '.agentic/memory/index.md' : 'NOTES/MAP.md' } };
   return {
     args: { command, description: title },
+    call,
     body,
     view: { kind: 'opening', title, command, lines, content: body },
   };

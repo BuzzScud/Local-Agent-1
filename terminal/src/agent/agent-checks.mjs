@@ -15,6 +15,7 @@ import { DRIFT_EVERY, DRIFT_NUDGES, driftCheck, nudgeText, recentSteps } from '.
 import { lookFacts, lookOn, lookText, ownSteps, secondLook } from './second-look.mjs';
 import { chasedQuestion } from './claude-notes.mjs';
 import { reviewChange } from './helper-models.mjs';
+import { MODEL_TOOL_LINES, offeredToolLines } from './way.mjs';
 import { BIG_MEMORY, CASE_ITEM, CHANGES, CUT_MARK, LOOKS, PLAN_EVERY, REQUEST_EVERY, claimsFound, namesAFix, planList, planReminder, requestReminder, severalAsks } from './agent-said.mjs';
 
 export class ChecksPart {
@@ -22,6 +23,7 @@ export class ChecksPart {
   // for its kind of bug, the user's own math notes when the topic came up, and
   // the design examples with a request to make or restyle a page.
   withTurnNotes(messages) {
+    messages = this.offeredLines(messages);
     const t = this.turn;
     if (t?.baked) return messages;
     const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.asks, t?.fixNote, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.rules].filter(Boolean);
@@ -32,6 +34,15 @@ export class ChecksPart {
       const held = pin && m === t.requestMsg ? `\n\n(${pin})` : '';
       return notes || held ? { ...m, content: `${m.content}${notes}${held}` } : m;
     });
+  }
+
+  // The model's tool lines (way.mjs) name only the tools this request offers: the list is fixed
+  // for a conversation (tools()), so the system prompt sent does not move from one step to the next.
+  offeredLines(messages) {
+    const sys = messages[0];
+    if (sys?.role !== 'system' || typeof sys.content !== 'string' || !sys.content.includes(MODEL_TOOL_LINES)) return messages;
+    const lines = offeredToolLines(new Set(this.tools().map((t) => t.function?.name)));
+    return lines === MODEL_TOOL_LINES ? messages : [{ ...sys, content: sys.content.replace(MODEL_TOOL_LINES, lines) }, ...messages.slice(1)];
   }
 
   // What a trim must not drop, sent with the request: the success check, and the last tool
