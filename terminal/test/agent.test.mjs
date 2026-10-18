@@ -768,6 +768,19 @@ test('summarizing keeps the request word for word and continues, not restarts', 
   expect(agent.messages.at(-1).content).toContain('Do not start the investigation over');
 });
 
+test('notes when memory fills keep every note that goes with the request (Bypass permissions\' too)', async () => {
+  const cwd = project();
+  const fake = await startFakeServer([{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, { text: 'Looked.' }, { text: 'It read export.mjs.' }]);
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'bypass', flows: false, verify: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  const bypassSent = () => agent.withTurnNotes(agent.messages).some((m) => m.role === 'user' && String(m.content).includes('Bypass permissions is on'));
+  await agent.send('add a --json flag to export.mjs');
+  expect(bypassSent()).toBe(true);
+  await agent.compact();
+  await fake.close();
+  expect(bypassSent()).toBe(true);
+  expect(agent.requestNotes().every((x) => agent.messages.includes(x.request))).toBe(true);
+});
+
 test('when memory fills, old thinking shrinks to its key lines; the newest steps keep theirs', async () => {
   const chatter = 'Let me look at the imports first and see how the file is put together before anything else. ';
   const cause = 'The cause is that toCsv drops the header row when the list is empty.';

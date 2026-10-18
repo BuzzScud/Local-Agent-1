@@ -313,7 +313,7 @@ export class RoomPart {
     if (this.turn) this.turn.requestAt = this.turn.steps ?? 0;
     // The notes that go with the request (the steps for its kind of bug, a
     // check the fix path made) follow the request into the new conversation.
-    for (const x of [this.turn?.bug, this.turn?.skill, this.turn?.look, this.turn?.math, this.turn?.design, this.turn?.carried].filter(Boolean)) {
+    for (const x of this.requestNotes()) {
       const i = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).indexOf(x.request);
       if (i >= 0) x.request = opening[i];
     }

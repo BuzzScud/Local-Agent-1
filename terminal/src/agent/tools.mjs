@@ -301,7 +301,8 @@ export async function execute(name, args, prepared, env) {
       return { text: `${note}${head}\n${cut(lines.slice(0, shown).join('\n'), max)}`, view: { kind: 'read', lines: shown, total: r.lineCount, content: hideBuilt(r.numbered).split('\n').slice(0, shown).join('\n') } };
     }
     case 'List': {
-      let lp = resolvePath(env.cwd, args.path ?? '.');
+      // Bypass: a parent of the project named in full is that folder (tools-paths.mjs open).
+      let lp = resolvePath(env.cwd, args.path ?? '.', { open: env.permissionsNow?.().mode === 'bypass' });
       let fixed = '';
       if (!lp.shelf && !existsSync(lp.abs)) {
         const fix = settlePath(env.cwd, args.path, { work: env.workFolder });
@@ -322,7 +323,7 @@ export async function execute(name, args, prepared, env) {
       return { text: fixed + (lines.join('\n') || `(nothing found)${lp.shelf ? '' : projectFiles(env.cwd)}`) + more, view: { kind: 'list', count: r.total, content: lines.join('\n') } };
     }
     case 'Search': {
-      let sp = resolvePath(env.cwd, args.path ?? '.');
+      let sp = resolvePath(env.cwd, args.path ?? '.', { open: env.permissionsNow?.().mode === 'bypass' });
       let fixed = '';
       if (!sp.shelf && !existsSync(sp.abs)) {
         const fix = settlePath(env.cwd, args.path, { work: env.workFolder });
