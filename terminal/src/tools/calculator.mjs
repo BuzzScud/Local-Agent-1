@@ -83,10 +83,8 @@ export async function capabilities({ signal, url } = {}) {
 }
 
 // The formulas, with one login kept for the backend: login() → its session, made again once
-// when the calculator says it has run out (401). link (the calculator link, web/calc-link.mjs):
-// its session first, and a 401 is told to it, so it signs in again for everyone; with no link
-// for this login (null) or one that is down past its wait, the client signs in by itself.
-export function formulasClient({ url, user, pass, link = null } = {}) {
+// when the calculator says it has run out (401).
+export function formulasClient({ url, user, pass } = {}) {
   let token = null;
   const login = async (signal) => {
     if (!user || !pass) throw new Error('no calculator login: an admin sets it in Admin → Settings');
@@ -103,11 +101,9 @@ export function formulasClient({ url, user, pass, link = null } = {}) {
       qs.set('limit', String(Math.max(1, Math.min(200, Number(limit) || 20))));
       if (verifiedOnly) qs.set('verifiedOnly', 'true');
       for (let tries = 0; ; tries++) {
-        let shared = null;
-        if (link) try { shared = await link.session(); } catch (e) { if (!user || !pass) throw e; }
-        const t = shared ?? token ?? await login(signal);
+        const t = token ?? await login(signal);
         try { return await call(url, `/api/formulas?${qs}`, { token: t, signal }); } catch (e) {
-          if (e.status === 401 && tries === 0) { if (shared) await link.rejected(shared, { path: 'GET /api/formulas' }).catch(() => {}); else token = null; continue; }
+          if (e.status === 401 && tries === 0) { token = null; continue; }
           throw e;
         }
       }

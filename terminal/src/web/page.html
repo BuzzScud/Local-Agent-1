@@ -917,17 +917,10 @@ async function renderAdmin() {
         <span class="h">One address a line; the first is AI 1.</span>
         <label>Calculator</label><input id="s-calc" value="${esc(set.calc.url ?? '')}" spellcheck="false">
         <label>Calculator login (for formulas)</label><input id="s-cuser" value="${esc(set.calc.user ?? '')}" placeholder="username" autocomplete="off"><span></span><input id="s-cpass" type="password" placeholder="${set.calc.hasPass ? 'saved: type to replace' : 'password'}" autocomplete="new-password">
-        <span class="h">Kept on this copy only, never sent to a page. The calculator link signs in with it, keeps the connection open and shares the one session: formulas for everyone, and the problem reports.</span>
-        <label>Calculator link</label><span id="s-calclink" style="color:var(--ink2)">Asking…</span>
-        <span class="h"><button class="btn" id="s-calcre" type="button">Reconnect now</button> <button class="btn" id="s-calcsign" type="button">Sign in again</button> Where it runs: the hub's Calculator tab, or /calc on and /calc off.</span>
+        <span class="h">Kept on this copy only, never sent to a page. It signs in with it to read the formulas.</span>
         ${isMac() ? `<label>Runs may read web pages</label><span><input type="checkbox" class="toggle" id="s-web" ${set.runs?.webFetch ? 'checked' : ''}></span><span class="h">Off: runs cannot fetch pages. On: each page still asks the user, and a run could reach addresses on this Mac's network.</span>` : ''}
         <label>Claude API</label><span style="color:var(--ink2)">Off for web users</span>
       </div><button class="btn primary" id="s-save" type="button">Save</button>`;
-      const linkLine = (l) => !l ? 'Not running: save a calculator login, or switch its background service on (/calc on).' : `<span class="dot ${l.state === 'live' ? 'ok' : l.state === 'login-wrong' || l.state === 'no-login' ? 'bad' : 'warn'}"></span> ${esc(l.words)} · since ${new Date(l.since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${l.where === 'service' ? 'its own background service' : 'inside this web'} · drops today ${l.counts?.drops ?? 0} · reports filed ${l.reports.filter((r) => r.status === 'filed').length}`;
-      const showLink = async (p) => { try { const r = p ? await api(`/api/admin/calc-link/${p}`, { method: 'POST' }) : await api('/api/admin/calc-link'); $('#s-calclink').innerHTML = linkLine(r.link); } catch (e) { $('#s-calclink').textContent = e.message; } };
-      showLink();
-      $('#s-calcre').onclick = () => showLink('reconnect');
-      $('#s-calcsign').onclick = () => showLink('signin');
       $('#s-save').onclick = async () => {
         const patch = { limits: { perUser: $('#s-per').value, total: $('#s-total').value, runMins: $('#s-mins').value, askMins: $('#s-ask').value, inviteDays: $('#s-inv').value }, services: $('#s-svc').value.split('\n').map((x) => x.trim()).filter(Boolean), calc: { url: $('#s-calc').value.trim(), user: $('#s-cuser').value.trim(), ...($('#s-cpass').value ? { pass: $('#s-cpass').value } : {}) } };
         if ($('#s-web')) patch.runs = { webFetch: $('#s-web').checked };
