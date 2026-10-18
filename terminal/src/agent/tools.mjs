@@ -10,6 +10,7 @@ import { outlineText } from '../tools/outline.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { took } from '../tools/jobs.mjs';
+import { keysReady, loginAnswer, sshLogin, usesSsh } from '../tools/ssh.mjs';
 import { listFiles, searchFiles } from '../tools/fs.mjs';
 import { hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
@@ -362,6 +363,10 @@ export async function execute(name, args, prepared, env) {
       // Keychain's sign-in; the app's own folder stays closed.
       const now = env.permissionsNow?.() ?? {};
       const open = now.mode === 'bypass' || runsGitPush(args.command);
+      // ssh logs in through this Mac's ssh agent (tools/ssh.mjs): one with no key yet gets the Keychain's
+      // first, as the user's own first ssh would. A bare `ssh <server>` runs as a login check instead.
+      if (open && usesSsh(args.command)) await keysReady();
+      const login = sshLogin(args.command);
       // A long script typed in as a heredoc is saved as SCRIPTS/… too; SCRIPTS/… in a command is the
       // real folder, which the sandbox may read (scripts.mjs). The command itself runs as typed.
       const saved = saveScript(args.command, env.cwd);
@@ -371,13 +376,15 @@ export async function execute(name, args, prepared, env) {
       // A wait the model chose ("sleep 115; grep … run.log") ends early when a message of yours comes in.
       const wait = env.heard && waitsFirst(args.command);
       const signal = wait ? AbortSignal.any([env.signal, env.heard].filter(Boolean)) : env.signal;
-      const r = await runCommand(commandWithScripts(args.command, env.cwd), { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal, squeeze: env.rulesSet === 'remote', ...(sandbox ? { sandbox } : {}) });
+      const r = await runCommand(commandWithScripts(login?.command ?? args.command, env.cwd), { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal, squeeze: env.rulesSet === 'remote', ...(sandbox ? { sandbox } : {}) });
       if (scripts) r.lines = r.lines.map(outputWithScripts);
       const body = r.lines.join('\n');
       const secs = `${Math.round(r.ms / 1000)} s`;
       if (wait && env.heard.aborted && !env.signal?.aborted) return { text: `${body ? `${cut(body, max)}\n` : ''}(The wait ended early, after ${secs}: the user sent a message, which comes with this result. The rest of the command did not run: answer the user first, then run it again if it is still needed.)`, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: false, heard: true } };
       // Esc: the user stopped it. Not a failure of the command's own.
       if (env.signal?.aborted) return { text: `${body ? `${cut(body, max)}\n` : ''}(Stopped by the user after ${secs}.)`, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: false, stopped: true } };
+      const loggedIn = login && loginAnswer(login, r);
+      if (loggedIn) return { text: loggedIn.text, view: { kind: 'bash', code: 0, lines: [loggedIn.said], ms: r.ms, timedOut: false } };
       const took = timeoutMs >= 90_000 && timeoutMs % 60_000 === 0 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
       const longer = r.timedOut && timeoutMs < MAX_TIMEOUT_SECS * 1000 ? `; for longer, send timeout (up to ${MAX_TIMEOUT_SECS} seconds), or background: true for one that need not be waited for` : '';
       const none = noMatch(args.command, r);
@@ -474,6 +481,7 @@ async function startJob(args, env, max) {
   // so does a push you said yes to (permissions.mjs runsGitPush).
   const now = env.permissionsNow?.() ?? {};
   const open = now.mode === 'bypass' || runsGitPush(args.command);
+  if (open && usesSsh(args.command)) await keysReady(); // a tunnel needs the key too (tools/ssh.mjs)
   // SCRIPTS/… is the real folder of saved scripts, which the sandbox may read (scripts.mjs).
   const scripts = usesScripts(args.command, env.cwd);
   const sandbox = open ? { open: true, self: Boolean(now.self) } : scripts ? { readOnly: [scriptsDir()] } : null;

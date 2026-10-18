@@ -531,6 +531,11 @@ if (opts.print) {
       if (st.slots > 1) agent.slots = { main: 0, side: 1 };
       return agent.canSee;
     } : null;
+    // --mode for a plain run too (18 Oct 2026): it was read and then left out, so `coding -p … --mode bypass` ran in
+    // Manual, its commands offline, with no word of it. A loop's run gets its mode with the loop's own parts below.
+    const { modeOf } = await import('./agent/permissions.mjs');
+    const asked = !loop && opts.mode ? modeOf(opts.mode) : null;
+    if (!loop && opts.mode && !asked) process.stderr.write(`· --mode ${opts.mode} is not a mode (auto, manual, edits, plan, bypass): the run goes on as if it were not given\n`);
     const r = await runHeadless({
       images, canSee, visionOn, userHooks: true,
       prompt: opts.prompt, cwd: opts.cwd, url, model: runModel, ctx: ctx ?? 32768,
@@ -558,6 +563,7 @@ if (opts.print) {
       answers: process.stdin.isTTY && !loop ? askOnTerminal : null,
       // A loop's run: its window's mode, its questions answered on the loop board, a note typed there sent
       // when the turn ends, and a half-fix kept when fewer tests fail (agent.mjs madeProgress).
+      ...(asked ? { mode: asked } : {}),
       ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, steering: loop.io.steering, signal: loop.io.signal, keepProgress: true, testsFirst: loop.testsFirst, maxSteps: loop.steps, rewind: loop.rewind, resume: loop.resume } : {}),
       helperJobs,
       // What the app read for it before its first step (the project map, the files a question names) ends " [app]".

@@ -115,3 +115,16 @@ test('coding -p: your never-list holds under --yes, and a command you allowed ru
   expect(sent).toMatch(/pass \d/); // the test output reached the model
   expect(r2.code).toBe(0);
 }, T * 2);
+
+// 18 Oct 2026: --mode was read and then left out of a plain run, so `coding -p … --mode bypass` ran in Manual.
+test('coding -p --mode bypass runs in Bypass; a word that is not a mode says so', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([{ text: 'In Bypass.' }, { text: 'As before.' }]);
+  const r = await runInPty({ cwd, env, args: ['-p', 'which mode?', '--mode', 'bypass', '--url', fake.url, '--no-flows'], steps: [{ wait: 'In Bypass.' }, { sleep: 300 }] });
+  expect(JSON.stringify(fake.requests[0].messages)).toContain('Bypass permissions is on');
+  expect(r.code).toBe(0);
+  const r2 = await runInPty({ cwd, env, args: ['-p', 'which mode?', '--mode', 'bypas', '--url', fake.url, '--no-flows'], steps: [{ wait: 'As before.' }, { sleep: 300 }] });
+  await fake.close();
+  expect(r2.text).toContain('--mode bypas is not a mode');
+  expect(JSON.stringify(fake.requests[1].messages)).not.toContain('Bypass permissions is on');
+}, T * 2);

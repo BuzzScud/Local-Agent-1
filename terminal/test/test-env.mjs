@@ -77,6 +77,8 @@ process.env.AGENTIC_LAST_MODE ??= 'off';
 // Lost services brought back at a window's start (saved-services.mjs repairNow): off unless a test turns it on,
 // so a test's own settings are what its window shows.
 process.env.AGENTIC_SERVICES_REPAIR ??= 'off';
+// The ssh agent is never given the Keychain's keys from a test (tools/ssh.mjs keysReady): ssh.test.mjs uses a stand-in.
+process.env.AGENTIC_SSH_KEYS ??= 'off';
 // No page is opened in WebKit to see what a reader sees (page-read.mjs), unless a test asks for it.
 process.env.AGENTIC_PAGE_READ ??= 'off';
 // New files stay where the model puts them: a test never writes to the real Desktop (agent.mjs desktopDefault).
