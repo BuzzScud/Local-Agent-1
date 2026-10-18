@@ -116,7 +116,10 @@ rebuild() {
     (cd "$REPO" && "$BUN" install) >"$LOG.install" 2>&1 || printf '\033[33m! bun install failed (see %s)\033[0m\n' "$(echo "$LOG.install" | sed "s|^$HOME|~|")" >&2
   fi
   tmp="$APP.$$"
-  if (cd "$REPO" && "$BUN" build --compile --minify terminal/src/cli.jsx --outfile "$tmp") >"$LOG" 2>&1; then
+  # Built without NODE_ENV: bun build writes the NODE_ENV it runs with into the app, and an app built
+  # with the tests' (NODE_ENV=test) made a throwaway home at every start, so it never found your
+  # settings or its window and opened in the terminal (18 Oct 2026).
+  if (cd "$REPO" && env -u NODE_ENV "$BUN" build --compile --minify terminal/src/cli.jsx --outfile "$tmp") >"$LOG" 2>&1; then
     # bun leaves the file open to every account on the Mac; only you may change the app
     chmod 755 "$tmp"
     mv -f "$tmp" "$APP"

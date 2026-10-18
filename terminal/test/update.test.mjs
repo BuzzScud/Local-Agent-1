@@ -143,12 +143,8 @@ test.skipIf(needs('python3'))('/update without the launcher (run from the source
   } finally { await t.close(); await fake.close(); }
 }, 60_000);
 
-// The whole path as you use it: the real launcher script, a repo made from
-// this working tree (so the launcher builds this code), the compiled app.
-// keeper: the app runs inside a keeper (sessions.mjs), the way a window really runs it since 3 Oct 2026;
-// the keeper starts the app through the launcher, so /update restarts it there and the window only
-// keeps showing it. Without it the app runs in the window itself (AGENTIC_SESSIONS=off in the tests).
-async function updateThroughLauncher({ keeper = false } = {}) {
+// A repo made from this working tree, so a launcher pointed at it builds this code.
+function thisTree() {
   const src = join(import.meta.dir, '..', '..');
   const repo = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-update-repo-')));
   const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/agentic-coder-launcher.sh', 'models', 'package.json', 'bunfig.toml'], { encoding: 'utf8' })
@@ -156,6 +152,15 @@ async function updateThroughLauncher({ keeper = false } = {}) {
   for (const f of files) { mkdirSync(dirname(join(repo, f)), { recursive: true }); cpSync(join(src, f), join(repo, f)); }
   symlinkSync(join(src, 'node_modules'), join(repo, 'node_modules'));
   git(repo, 'init', '-q', '-b', 'main'); git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'this tree');
+  return { src, repo };
+}
+// The whole path as you use it: the real launcher script, a repo made from
+// this working tree (so the launcher builds this code), the compiled app.
+// keeper: the app runs inside a keeper (sessions.mjs), the way a window really runs it since 3 Oct 2026;
+// the keeper starts the app through the launcher, so /update restarts it there and the window only
+// keeps showing it. Without it the app runs in the window itself (AGENTIC_SESSIONS=off in the tests).
+async function updateThroughLauncher({ keeper = false } = {}) {
+  const { src, repo } = thisTree();
   const { base, cwd } = trustedProject();
   const launcher = join(base, 'coding');
   writeFileSync(launcher, readFileSync(join(src, 'terminal/app/agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo));
@@ -197,6 +202,33 @@ test.skipIf(needs('python3'))('/update through the coding launcher: rebuilt, res
 
 const { canHost } = await import('../src/app/sessions.mjs');
 test.skipIf(needs('python3') || !canHost())('/update through the keeper: the app restarts inside it, the window keeps showing it, conversation back, every key arrives', () => updateThroughLauncher({ keeper: true }), 150_000);
+
+// 18 Oct 2026: bun build writes the NODE_ENV it runs with into the app. The real app, rebuilt by a launcher that a test
+// had started (NODE_ENV=test), made a throwaway home at every start, so `coding` never found its window and opened in
+// the terminal. This launcher is started from the tests too, so with NODE_ENV=test.
+test('built by a launcher started from the tests, the app still keeps its home in HOME: coding window finds the window there', () => {
+  expect(process.env.NODE_ENV).toBe('test');
+  const { src, repo } = thisTree();
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'ac-env-')));
+  const user = join(base, 'user');
+  const launcher = join(base, 'coding');
+  writeFileSync(launcher, readFileSync(join(src, 'terminal/app/agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo));
+  chmodSync(launcher, 0o755);
+  const built = Bun.spawnSync(['/bin/sh', launcher, '--version'], { env: { ...process.env, HOME: user, AGENTIC_REPO: '', AGENTIC_NO_PULL: '1' } });
+  expect(`${built.stderr}`).toContain('Agentic Coder updated from');
+  // A stand-in for the window `bun run window` builds, in the home the app should use: it notes how it was opened.
+  const win = join(user, '.agentic-coder', 'build', 'window-target', 'release', 'agentic-coder-window');
+  const said = join(base, 'window-said');
+  mkdirSync(dirname(win), { recursive: true });
+  writeFileSync(win, `#!/bin/sh\necho "$@" > '${said}'\n`);
+  chmodSync(win, 0o755);
+  // As a Terminal starts it: that HOME, no AGENTIC_HOME, no NODE_ENV.
+  const env = { ...process.env, HOME: user };
+  for (const k of ['AGENTIC_HOME', 'AGENTIC_TEST_HOME', 'AGENTIC_WINDOW_APP', 'NODE_ENV']) delete env[k];
+  const r = Bun.spawnSync([join(user, '.agentic-coder', 'app', 'agentic-coder'), 'window', '--folder', base], { env, timeout: 30_000 });
+  expect(`${r.stderr}`).not.toContain('not built yet');
+  expect(existsSync(said) ? readFileSync(said, 'utf8') : '').toContain('--url http://127.0.0.1:');
+}, 90_000);
 
 // ── The GitHub check (git fetch) and what keeps it safe ─────────────────────
 

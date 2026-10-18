@@ -30,6 +30,12 @@ test('the tests run in a throwaway home', () => {
   expect(S.BG_DIR().startsWith(unitHome)).toBe(true);
 });
 
+// A session's keeper runs the launcher in AGENTIC_LAUNCHER: run from inside the app, the tests had the real one, and
+// a session started here rebuilt the real app with NODE_ENV=test in it (18 Oct 2026, test-env.mjs).
+test('a session the tests start never runs the coding the tests were started from', () => {
+  for (const k of ['AGENTIC_LAUNCHER', 'AGENTIC_REPO', 'AGENTIC_RESTART_FILE']) expect([k, process.env[k]]).toEqual([k, undefined]);
+});
+
 test('frames come out whole however the bytes are cut, and a giant one is refused', () => {
   const got = [];
   const read = S.frameReader((kind, body) => got.push([kind, Buffer.from(body).toString()]));
