@@ -17,6 +17,7 @@ import { checkInText } from '../flows/fix.mjs';
 import { alwaysRules } from './facts.mjs';
 import { requestHits, requestNote } from './mcp.mjs';
 import { BYPASS_OPEN, CORRECTS, SELF_OPEN, asksForWork, tokensOf, webAddresses } from './agent-said.mjs';
+import { sshNamed, sshNote } from '../tools/ssh.mjs';
 
 export class NotesPart {
   async turnNotes(text, request, signal, { follow, kind, bug, skill, math }) {
@@ -82,6 +83,13 @@ export class NotesPart {
     const urls = webAddresses(text);
     if (urls.length && this.webTools()?.fetch && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.web = { request, urls, notes: `${urls.length === 1 ? 'The request names a web page' : 'The request names web pages'} (${urls.slice(0, 3).join(', ')}): read ${urls.length === 1 ? 'it' : 'them'} with WebFetch. ${urls.length === 1 ? 'It is' : 'They are'} not a file in the project.` };
+    }
+    // A server named as an ssh command (18 Oct 2026, tools/ssh.mjs): "log in to the server: ssh root@…, just run the
+    // command". In Bypass Qwen3.6 thought past its budget about whether it might, then wrote the command out and never
+    // ran it. A line says it runs from here, and how (outside Bypass, where it would).
+    const server = sshNamed(text);
+    if (server && request?.role === 'user' && typeof request.content === 'string') {
+      this.turn.ssh = { request, server, notes: sshNote(server, { open: this.mode === 'bypass' }) };
     }
     // Bypass permissions: the prompt's rules say commands stay in the folder, offline. They are
     // kept word for word (the service's cache), so the request says what is true while it is on.

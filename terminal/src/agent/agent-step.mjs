@@ -28,6 +28,7 @@ import { CODE_SEARCH_CHARS, CUT_MARK, MODEL_TOOLS, countLine, failsOf, leakedCal
 import { rawQwenCall } from './client.mjs';
 import { readCallText } from './qwen-raw.mjs';
 import { HOME } from '../../../models/index.mjs';
+import { usesSsh } from '../tools/ssh.mjs';
 
 export class StepPart {
   // A Write with its content but no path: the content is kept, the call in the
@@ -561,6 +562,7 @@ export class StepPart {
       }
       if (call.name === 'Bash' && this.turn.outlined.size) for (const f of [...this.turn.outlined]) if (String(args.command ?? '').includes(basename(f))) this.turn.outlined.delete(f);
       if (call.name === 'WebFetch') this.turn.fetched = true;
+      if (call.name === 'Bash' && usesSsh(args.command)) this.turn.sshRan = true;
       (this.turn.callLog ??= []).push({ function: { name: call.name, arguments: JSON.stringify(args ?? {}) } });
       // The app's own words for a step that failed (never a page's or a command's output): the second look's facts.
       if (out.error) (this.turn.errors ??= []).push(call.name === 'Bash' ? `${runLine(args.command)} ended with exit code ${out.view?.code ?? '?'}` : `${call.name}: ${String(out.text).split('\n')[0].split(' What it said')[0].slice(0, 160)}`);

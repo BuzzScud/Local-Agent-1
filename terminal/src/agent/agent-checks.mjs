@@ -26,7 +26,7 @@ export class ChecksPart {
     messages = this.offeredLines(messages);
     const t = this.turn;
     if (t?.baked) return messages;
-    const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.asks, t?.fixNote, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.rules].filter(Boolean);
+    const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.asks, t?.fixNote, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.ssh, t?.rules].filter(Boolean);
     const pin = this.pinnedNote();
     if (!extras.length && !pin) return messages;
     return messages.map((m) => {

@@ -21,6 +21,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
+import { sshHint } from './ssh.mjs';
 
 export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
 
@@ -31,6 +32,11 @@ const TOOL_DIRS = ['.nvm', '.bun', '.volta', '.fnm', '.deno', '.cargo', '.rustup
 const CACHE_DIRS = ['.npm', '.bun/install/cache', '.cache', 'Library/Caches', '.yarn', 'Library/pnpm'];
 // Programs that start apps or scripts outside the fence.
 const APP_LAUNCHERS = ['/usr/bin/open', '/usr/bin/osascript', '/usr/bin/osacompile', '/usr/bin/automator', '/usr/bin/shortcuts', '/bin/launchctl', '/usr/bin/screen', '/usr/bin/tmux', '/opt/homebrew/bin/tmux'];
+
+// What ssh reads in ~/.ssh besides the keys (18 Oct 2026): its settings, the servers it knows and the
+// public halves it picks the agent's key by. Without them "Host key verification failed" for every server.
+const SSH_PUBLIC = ['config', 'known_hosts', 'known_hosts2'];
+const reText = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Service data outside the home folder (Homebrew's Postgres, MySQL, Redis…).
 // (Not /var/run or /var/db: DNS and time zones live there.)
@@ -70,7 +76,8 @@ function gitDirs(cwd) {
 // running on this Mac it may reach ([5432] for your Postgres), or 'any'.
 // open: Bypass permissions (the owner's pick, 3 Oct 2026): any folder and the internet, but
 // still no apps started, nothing that already runs here touched, Agentic Coder's own
-// folder not written, and ~/.ssh not read (permissions.mjs SECRET_FILES).
+// folder not written, and ~/.ssh not read (permissions.mjs SECRET_FILES) but for ssh's public
+// files (SSH_PUBLIC), so ssh logs in through this Mac's ssh agent with no key file open to it (ssh.mjs).
 // self: Bypass with the Claude API (permissions.mjs isSelf): the app works on itself, so its own
 // folder is open too; only the door's key and trust list stay closed (SELF_LOCKED).
 export function sandboxProfile(root, { home = homedir(), readOnly = [], net = false, local = [], open = false, self = false } = {}) {
@@ -92,7 +99,8 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [], net = fa
     // sandbox-exec takes only "localhost" or "*" as the host ("127.0.0.1:*"
     // stops every command with exit 65); localhost covers 127.0.0.1 and ::1.
     ...(net || open ? [] : ['(deny network-outbound)', '(allow network-outbound (remote ip "localhost:*"))', '(allow network-outbound (remote unix-socket))']),
-    ...(open ? [`(deny file-write* ${ownClosed})`, `(deny file-read-data file-write* (subpath ${q(inHome('.ssh'))}))`] : [
+    ...(open ? [`(deny file-write* ${ownClosed})`, `(deny file-read-data file-write* (subpath ${q(inHome('.ssh'))}))`,
+      `(allow file-read-data ${SSH_PUBLIC.map((f) => `(literal ${q(inHome(`.ssh/${f}`))})`).join(' ')} (subpath ${q(inHome('.ssh/config.d'))}) (regex #"^${reText(inHome('.ssh'))}/[^/]+\\.pub$"))`] : [
       `(deny file-read-data (subpath ${q(h)}))`,
       `(deny file-write* (subpath ${q(h)}) (subpath "/Volumes"))`,
       '(deny file-read-data (subpath "/Volumes"))',
@@ -142,6 +150,9 @@ export function netHint(output, command) {
 }
 
 export function fenceHint(output, { open = false, self = false, command = '' } = {}) {
+  // ssh says why it failed in its own words; the files hint below sent the model after the wrong cause.
+  const ssh = sshHint(output, { open, command });
+  if (ssh) return ssh;
   if (new RegExp(`operation not permitted: (?:${LAUNCHERS})\\b`, 'i').test(output)) {
     return '\n(Apps cannot be started from here, so do not try again: say where the file is, with its full path.)';
   }

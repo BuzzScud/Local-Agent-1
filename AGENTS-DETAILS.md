@@ -1496,6 +1496,39 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   actions, the pill's numbers, and the server with a stand-in app: its key, the state, keys back, the end). The app
   tests keep the terminal (`AGENTIC_WINDOW=off` in test-env.mjs).
 
+## ssh from a command (18 Oct 2026)
+
+- **What and why.** The owner, in Bypass on Qwen3.6 on their service: "log in to the server: ssh root@<server>, just
+  run the command. the mac should go once you enter that into the terminal", and "it gets stuck". Their saved session
+  showed three causes: the Bypass note's "Still refused: secrets … .ssh" sent the model into 42 s of arguing with
+  itself whether it might run ssh at all; the fence denied all of ~/.ssh, so ssh could not read its own known_hosts
+  and every server failed with "Host key verification failed"; and the hint after it blamed apps and running services,
+  so the model told the user to add the server's key, which was already there.
+- **The fence** (`sandbox.mjs`, open profile only): after the deny of ~/.ssh, ssh's public files are readable again
+  (`SSH_PUBLIC`: config, known_hosts, known_hosts2, config.d/, `*.pub`). Keys stay closed to every command, ssh
+  included, and nothing in ~/.ssh is written, so ssh logs in through the Mac's ssh agent. Outside Bypass the network
+  stays closed to commands, as before.
+- **`tools/ssh.mjs`**: `keysReady` (an agent with no key, after a restart, gets the keys whose passphrase is in the
+  Keychain: `ssh-add --apple-load-keychain`, once per app, as the owner's own first ssh does with UseKeychain;
+  `AGENTIC_SSH_KEYS=off` in the tests); `sshLogin` (a bare `ssh [options] <server>` runs as a login check with
+  `-T -o BatchMode=yes -o ConnectTimeout=15` first, so nothing waits on a keyboard; commands get none here, so a bare
+  ssh logged in and straight out, printed the welcome text, and the model took its next command for one on the
+  server); `loginAnswer` (who and where, and that every command goes through `ssh <server> '<command>'`); `sshHint`
+  (fenceHint asks it first: closed outside Bypass, a changed server key, a server never seen, a locked key, a
+  password, a refused key, an unknown name, no answer, each with what to do or what to Ask, never a password).
+- **The note** (`agent-said.mjs` `SSH_OPEN` in BYPASS_OPEN and SELF_OPEN): ssh, scp and rsync log in with this Mac's
+  saved keys; what stays refused is opening secret files yourself; a git push asks first (the note had said refused).
+- **A request that names a server** (`sshNamed`: `ssh user@host` or an address, not "ssh into it") carries a line
+  (`sshNote`, `turn.ssh`, agent-notes.mjs): in Bypass, run it with Bash as typed; elsewhere, tell the user it needs
+  Bypass. With the fence fixed and only the note, Qwen3.6 still thought past 4.1k tokens, then wrote "I'll run the SSH
+  command" with the command in a shell block, promised a password prompt and ended (`commandInText` misses a block
+  with words after it). An answer in Bypass that ran no ssh goes back once (`turn.sshRan`, agent-answer.mjs, the
+  next-step hook). With both, the same request on the real service: 42 tokens of thinking, ssh run, "Logged in".
+- **`coding -p --mode <mode>`** is the run's mode now; it was read and then left out (only a loop's run had it).
+- **Tests**: `terminal/test/ssh.test.mjs` (the parts, the Bash tool with a stand-in ssh on PATH, the line and the
+  send-back on a scripted model), `sandbox.test.mjs` (the profile, and sandbox-exec reading the public files and not
+  a key), `app-permissions.test.mjs` (`-p --mode`).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
