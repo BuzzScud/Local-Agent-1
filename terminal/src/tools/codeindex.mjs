@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { byPath } from './fs.mjs';
 import { outline } from './outline.mjs';
-import { codeFiles } from './repomap.mjs';
+import { codeFiles, pruneMapsOnce, touchMap } from './repomap.mjs';
 import { HOME } from '../../../models/index.mjs';
 import { Words, terms, WORD_TOP } from '../agent/search.mjs';
 
@@ -154,7 +154,9 @@ export class CodeIndex {
     if (this.state !== 'ready') this.state = 'building';
     const model = this.embedder?.model?.file ?? 'unknown';
     let saved = {};
-    try { const j = JSON.parse(readFileSync(this.file, 'utf8')); if (j.model === model && j.format === FORMAT) saved = j.files ?? {}; } catch { /* none yet */ }
+    // Maps not used for 30 days go (repomap.mjs pruneMaps); this one is used, so it is touched.
+    pruneMapsOnce(this.dir);
+    try { const j = JSON.parse(readFileSync(this.file, 'utf8')); if (j.model === model && j.format === FORMAT) saved = j.files ?? {}; touchMap(this.file); } catch { /* none yet */ }
     // The most recently worked on first, so maxParts leaves out the least.
     const files = codeFiles(this.cwd, { max: this.maxFiles });
     const entries = {};

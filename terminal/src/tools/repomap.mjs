@@ -5,7 +5,7 @@
 // choosing which file a task is about, when deciding whether a request is
 // clear, and as the first thing the step-by-step loop sees in a project with
 // several files (instead of List → Read → List → Read at ~60 tokens a second).
-import { readFileSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, statSync, mkdirSync, writeFileSync, readdirSync, rmSync, utimesSync, openSync, readSync, closeSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -16,6 +16,45 @@ import { readLadder, fitLines } from '../agent/ladder.mjs';
 
 export const CODE_FILE = /\.(m?[jt]sx?|cjs|mts|cts|py|rb|go|rs|java|kt|swift|c|cc|cpp|h|hpp|cs|php|vue|svelte)$/i;
 const MAP_DIR = () => join(HOME, 'maps');
+
+// The maps are a cache: a file for each folder ever mapped, and a practice run maps a new copy of its
+// project each time (54,418 files, 247 MB by 15 Oct 2026). A map is touched when it is used; one not
+// used for MAP_DAYS is deleted, and so is a code search index (codeindex.mjs) whose folder is gone.
+// Looked at once a day at most (the .pruned file's time), the first time a process maps a folder.
+export const MAP_DAYS = 30;
+const DAY_MS = 86_400_000;
+export function touchMap(file) { try { const now = new Date(); utimesSync(file, now, now); } catch { /* not there yet */ } }
+// A code search index starts {"model":…,"format":…,"cwd":"…": its folder is in its first bytes.
+function folderGone(file) {
+  const buf = Buffer.alloc(4096);
+  let n = 0;
+  try { const fd = openSync(file, 'r'); try { n = readSync(fd, buf, 0, buf.length, 0); } finally { closeSync(fd); } } catch { return false; }
+  const m = /"cwd":("(?:[^"\\]|\\.)*")/.exec(buf.subarray(0, n).toString('utf8'));
+  try { return Boolean(m) && !existsSync(JSON.parse(m[1])); } catch { return false; }
+}
+export function pruneMaps(dir = MAP_DIR(), { days = MAP_DAYS, now = Date.now(), force = false } = {}) {
+  const mark = join(dir, '.pruned');
+  try { if (!force && now - statSync(mark).mtimeMs < DAY_MS) return 0; } catch { /* never looked */ }
+  let names;
+  try { names = readdirSync(dir); } catch { return 0; }
+  let gone = 0;
+  for (const name of names) {
+    if (name === '.pruned') continue;
+    const file = join(dir, name);
+    let st;
+    try { st = statSync(file); } catch { continue; }
+    if (!st.isFile()) continue;
+    if (now - st.mtimeMs > days * DAY_MS || (name.endsWith('.code.json') && folderGone(file))) { try { rmSync(file); gone++; } catch { /* in use elsewhere: next time */ } }
+  }
+  try { writeFileSync(mark, ''); utimesSync(mark, now / 1000, now / 1000); } catch { /* a read-only home */ }
+  return gone;
+}
+const prunedDirs = new Set();
+export function pruneMapsOnce(dir = MAP_DIR()) {
+  if (prunedDirs.has(dir)) return;
+  prunedDirs.add(dir);
+  pruneMaps(dir);
+}
 
 // Code nobody works on: old copies, other people's libraries, test
 // snapshots. Left out while the project has other code.
@@ -109,6 +148,7 @@ export function repoMap(cwd, { maxFiles = 400, maxChars = 5000, ladder = false }
   const lad = ladder ? readLadder(join(cwd, 'docs', 'map')) : null;
   const mapLines = lad ? fitLines(lad.text.replace(/^# .*\n+/, ''), Math.round(maxChars * 0.45)) : '';
   if (lad) maxChars -= mapLines.length + 120;
+  pruneMapsOnce();
   const cacheFile = join(MAP_DIR(), `${createHash('sha1').update(cwd).digest('hex').slice(0, 16)}.json`);
   let cache = {};
   try { cache = JSON.parse(readFileSync(cacheFile, 'utf8')); } catch {}
@@ -131,7 +171,7 @@ export function repoMap(cwd, { maxFiles = 400, maxChars = 5000, ladder = false }
   }
   const keep = new Set(files);
   for (const k of Object.keys(cache)) if (!keep.has(k)) { delete cache[k]; changed = true; }
-  if (changed) { try { mkdirSync(MAP_DIR(), { recursive: true }); writeFileSync(cacheFile, JSON.stringify(cache)); } catch {} }
+  if (changed) { try { mkdirSync(MAP_DIR(), { recursive: true }); writeFileSync(cacheFile, JSON.stringify(cache)); } catch {} } else touchMap(cacheFile); // used: kept (pruneMaps)
   const list = mapText(entries, maxChars);
   const text = lad ? `The code map (docs/map/MAP.md; Map with a part opens one):\n${mapLines}\n\nCode files (lines: top-level names):\n${list}` : list;
   entries.sort((a, b) => byPath(a.rel, b.rel));

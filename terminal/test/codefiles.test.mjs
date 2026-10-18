@@ -4,7 +4,7 @@
 // 400 code files in the folder's order: on this repo 396 of them were old test
 // output git ignores, and terminal/src was never read.
 import { test, expect, beforeAll } from 'bun:test';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -114,4 +114,45 @@ test('outside git the folder is walked, the same code left out; old copies are r
   expect(codeFiles(only)).toEqual(['archive/app.mjs']);
   // A folder git ignores as a whole, opened on its own: its own files.
   expect(codeFiles(join(cwd, 'a-results'), { max: 2 })).toHaveLength(2);
+});
+
+// The maps are a cache that only grew (54,418 files, 247 MB by 15 Oct 2026, mostly practice copies):
+// a map used is touched; one not used for 30 days goes, and so does a code search index whose folder
+// is gone; looked at once a day at most.
+test('the maps: one used is touched and kept; one unused for 30 days, or an index of a folder that is gone, is deleted; once a day', async () => {
+  const { pruneMaps, touchMap, MAP_DAYS } = await import('../src/tools/repomap.mjs');
+  const dir = tmp('prune');
+  const now = Date.now();
+  const age = (name, days) => utimesSync(join(dir, name), new Date(now - days * 86_400_000), new Date(now - days * 86_400_000));
+  const here = tmp('here');
+  writeFileSync(join(dir, 'fresh.json'), '{}');
+  writeFileSync(join(dir, 'old.json'), '{}');
+  writeFileSync(join(dir, 'used.json'), '{}');
+  writeFileSync(join(dir, 'kept.code.json'), JSON.stringify({ model: 'm', format: 2, cwd: here, files: {} }));
+  writeFileSync(join(dir, 'gone.code.json'), JSON.stringify({ model: 'm', format: 2, cwd: join(here, 'deleted'), files: {} }));
+  age('fresh.json', MAP_DAYS - 1);
+  age('old.json', MAP_DAYS + 1);
+  age('used.json', MAP_DAYS + 5);
+  touchMap(join(dir, 'used.json')); // used today: its 35 days start again
+  expect(pruneMaps(dir, { now })).toBe(2);
+  const { readdirSync } = await import('node:fs');
+  expect(readdirSync(dir).sort()).toEqual(['.pruned', 'fresh.json', 'kept.code.json', 'used.json']);
+  // Once a day: within the day nothing is looked at, the next day it is.
+  age('fresh.json', MAP_DAYS + 1);
+  expect(pruneMaps(dir, { now: now + 3_600_000 })).toBe(0);
+  expect(pruneMaps(dir, { now: now + 86_400_000 + 1000 })).toBe(1);
+});
+
+test('the project map touches its map when it reads it unchanged', async () => {
+  const cwd = messyProject();
+  repoMap(cwd);
+  const { statSync } = await import('node:fs');
+  const { createHash } = await import('node:crypto');
+  // This project's own map (the other tests here map copies of the same files).
+  const file = join(process.env.AGENTIC_HOME, 'maps', `${createHash('sha1').update(cwd).digest('hex').slice(0, 16)}.json`);
+  expect(readFileSync(file, 'utf8')).toContain('src/billing.mjs');
+  const long = new Date(Date.now() - 20 * 86_400_000);
+  utimesSync(file, long, long);
+  repoMap(cwd);
+  expect(Date.now() - statSync(file).mtimeMs).toBeLessThan(60_000);
 });
