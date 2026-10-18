@@ -8,6 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [diagrams/agentic-coder-structure-2026-10-18.html](diagrams/agentic-coder-structure-2026-10-18.html) | page | Agentic Coder folder structure | 758 KB | 2026-10-18 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 666 KB | 2026-10-18 |
 | [tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0918.html](tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0918.html) | page | Cache check · claude-opus-5-5 | 11 KB | 2026-10-13 |
 | [tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0914.html](tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0914.html) | page | Cache check · claude-opus-5-5 | 12 KB | 2026-10-13 |
@@ -73,7 +74,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 | [design rounds/footer-spacing-2026-10-01.html](design%20rounds/footer-spacing-2026-10-01.html) | page | Footer spacing, new design | 23 KB | 2026-10-01 |
 | [design rounds/live-run-screen-preview-2026-10-01.html](design%20rounds/live-run-screen-preview-2026-10-01.html) | page | Live Run Preview | 147 KB | 2026-10-01 |
 | [older versions/agentic-coder-structure-2026-09-30.html](older%20versions/agentic-coder-structure-2026-09-30.html) | page | Agentic Coder folder structure | 614 KB | 2026-10-01 |
-| [diagrams/agentic-coder-structure-2026-10-01.html](diagrams/agentic-coder-structure-2026-10-01.html) | page | Agentic Coder folder structure | 673 KB | 2026-10-01 |
+| [older versions/agentic-coder-structure-2026-10-01.html](older%20versions/agentic-coder-structure-2026-10-01.html) | page | Agentic Coder folder structure | 673 KB | 2026-10-01 |
 | [design rounds/agentic-coder-start-page-upgrades-2-designs-2026-10-01.html](design%20rounds/agentic-coder-start-page-upgrades-2-designs-2026-10-01.html) | page | Start page upgrades | 641 KB | 2026-10-01 |
 | [tests/agentic-coder-model-check-k2-2026-10-01-0000.html](tests/agentic-coder-model-check-k2-2026-10-01-0000.html) | page | New model check · K2 Horizon 7B | 9 KB | 2026-10-01 |
 | [design rounds/agentic-coder-start-page-agent-detailed-2-designs-2026-10-01.html](design%20rounds/agentic-coder-start-page-agent-detailed-2-designs-2026-10-01.html) | page | Start page agents | 1.4 MB | 2026-10-01 |
