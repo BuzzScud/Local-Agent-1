@@ -8,6 +8,8 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runWindow } from '../src/window/server.mjs';
+import { meterOf, modelNowOf, effortWords } from '../src/window/bridge.mjs';
+import { knownOf } from '../src/app/start.jsx';
 import { saveSession } from '../src/app/store.mjs';
 import { findChrome } from '../src/flows/layoutcheck.mjs';
 import { needs } from './needs.mjs';
@@ -147,6 +149,46 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: Enter and Tab work 
     const marks = [];
     for (let i = 0; i < 4; i++) { marks.push(await p.js(`document.querySelector('.ac')?.textContent.slice(0, 1)`)); await Bun.sleep(300); }
     expect(new Set(marks)).toEqual(new Set(['⠿']));
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
+// The window's first seconds on a model on the service (18 Oct 2026, the owner, from pictures of the real window taken
+// as it opened): it said Ready with a green dot for the ~12 s the model was still loading there, "ctx 17% of 32k" until
+// it jumped to "2% of 256k", and "on effort". The states are the bridge's own (meterOf, modelNowOf, effortWords with start.jsx knownOf).
+test.skipIf(needs('chrome', findChrome))('in a real browser: a model still loading on the service is not Ready, shows no context size yet, and says thinking on', async () => {
+  const p = await openPage();
+  try {
+    const name = 'Qwen3.6:35B-A3B', where = '203.0.113.9:60009';
+    const at = (state, more = {}) => {
+      const app = { modelState: { remote: true, state, name, where, gb: state === 'loading' ? 26.1 : null }, ctx: state === 'on' ? 262144 : 32768, stats: { ctxUsed: 5571 }, ...more };
+      return { ...base, order: [], items: {}, hold: true, modelName: `${name} · ${where}`, start: { model: `${name} · ${where}`, effort: effortWords(knownOf({ effort: state === 'connecting' ? 'high' : 'on', svc: app.modelState }).effort), cwd: '~/project', recent: [] }, meter: meterOf(app), model: modelNowOf(app.modelState) };
+    };
+    const seen = () => p.js(`({ status: document.getElementById('status').textContent, dot: document.getElementById('pilldot').className, pill: document.getElementById('uslot').textContent, sub: document.querySelector('.home .sub').textContent })`);
+    // Connecting: no effort yet (the levels are a stand-in's until the service answers)
+    await p.say(at('connecting'));
+    expect(await seen()).toMatchObject({ status: expect.stringContaining(`Connecting to ${where}…`), dot: 'dot busy', pill: 'ctx once loaded', sub: `in ~/project · ${name} · ${where}` });
+    // Loading on the service: not Ready, what you type waits, no size until the service says it
+    await p.say(at('loading'));
+    let s = await seen();
+    expect(s).toMatchObject({ dot: 'dot busy', pill: 'ctx once loaded', sub: `in ~/project · ${name} · ${where} · thinking on` });
+    expect(s.status).toContain(`Loading ${name} on the service · 26.1 GB…`);
+    expect(s.status).toContain('You can type now: it sends once the model has loaded');
+    expect(s.status).not.toContain('Ready');
+    await p.click('[data-act="usage"]');
+    expect(await p.js(`document.getElementById('ucard').textContent`)).toContain('its size shows once the model has loaded on the service');
+    await p.click('[data-act="usage"]');
+    // A message typed meanwhile: queued, and says what it waits for
+    await p.say({ ...at('loading'), queued: 'fix the tax rounding' });
+    expect((await seen()).status).toContain('⏵ Queued: fix the tax rounding · sends once the model has loaded on the service');
+    // Loaded: Ready, and the size the service runs it at with its GPU
+    await p.say(at('on', { server: { loaded: true, size: 26.1e9, vram: 26.1e9, gpuPct: 100, until: null, ms: 40 } }));
+    s = await seen();
+    expect(s).toMatchObject({ dot: 'dot', pill: 'ctx 2% of 256kGPU 26.1 GB', sub: `in ~/project · ${name} · ${where} · thinking on` });
+    expect(s.status.startsWith('Ready')).toBe(true);
+    // The service gone: said, not Ready
+    await p.say(at('down'));
+    expect(await seen()).toMatchObject({ status: expect.stringContaining(`${where} is not answering · /remote`), dot: 'dot off' });
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);

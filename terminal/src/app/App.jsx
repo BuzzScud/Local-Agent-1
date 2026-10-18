@@ -819,30 +819,30 @@ export function App({ opts, win, onRestart }) {
   const kept = pageRoomRef.current;
   const comingNotes = (startedIn.from === 'last' && startedIn.mode !== 'ask' ? 2 : 0) + (remoteAtStart ? 2 : 0);
   const pageRoom = holdRef.current ? heldRoom : kept?.rows === (rows ?? 40) ? kept.room : Math.max(START_MIN, (rows ?? 40) - 7 - comingNotes);
+  // The model's label in the footer (screen.jsx modelLabels): off, loading, or on with the memory it holds.
+  // A remote: the model by the name the server knows, where it runs, and how it is going (screen.jsx modelLabels).
+  const remoteGb = remoteState === 'loading' ? (catalog?.models.find((m) => m.id === model.remote?.model)?.bytes ?? 0) / 1e9 || null : null;
+  // Its name is remoteModel's without " · <where>" (one of ours keeps its own name, not its file's).
+  const remoteName = model.remote ? model.name.replace(` · ${model.remote.label}`, '') : null;
+  // Which profile the conversation is on, once profiles route it (9 Oct 2026, the owner's pick): a switch back is seen.
+  // On a service of its own (/remote's "Just this window"): "this window" too.
+  const profileTag = model.remote && agent.router?.active() ? ((agent.pinned && agent.pinned.model === agent.modelName()) || agent.router.own ? 'this window' : agent.routeName ?? null) : null;
+  const modelState = opts.url ? null : model.remote ? { remote: true, state: remoteState ?? 'connecting', name: remoteName, where: model.remote.label, gb: remoteGb, profile: profileTag } : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
   // What primeRows needs to measure items as they are printed. The tip (startTip) is on the page while
   // it has room for its Try rows, else on the footer.
-  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running, said: items.find((x) => x.type === 'startnotes')?.said ?? null, modeId: mode };
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, svc: modelState, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running, said: items.find((x) => x.type === 'startnotes')?.said ?? null, modeId: mode };
   const tipOnPage = homeLook === 'launcher' && Boolean(tip) && pageRoom - 2 >= START_BIG; // the Menu leaves it on the footer
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, view: stepsView };
   itemsRef.current = items;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
   const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;
-  // The model's label in the footer (screen.jsx modelLabels): off, loading, or on with the memory it holds.
-  // A remote: the model by the name the server knows, where it runs, and how it is going (screen.jsx modelLabels).
-  const remoteGb = remoteState === 'loading' ? (catalog?.models.find((m) => m.id === model.remote?.model)?.bytes ?? 0) / 1e9 || null : null;
-  // Its name is remoteModel's without " · <where>" (one of ours keeps its own name, not its file's).
-  const remoteName = model.remote ? model.name.replace(` · ${model.remote.label}`, '') : null;
   // The footer's gauges on a remote (remote-footer.mjs), from the model in use's own answers: none
   // until the first has a speed. While it writes, the speed is this reply's, in the app's blue.
   const writingNow = live.phase === 'working' && live.firstTokenAt && !live.waiting && live.liveTps ? live.liveTps : null;
   const ownStats = model.remote && stats.speedsOf === model.remote.model && (stats.tps || stats.speeds?.length);
   const server = psRef.current;
   const gauges = ownStats ? { tps: writingNow ?? stats.tps, live: Boolean(writingNow), speeds: stats.speeds ?? [], ttft: stats.ttft ?? null, ctxUsed: stats.ctxUsed ?? agent.ctxUsed, ctx, gpuPct: server?.loaded ? server.gpuPct : null } : null;
-  // Which profile the conversation is on, once profiles route it (9 Oct 2026, the owner's pick): a switch back is seen.
-  // On a service of its own (/remote's "Just this window"): "this window" too.
-  const profileTag = model.remote && agent.router?.active() ? ((agent.pinned && agent.pinned.model === agent.modelName()) || agent.router.own ? 'this window' : agent.routeName ?? null) : null;
-  const modelState = opts.url ? null : model.remote ? { remote: true, state: remoteState ?? 'connecting', name: remoteName, where: model.remote.label, gb: remoteGb, profile: profileTag } : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
   // What the running start has left (start-times.mjs), from how long each part has run so far.
   const tm = timing.current;
   const startLeftNow = starting && tm ? startLeft(timesRef.current[tm.id], { phase: startPhase, cold: tm.cold, sinceLoad: (now - tm.loadAt) / 1000, sinceWarm: tm.warmAt ? (now - tm.warmAt) / 1000 : 0 }) : null;

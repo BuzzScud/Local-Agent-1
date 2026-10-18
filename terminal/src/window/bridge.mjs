@@ -14,6 +14,7 @@ import { pressureWord, used as macUsed } from '../app/mac-memory.mjs';
 import { gib } from '../../../models/index.mjs';
 import { AgentsView } from '../app/agents-view.jsx';
 import { LoopsView } from '../app/loops-view.jsx';
+import { knownOf } from '../app/start.jsx';
 import { viewItem, heldView, ansiRows } from './view.mjs';
 
 const SEND_MS = 33; // at most 30 states a second; a burst of redraws is sent as the last of them
@@ -124,7 +125,8 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
       menu: app.menu ? { kind: app.menu.kind, index: app.menu.index ?? 0, items: (app.menu.items ?? []).slice(0, 60).map((x) => ({ label: x.label, desc: x.desc ?? '' })) } : null,
       perm, panel, full,
       mode: app.mode, modelName: app.modelName, modelOff: Boolean(app.modelOff), starting: Boolean(app.starting), cwd: app.cwd, cwdShort: app.cwdShort,
-      hold: Boolean(app.hold), start: app.hold ? { model: app.start?.model, effort: app.start?.effort, cwd: app.start?.cwd, git: app.start?.git ?? null, recent: (app.start?.recent ?? []).slice(0, 12).map((r) => ({ id: r.id, title: String(r.title ?? '').replace(/\s+/g, ' ').slice(0, 140), updated: r.updated ?? null, turns: r.turns ?? 0 })) } : null,
+      model: modelNowOf(app.modelState),
+      hold: Boolean(app.hold), start: app.hold ? { model: app.start?.model, effort: effortWords(knownOf(app.start).effort), cwd: app.start?.cwd, git: app.start?.git ?? null, recent: (app.start?.recent ?? []).slice(0, 12).map((r) => ({ id: r.id, title: String(r.title ?? '').replace(/\s+/g, ' ').slice(0, 140), updated: r.updated ?? null, turns: r.turns ?? 0 })) } : null,
       queued: app.queued ?? null, notice: app.notice ?? null, tip: app.tip ?? null, usageText, usage, meter, files: [...files.values()].reverse(), todos, spend: app.spend ?? '', loopsBadge: app.loopsBadge ?? null,
       stats: { ctxUsed: app.stats?.ctxUsed ?? null, ctx: app.ctx ?? null },
     };
@@ -168,11 +170,14 @@ export function usageOf(u) {
 // conversation's context is, and the memory: the Mac's for a model on this Mac (and what the model holds), the
 // service's GPU for one on Ollama (its /api/ps, as the footer's gauge). null on the Claude API (its pill is the month's
 // dollars, usageOf) and with --url.
+// A model on a service has no context size of its own until it has loaded there (App.jsx: the 32k planned for
+// stands in): none is said then.
 export function meterOf(app) {
   const ms = app?.modelState;
   if (!ms || app.usage) return null;
   const st = app.stats ?? {};
-  const ctx = app.ctx ?? st.ctx ?? null, ctxUsed = st.ctxUsed ?? null;
+  const unsure = ms.remote && (ms.state === 'connecting' || ms.state === 'loading');
+  const ctx = unsure ? null : app.ctx ?? st.ctx ?? null, ctxUsed = st.ctxUsed ?? null;
   const sv = ms.remote && app.server?.loaded ? app.server : null;
   const m = !ms.remote && app.mac ? app.mac : null;
   return {
@@ -183,6 +188,25 @@ export function meterOf(app) {
     gpu: sv ? { size: sv.size ?? null, vram: sv.vram ?? null, pct: sv.gpuPct ?? null, until: sv.until ?? null, ms: sv.ms ?? null } : null,
     tps: st.tps ?? null, ttft: st.ttft ?? null, speeds: (st.speeds ?? []).slice(-8),
   };
+}
+
+// How the model stands, for the window's status line and the dot in its title bar (18 Oct 2026, the owner: the window
+// said Ready for the ~12 s a model on the service was still loading, where the terminal's footer said so): App.jsx's
+// modelState, null with --url.
+export function modelNowOf(ms) {
+  if (!ms) return null;
+  return { remote: Boolean(ms.remote), state: ms.state ?? 'on', name: ms.name ?? null, where: ms.where ?? null, gb: ms.gb ?? null };
+}
+
+// The start page's thinking (18 Oct 2026, the owner: "it should say thinking on"): a model with steps says its effort
+// ("high effort"); one that only thinks or not says so ("thinking on"; "no thinking" for one that cannot). The level's
+// label, lower case (models/registry.mjs thinkingLevel, models/runtime/remote.mjs remoteLevels); null while not known
+// (start.jsx knownOf: a model on a service that has not answered yet).
+export function effortWords(level) {
+  if (!level) return null;
+  if (level === 'on' || level === 'off') return `thinking ${level}`;
+  if (level === 'none') return 'no thinking';
+  return `${level} effort`;
 }
 
 export const windowBridge = makeBridge();

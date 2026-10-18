@@ -11,7 +11,7 @@ import { VtScreen } from '../src/window/vt.mjs';
 import { viewItem, ansiRows, cellRows, xterm } from '../src/window/view.mjs';
 import { windowWanted, runWindow, dropText, openWindowFree } from '../src/window/server.mjs';
 import { droppedFiles, pathsOnly } from '../src/agent/images.mjs';
-import { makeBridge, usageOf, meterOf } from '../src/window/bridge.mjs';
+import { makeBridge, usageOf, meterOf, modelNowOf, effortWords } from '../src/window/bridge.mjs';
 import { printedOf } from '../src/app/screen.jsx';
 import { HOME } from '../../models/index.mjs';
 
@@ -177,6 +177,23 @@ test("the pill beside the model: the Claude API's month as the footer said it, a
   const svc = { modelState: { remote: true, state: 'on', name: 'Qwen3.6:35B-A3B', where: 'server-1' }, ctx: 65536, stats: { ctxUsed: 48650 }, mac: { total: 16 * GB, avail: 6 * GB, level: 1 } };
   expect(meterOf({ ...svc, server: { loaded: true, size: 31.2e9, vram: 24.3e9, gpuPct: 78, until: null, ms: 44 } })).toMatchObject({ remote: true, where: 'server-1', pct: 74, ctxWord: '64k', mac: null, gpu: { size: 31.2e9, vram: 24.3e9, pct: 78, ms: 44 } });
   expect(meterOf({ ...svc, server: { loaded: false } })).toMatchObject({ gpu: null, mac: null });
+});
+
+// 18 Oct 2026, the owner: the window said "Ready" and "17% of 32k" for the ~12 s a model was loading on the service
+// (then "2% of 256k"), and "high effort" then "on effort" as it connected.
+test('a model on the service before it has loaded: no context size, its state for the status line, and the thinking in words', () => {
+  const svc = { modelState: { remote: true, state: 'loading', name: 'Qwen3.6:35B-A3B', where: '203.0.113.9:60009', gb: 26.1 }, ctx: 32768, stats: { ctxUsed: 5571 } };
+  // the 32k the app plans for until then is not the service's size: none is said, the tokens used still are
+  expect(meterOf(svc)).toMatchObject({ remote: true, state: 'loading', ctx: null, pct: null, ctxWord: '', ctxUsed: 5571, modelGb: 26.1 });
+  expect(meterOf({ ...svc, modelState: { ...svc.modelState, state: 'connecting' } })).toMatchObject({ ctx: null, pct: null });
+  // loaded: the size the service runs it at
+  expect(meterOf({ ...svc, modelState: { ...svc.modelState, state: 'on' }, ctx: 262144 })).toMatchObject({ ctx: 262144, pct: 2, ctxWord: '256k' });
+  // the state as the window's status line reads it
+  expect(modelNowOf(svc.modelState)).toEqual({ remote: true, state: 'loading', name: 'Qwen3.6:35B-A3B', where: '203.0.113.9:60009', gb: 26.1 });
+  expect(modelNowOf({ state: 'on', name: 'Qwen3.5 9B' })).toEqual({ remote: false, state: 'on', name: 'Qwen3.5 9B', where: null, gb: null });
+  expect(modelNowOf(null)).toBeNull();
+  // the levels' labels (registry.mjs, remote.mjs remoteLevels) in words; none while not known
+  expect(['high', 'medium', 'low', 'on', 'off', 'none', 'max', null].map(effortWords)).toEqual(['high effort', 'medium effort', 'low effort', 'thinking on', 'thinking off', 'no thinking', 'max effort', null]);
 });
 
 test('files dropped on the window are typed as Terminal types a drop, so the app finds each one again', () => {
