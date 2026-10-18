@@ -109,11 +109,12 @@ export const SERVER_PROCESS = /(^|\/)(llama-server|mlx-server\.py)(\s|$)/;
 // What the server says when it ends the thinking at the budget, and the model has to act.
 export const BUDGET_MESSAGE = ' I have thought enough. Now I act on it.';
 // The MLX engine's server script: beside this file, or, inside the built app (whose own files are not on
-// disk), in the repo the launcher names (AGENTIC_REPO).
+// disk), in the copy of GitHub's main it was built from (AGENTIC_BUILD), else the repo the launcher names
+// (AGENTIC_REPO).
 export function mlxServerScript() {
   const here = (() => { try { return fileURLToPath(new URL('./mlx/mlx-server.py', import.meta.url)); } catch { return null; } })();
-  const repo = process.env.AGENTIC_REPO;
-  return [here, repo ? join(repo, 'models', 'runtime', 'mlx', 'mlx-server.py') : null].find((p) => p && existsSync(p)) ?? here;
+  const at = (dir) => (dir ? join(dir, 'models', 'runtime', 'mlx', 'mlx-server.py') : null);
+  return [here, at(process.env.AGENTIC_BUILD), at(process.env.AGENTIC_REPO)].find((p) => p && existsSync(p)) ?? here;
 }
 
 // Whether the model's guessing helper is used: it is on this Mac (coding setup

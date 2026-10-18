@@ -553,7 +553,7 @@ async function appTool(args, env, max) {
   if (action === 'restart') {
     const r = await app.restart(String(args.reason ?? '').trim());
     if (r.error) return err(r.error);
-    return { restarted: true, text: 'Agentic Coder restarts now on the code in its repo (built first). This conversation is saved and picked back up by the new version, which tells you it restarted; then say what changed and check it works.', view: { kind: 'app', what: 'restart on the new code', lines: [] } };
+    return { restarted: true, text: "Agentic Coder restarts now on GitHub's main (built first). This conversation is saved and picked back up by the new version, which tells you it restarted; then say what changed and check it works.", view: { kind: 'app', what: 'restart on the new code', lines: [] } };
   }
   return err('action must be command, setting or restart');
 }

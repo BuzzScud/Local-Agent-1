@@ -1,6 +1,7 @@
 # Fixing a bug
 
-Agentic Coder follows this file. It is the only copy: change it here and Agentic Coder changes.
+Agentic Coder follows this file. It is the only copy: change it here and Agentic Coder changes (the `coding`
+command's app once the change is on GitHub's main).
 
 - **Every time** goes into Agentic Coder's instructions for every request.
 - When a request is about a bug, Agentic Coder sorts it into one of the kinds below by its
@@ -9,7 +10,8 @@ Agentic Coder follows this file. It is the only copy: change it here and Agentic
   fix mode then skips the suite and works step by step, unless the request names a check, or
   the main tool is a browser check and the project has a browser: then Agentic Coder makes the check first.
 - **Runs of the check** is how many runs in a row the named check must pass.
-- Agentic Coder rebuilds with this file inside it: after editing, run `bun run install-cli`.
+- Agentic Coder is built from GitHub's main with this file inside it: an edit is in the app once it is pushed
+  (then /update).
 
 ## Every time
 

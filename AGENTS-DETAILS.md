@@ -274,7 +274,8 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   package, offline, ~15 ms; a new compiler each build, because one keeps every class it was ever given). A stock
   Tailwind colour draws nothing and is named back to the model in the same reply; a Tailwind CDN tag is taken out.
   Read shows the built line folded (`hideBuilt`), and an Edit naming the fold means the real line (`realBuilt`).
-  The app built with `bun build --compile` finds the package through `AGENTIC_REPO`, which the launcher sets.
+  The app built with `bun build --compile` finds the package through `AGENTIC_BUILD` (its copy of GitHub's main) or
+  `AGENTIC_REPO`, which the launcher sets.
   Switches: settings.json `design.studio`, `AGENTIC_STUDIO` (off in the tests, test-env.mjs), `/design studio on|off`;
   `/design studio` alone lists the pieces (a /design word, not a command of its own: the / menu keeps 18 and
   /settings 18, which is all that fits an 80 × 24 window). The Arena's **Design studio check** (`models/evals/bench/design/studio-check.mjs`,

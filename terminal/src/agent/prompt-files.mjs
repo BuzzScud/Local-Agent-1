@@ -99,12 +99,14 @@ async function loadRemote() {
 }
 export const BUILT_IN_REMOTE = Object.freeze(await loadRemote());
 
-// Where the files are kept on this Mac: the repo's terminal/rules (the
-// launcher passes AGENTIC_REPO; run from the source, the folder beside this
-// one); AGENTIC_RULES_DIR for tests. null: the built-in copies only.
-export function rulesDir() {
+// Where the files are kept on this Mac: the terminal/rules of the copy of GitHub's main the app was
+// built from (main, always, 18 Oct 2026: the launcher passes AGENTIC_BUILD), else the repo's (the
+// launcher passes AGENTIC_REPO; run from the source, the folder beside this one); AGENTIC_RULES_DIR for
+// tests. null: the built-in copies only. edit: where the hub saves them, the folder's own (a change
+// reaches the app once it is pushed to main), never that copy, which the next update replaces.
+export function rulesDir({ edit = false } = {}) {
   if (process.env.AGENTIC_RULES_DIR) return process.env.AGENTIC_RULES_DIR;
-  for (const repo of [process.env.AGENTIC_REPO]) {
+  for (const repo of edit ? [process.env.AGENTIC_REPO] : [process.env.AGENTIC_BUILD, process.env.AGENTIC_REPO]) {
     if (repo && existsSync(join(repo, 'terminal', 'rules', 'bug-fixing.md'))) return join(repo, 'terminal', 'rules');
   }
   try {

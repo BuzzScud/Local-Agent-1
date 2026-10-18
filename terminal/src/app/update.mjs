@@ -1,33 +1,37 @@
 // "Update available" in the lower right, as in Claude Code: while Agentic Coder runs,
-// it looks at its own repo every 20 s. When a commit lands on main (or is
-// pushed to GitHub's main from this Mac) that changes Agentic Coder's code, a restart
-// would run something new, and the badge says so. /update restarts Agentic Coder on
-// it through the launcher (which builds the new version first) and picks the
-// conversation back up.
+// it looks at its own repo every 20 s. The app is built from GitHub's main only (main, always: the owner's
+// pick, 18 Oct 2026; terminal/app/agentic-coder-launcher.sh): when GitHub's main has code of the app's that
+// this app was not built from (AGENTIC_BUILT_COMMIT), a restart would run something new, and the badge says
+// so. /update restarts Agentic Coder through the launcher (which builds that main first) and picks the
+// conversation back up. A change in the folder is in the app only once it is pushed to main.
 // GitHub is asked too (git fetch, 30 s after the start, then every 5 min, and
 // at each /update), so a push from anywhere else shows up as well.
+// Run from the source (bun run start, no launcher), the folder's own main is looked at, as before.
 //   AGENTIC_NO_UPDATE=1 turns the check off (as it turns off the launcher's rebuild);
 //   AGENTIC_UPDATE_EVERY=<ms> looks more often (the tests); AGENTIC_FETCH_EVERY=<ms>
 //   asks GitHub that often, 0 never.
 import { spawn } from 'node:child_process';
-import { statSync, lstatSync, readFileSync, writeFileSync, unlinkSync, renameSync } from 'node:fs';
+import { existsSync, statSync, lstatSync, readFileSync, writeFileSync, unlinkSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 
 const EVERY_MS = 20_000;
 const FETCH_EVERY_MS = 5 * 60_000;
 const FETCH_FIRST_MS = 30_000;
 
-// The files a rebuild picks up: the same list the launcher checks
-// (terminal/app/agentic-coder-launcher.sh), so the badge and the rebuild agree.
+// The files a rebuild picks up: the same list the launcher checks (agentic-coder-launcher.sh
+// app_code_between), so the badge and the rebuild agree. The package files; the files under evals/ that
+// are part of the app: the test record, the list of tests the Arena and /test know (a new test is there
+// only once the app is rebuilt), the test prompts (models/index.mjs) and the arena's own files the hub's
+// Test builder runs (models/evals/battle/*.mjs, not its sets); and the code under terminal/src,
+// terminal/rules and models, with the text files the app reads in (a font, the Swift media helper, the
+// MLX server script), not tests, results or READMEs.
 export function isAppCode(path) {
-  // package.json, and the files under evals/ that are part of the app: the test record, the list
-  // of tests the Arena and /test know (a new test is there only once the app is rebuilt), and
-  // the arena's own files the hub's Test builder runs (models/evals/battle/*.mjs, not its sets)
-  if (path === 'package.json' || path === 'models/evals/record.mjs' || path === 'models/evals/run-tests.mjs' || /^models\/evals\/battle\/[^/]+\.mjs$/.test(path)) return true;
+  if (/^(package\.json|bun\.lock|bunfig\.toml)$/.test(path) || path.startsWith('patches/')) return true;
+  if (/^models\/evals\/(record|run-tests|prompts)\.mjs$/.test(path) || /^models\/evals\/battle\/[^/]+\.mjs$/.test(path)) return true;
   if (!/^(terminal\/src|terminal\/rules|models)\//.test(path)) return false;
   if (/(^|\/)(node_modules|results|evals|test)\//.test(path)) return false;
   if (/(^|\/)README\.md$/.test(path)) return false;
-  return /\.(mjs|js|jsx|json|md|html)$/.test(path);
+  return /\.(mjs|js|jsx|json|md|html|txt|swift|py)$/.test(path);
 }
 
 // Every git call runs without a terminal: in its own session, so neither git
@@ -74,9 +78,21 @@ function builtAt() {
   return Date.now();
 }
 
-// One look. `start` = { main } as it was when Agentic Coder started.
+// What the coding command builds the app from (the launcher's main_ref): GitHub's main as this Mac last
+// fetched it; a repo with no GitHub, its own main.
+export const mainRef = async (repo) => (await rev(repo, 'refs/remotes/origin/main')) ?? rev(repo, 'refs/heads/main');
+
+// One look. `start` = { main } as it was when Agentic Coder started; `built` = when the running code was
+// built; `commit` = the commit of main it was built from (the launcher passes AGENTIC_BUILT_COMMIT).
 // Returns the badge's state or null.
-export async function checkUpdate(repo, start, built) {
+export async function checkUpdate(repo, start, built, commit = process.env.AGENTIC_BUILT_COMMIT) {
+  if (commit) {
+    // Main, always: the app's code on main moved past the commit this app was built from.
+    const main = await mainRef(repo);
+    if (!main || main === commit) return null;
+    const files = await changed(repo, commit, main);
+    return files.length ? { kind: 'ready', files: files.length, commit: main } : null;
+  }
   const main = await rev(repo, 'refs/heads/main');
   if (main && start.main && main !== start.main) {
     // New commits on main that change code newer than this build: a restart
@@ -94,6 +110,28 @@ export async function checkUpdate(repo, start, built) {
     if (!inMain && (await changed(repo, main, origin)).length) return { kind: 'pull', commit: origin };
   }
   return null;
+}
+
+// The app's own code (isAppCode) that the folder has and main does not (main, always): files changed or
+// new in the folder, and those of its commits main does not have yet, each kept only when its copy here is
+// not main's (a change squashed into main counts as on main). Only those of `files` when given. A restart
+// builds main, so none of these would be in it.
+export async function notOnMain(repo, files = null) {
+  const main = await mainRef(repo);
+  if (!main) return [];
+  const list = async (args) => ((await git(repo, args)) ?? '').split('\n').filter(Boolean);
+  const mine = [
+    ...(await list(['diff', '--name-only', '--no-renames', 'HEAD', '--'])),
+    ...(await list(['ls-files', '--others', '--exclude-standard'])),
+    ...(await list(['diff', '--name-only', '--no-renames', `${main}...HEAD`, '--'])),
+  ];
+  const cands = [...new Set(mine)].filter((f) => isAppCode(f) && (!files || files.includes(f)));
+  if (!cands.length) return [];
+  const onMain = new Map((await list(['ls-tree', '-r', main, '--', ...cands])).map((l) => /^\S+ blob (\S+)\t(.+)$/.exec(l)).filter(Boolean).map((m) => [m[2], m[1]]));
+  const here = cands.filter((f) => existsSync(join(repo, f)));
+  const ids = here.length ? await list(['hash-object', '--', ...here]) : [];
+  const have = new Map(here.map((f, i) => [f, ids[i]]));
+  return cands.filter((f) => onMain.get(f) !== have.get(f));
 }
 
 export const updateText = (u) => (!u ? null : u.kind === 'pull' ? 'Update on GitHub · /update to get it' : 'Update available · /update to use it');
@@ -137,18 +175,19 @@ export const msEnv = (name, dflt) => { const v = process.env[`AGENTIC_${name}`];
 // The `coding` command keeps itself current (10 Oct 2026). The launcher only replaced itself when a pull at
 // its own start brought a change to it; one that came in by /update, or a launcher installed before 9 Oct
 // (which never replaced itself), stayed old for ever, and that Mac needed `bun run install-cli` by hand.
-// Now the app, at each start and each /update restart, puts the repo's launcher in its place when they
-// differ: only the one that started it (AGENTIC_LAUNCHER), a plain file of yours (not a link) installed for
+// Now the app, at each start and each /update restart, puts main's launcher in its place when they differ:
+// the one in the copy of main the app was built from (AGENTIC_BUILD; the folder's own when run without
+// it). Only the one that started it (AGENTIC_LAUNCHER), a plain file of yours (not a link) installed for
 // this repo, replaced whole (rename), so the shell running the old copy carries on with it.
 // Returns 'updated', 'same' or why it was left alone.
-export function refreshLauncher(repo, launcher = process.env.AGENTIC_LAUNCHER) {
+export function refreshLauncher(repo, launcher = process.env.AGENTIC_LAUNCHER, from = process.env.AGENTIC_BUILD || repo) {
   if (!repo || !launcher) return 'no launcher';
   try {
     const st = lstatSync(launcher);
     if (!st.isFile() || (process.getuid && st.uid !== process.getuid())) return 'not a plain file of yours';
     const have = readFileSync(launcher, 'utf8');
     if (!have.includes(`REPO="\${AGENTIC_REPO:-${repo}}"`)) return 'installed for another folder';
-    const want = readFileSync(join(repo, 'terminal', 'app', 'agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo);
+    const want = readFileSync(join(from, 'terminal', 'app', 'agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo);
     if (have === want) return 'same';
     const tmp = `${launcher}.new`;
     try { unlinkSync(tmp); } catch {}
@@ -207,8 +246,8 @@ export async function bringIn(repo) {
 const short = (p) => (process.env.HOME && p.startsWith(process.env.HOME) ? `~${p.slice(process.env.HOME.length)}` : p);
 
 // Restarting is the launcher's job (terminal/app/agentic-coder-launcher.sh): it runs
-// the app and waits, so when this app exits with RESTART_CODE it rebuilds and
-// starts the new version with the arguments left in AGENTIC_RESTART_FILE (one
+// the app and waits, so when this app exits with RESTART_CODE it builds GitHub's main
+// (as last fetched) and starts it with the arguments left in AGENTIC_RESTART_FILE (one
 // per line). This window has fully let go of the keyboard by then; a restart
 // from inside the app (it waiting on the new one) lost typed keys to the old
 // process and left one more of them behind at each /update.

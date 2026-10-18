@@ -416,11 +416,13 @@ export class AnswerPart {
     // in this message and the tests passed after it, so the window starts again on that code once
     // the answer is in (app-self.mjs restart; the restarted conversation says what changed). Not
     // when the model already asked for it with the App tool, not after a failed or missing test run.
+    // The app is built from GitHub's main only (18 Oct 2026): a change not pushed yet is not restarted
+    // on, and the note says to push it first.
     if (this.turn.changed && this.turn.testedAfterChange && this.turn.checkOk && !this.turn.restarted && this.app?.restart && !this.isHelper && !signal?.aborted && this.selfOn()) {
       const files = appCodeChanged(this.cwd, this.happened?.files ?? []);
       if (files.length) {
         this.turn.restarted = true;
-        const r = await this.app.restart(`${files.length === 1 ? files[0] : `${files.length} files of the app`} changed and the tests pass`);
+        const r = await this.app.restart(`${files.length === 1 ? files[0] : `${files.length} files of the app`} changed and the tests pass`, { files });
         if (r?.error) this.emit('note', { text: `Not restarted on the new code: ${r.error}`, tone: 'warn' });
       }
     }

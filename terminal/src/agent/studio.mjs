@@ -347,11 +347,12 @@ export function realBuilt(oldText, before) {
   return real ? oldText.replace(`<style id="studio-css">${BUILT_NOTE}</style>`, () => real) : oldText;
 }
 
-// Where the tailwindcss package is: beside this source, or in the repo the
-// launcher names (the built app runs from elsewhere).
+// Where the tailwindcss package is: beside this source, or in the copy of GitHub's main the app was
+// built from (AGENTIC_BUILD), or in the repo the launcher names (the built app runs from elsewhere).
 function tailwindDir() {
   const tries = [];
   try { tries.push(dirname(createRequire(import.meta.url).resolve('tailwindcss/package.json'))); } catch {}
+  if (process.env.AGENTIC_BUILD) tries.push(join(process.env.AGENTIC_BUILD, 'node_modules', 'tailwindcss'));
   const repo = process.env.AGENTIC_REPO;
   if (repo) tries.push(join(repo, 'node_modules', 'tailwindcss'), join(mainFolder(repo), 'node_modules', 'tailwindcss'));
   try { tries.push(join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'node_modules', 'tailwindcss')); } catch {}

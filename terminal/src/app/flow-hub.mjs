@@ -134,7 +134,7 @@ export function flowPage(d, { dated = '' } = {}) {
     const mbox = (g, m, x, y, w) => g.box(x, y, w, mh, { k: `mdl${live(m) ? ' live' : ''}`, attr: `data-model="${esc(m.id)}"`, t: m.name, s: [{ t: m.tags.join(' · ') || 'in /model', k: live(m) ? 'live' : 'dim' }, `${m.fileGB} GB file`, ...speed(m)] });
     f.box(230, 6, 1030, 40, { k: 'ghost', t: `Test bench (models/evals): runs the terminal’s agent with no screen, on ${many ? 'each model in turn' : 'the model'}, and grades the result` });
     f.box(20, 110, 120, 72, { k: 'you', t: 'You', s: ['in Terminal, or via', 'Agentic Coder.app'] });
-    f.box(20, 300, 120, 80, { t: 'coding', s: ['launcher: rebuilds', 'if the code changed'], mono: true });
+    f.box(20, 300, 120, 80, { t: 'coding', s: ['launcher: builds', 'GitHub’s main'], mono: true });
     f.group(200, 64, 630, 370, 'PART 1 · THE TERMINAL  (terminal/)', 't1');
     f.box(216, 110, 120, 72, { k: 't1', t: 'Screen', s: ['Ink · keys', '/ commands'] });
     f.box(400, 110, 120, 72, { k: 't1', t: 'Sort & ask', s: ['rules first', 'then a question'], dot: true });
@@ -404,7 +404,7 @@ ${M.map((m) => `│  ├─ ${esc(`${d.folders[m.id]}/`.padEnd(19))}<em>${esc(m.
   const ownBox = many ? `<b>${sw('Every model in /model has its own box', '{name} is the model drawn here')}</b><span class="when-all">; one is loaded at a time</span>.` : 'The model is the box on the right.';
   const TABS = [
     ['big', 'Big picture', 'Two parts joined by one door', `You type in a terminal. The terminal decides how to do the job and calls the model only when it has to. ${ownBox}`,
-      fig(f1, `Agentic Coder: you talk to the terminal (part 1); the terminal reaches a local model only through models/index.mjs (part 2): ${M.map((m) => m.name).join(' or ')}${many ? ', one loaded at a time' : ''}.`) + legend + cap('The terminal never reads a model’s settings directly; it goes through one file, models/index.mjs. `/update` exits the app with code 75, and the launcher rebuilds and restarts it in the same window.')],
+      fig(f1, `Agentic Coder: you talk to the terminal (part 1); the terminal reaches a local model only through models/index.mjs (part 2): ${M.map((m) => m.name).join(' or ')}${many ? ', one loaded at a time' : ''}.`) + legend + cap('The terminal never reads a model’s settings directly; it goes through one file, models/index.mjs. `/update` exits the app with code 75, and the launcher builds GitHub’s main and restarts it in the same window.')],
     ['req', 'One request', 'What happens to one request', `${STEPS.length} steps from your Enter key to “done”. The line over them is the Harness tab’s ${STAGES.length}: ${esc(stagesInWords())}.${EX ? ` Under them, <b>${many ? sw('the same real request on each model', 'one real request on {name}') : 'one real request'}</b>, step for step.` : ''}`,
       fig(f2, `The ${STEPS.length} steps a request takes, the ${STAGES.length} stages they group into${EX ? ', and one real task on each model under them' : ''}.`) + legend + cap(`Only some steps use the model (amber dot).${EX ? ` The ${many ? 'rows are' : 'row is'} task ${EX.n} of the newest run ${many ? `${runWho} did` : 'it did'}: what ${many ? 'each model' : 'it'} really did at each step.` : ''}`)],
     ['sort', 'Sorting', 'Step 2 in detail: where a request goes', 'Rules look at your words first. The model is asked only when no rule fits.',
