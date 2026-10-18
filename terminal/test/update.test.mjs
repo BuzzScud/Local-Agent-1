@@ -4,11 +4,11 @@
 // /update restarts the app on the new code with the conversation kept.
 import { test, expect } from 'bun:test';
 import { needs } from './needs.mjs';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync, symlinkSync, chmodSync, realpathSync, statSync, lstatSync, existsSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync, symlinkSync, chmodSync, realpathSync, statSync, lstatSync, existsSync, rmSync, readlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart, folderArgs, withStartFolder, refreshLauncher } from '../src/app/update.mjs';
+import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart, folderArgs, withStartFolder, refreshLauncher, notOnMain } from '../src/app/update.mjs';
 import { runCommand } from '../src/tools/run.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { openTerm } from './term.mjs';
@@ -25,13 +25,21 @@ function makeRepo() {
 const heads = (repo) => ({ main: git(repo, 'rev-parse', 'main'), origin: null });
 
 test('the file list matches the launcher: code counts, docs, tests, results and READMEs do not', () => {
-  for (const p of ['terminal/src/app/App.jsx', 'terminal/src/app/help.html', 'terminal/rules/bug-fixing.md', 'models/index.mjs', 'models/bonsai-2-27b/model.mjs', 'models/evals/record.mjs', 'models/evals/run-tests.mjs', 'package.json']) expect([p, isAppCode(p)]).toEqual([p, true]);
-  // The arena's own files are in the app too (the hub's Test builder runs them); its sets' practice projects are not.
-  for (const p of ['models/evals/battle/store.mjs', 'models/evals/battle/builder.mjs', 'models/evals/battle/checks.mjs', 'models/evals/battle/suggest.mjs']) expect([p, isAppCode(p)]).toEqual([p, true]);
-  for (const p of ['models/evals/battle/work28/w01-roll/project/roll.mjs', 'models/evals/battle/new28/n01-x/solution/a.mjs', 'models/evals/battle/arena.html', 'models/evals/battle/practice28.json']) expect([p, isAppCode(p)]).toEqual([p, false]);
+  const yes = ['terminal/src/app/App.jsx', 'terminal/src/app/help.html', 'terminal/rules/bug-fixing.md', 'models/index.mjs', 'models/bonsai-2-27b/model.mjs', 'models/evals/record.mjs', 'models/evals/run-tests.mjs', 'package.json',
+    // The arena's own files are in the app too (the hub's Test builder runs them); its sets' practice projects are not.
+    'models/evals/battle/store.mjs', 'models/evals/battle/builder.mjs', 'models/evals/battle/checks.mjs', 'models/evals/battle/suggest.mjs',
+    // What the app reads in as text or from its copy of main (18 Oct 2026): the test prompts, a font, the Swift media
+    // helper, the MLX server script, and the package files a build installs from.
+    'models/evals/prompts.mjs', 'terminal/src/morning/fraunces-600.woff2.b64.txt', 'terminal/src/tools/media-tool.swift', 'models/runtime/mlx/mlx-server.py', 'patches/ink@7.1.1.patch', 'bun.lock', 'bunfig.toml'];
+  const no = ['models/evals/battle/work28/w01-roll/project/roll.mjs', 'models/evals/battle/new28/n01-x/solution/a.mjs', 'models/evals/battle/arena.html', 'models/evals/battle/practice28.json',
+    'docs/README.md', 'agentic-coder DOCS/a.html', 'terminal/test/app.test.mjs', 'models/evals/bench/run.mjs', 'models/bonsai-2-27b/results/r.json', 'models/README.md', 'terminal/README.md', 'terminal/scripts/demo/spin.jsx', 'models/runtime/engine/x.patch', 'terminal/app/agentic-coder-launcher.sh'];
+  for (const p of yes) expect([p, isAppCode(p)]).toEqual([p, true]);
+  for (const p of no) expect([p, isAppCode(p)]).toEqual([p, false]);
+  // The launcher's own rule (app_code_between's awk), run on the same paths: the same answer for each.
   const launcher = readFileSync(join(import.meta.dir, '..', 'app', 'agentic-coder-launcher.sh'), 'utf8');
-  expect(launcher).toContain("-o \\( -path '*/models/evals/battle/*.mjs' -not -path '*/models/evals/battle/*/*' \\)");
-  for (const p of ['docs/README.md', 'agentic-coder DOCS/a.html', 'terminal/test/app.test.mjs', 'models/evals/bench/run.mjs', 'models/bonsai-2-27b/results/r.json', 'models/README.md', 'terminal/README.md', 'terminal/scripts/demo/spin.jsx', 'models/runtime/engine/x.patch']) expect([p, isAppCode(p)]).toEqual([p, false]);
+  const prog = /^app_code_between\(\) \{\n.*\| awk '([\s\S]*?)'\n\}/m.exec(launcher)?.[1];
+  expect(prog).toBeTruthy();
+  for (const p of [...yes, ...no]) expect([p, execFileSync('awk', [prog], { input: `${p}\n`, encoding: 'utf8' }).trim() === p]).toEqual([p, isAppCode(p)]);
 });
 
 test('a code commit on main after the start lights the badge; a docs-only commit does not', async () => {
@@ -70,6 +78,50 @@ test("a push to GitHub's main from elsewhere (not in this folder) asks for a pul
   expect(updateText(u)).toBe('Update on GitHub · /update to get it');
   git(repo, 'merge', '-q', '--ff-only', 'other'); // pulled: now it is a plain restart
   expect((await checkUpdate(repo, start, Date.now() - 60_000))?.kind).toBe('ready');
+});
+
+// Main, always (18 Oct 2026): the app is built from GitHub's main only, and the launcher says from which commit
+// (AGENTIC_BUILT_COMMIT). The badge counts from that commit on GitHub's main; the folder's own commits do not count.
+test("main, always: the badge lights for app code on GitHub's main past the built commit, not for the folder's own commits", async () => {
+  const repo = makeRepo();
+  const built = git(repo, 'rev-parse', 'main');
+  git(repo, 'update-ref', 'refs/remotes/origin/main', built);
+  commit(repo, { 'terminal/src/app/a.mjs': 'export const a = "mine";\n' }, 'mine, not pushed');
+  expect(await checkUpdate(repo, { main: built }, Date.now(), built)).toBeNull();
+  // Pages only, on GitHub's main: nothing new in the app.
+  git(repo, 'checkout', '-q', '-b', 'gh', built);
+  const docs = commit(repo, { 'agentic-coder DOCS/y.html': '<p>y</p>' }, 'docs');
+  git(repo, 'update-ref', 'refs/remotes/origin/main', docs);
+  expect(await checkUpdate(repo, { main: built }, Date.now(), built)).toBeNull();
+  // The app's code, on GitHub's main: an update, whatever the folder's main has.
+  const code = commit(repo, { 'models/index.mjs': 'export {};\n' }, 'code');
+  git(repo, 'update-ref', 'refs/remotes/origin/main', code);
+  const u = await checkUpdate(repo, { main: built }, Date.now(), built);
+  expect(u).toEqual({ kind: 'ready', files: 1, commit: code });
+  expect(updateText(u)).toBe('Update available · /update to use it');
+  expect(await checkUpdate(repo, { main: built }, Date.now(), code)).toBeNull(); // built from it already
+  // A repo with no GitHub: its own main is what the launcher builds.
+  git(repo, 'update-ref', '-d', 'refs/remotes/origin/main');
+  git(repo, 'checkout', '-q', 'main');
+  expect((await checkUpdate(repo, { main: built }, Date.now(), built))?.commit).toBe(git(repo, 'rev-parse', 'main'));
+});
+
+test("what the folder has of the app's code and GitHub's main does not: changed, new, or committed and not pushed", async () => {
+  const repo = makeRepo();
+  git(repo, 'update-ref', 'refs/remotes/origin/main', git(repo, 'rev-parse', 'main'));
+  expect(await notOnMain(repo)).toEqual([]);
+  put(repo, 'terminal/src/app/a.mjs', 'export const a = "mine";\n');
+  put(repo, 'terminal/src/app/new.mjs', 'export {};\n');
+  put(repo, 'agentic-coder DOCS/z.html', '<p>z</p>'); // not the app's code
+  put(repo, 'terminal/test/t.test.mjs', ''); // nor a test
+  expect((await notOnMain(repo)).sort()).toEqual(['terminal/src/app/a.mjs', 'terminal/src/app/new.mjs']);
+  expect(await notOnMain(repo, ['terminal/src/app/new.mjs', 'models/x.mjs'])).toEqual(['terminal/src/app/new.mjs']);
+  git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'mine');
+  expect((await notOnMain(repo)).sort()).toEqual(['terminal/src/app/a.mjs', 'terminal/src/app/new.mjs']); // committed, not pushed
+  git(repo, 'update-ref', 'refs/remotes/origin/main', git(repo, 'rev-parse', 'HEAD'));
+  expect(await notOnMain(repo)).toEqual([]); // pushed
+  rmSync(join(repo, 'terminal/src/app/a.mjs'));
+  expect(await notOnMain(repo)).toEqual(['terminal/src/app/a.mjs']); // deleted here, still on main
 });
 
 test.skipIf(needs('python3'))('the real app shows the badge in the lower right when a code commit lands while it runs', async () => {
@@ -143,11 +195,35 @@ test.skipIf(needs('python3'))('/update without the launcher (run from the source
   } finally { await t.close(); await fake.close(); }
 }, 60_000);
 
+// Main, always (18 Oct 2026): run by the coding command, the app knows the commit of main it was built from.
+test.skipIf(needs('python3'))("/update in an app built from main: up to date names that main and what the folder has that main does not; a push lights the badge", async () => {
+  const repo = makeRepo();
+  const built = git(repo, 'rev-parse', 'main');
+  git(repo, 'update-ref', 'refs/remotes/origin/main', built);
+  put(repo, 'terminal/src/app/a.mjs', 'export const a = "mine";\n');
+  const { base, cwd } = trustedProject();
+  const fake = await startFakeServer([{ text: 'Hello.' }]);
+  const t = openTerm({ cwd, env: { AGENTIC_HOME: join(base, 'home'), AGENTIC_REPO: repo, AGENTIC_BUILT_COMMIT: built, AGENTIC_UPDATE_EVERY: '300', AGENTIC_FETCH_EVERY: '0', AGENTIC_RESTART_FILE: '' }, args: ['--url', fake.url, '--no-flows'] });
+  try {
+    await t.waitFor('? for shortcuts');
+    await t.type('/update'); t.key('enter');
+    await t.waitFor(`it runs GitHub's main (${built.slice(0, 7)})`);
+    await t.waitFor('a.mjs is changed in the folder');
+    expect(await t.screen()).not.toContain('Update available');
+    // Pushed to GitHub's main from elsewhere (the folder's main stays where it is): an update.
+    git(repo, 'checkout', '-q', '-b', 'gh', built);
+    git(repo, 'update-ref', 'refs/remotes/origin/main', commit(repo, { 'models/index.mjs': 'export {};\n' }, 'pushed'));
+    await t.waitFor('Update available · /update to use it', 10_000);
+    await t.type('/update'); t.key('enter');
+    await t.waitFor('quit and start it again');
+  } finally { await t.close(); await fake.close(); }
+}, 60_000);
+
 // A repo made from this working tree, so a launcher pointed at it builds this code.
 function thisTree() {
   const src = join(import.meta.dir, '..', '..');
   const repo = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-update-repo-')));
-  const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/agentic-coder-launcher.sh', 'models', 'package.json', 'bunfig.toml'], { encoding: 'utf8' })
+  const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/agentic-coder-launcher.sh', 'models', 'package.json', 'bunfig.toml', 'patches'], { encoding: 'utf8' })
     .split('\n').filter(Boolean); // models/ whole: the app imports from evals/ too (the test record)
   for (const f of files) { mkdirSync(dirname(join(repo, f)), { recursive: true }); cpSync(join(src, f), join(repo, f)); }
   symlinkSync(join(src, 'node_modules'), join(repo, 'node_modules'));
@@ -180,7 +256,7 @@ async function updateThroughLauncher({ keeper = false } = {}) {
     await t.waitFor('resumed: hi', 60_000);
     await t.idle(600, 10_000);
     const after = t.raw().subarray(before).toString();
-    expect(after).toContain('Agentic Coder updated from'); // the launcher rebuilt it
+    expect(after).toContain('Agentic Coder updated to main ('); // the launcher built the new main
     const screen = await t.screen();
     expect(screen).toContain('Hello from before the update.');
     expect(screen).not.toContain('Update available');
@@ -215,7 +291,7 @@ test('built by a launcher started from the tests, the app still keeps its home i
   writeFileSync(launcher, readFileSync(join(src, 'terminal/app/agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo));
   chmodSync(launcher, 0o755);
   const built = Bun.spawnSync(['/bin/sh', launcher, '--version'], { env: { ...process.env, HOME: user, AGENTIC_REPO: '', AGENTIC_NO_PULL: '1' } });
-  expect(`${built.stderr}`).toContain('Agentic Coder updated from');
+  expect(`${built.stderr}`).toContain('Agentic Coder updated to main (');
   // A stand-in for the window `bun run window` builds, in the home the app should use: it notes how it was opened.
   const win = join(user, '.agentic-coder', 'build', 'window-target', 'release', 'agentic-coder-window');
   const said = join(base, 'window-said');
@@ -357,29 +433,56 @@ test.skipIf(needs('python3'))('the real app asks GitHub on its own: a push from 
   } finally { await t.close(); await fake.close(); }
 }, 60_000);
 
-// ── coding pulls GitHub's main when it starts (the launcher's pull) ──────────
+// ── coding builds GitHub's main when it starts (the launcher) ─────────────────
 
-// The real launcher on a clone of a stand-in GitHub, with a stand-in app (a script that says it ran)
-// already built for this Bun, so only the pull is under test. Answers what it printed and the repo.
+// The real launcher on a clone of a stand-in GitHub, with a stand-in `bun` first on PATH: its build writes a
+// stand-in app (a script that says it ran) that keeps what it was built from (terminal/src/app/a.mjs of the
+// folder it was built in, and whether b.mjs was there), so a test sees which code the app is. The app starts
+// out built from the clone's main and stamped so (agentic-coder.commit), as the launcher leaves it. Answers
+// what it printed, the app and the launcher.
 const BUN_VERSION = execFileSync(process.execPath, ['--version'], { encoding: 'utf8' }).trim();
 const LAUNCHER = readFileSync(join(import.meta.dir, '..', 'app', 'agentic-coder-launcher.sh'), 'utf8');
-function launcherOn(local) {
+const STAND_IN_APP = (from) => `#!/bin/sh\n# built from: ${from}\necho "APP RAN $*"\n`;
+function launcherOn(local, { built = true } = {}) {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-pull-')));
-  const app = join(base, 'user', '.agentic-coder', 'app', 'agentic-coder');
-  mkdirSync(dirname(app), { recursive: true });
-  writeFileSync(app, '#!/bin/sh\necho "APP RAN $*"\n');
-  chmodSync(app, 0o755);
-  writeFileSync(`${app}.bun`, BUN_VERSION);
-  const future = new Date(Date.now() + 3600_000); // newer than every file in the repo: no rebuild
-  utimesSync(app, future, future);
+  const user = join(base, 'user');
+  const app = join(user, '.agentic-coder', 'app', 'agentic-coder');
+  const bin = join(base, 'bin');
+  const log = join(base, 'bun.log');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'bun'), `#!/bin/sh
+case "$1" in
+  --version) echo '${BUN_VERSION}' ;;
+  -e) exit 0 ;;
+  install) mkdir -p node_modules; echo "install in $(pwd)" >> '${log}' ;;
+  build)
+    a="$(cat terminal/src/app/a.mjs 2>/dev/null | tr -d '\\n')"
+    if [ -f terminal/src/app/b.mjs ]; then b=", with b.mjs"; else b=""; fi
+    case "$a" in *BREAK*) echo "error: it does not build" >&2; exit 1 ;; esac
+    while [ $# -gt 0 ]; do [ "$1" = --outfile ] && out="$2"; shift; done
+    printf '#!/bin/sh\\n# built from: %s\\necho "APP RAN $*"\\n' "$a$b" > "$out"
+    echo "build in $(pwd) (NODE_ENV=\${NODE_ENV:-none})" >> '${log}' ;;
+esac
+`);
+  chmodSync(join(bin, 'bun'), 0o755);
+  if (built) {
+    mkdirSync(dirname(app), { recursive: true });
+    mkdirSync(join(user, '.agentic-coder', 'build', 'main'), { recursive: true });
+    writeFileSync(app, STAND_IN_APP(readFileSync(join(local, 'terminal/src/app/a.mjs'), 'utf8').trim()));
+    chmodSync(app, 0o755);
+    writeFileSync(`${app}.bun`, BUN_VERSION);
+    writeFileSync(`${app}.commit`, git(local, 'rev-parse', 'refs/remotes/origin/main'));
+  }
   const launcher = join(base, 'coding');
   writeFileSync(launcher, LAUNCHER.replace('__REPO__', local));
   chmodSync(launcher, 0o755);
   const run = (env = {}) => {
-    const r = Bun.spawnSync(['/bin/sh', launcher, 'x'], { env: { ...process.env, HOME: join(base, 'user'), AGENTIC_REPO: '', AGENTIC_PULL_WAIT: '8', ...env } });
+    const r = Bun.spawnSync(['/bin/sh', launcher, 'x'], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, HOME: user, AGENTIC_REPO: '', AGENTIC_PULL_WAIT: '8', ...env } });
     return { code: r.exitCode, out: `${r.stdout}${r.stderr}` };
   };
-  return { launcher, run };
+  const builtFrom = () => /^# built from: (.*)$/m.exec(readFileSync(app, 'utf8'))?.[1];
+  const bunDid = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
+  return { launcher, run, app, user, builtFrom, bunDid };
 }
 
 test('coding pulls a push from another Mac before it starts, and says so', () => {
@@ -396,17 +499,46 @@ test('coding pulls a push from another Mac before it starts, and says so', () =>
   expect(again.out.trim()).toBe('APP RAN x');
 });
 
+// 18 Oct 2026, the owner's pick ("main, always"): the app is built from a clean copy of GitHub's main, never from
+// the folder: a change in the folder, committed or not, is in the app only once it is pushed.
+test("coding builds the app from GitHub's main only: the folder's own changes and commits are not in it", () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  const pushed = commit(other, { 'terminal/src/app/a.mjs': 'export const a = "main";\n' }, 'pushed elsewhere');
+  git(other, 'push', '-q', 'origin', 'main');
+  commit(local, { 'terminal/src/app/b.mjs': 'export const b = "only here";\n' }, 'a commit of the folder, not pushed');
+  put(local, 'terminal/src/app/a.mjs', 'export const a = "edited here";\n');
+  const r = c.run();
+  expect(r.out).toContain('both have new commits'); // the folder is left as it is
+  expect(r.out).toContain(`Agentic Coder updated to main (${pushed.slice(0, 7)})`);
+  expect(r.out).toContain('APP RAN x');
+  expect(c.builtFrom()).toBe('export const a = "main";'); // GitHub's a.mjs, and no b.mjs
+  expect(readFileSync(`${c.app}.commit`, 'utf8')).toBe(pushed);
+  expect(c.bunDid()).toContain(`build in ${join(c.user, '.agentic-coder', 'build', 'main.new.')}`);
+  expect(c.bunDid()).toContain('(NODE_ENV=none)');
+  expect(readFileSync(join(c.user, '.agentic-coder', 'build', 'main', 'terminal/src/app/a.mjs'), 'utf8')).toBe('export const a = "main";\n');
+  expect(existsSync(join(c.user, '.agentic-coder', 'build', 'main', 'terminal/src/app/b.mjs'))).toBe(false);
+  expect(readFileSync(join(local, 'terminal/src/app/a.mjs'), 'utf8')).toBe('export const a = "edited here";\n');
+  // Started again with nothing new on GitHub: no build (the folder still has its own commit, and is told so).
+  const before = c.bunDid();
+  const again = c.run();
+  expect(again.out).toContain('APP RAN x');
+  expect(again.out).not.toContain('Agentic Coder updated');
+  expect(c.bunDid()).toBe(before);
+});
+
 test('coding never pulls over a file you changed, a branch, or with AGENTIC_NO_PULL; the app still starts', () => {
   const { local, other } = github();
   const before = git(local, 'rev-parse', 'main');
   commit(other, { 'terminal/src/app/a.mjs': 'export const a = 9;\n' }, 'pushed elsewhere');
   git(other, 'push', '-q', 'origin', 'main');
-  const { run } = launcherOn(local);
+  const { run, builtFrom } = launcherOn(local);
   expect(run({ AGENTIC_NO_PULL: '1' }).out.trim()).toBe('APP RAN x');
   put(local, 'terminal/src/app/a.mjs', 'export const a = "mine";\n');
   const blocked = run({ AGENTIC_NO_UPDATE: '0' });
-  expect(blocked.out).toContain('files changed here are in its way');
+  expect(blocked.out).toContain('are in the way of GitHub\'s main');
   expect(blocked.out).toContain('APP RAN x');
+  expect(builtFrom()).toBe('export const a = 9;'); // the app is GitHub's main all the same
   expect(git(local, 'rev-parse', 'main')).toBe(before);
   expect(readFileSync(join(local, 'terminal/src/app/a.mjs'), 'utf8')).toBe('export const a = "mine";\n');
   git(local, 'checkout', '-q', '-b', 'mine');
@@ -414,7 +546,7 @@ test('coding never pulls over a file you changed, a branch, or with AGENTIC_NO_P
   expect(git(local, 'rev-parse', 'main')).toBe(before);
 });
 
-test('coding with GitHub out of reach, or a plain http:// origin, starts the version already here', () => {
+test('coding with GitHub out of reach, or a plain http:// origin, starts the main this Mac last saw', () => {
   const { local } = github();
   const before = git(local, 'rev-parse', 'main');
   const { run } = launcherOn(local);
@@ -427,11 +559,74 @@ test('coding with GitHub out of reach, or a plain http:// origin, starts the ver
   expect(git(local, 'rev-parse', 'main')).toBe(before);
 });
 
-test('a pull that changes the launcher installs the new launcher, used from the next start', () => {
+test('a main that does not build leaves the last good app and its stamp; an app without a stamp is built from main', () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  const was = readFileSync(`${c.app}.commit`, 'utf8');
+  commit(other, { 'terminal/src/app/a.mjs': 'BREAK\n' }, 'a broken main');
+  git(other, 'push', '-q', 'origin', 'main');
+  const r = c.run();
+  expect(r.out).toContain("GitHub's main did not build");
+  expect(r.out).toContain('APP RAN x');
+  expect(c.builtFrom()).toBe('export const a = 1;');
+  expect(readFileSync(`${c.app}.commit`, 'utf8')).toBe(was);
+  expect(existsSync(join(c.user, '.agentic-coder', 'build', 'main', 'terminal'))).toBe(false); // the last copy stays as it was
+  // An app a launcher from before 18 Oct 2026 built from the folder has no stamp: the next start builds main,
+  // even with nothing new on GitHub.
+  const fresh = github();
+  const d = launcherOn(fresh.local);
+  rmSync(`${d.app}.commit`);
+  expect(d.run().out).toContain(`Agentic Coder updated to main (${git(fresh.local, 'rev-parse', 'main').slice(0, 7)})`);
+  expect(d.bunDid()).toContain('build in');
+  expect(readFileSync(`${d.app}.commit`, 'utf8')).toBe(git(fresh.local, 'rev-parse', 'main'));
+});
+
+test('bun run install-cli builds and installs from main, and starts nothing (AGENTIC_BUILD_ONLY)', () => {
+  const { local } = github();
+  const c = launcherOn(local, { built: false });
+  const r = c.run({ AGENTIC_BUILD_ONLY: '1' });
+  expect(r.code).toBe(0);
+  expect(r.out).toContain('Agentic Coder updated to main');
+  expect(r.out).not.toContain('APP RAN');
+  expect(c.builtFrom()).toBe('export const a = 1;');
+  expect(readFileSync(`${c.app}.commit`, 'utf8')).toBe(git(local, 'rev-parse', 'main'));
+  const pkg = JSON.parse(readFileSync(join(import.meta.dir, '..', '..', 'package.json'), 'utf8')).scripts['install-cli'];
+  expect(pkg).toContain('AGENTIC_BUILD_ONLY=1 ~/.local/bin/coding');
+  expect(pkg).toContain('rm -f ~/.agentic-coder/app/agentic-coder.commit');
+  expect(pkg).not.toContain('bun run build');
+});
+
+test("the build uses the folder's packages when main's package files are the folder's, else installs its own", () => {
+  const { local, other } = github();
+  commit(other, { 'package.json': '{ "name": "x" }\n', 'terminal/src/app/a.mjs': 'export const a = 2;\n' }, 'packages');
+  git(other, 'push', '-q', 'origin', 'main');
+  git(local, 'pull', '-q', '--ff-only');
+  mkdirSync(join(local, 'node_modules'));
+  const c = launcherOn(local);
+  git(local, 'update-ref', 'refs/remotes/origin/main', git(local, 'rev-parse', 'HEAD~1')); // the app was built before it
+  writeFileSync(`${c.app}.commit`, git(local, 'rev-parse', 'HEAD~1'));
+  git(local, 'remote', 'set-url', 'origin', join(local, '..', 'hub.git'));
+  c.run();
+  const mods = join(c.user, '.agentic-coder', 'build', 'main', 'node_modules');
+  expect(lstatSync(mods).isSymbolicLink()).toBe(true);
+  expect(readlinkSync(mods)).toBe(join(local, 'node_modules'));
+  expect(c.bunDid()).not.toContain('install in');
+  // Main asks for other packages than the folder has: installed for the build, never in the folder.
+  commit(other, { 'package.json': '{ "name": "x", "dependencies": { "y": "1" } }\n', 'terminal/src/app/a.mjs': 'export const a = 3;\n' }, 'more packages');
+  git(other, 'push', '-q', 'origin', 'main');
+  put(local, 'package.json', '{ "name": "x", "mine": true }\n'); // in the way of the pull: the folder keeps its own
+  c.run();
+  expect(c.bunDid()).toContain(`install in ${join(c.user, '.agentic-coder', 'build', 'main.new.')}`);
+  expect(lstatSync(mods).isSymbolicLink()).toBe(false);
+  expect(c.builtFrom()).toBe('export const a = 3;');
+});
+
+test('a new launcher on main is installed, used from the next start', () => {
   const { local, other } = github();
   commit(other, { 'terminal/app/agentic-coder-launcher.sh': `${LAUNCHER}# a newer launcher\n` }, 'new launcher');
   git(other, 'push', '-q', 'origin', 'main');
   const { launcher, run } = launcherOn(local);
+  git(local, 'checkout', '-q', '-b', 'elsewhere'); // the folder's branch does not matter: main's launcher
   expect(run().out).toContain('APP RAN x');
   const now = readFileSync(launcher, 'utf8');
   expect(now).toContain('# a newer launcher');
@@ -470,6 +665,11 @@ test('the app puts the repo\'s launcher in place of an old one; a link, another 
   expect(existsSync(`${launcher}.new`)).toBe(false);
   // the next start: nothing to do
   expect(refreshLauncher(repo, launcher)).toBe('same');
+  // Main, always: the launcher of the copy of main the app was built from (AGENTIC_BUILD), not the folder's.
+  const build = mkdtempSync(join(tmpdir(), 'agentic-build-'));
+  put(build, 'terminal/app/agentic-coder-launcher.sh', '#!/bin/sh\n# main\'s launcher\nREPO="${AGENTIC_REPO:-__REPO__}"\n');
+  expect(refreshLauncher(repo, launcher, build)).toBe('updated');
+  expect(readFileSync(launcher, 'utf8')).toBe(`#!/bin/sh\n# main's launcher\nREPO="\${AGENTIC_REPO:-${repo}}"\n`);
   // installed for another folder (a worktree's): left as it is
   const other = join(bin, 'other');
   writeFileSync(other, '#!/bin/sh\nREPO="${AGENTIC_REPO:-/somewhere/else}"\n', { mode: 0o755 });

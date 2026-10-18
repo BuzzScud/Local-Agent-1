@@ -55,10 +55,10 @@ const failure = (message, status = 400) => Object.assign(new Error(message), { s
 const home = () => homedir();
 const tilde = (p) => (p ? p.replace(home(), '~') : p);
 
-// Where a file lives. null: TOOLS.md and SKILLS.md when the repo is not on this Mac.
-export function filePath(which, folder) {
+// Where a file lives: the folder's copy, which a save changes. null: TOOLS.md and SKILLS.md when the
+// repo is not on this Mac. dir = rulesDir(): the copy the app reads (GitHub's main, main always).
+export function filePath(which, folder, dir = rulesDir({ edit: true })) {
   if (which === 'agents') return join(folder, 'AGENTS.md');
-  const dir = rulesDir();
   if (!dir) return null;
   return isRemote(which) ? join(dir, REMOTE_DIR, fileName(which)) : join(dir, PROMPT_FILES[which]);
 }
@@ -102,10 +102,13 @@ export function fileInfo(which, folder, { state } = {}) {
   // TOOLS.md and SKILLS.md: the built-in copy stands in when there is none on disk.
   const builtIn = isRemote(which) ? BUILT_IN_REMOTE[inner(which)] ?? '' : BUILT_IN[which];
   const text = disk ?? builtIn;
-  const out = { ...base, text, starter: builtIn, rulesDir: tilde(rulesDir()), fromDisk: disk !== null, set: isRemote(which) ? 'remote' : 'local' };
+  // The app reads GitHub's main copy (main, always): the folder's is in use once it is pushed to main.
+  const used = filePath(which, folder, rulesDir());
+  const inUse = !used || used === path || readText(used) === disk;
+  const out = { ...base, text, starter: builtIn, rulesDir: tilde(rulesDir({ edit: true })), fromDisk: disk !== null, inUse, set: isRemote(which) ? 'remote' : 'local' };
   if (which === 'remote:harness') return { ...out, tokens: estimate(HARNESS_PARTS.map((h) => sectionOf(text, h) ?? '').join('\n')) };
   if (isRemote(which) && !['remote:tools', 'remote:skills'].includes(which)) {
-    const g = readGuides('remote', { agents: true, mcp: true }).find((x) => `remote:${x.name}` === which);
+    const g = readGuides('remote', { dir: rulesDir({ edit: true }), agents: true, mcp: true }).find((x) => `remote:${x.name}` === which);
     return { ...out, guide: inner(which), about: g?.about ?? '', tokens: estimate(g?.body ?? '') };
   }
   if (inner(which) === 'tools') {
@@ -119,7 +122,7 @@ export function fileInfo(which, folder, { state } = {}) {
 }
 
 export function filesData(folder, opts) {
-  return { folder, rulesDir: tilde(rulesDir()), files: Object.fromEntries(FILES.map((f) => [f, fileInfo(f, folder, opts)])) };
+  return { folder, rulesDir: tilde(rulesDir({ edit: true })), files: Object.fromEntries(FILES.map((f) => [f, fileInfo(f, folder, opts)])) };
 }
 
 // The text a save may write: plain text in the limit, and for TOOLS.md and

@@ -1,11 +1,12 @@
 // The window as the model drives it (agent/tools.mjs appTool; the owner's pick, 8 Oct 2026): when
 // Agentic Coder works on itself (Bypass permissions on the Claude API, permissions.mjs isSelf), the
 // App tool runs a slash command as the user would type it, reads or changes a setting, and restarts
-// the app on the code in its repo. App.jsx hands appBridge(self) to the Agent as agent.app.
+// the app on GitHub's main (main, always, 18 Oct 2026: a change of its own code is in it once pushed).
+// App.jsx hands appBridge(self) to the Agent as agent.app.
 import { readFileSync } from 'node:fs';
 import { thinkingLevel } from '../../../models/index.mjs';
 import { saveSettings, SETTINGS_FILE } from './store.mjs';
-import { canRestart, folderArgs } from './update.mjs';
+import { canRestart, folderArgs, notOnMain } from './update.mjs';
 import { RESTARTED_PROMPT } from '../agent/self.mjs';
 // Keys the model does not set here: the mode has /mode (and the permission checks around it).
 const NOT_SET = new Set(['mode', 'lastMode']);
@@ -36,12 +37,18 @@ export function appBridge(self) {
       try { saveSettings(file); } catch (e) { return { error: `settings.json could not be saved: ${e.message}` }; }
       return { was, value: v, note: 'Saved to settings.json; a window reads most keys when it starts, so a restart (action restart) or a new window picks it up.' };
     },
-    // Start again on the code in the repo now (the launcher builds it), with this conversation and a
-    // first message that says it restarted (RESTARTED_PROMPT). Unlike /update, no new commit is needed.
-    async restart(reason) {
+    // Start again on GitHub's main now (the launcher builds it), with this conversation and a first
+    // message that says it restarted (RESTARTED_PROMPT). The app is built from main only, so a change of
+    // the app's code that is still only in the folder (`files`: those of this turn; else any) would not be
+    // in it: then it does not restart, and says to push first.
+    async restart(reason, { files } = {}) {
       const w = self.updateRef.current;
       if (!w?.repo) return { error: 'This window does not run from the Agentic Coder repo (the coding command), so it cannot restart on new code.' };
       if (!canRestart()) return { error: 'This window was not started by the coding command, so it cannot restart itself; tell the user to quit and start it again.' };
+      if (process.env.AGENTIC_BUILD) {
+        const mine = await notOnMain(w.repo, files).catch(() => []);
+        if (mine.length) return { error: `${mine.length === 1 ? mine[0] : `${mine.length} files of the app (${mine.slice(0, 3).join(', ')}${mine.length > 3 ? ' …' : ''})`} ${mine.length === 1 ? 'is' : 'are'} not on GitHub's main yet, and the coding command runs main only: commit and push to main, then restart (/update). To try it before that: bun run start in the repo.` };
+      }
       self.push({ type: 'note', text: `↻ Restarting on the new code${reason ? `: ${reason}` : ''}…`, tone: 'dim' });
       const s = self.sessionRef.current;
       const level = thinkingLevel(self.model, self.thinking, self.effort).id;

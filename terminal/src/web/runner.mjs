@@ -230,7 +230,7 @@ export class Runner {
 
   // What a run's process gets: no more of this server's environment than a shell needs.
   runEnv(d, token, transcript) {
-    const keep = ['PATH', 'LANG', 'LC_ALL', 'TMPDIR', 'USER', 'LOGNAME', 'SHELL', 'TERM', 'TZ', '__CF_USER_TEXT_ENCODING', 'BUN_INSTALL', 'AGENTIC_REPO'];
+    const keep = ['PATH', 'LANG', 'LC_ALL', 'TMPDIR', 'USER', 'LOGNAME', 'SHELL', 'TERM', 'TZ', '__CF_USER_TEXT_ENCODING', 'BUN_INSTALL', 'AGENTIC_REPO', 'AGENTIC_BUILD'];
     const env = { HOME: process.env.HOME ?? homedir() };
     for (const k of keep) if (process.env[k] != null) env[k] = process.env[k];
     return {

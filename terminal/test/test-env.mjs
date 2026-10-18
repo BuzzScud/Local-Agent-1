@@ -70,6 +70,8 @@ delete process.env.AGENTIC_WINDOW_CHILD;
 delete process.env.AGENTIC_LAUNCHER;
 delete process.env.AGENTIC_REPO;
 delete process.env.AGENTIC_RESTART_FILE;
+delete process.env.AGENTIC_BUILD;
+delete process.env.AGENTIC_BUILT_COMMIT;
 // A window starts in Manual, not in the mode another test's window was left in (store.mjs firstMode).
 process.env.AGENTIC_LAST_MODE ??= 'off';
 // Lost services brought back at a window's start (saved-services.mjs repairNow): off unless a test turns it on,

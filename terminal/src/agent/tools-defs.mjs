@@ -157,11 +157,11 @@ const SCREEN_TOOL_DEF = {
 // Agentic Coder itself (self.mjs; the owner's pick, 8 Oct 2026): offered only when the app works on
 // itself (Bypass permissions on the Claude API, permissions.mjs isSelf). command runs a slash command
 // as the user would type it; setting reads or changes one key of settings.json; restart starts the
-// app again on the code in its repo as it is now (the launcher rebuilds it) and picks this
-// conversation back up. Commands that would end or replace the conversation are refused (APP_NOT).
+// app again on GitHub's main (the launcher builds it; a change is in it once pushed, 18 Oct 2026) and
+// picks this conversation back up. Commands that would end or replace the conversation are refused (APP_NOT).
 export const APP_TOOL_DEF = {
   name: 'App',
-  description: "Agentic Coder itself, the app you run in: drive it as the user would. action command: run a slash command as typed (\"/mode auto\", \"/effort high\", \"/hooks lean\", \"/permissions allow npm test\", \"/rules\", \"/helpers off 2\"); its answer comes back as the notes the screen showed. action setting: with key alone, that key's value from the app's settings.json (no key: every key); with value too, set it (a JSON value: true, \"low\", 3) and say what changed. action restart: after you changed the app's own code and its tests pass, start the app again on that code (it is built first, in about a second) and pick this conversation back up; a build that fails leaves the last good version running and the conversation says so. Available only while the user runs Agentic Coder in Bypass permissions on the Claude API.",
+  description: "Agentic Coder itself, the app you run in: drive it as the user would. action command: run a slash command as typed (\"/mode auto\", \"/effort high\", \"/hooks lean\", \"/permissions allow npm test\", \"/rules\", \"/helpers off 2\"); its answer comes back as the notes the screen showed. action setting: with key alone, that key's value from the app's settings.json (no key: every key); with value too, set it (a JSON value: true, \"low\", 3) and say what changed. action restart: after you changed the app's own code, its tests pass and you pushed it to GitHub's main (the app is built from main only; a change still only in the folder is refused), start the app again on that code (it is built first, in a few seconds) and pick this conversation back up; a build that fails leaves the last good version running and the conversation says so. Available only while the user runs Agentic Coder in Bypass permissions on the Claude API.",
   parameters: { type: 'object', properties: {
     action: { type: 'string', enum: ['command', 'setting', 'restart'], description: 'command, setting or restart' },
     command: str('For command: the slash command as the user would type it, starting with /'),

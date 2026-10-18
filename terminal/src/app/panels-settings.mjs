@@ -51,7 +51,7 @@ export function panelsSettings(self, own) {
       stats: `${tokK(self.agent.ctxUsed ?? 0)} of ${tokK(self.agent.ctx)} context`,
       doctor: `${(availableBytes() / 1e9).toFixed(1)} GB free now`,
       init: existsSync(join(self.cwd, 'AGENTS.md')) ? 'AGENTS.md is here' : 'no AGENTS.md yet',
-      update: self.update ? (self.update.kind === 'pull' ? 'new code on GitHub' : 'new code waiting') : `${VERSION} · nothing new`,
+      update: self.update ? (self.update.kind === 'pull' ? 'new code on GitHub' : 'new code waiting') : `${VERSION}${process.env.AGENTIC_BUILT_COMMIT ? ` · main ${process.env.AGENTIC_BUILT_COMMIT.slice(0, 7)}` : ''} · nothing new`,
     };
     const groups = SETTINGS.map((g) => ({ group: g.group, rows: g.rows.map((r) => ({ ...r, value: value[r.name] })) }));
     self.setPicker({ kind: 'settings', groups, rows: groups.flatMap((g) => g.rows), index: 0 });

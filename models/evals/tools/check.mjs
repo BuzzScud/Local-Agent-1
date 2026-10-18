@@ -9,11 +9,12 @@
 //   --offline   without the checks that need the network (GitHub, npm)
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, existsSync, readFileSync, readdirSync, statSync, lstatSync, mkdtempSync, mkdirSync, cpSync, copyFileSync, rmSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync, lstatSync, mkdtempSync, mkdirSync, cpSync, copyFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, tmpdir } from 'node:os';
 import { recordTest, codeLabel } from '../record.mjs';
+import { isAppCode } from '../../../terminal/index.mjs';
 import { published, ownerMarks } from '../../../docs/tools/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -474,20 +475,11 @@ async function modelFiles({ fast }) {
   return extra.length || missing.length ? look(text, notes) : fine(text, notes);
 }
 
-// The launcher's own rule for "the code changed since the app was built".
-function newerThanApp(app) {
-  const since = statSync(app).mtimeMs;
-  const kinds = /\.(mjs|js|jsx|json|md|html)$/;
-  const skip = (rel, e) => (e.isDirectory() ? /^(node_modules|results|evals|test)$/.test(e.name) : !kinds.test(e.name) || e.name === 'README.md');
-  for (const dir of ['terminal/src', 'terminal/rules', 'models']) {
-    if (!existsSync(join(root, dir))) continue;
-    const hit = filesUnder(join(root, dir), skip).find((f) => statSync(join(root, dir, f)).mtimeMs > since);
-    if (hit) return `${dir}/${hit}`;
-  }
-  // and the two single files: package.json, and the test record (the one file under evals/ the app holds)
-  return ['package.json', join('models', 'evals', 'record.mjs')].find((f) => existsSync(join(root, f)) && statSync(join(root, f)).mtimeMs > since) ?? null;
-}
-
+// Main, always (18 Oct 2026): the launcher builds the app and installs itself from a clean copy of GitHub's main
+// only (terminal/app/agentic-coder-launcher.sh), and writes the commit beside the app (agentic-coder.commit).
+// So the app is right when that commit is GitHub's main (or main has none of the app's code since: isAppCode,
+// the launcher's own list), the launcher is that commit's, and a build of a clean copy of it is the app,
+// byte for byte.
 async function installedApp() {
   const home = process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
   const app = join(home, 'app', 'agentic-coder'), launcher = join(homedir(), '.local', 'bin', 'coding');
@@ -497,26 +489,44 @@ async function installedApp() {
   const have = readFileSync(launcher, 'utf8');
   // An installed launcher from before 3 Oct 2026 also read the app's old name (until bun run install-cli).
   const repo = /^REPO="\$\{AGENTIC_REPO:-\$\{BONSAI_REPO:-(.*)\}\}"$/m.exec(have)?.[1] ?? /^REPO="\$\{AGENTIC_REPO:-([^$]*)\}"$/m.exec(have)?.[1];
-  const source = join(root, 'terminal', 'app', 'agentic-coder-launcher.sh');
   if (!repo) bad.push(`${tilde(launcher)} is not Agentic Coder's launcher`);
-  else if (resolve(repo) !== resolve(root)) notes.push(`the installed app is built from another folder: ${tilde(repo)}`);
-  else if (have !== readFileSync(source, 'utf8').replace('__REPO__', repo)) notes.push('the launcher differs from the repo\'s (bun run install-cli installs the current one)');
-  const changed = newerThanApp(app);
-  if (changed) notes.push(`the app is older than the code (${changed}); it rebuilds itself at the next start`);
-  else if (repo && resolve(repo) === resolve(root)) {
-    // The output's name is written into the file, so the fresh build gets the
-    // same name; then the two files must be the same, byte for byte.
-    const name = /\/\$bunfs\/root\/((?:agentic-coder|bonsai)[A-Za-z0-9._-]*)/.exec(readFileSync(app).toString('latin1'))?.[1] ?? 'agentic-coder';
-    const tmp = mkdtempSync(join(tmpdir(), 'agentic-check-'));
-    try {
-      const bun = existsSync(join(homedir(), '.bun', 'bin', 'bun')) ? join(homedir(), '.bun', 'bin', 'bun') : 'bun';
-      const built = await run(bun, ['build', '--compile', '--minify', 'terminal/src/cli.jsx', '--outfile', join(tmp, name)], { timeout: 120_000 });
-      if (built.code !== 0) notes.push('the code does not build just now, so the app could not be compared');
-      else if (!readFileSync(join(tmp, name)).equals(readFileSync(app))) bad.push('the installed app is not what this code builds (bun run install-cli rebuilds it; a bun update also causes this)');
-    } finally { rmSync(tmp, { recursive: true, force: true }); }
+  else if (resolve(repo) !== resolve(root)) notes.push(`the installed app is built from another folder's git: ${tilde(repo)}`);
+  const commit = (() => { try { return readFileSync(`${app}.commit`, 'utf8').trim(); } catch { return ''; } })();
+  const main = lines((await git('rev-parse', '-q', '--verify', 'refs/remotes/origin/main^{commit}')).out)[0] ?? lines((await git('rev-parse', '-q', '--verify', 'refs/heads/main^{commit}')).out)[0];
+  if (!commit) notes.push('the app was built from a folder by a launcher from before 18 Oct 2026; the next coding builds GitHub\'s main');
+  else if ((await git('cat-file', '-e', `${commit}^{commit}`)).code !== 0) notes.push(`the app's commit (${commit.slice(0, 7)}) is not in this repo, so it could not be compared`);
+  else {
+    const short = commit.slice(0, 7);
+    const theirs = (await git('show', `${commit}:terminal/app/agentic-coder-launcher.sh`)).out;
+    if (repo && theirs && have !== theirs.replace('__REPO__', repo)) notes.push(`the launcher is not main's (${short}); the next coding puts main's in its place`);
+    const moved = main && main !== commit ? lines((await git('diff', '--name-only', commit, main, '--')).out).filter(isAppCode) : [];
+    if (moved.length) notes.push(`the app is main as it was at ${short}, older than GitHub's main (${moved[0]}); it rebuilds itself at the next start`);
+    else {
+      // The output's name is written into the file, so the fresh build gets the
+      // same name; then the two files must be the same, byte for byte.
+      const name = /\/\$bunfs\/root\/((?:agentic-coder|bonsai)[A-Za-z0-9._-]*)/.exec(readFileSync(app).toString('latin1'))?.[1] ?? 'agentic-coder';
+      const tmp = mkdtempSync(join(tmpdir(), 'agentic-check-'));
+      try {
+        const bun = existsSync(join(homedir(), '.bun', 'bin', 'bun')) ? join(homedir(), '.bun', 'bin', 'bun') : 'bun';
+        const src = join(tmp, 'main');
+        mkdirSync(src);
+        const parts = [];
+        for (const p of ['terminal/src', 'terminal/rules', 'terminal/app', 'models', 'package.json', 'bun.lock', 'bunfig.toml', 'patches']) if ((await git('cat-file', '-e', `${commit}:${p}`)).code === 0) parts.push(p);
+        const out = await git('archive', '--format=tar', '-o', join(tmp, 'main.tar'), commit, '--', ...parts);
+        const copied = out.code === 0 && (await run('tar', ['-xf', join(tmp, 'main.tar'), '-C', src])).code === 0;
+        // Its packages: the launcher's for that build, else this folder's.
+        const mods = [join(home, 'build', 'main', 'node_modules'), join(root, 'node_modules')].find((d) => existsSync(d));
+        if (copied && mods) symlinkSync(mods, join(src, 'node_modules'));
+        const env = { ...process.env };
+        delete env.NODE_ENV;
+        const built = copied ? await run(bun, ['build', '--compile', '--minify', 'terminal/src/cli.jsx', '--outfile', join(tmp, name)], { cwd: src, timeout: 120_000, env }) : { code: 1 };
+        if (built.code !== 0) notes.push(`main as it was at ${short} does not build just now, so the app could not be compared`);
+        else if (!readFileSync(join(tmp, name)).equals(readFileSync(app))) bad.push(`the installed app is not what main at ${short} builds (a bun update also causes this; bun run install-cli builds it again)`);
+      } finally { rmSync(tmp, { recursive: true, force: true }); }
+    }
   }
   if (bad.length) return wrong(bad[0], [...bad.slice(1), ...notes]);
-  return notes.length ? look(notes[0], notes.slice(1)) : fine('byte for byte what this code builds; only you can change it');
+  return notes.length ? look(notes[0], notes.slice(1)) : fine(`byte for byte what GitHub's main (${commit.slice(0, 7)}) builds; only you can change it`);
 }
 
 // docs/ holds the pages, which are published, and docs/private/, which is the owner's and

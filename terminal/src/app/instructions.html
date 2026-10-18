@@ -385,6 +385,7 @@ function renderFile() {
    if (!/^## \S/m.test(text)) warn.push('No “## ” part: Save needs one. That is what the model reads when it opens the guide.');
   }
   if (!f.fromDisk && f.path) warn.push(`Showing the copy built into the app: there is no ${f.name} on disk.`);
+  if (f.inUse === false) warn.push(`The app uses ${f.name} as it is on GitHub's main, which is not this copy yet: it uses this one once it is pushed to main.`);
  } else if (section === 'agents') {
   const gets = !f.exists ? 'Not on disk yet: Save creates it, and Agentic Coder reads it on your next message here.'
    : !f.gets ? 'Agentic Coder does not read it from here.'
@@ -413,6 +414,7 @@ function renderFile() {
    row.replaceChildren(...(list.length ? list.map(k => { const c = document.createElement('span'); c.className = 'skill-chip' + (tried?.skill?.slug === k.slug ? ' hit' : ''); c.title = `SKILLS/${k.slug}${k.about ? ': ' + k.about : ''}\nWords: ${k.words.join(', ') || 'none'}`; c.append(k.name, Object.assign(document.createElement('small'), {textContent: `${k.words.length} words · ≈${num(Math.ceil(k.body.length / 3.6))} tokens`})); return c; }) : [document.createTextNode(/<!--[\s\S]*##[\s\S]*-->/.test(text) ? 'No skills on yet. The example at the end turns on when you delete the <!-- and --> lines around it.' : 'No skills yet: add a “## Name” section with a “- Words:” line and its steps.')]));
   }
   if (!f.fromDisk && f.path) warn.push(`Showing the copy built into the app: there is no ${f.name} on disk.`);
+  if (f.inUse === false) warn.push(`The app uses ${f.name} as it is on GitHub's main, which is not this copy yet: it uses this one once it is pushed to main.`);
  }
  put($('file-warn'), warn.length ? [warn.join(' ')] : []);
 }

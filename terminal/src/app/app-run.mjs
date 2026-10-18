@@ -21,7 +21,7 @@ import { mcpLogFile } from './mcp-store.mjs';
 import { pictureFor } from '../tools/mcp.mjs';
 import { resourceMentions, resourceParts } from '../agent/mcp.mjs';
 import { countTries } from './live.mjs';
-import { canRestart, bringIn, folderArgs } from './update.mjs';
+import { canRestart, bringIn, folderArgs, notOnMain } from './update.mjs';
 import { askAside } from '../agent/btw.mjs';
 import { modelWithLimits, searchModels } from './limits.mjs';
 import { AgentsRun } from '../agent/agents-run.mjs';
@@ -558,15 +558,23 @@ export function runPart(self) {
     self.exit();
   };
 
-  // /update: Agentic Coder starts again on the new code (the launcher builds it) and
-  // picks this conversation back up; the model stays loaded in between. An
-  // update only on GitHub is brought into the repo's main first, if git can
+  // /update: Agentic Coder starts again on the new code (the launcher builds GitHub's main) and
+  // picks this conversation back up; the model stays loaded in between. Run from the source
+  // (bun run start), an update only on GitHub is brought into the repo's main first, if git can
   // do that without touching anything uncommitted.
   const updateNowFn = async () => {
     const w = self.updateRef.current;
     if (!w?.repo) { self.push({ type: 'note', text: 'Updates are looked for when Agentic Coder runs from its repo (the coding command); AGENTIC_NO_UPDATE=1 turns them off.', tone: 'dim' }); return; }
     if (self.S.current.live.phase === 'working' || self.S.current.perm) { self.push({ type: 'note', text: 'Agentic Coder is busy. Let it finish (or press esc), then /update.', tone: 'warn' }); return; }
     const u = await w.check();
+    const built = process.env.AGENTIC_BUILT_COMMIT;
+    if (!u && built) {
+      // Main, always: what the folder has and main does not is not in any restart (update.mjs notOnMain).
+      const mine = await notOnMain(w.repo).catch(() => []);
+      const own = !mine.length ? '' : ` ${mine.length === 1 ? `${mine[0]} is changed in the folder and is` : `${mine.length} files of the app are changed in the folder and are`} not on main yet: push, then /update.`;
+      self.push({ type: 'note', text: `Agentic Coder is up to date: it runs GitHub's main (${built.slice(0, 7)}).${own}`, tone: 'dim' });
+      return;
+    }
     if (!u) { self.push({ type: 'note', text: 'Agentic Coder is up to date: no new code on main since this window started.', tone: 'dim' }); return; }
     if (u.kind === 'pull') {
       const r = await bringIn(w.repo);

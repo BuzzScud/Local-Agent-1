@@ -4,6 +4,7 @@
 // when the model already asked the App tool for the restart, and never on a local model.
 import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '../src/agent/agent.mjs';
@@ -91,3 +92,26 @@ test('outside self (Auto on the Claude API) nothing restarts, even with the same
   const r = await turn([{ tools: [write('terminal/src/agent/new.mjs')] }, { tools: [tests()] }, { text: 'Done.' }], { cwd, mode: 'auto' });
   expect(r.restarts).toEqual([]);
 }, 30_000);
+
+// Main, always (18 Oct 2026): the coding command builds the app from GitHub's main only, so a change still only in
+// the folder is not restarted on: the restart says to push it first, and the window stays as it is.
+test("a change not on GitHub's main yet: the restart says to push it first, and the window stays", async () => {
+  const { appBridge } = await import('../src/app/app-self.mjs');
+  const repo = repoLike();
+  const g = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { encoding: 'utf8' }).trim();
+  g('init', '-q', '-b', 'main'); g('add', '-A'); g('commit', '-qm', 'start');
+  g('update-ref', 'refs/remotes/origin/main', g('rev-parse', 'HEAD'));
+  writeFileSync(join(repo, 'terminal', 'src', 'agent', 'new.mjs'), '// changed\n');
+  const shown = [];
+  const self = { updateRef: { current: { repo } }, push: (n) => shown.push(n.text) };
+  const keep = { file: process.env.AGENTIC_RESTART_FILE, build: process.env.AGENTIC_BUILD };
+  process.env.AGENTIC_RESTART_FILE = join(repo, 'restart');
+  process.env.AGENTIC_BUILD = join(repo, 'build');
+  try {
+    const r = await appBridge(self).restart('new.mjs changed and the tests pass', { files: ['terminal/src/agent/new.mjs'] });
+    expect(r.error).toBe("terminal/src/agent/new.mjs is not on GitHub's main yet, and the coding command runs main only: commit and push to main, then restart (/update). To try it before that: bun run start in the repo.");
+    expect(shown).toEqual([]); // no "Restarting…": nothing left
+  } finally {
+    for (const [k, v] of [['AGENTIC_RESTART_FILE', keep.file], ['AGENTIC_BUILD', keep.build]]) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+});

@@ -1,7 +1,8 @@
 # Tools
 
 Agentic Coder follows this file. It is the only copy: change it here, or in the hub
-(Instructions → 07 TOOLS.md), and Agentic Coder changes on your next message.
+(Instructions → 07 TOOLS.md), and Agentic Coder changes on your next message (the `coding` command's app once
+the change is on GitHub's main, after /update).
 
 - The lines under **Tool use** are the "Tool use" part of Agentic Coder's instructions, word
   for word, in every conversation. Keep them short: Qwen reads them with every start.

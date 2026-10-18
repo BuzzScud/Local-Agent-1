@@ -61,7 +61,7 @@ curl -fsSL https://bun.sh/install | bash   # Bun
 git clone https://github.com/BuzzScud/Local-Agent-1.git ~/agentic-coder
 cd ~/agentic-coder
 bun install
-bun run install-cli                        # builds the app, puts `coding` in ~/.local/bin
+bun run install-cli                        # builds the app from GitHub's main, puts `coding` in ~/.local/bin
 export PATH="$HOME/.local/bin:$PATH"       # add this line to ~/.zshrc too
 coding setup                               # model server + models, about 8.5 GB
 ```
@@ -82,10 +82,13 @@ answer takes a little longer while the model loads.
 | The model is slow or won't start | Close other big apps: the model needs most of a 16 GB Mac's memory. |
 </details>
 
-**Update:** just start `coding`. Each start takes GitHub's newest version (a fast-forward
-only, never over files you changed; with no internet it starts the version it has), installs
-new packages, rebuilds itself, and the door restarts on the new version. `AGENTIC_NO_PULL=1
-coding` skips the pull. A launcher from before this needs one last `bun run install-cli`.
+**Update:** just start `coding`. The app is always GitHub's main (since 18 Oct 2026): each start
+asks GitHub for its main (with no internet, the main this Mac last saw), builds the app from a clean
+copy of it when its code changed (`~/.agentic-coder/build/main`), and the door restarts on the new
+version. A change in the folder is in the app once it is pushed to main; until then, try it with
+`bun run start`. The folder is also fast-forwarded to main for that (only on main, never over files
+you changed). `AGENTIC_NO_PULL=1 coding` skips asking GitHub. A launcher from before this needs one
+last `bun run install-cli`.
 **Uninstall:** delete `~/.local/bin/coding`, `~/.agentic-coder` (the model files and
 settings) and `~/agentic-coder`.
 
@@ -374,9 +377,10 @@ first under `~/.agentic-coder/memory-backups/self/<day>/`; a push runs, and a pr
 may be stopped. Only `door.key` and `trust.json` (who may reach this Mac) stay locked, with the
 never-list and the destructive commands. The model gets one more tool, **App**: it runs a slash
 command as you would type it (`/mode auto`, `/hooks lean`), reads or sets a key of `settings.json`,
-and restarts the app on the code in its repo. When a request changed the app's own code and the
-tests passed after it, the window restarts on that code by itself once the answer is in, and the
-conversation picks up where it was. `/permissions` shows the rows that open. A local model, or any
+and restarts the app on GitHub's main. The app runs main only, so a change of its own code is in it
+once pushed: when a request changed the app's code, the tests passed after it and the change is on
+main, the window restarts on it by itself once the answer is in, and the conversation picks up where
+it was; a change still only in the folder gets a note to push it first. `/permissions` shows the rows that open. A local model, or any
 other mode, works as before.
 
 ## Background sessions, and opening them from another Mac
@@ -502,7 +506,7 @@ bun run eval               # the 28 practice tasks against the real model (model
 bun run eval:words         # the 28 real requests
 bun run eval:verify        # prove every practice task's check can fail and pass
 bun run battle:verify      # prove every Battle test that comes with the arena (New 28, Work 28, Practice 28) fails as given and passes with its answer (no model)
-bun run install-cli        # build one file and put it at ~/.local/bin/coding
+bun run install-cli        # put the launcher at ~/.local/bin/coding and build the one-file app from GitHub's main
 bun run docs               # rewrite docs/README.md, the index; fails if docs/private/ is tracked or a page holds your home path (run before a commit)
 bun run test:record        # add test runs that are on this Mac but not yet in the test record
 bun run pack               # build the pack of Claude's notes (~/.agentic-coder/claude-pack) from Claude Code's memory; --from <copy> adds a copy from another Mac
@@ -576,7 +580,9 @@ each saved as a real file and read again before your next message:
   would bring. As shipped, the one skill in it is an example switched off (between `<!--` and `-->`).
 
 TOOLS.md and SKILLS.md are in the repo, so they ship with the app and are public after a push
-(the app reads them from the repo named by the launcher, `AGENTIC_REPO`, or its built-in copies).
+(the app reads them from its copy of GitHub's main, `AGENTIC_BUILD`, else from the repo named by the
+launcher, `AGENTIC_REPO`, or its built-in copies). The tab saves the folder's copy, which the app
+uses once it is pushed to main; until then the tab says so.
 A save never overwrites a change made elsewhere since the tab read the file, and Undo puts back
 the text before each save (20 a file, kept in `~/.agentic-coder/prompt-files/`). ▶ Run a test →
 **Skills check** measures a skill on the real model: the example on three test-writing tasks,

@@ -1,7 +1,8 @@
 # Skills
 
 Agentic Coder follows this file. It is the only copy: change it here, or in the hub
-(Instructions → 08 SKILLS.md), and Agentic Coder changes on your next message.
+(Instructions → 08 SKILLS.md), and Agentic Coder changes on your next message (the `coding` command's app once
+the change is on GitHub's main, after /update).
 
 - Each skill is a `## Name` section: a `- Words:` line (the words or phrases that bring it,
   split by commas), an `- About:` line (one line, shown in the list), an optional `- Fence:`
