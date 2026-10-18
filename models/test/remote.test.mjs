@@ -362,3 +362,38 @@ test('the check on an Ollama service that never loads the model: it says what th
     expect(ok.steps.at(-1).text).toMatch(/^answered "ready" in/);
   } finally { server.closeAllConnections?.(); server.close(); }
 }, 20_000);
+
+// 18 Oct 2026: Connect while another window's long reply ran on the service waited its whole 3 min, then said the
+// model was not loaded and to pick the 0.3 GB model kept beside it. The model was loaded all along, and only busy.
+test('the check on an Ollama service whose model is loaded but busy with another request: ready after a short wait, never "did not load"', async () => {
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      const json = (o) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(o)); };
+      if (req.url === '/v1/models') return json({ object: 'list', data: [{ id: 'busy:35b' }, { id: 'tiny:270m' }] });
+      if (req.url === '/api/version') return json({ version: '0.32.12' });
+      if (req.url === '/api/tags') return json({ models: [{ name: 'busy:35b', size: 26.1e9 }, { name: 'tiny:270m', size: 0.34e9 }] });
+      if (req.url === '/api/show') return json({ details: { family: 'qwen35moe', parameter_size: '36.0B' }, capabilities: ['completion', 'tools'], model_info: {} });
+      if (req.url === '/api/ps') return json({ models: [{ name: 'tiny:270m', size: 0.34e9, size_vram: 0.34e9, context_length: 32768, expires_at: '2319-01-26T17:35:49Z' }, { name: 'busy:35b', size: 26.1e9, size_vram: 26.1e9, context_length: 262144, expires_at: '2026-10-18T22:15:02Z' }] });
+      if (req.url === '/api/chat') return; // a long reply of another window runs ahead: no word for this one yet
+      res.statusCode = 404; res.end('{}');
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const told = [];
+    const t0 = Date.now();
+    const r = await probe({ url, kind: 'openai', model: 'busy:35b', reply: true, busyMs: 300, replyMs: 10_000, onStep: (f) => told.push(f) });
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(r.ok).toBe(true);
+    expect(r.busy).toBe(true);
+    expect(r.steps.at(-1)).toEqual({ ok: true, text: 'loaded · busy with another request (another window or Mac), so the first reply waits for that one' });
+    expect(told[0].waiting).toBe('asking busy:35b for one word (it is loaded; a request already on the service goes first)');
+    // Out of time before the short wait: the error says it is loaded and busy, and names no other model to pick.
+    const late = await probe({ url, kind: 'openai', model: 'busy:35b', reply: true, busyMs: 10_000, replyMs: 300 });
+    expect(late.ok).toBe(false);
+    expect(late.error).toBe('no answer in 1 min, though busy:35b is loaded on the service: a request ahead of it (another window or Mac) is still running, and Ollama answers one at a time. Try again once that one ends');
+  } finally { server.closeAllConnections?.(); server.close(); }
+}, 20_000);

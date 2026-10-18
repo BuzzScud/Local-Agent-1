@@ -121,6 +121,10 @@ test("the app's side: each redraw as data, only what changed, and the window's c
   conn.write(`${JSON.stringify({ t: 'act', do: 'toggle', id: 'row-1' })}\n`);
   for (let i = 0; i < 40 && !toggled.length; i++) await Bun.sleep(25);
   expect(toggled).toEqual(['row-1']);
+  // the thinking under way goes as its words (18 Oct 2026: the window showed "∴ [object Object]")
+  bridge.publish({ ...app, live: { phase: 'working', turnStart: 1, thinking: { text: 'First the config file.', startedAt: 1, tokens: 5 } } }, self);
+  for (let i = 0; i < 40 && lines.length < 4; i++) await Bun.sleep(25);
+  expect(lines[3].live.thinking).toBe('First the config file.');
   bridge.close();
   srv.close();
 });
