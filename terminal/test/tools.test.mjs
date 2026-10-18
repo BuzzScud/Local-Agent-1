@@ -180,6 +180,18 @@ test('a mistyped full path is forgiven', () => {
   expect(resolvePath(dir, dir.split('/').slice(0, -1).join('/')).abs).toBe(dir);
   expect(resolvePath(dir, `/somewhere/else/${dir.split('/').pop()}/src/b.js`).abs).toBe(join(dir, 'src/b.js'));
   expect(resolvePath(dir, '/etc/hosts').inside).toBe(false);
+  // Bypass permissions (open): a folder above the project named in full is that folder.
+  const parent = dir.split('/').slice(0, -1).join('/');
+  expect(resolvePath(dir, parent, { open: true })).toMatchObject({ abs: parent, inside: false });
+});
+
+test('in Bypass permissions, List of a folder above the project lists that folder, not the project', async () => {
+  const desk = mkdtempSync(join(tmpdir(), 'agentic-desk-'));
+  const project = join(desk, 'project');
+  mkdirSync(join(project, 'src'), { recursive: true });
+  writeFileSync(join(desk, 'notes.txt'), 'x\n');
+  expect((await execute('List', { path: desk }, {}, { cwd: project, permissionsNow: () => ({ mode: 'bypass' }) })).text.split('\n')).toEqual(['notes.txt', 'project/']);
+  expect((await execute('List', { path: desk }, {}, { cwd: project })).text.split('\n')).toEqual(['src/']); // elsewhere: the retyped project
 });
 
 test('a wrong folder in a path finds the file by name; Write will not replace a long file', async () => {

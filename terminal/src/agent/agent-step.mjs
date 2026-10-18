@@ -365,6 +365,9 @@ export class StepPart {
       const t = this.turn;
       let where = null;
       try { where = desktopDefault(args.path, { cwd: this.cwd, home: this.home, request: t.task ?? t.request ?? '', code: (this.folderKinds?.get(this.cwd) ?? folderKind(this.cwd)) === 'code' }); } catch {}
+      // Bypass permissions never asks: a new code file the request gives no place for goes to the Desktop,
+      // as pages and documents do (the owner's pick, 18 Oct 2026).
+      if (where?.ask && !t.whereChoice && this.mode === 'bypass') t.whereChoice = 'desktop';
       if (where?.ask && !t.whereChoice) {
         const question = `Where should ${where.name} go?`;
         const qid = `where_${Date.now()}`;
@@ -432,7 +435,7 @@ export class StepPart {
         return { text: note.text, error: true };
       }
     }
-    const at = args.path ? resolvePath(this.cwd, args.path) : null;
+    const at = args.path ? resolvePath(this.cwd, args.path, { open: this.mode === 'bypass' && (call.name === 'List' || call.name === 'Search') }) : null;
     // On the Desktop (desktopOpen), or a file you dropped into the window (attachedOpen).
     const away = Boolean(at && !at.inside && (this.desktopOpen(call.name, at.abs) || this.attachedOpen?.(call.name, at.abs)));
     const inside = at ? at.inside || away : true;

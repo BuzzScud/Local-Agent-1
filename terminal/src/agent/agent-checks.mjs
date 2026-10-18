@@ -26,7 +26,7 @@ export class ChecksPart {
     messages = this.offeredLines(messages);
     const t = this.turn;
     if (t?.baked) return messages;
-    const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.asks, t?.fixNote, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.ssh, t?.rules].filter(Boolean);
+    const extras = this.requestNotes();
     const pin = this.pinnedNote();
     if (!extras.length && !pin) return messages;
     return messages.map((m) => {
@@ -34,6 +34,14 @@ export class ChecksPart {
       const held = pin && m === t.requestMsg ? `\n\n(${pin})` : '';
       return notes || held ? { ...m, content: `${m.content}${notes}${held}` } : m;
     });
+  }
+
+  // Every note that goes with this turn's request. Notes when memory fills carry each one over to the
+  // request's new copy (agent-room.mjs): before 18 Oct 2026 that list was its own, older one, and Bypass
+  // permissions' note, the web page's, your standing rules and five more were lost there.
+  requestNotes() {
+    const t = this.turn;
+    return [t?.bug, t?.skill, t?.folder, t?.look, t?.asks, t?.fixNote, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.ssh, t?.rules].filter(Boolean);
   }
 
   // The model's tool lines (way.mjs) name only the tools this request offers: the list is fixed

@@ -68,7 +68,10 @@ const realOf = (p) => {
   return join(realpathSync(head), ...rest);
 };
 
-export function resolvePath(cwd, p) {
+// open: Bypass permissions, where any folder may be listed or searched, so a parent of the project
+// named in full is that folder, not a retyped project path (18 Oct 2026: a List of ~/Desktop by its
+// full path, from a project on the Desktop, gave the project's files and the model took them for the Desktop's).
+export function resolvePath(cwd, p, { open = false } = {}) {
   // "~" and "~/…" mean the home folder, as in the shell: a Write to
   // "~/Desktop/notes.html" once made a folder named "~" in the home folder,
   // and Bash's "ls ~/Desktop/notes.html" then could not find the page.
@@ -117,7 +120,7 @@ export function resolvePath(cwd, p) {
   // A parent of the project folder means the project folder; otherwise try
   // the end of the path inside the project.
   if (fromHome) { /* exact: no guessing */ }
-  else if (isAbsolute(p) && abs !== cwd && `${cwd}${sep}`.startsWith(`${abs}${sep}`)) abs = cwd;
+  else if (isAbsolute(p) && abs !== cwd && `${cwd}${sep}`.startsWith(`${abs}${sep}`)) { if (!open) abs = cwd; }
   else if (isAbsolute(p) && !existsSync(abs)) {
     {
       const parts = abs.split(sep).filter(Boolean);

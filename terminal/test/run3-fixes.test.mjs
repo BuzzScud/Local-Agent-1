@@ -127,12 +127,29 @@ test('in a conversation: a page lands on the Desktop; a code file asks where, an
   ]);
   const asked = [];
   try {
-    const a = agentOn(fake.url, { home, ask: async (req) => { asked.push(req.args?.question); return { choice: 'answer', text: req.kind === 'where' ? `This project (x)` : 'yes' }; } });
+    // Accept edits: Bypass never asks where (below).
+    const a = agentOn(fake.url, { home, mode: 'edits', ask: async (req) => { asked.push(req.args?.question); return { choice: 'answer', text: req.kind === 'where' ? `This project (x)` : 'yes' }; } });
     await a.send('make a report page and a helper');
     expect(readFileSync(join(home, 'Desktop', 'report.html'), 'utf8')).toBe('<p>the formulas</p>\n');
     expect(existsSync(join(dir, 'report.html'))).toBe(false);
     expect(asked).toContain('Where should helper.mjs go?');
     expect(existsSync(join(dir, 'helper.mjs'))).toBe(true);
+  } finally { process.env.AGENTIC_DESKTOP_DEFAULT = was; await fake.close(); }
+});
+
+test('in Bypass permissions a code file is not asked about: it goes to the Desktop', async () => {
+  const was = process.env.AGENTIC_DESKTOP_DEFAULT;
+  process.env.AGENTIC_DESKTOP_DEFAULT = 'on';
+  const home = mkdtempSync(join(tmpdir(), 'agentic-run3-home4-'));
+  mkdirSync(join(home, 'Desktop'));
+  const fake = await startFakeServer([{ tool: { name: 'Write', args: { path: 'calc.mjs', content: 'export const y = 2;\n' } } }, { text: 'Done.' }]);
+  const asked = [];
+  try {
+    const a = agentOn(fake.url, { home, ask: async (req) => { asked.push(req.args?.question ?? req.name); return { choice: 'yes', text: 'yes' }; } });
+    await a.send('make a calculator module');
+    expect(asked).toEqual([]);
+    expect(readFileSync(join(home, 'Desktop', 'calc.mjs'), 'utf8')).toBe('export const y = 2;\n');
+    expect(existsSync(join(dir, 'calc.mjs'))).toBe(false);
   } finally { process.env.AGENTIC_DESKTOP_DEFAULT = was; await fake.close(); }
 });
 
