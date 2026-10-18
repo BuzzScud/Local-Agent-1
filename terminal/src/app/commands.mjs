@@ -1,6 +1,7 @@
 // Slash commands shown in the menu when you type "/".
 export const COMMANDS = [
   { name: 'help', desc: 'Open the Help page in the browser: every command, key and setting' },
+  { name: 'status', desc: "Which Agentic Coder runs, against GitHub's main: this app, the coding command, the window, the door, this folder and your other Macs" },
   { name: 'clear', desc: 'Start a new conversation: clears the screen and what the model remembers of this one, back in the folder you started in' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
   { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation: on a remote, the lowest model there answers when it is ready', arg: '[question]' },
@@ -106,9 +107,11 @@ const CLAUDE_MENU = new Set(['usage']);
 // shows /jumptomac, with three all of them. /loops, the board, had a row of its own until 9 Oct 2026
 // ("can we make 1 command for it all?"): /loop alone opens it now, and /loops typed still does.
 // /jobs (3 Oct 2026): the background commands, listed and stopped.
+// /status (18 Oct 2026, with "main, always": which Agentic Coder runs, against GitHub's main) after them: where it
+// shows, it is the row under /help that /calc had, and typing /sta finds it anywhere.
 // /bot (9 Oct 2026): hides or shows the bot over the prompt box (bot-layer.jsx); last, so it goes first.
 // /steps (9 Oct 2026): how a reply's steps show (task-rows.jsx); after /bot.
-export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'mcp', 'jobs', 'bot', 'steps']);
+export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'mcp', 'jobs', 'status', 'bot', 'steps']);
 const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On

@@ -511,6 +511,19 @@ function ask({ host, port, hello, timeoutMs = 8000 }) {
   });
 }
 
+// What another Mac runs, for coding status and /status: its door's list, asked with the key kept here and never
+// asked for, so nothing waits on you. { commit } (null: an app from before 18 Oct 2026, which kept none), or
+// { why } when it could not be had.
+export async function macVersion(host, { port = DOOR_PORT, timeoutMs = 4000 } = {}) {
+  const key = readKey(keyIdFor(host));
+  if (!key) return { why: `no key for its door kept here yet (coding sessions ${host} asks for it once)` };
+  let r;
+  try { r = await ask({ host, port, hello: { key, op: 'list', v: PROTO }, timeoutMs }); } catch (e) { return { why: reachProblem(e, host) }; }
+  if (r.kind !== F.LIST) return { why: r.body?.text === 'wrong key' ? `its door did not take the key kept here (coding sessions ${host} asks again)` : String(r.body?.text ?? 'it answered something odd') };
+  const c = r.body.app?.commit;
+  return { commit: typeof c === 'string' && /^[0-9a-f]{40}$/.test(c) ? c : null };
+}
+
 // A Mac that takes the connection and then says nothing (3 Oct 2026, the first try between two
 // Macs: minutes of it, then it answered at once): what holds it is on that Mac's screen.
 export const SILENT = (host) => `${host} took the connection but did not answer. Look at its screen: macOS may be asking there whether Agentic Coder may accept incoming connections (Allow), or about a folder. Then try again.`;

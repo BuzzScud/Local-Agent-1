@@ -100,6 +100,7 @@ function cliRows(lingerMins = 30, models = []) {
       ['coding stop', `free the memory of a model no window uses (one left by a window that crashed stays loaded up to ${lingerMins} min)`],
       ['coding serve', 'this machine’s model for /remote on another machine, behind an API key (--local: for an SSH tunnel; --port, --ctx, --model, --https cert key, --new-key)'],
       ['coding --bg ["prompt"]', 'start in the background, with no window (a prompt is worked on at once); ctrl+b in any window sends it there too'],
+      ['coding status', "which Agentic Coder runs here and on your other Macs, against GitHub's main: this app, the coding command, the window, the door and this folder (/status in the app)"],
       ['coding sessions [mac]', 'what runs in the background on this Mac, or on another Mac through its door'],
       ['coding attach [name]', 'open a background session in this window (ctrl+b leaves it running); coding attach <mac> opens one on another Mac or starts one there, in a folder you pick; that Mac shows it in a window too, and a lost link comes back by itself'],
       ['coding door on|off', 'let your other Macs open the sessions here, over Tailscale only, with a key (type it in Terminal; after a restart a Terminal window opens to start it again; start starts it, new-key makes a new key)'],
