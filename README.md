@@ -91,6 +91,10 @@ you changed). `AGENTIC_NO_PULL=1 coding` skips asking GitHub. A launcher from be
 last `bun run install-cli`. `coding status` (or `/status` in the app) shows what runs against
 GitHub's main: this app, the `coding` command, the window, the door, this folder's own changes and
 your other Macs, and what happens next for any that is not main.
+**Its own window:** with Rust installed (`rustup.rs`), `coding` builds Agentic Coder's Mac window by
+itself, in the background (a few minutes the first time), and opens in it from the next start; it
+builds it again whenever GitHub's main changes it. Without Rust, `coding` runs in the terminal and
+says how to get the window; `AGENTIC_WINDOW=off` keeps the terminal.
 **Uninstall:** delete `~/.local/bin/coding`, `~/.agentic-coder` (the model files and
 settings) and `~/agentic-coder`.
 

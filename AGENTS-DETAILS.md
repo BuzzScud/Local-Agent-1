@@ -1474,8 +1474,10 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   (`ui.html`, design 2) sends keys as the terminal would and clicks as actions (a task row opened, the mode, a
   conversation resumed). It is served on 127.0.0.1 with a key in its address; the bridge's socket is the user's own (0600).
 - **The window** (`terminal/app/window/`, Tauri 2, `bun run window` builds it into `<home>/app/Agentic Coder Window.app`;
-  needs Rust; after that `coding` builds it again from GitHub's main in the background whenever main changes it, the
-  stamp `Agentic Coder Window.app.tree` naming the version, 18 Oct 2026): one webview on the server's page, its title bar drawn by the page under the Mac's own lights (a
+  needs Rust. Since 18 Oct 2026 `coding` builds it by itself from GitHub's main on a Mac with Rust, the first time
+  too, in the background, and again whenever main changes it; the stamp `Agentic Coder Window.app.tree` names the
+  version, `build/window.failed` a build that failed, which is not run again until main changes it; without Rust a
+  line says how, and `AGENTIC_WINDOW=off` turns it all off): one webview on the server's page, its title bar drawn by the page under the Mac's own lights (a
   capability lets that page move its window). Closing it ends the app as closing its terminal did (it saves first); the
   app ending closes it. `coding window [--folder <path>]` opens one with no terminal (the Agentic Coder app and the
   window's "Open another folder…" use it); `coding --terminal` keeps the terminal.

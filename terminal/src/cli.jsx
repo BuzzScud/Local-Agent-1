@@ -278,7 +278,7 @@ if (process.argv[2] === 'serve') {
 // "Open another folder…" and the Agentic Coder app start it this way; `coding` in a terminal does the same itself).
 if (process.argv[2] === 'window') {
   const { runWindow, windowApp } = await import('./window/server.mjs');
-  if (!windowApp()) { process.stderr.write('coding window: the window is not built yet. Build it with: bun run window\n'); process.exit(1); }
+  if (!windowApp()) { process.stderr.write('coding window: the window is not built yet. coding builds it by itself once Rust is installed (rustup.rs), or build it now with: bun run window\n'); process.exit(1); }
   const a = process.argv.slice(3);
   const at = a.indexOf('--folder');
   const folder = at >= 0 ? resolve(a[at + 1] ?? '.') : startFolderOf(loadSettings());
