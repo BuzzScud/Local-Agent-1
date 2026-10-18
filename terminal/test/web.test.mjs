@@ -192,7 +192,10 @@ test('on the Claude API WebSearch and WebFetch go as Anthropic’s web tools (th
   expect(names('claude-opus-5-5')).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask', 'Jobs', 'web_search_20260209', 'web_fetch_20260209']);
   expect(names('claude-haiku-4-5').slice(-2)).toEqual(['web_search_20250305', 'web_fetch_20250910']);
   const p = claudeParams({ model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], tools: webSchemas(), maxTokens: 100 });
-  expect(p.tools.at(-2)).toEqual({ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }); // no eager_input_streaming on a server tool
+  // Called direct: no eager_input_streaming on a server tool, and no code execution (whose sandbox tools the model would see).
+  expect(p.tools.at(-2)).toEqual({ type: 'web_search_20260209', name: 'web_search', max_uses: 5, allowed_callers: ['direct'] });
+  expect(p.tools.at(-1)).toEqual({ type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5, allowed_callers: ['direct'] });
+  expect(claudeParams({ model: 'claude-haiku-4-5', messages: [{ role: 'user', content: 'hi' }], tools: webSchemas(), maxTokens: 100 }).tools.some((t) => t.allowed_callers)).toBe(false);
   expect(claudeParams({ model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }], tools: webSchemas(), maxTokens: 100, drop: new Set(['web']) }).tools.some((t) => t.type)).toBe(false);
 });
 

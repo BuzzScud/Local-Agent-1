@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { Agent, AUTO, MAX_CALLS } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { toolSchemas, MODEL_TOOL_DEFS } from '../src/agent/tools.mjs';
-import { wayPrompt, hooksOn, hooksFrom, changeHooks, HOOKS, MODEL_HOOKS, MODEL_TOOL_LINES, ONE_AT_A_TIME, ANSWER_HABIT } from '../src/agent/way.mjs';
+import { wayPrompt, hooksOn, hooksFrom, changeHooks, HOOKS, MODEL_HOOKS, MODEL_TOOL_LINES, ONE_AT_A_TIME, ANSWER_HABIT, offeredToolLines } from '../src/agent/way.mjs';
 import { decide } from '../src/agent/permissions.mjs';
 import { applyChanges, readFacts } from '../src/agent/facts.mjs';
 import { AutoSave } from '../src/app/autosave.mjs';
@@ -65,6 +65,21 @@ test('the prompt on Model: its own tool lines and the answer habit; back to App 
   expect(m.slice(m.indexOf('This session\n'))).toBe(app.slice(app.indexOf('This session\n')));
 });
 
+test('the tool lines name only the tools offered (the home folder on the Claude API named four that were not)', () => {
+  const all = new Set(['Map', 'CodeSearch', 'TestFirst', 'Rename', 'Remember']);
+  expect(offeredToolLines(all)).toBe(MODEL_TOOL_LINES);
+  const home = offeredToolLines(new Set(['Read', 'Search', 'Remember']));
+  expect(home.split('\n')).toEqual([
+    '- You decide how to do the task. Search finds exact words.',
+    MODEL_TOOL_LINES.split('\n')[1],
+    MODEL_TOOL_LINES.split('\n')[3],
+  ]);
+  expect(offeredToolLines(new Set(['CodeSearch', 'TestFirst']))).toContain('- You decide how to do the task. CodeSearch finds code by meaning; Search finds exact words.\n');
+  expect(offeredToolLines(new Set(['TestFirst']))).toContain('TestFirst can do the work and report back. Or do it yourself with Read and Edit.');
+  expect(offeredToolLines(new Set(['Rename']))).toContain('- To rename one name everywhere, Rename does it. Or do it yourself with Read and Edit.');
+  expect(offeredToolLines(new Set())).not.toMatch(/Map|CodeSearch|TestFirst|Rename|Remember/);
+});
+
 test('the tools: nine on App, fourteen on Model, Read with paths only on Model', () => {
   const names = (w) => toolSchemas(w).map((t) => t.function.name);
   expect(names('app')).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask', 'Jobs']);
@@ -106,7 +121,11 @@ test('the tax question on Model: no sorting, nothing read ahead; it reads both f
   expect(reqs[0].tools.map((t) => t.function.name)).not.toContain('Remember');
   // The first request holds only the system prompt and the question: nothing read ahead.
   expect(reqs[0].messages.map((m) => m.role)).toEqual(['system', 'user']);
-  expect(reqs[0].messages[0].content).toContain(MODEL_TOOL_LINES);
+  // Its tool lines name only the tools sent with it: Map, Rename and TestFirst, not CodeSearch or Remember.
+  expect(reqs[0].messages[0].content).toContain(offeredToolLines(new Set(reqs[0].tools.map((t) => t.function.name))));
+  expect(reqs[0].messages[0].content).toContain('Map shows how a project is laid out; Search finds exact words.');
+  expect(reqs[0].messages[0].content).not.toMatch(/CodeSearch|save it with Remember/);
+  expect(agent.messages[0].content).toContain(MODEL_TOOL_LINES); // the prompt kept whole, for wayPrompt
   const reads = toolsOf(events);
   expect(reads.map((t) => [t.label, t.arg, Boolean(t.given)])).toEqual([['Read', 'billing.mjs', false], ['Read', 'checkout.mjs', false]]);
   // The second request: one assistant message with both calls, then a result for each, in order.
