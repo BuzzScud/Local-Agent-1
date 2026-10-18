@@ -16,7 +16,7 @@
 // file with --sweep): a run folder whose pid is gone is one a crashed or killed process left; its
 // programs are stopped and it goes too. A live sibling's folder (six files run at once) is left alone.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -46,8 +46,13 @@ export const pidOf = (name) => (name.startsWith(RUN_PREFIX) ? Number(name.slice(
 // run started, and what those started in turn (children inherit it), with their children too. ps -E
 // prints each process's environment after its command (macOS), but none for Apple's own programs
 // (sleep, script, zsh: checked 10 Oct 2026), so those are reached as the children of the ones it shows.
-// The process asking is never in the list.
-export function processesIn(dir, { me = process.pid, ps = psEnv, tree = psTree } = {}) {
+// A program started with an environment of its own (an MCP server gets only a few variables, so no
+// TMPDIR) is reached as a child of the app that started it; once that app was killed first, launchd
+// adopts it, and it is found by its folder instead: a program the tests run (bun, node, a shell, script,
+// sleep, python) with no parent, whose working folder is inside the run's, and its children (18 Oct 2026:
+// a stand-in MCP server that never answers ran on for 39 min after a full check). The process asking is
+// never in the list.
+export function processesIn(dir, { me = process.pid, ps = psEnv, tree = psTree, orphans = psOrphans } = {}) {
   const mark = ` TMPDIR=${dir}`;
   const out = [];
   for (const line of ps().split('\n')) {
@@ -58,6 +63,8 @@ export function processesIn(dir, { me = process.pid, ps = psEnv, tree = psTree }
     const pid = Number(line.trim().split(/\s+/)[0]);
     if (pid && pid !== me && !out.includes(pid)) out.push(pid);
   }
+  const roots = namesOf(dir);
+  for (const [pid, cwd] of orphans()) if (pid !== me && !out.includes(pid) && roots.some((r) => cwd === r || cwd.startsWith(`${r}/`))) out.push(pid);
   if (!out.length) return out;
   const parents = tree();
   for (let i = 0; i < out.length; i++) for (const [pid, ppid] of parents) if (ppid === out[i] && pid !== me && !out.includes(pid)) out.push(pid);
@@ -65,6 +72,28 @@ export function processesIn(dir, { me = process.pid, ps = psEnv, tree = psTree }
 }
 function psEnv() {
   try { return execFileSync('ps', ['-E', '-o', 'pid=,command=', '-u', String(process.getuid())], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); } catch { return ''; }
+}
+// The folder as given and as the disk names it (/var is /private/var on a Mac): lsof gives the second.
+function namesOf(dir) {
+  try { const real = realpathSync(dir); return real === dir ? [dir] : [dir, real]; } catch { return [dir]; }
+}
+// [pid, working folder] of this user's programs of the kinds the tests run whose parent has gone (launchd's
+// now). Only those kinds: lsof on every app the Mac has open would cost each test process a moment.
+const RUN_KINDS = /(^|\/)(bun|node|sh|zsh|bash|script|sleep|python3?)$/;
+function psOrphans() {
+  let pids = [];
+  try {
+    pids = execFileSync('ps', ['-o', 'pid=,ppid=,comm=', '-u', String(process.getuid())], { encoding: 'utf8' }).split('\n')
+      .map((l) => l.trim().split(/\s+/)).filter((r) => r[1] === '1' && RUN_KINDS.test(r[2] ?? '')).map((r) => Number(r[0])).filter(Boolean);
+  } catch { return []; }
+  if (!pids.length) return [];
+  let text = '';
+  // lsof ends with 1 when one of them has gone meanwhile; what it printed still counts.
+  try { text = execFileSync('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn'], { encoding: 'utf8' }); } catch (e) { text = String(e.stdout ?? ''); }
+  const out = [];
+  let pid = 0;
+  for (const l of text.split('\n')) { if (l[0] === 'p') pid = Number(l.slice(1)); else if (l[0] === 'n' && pid) out.push([pid, l.slice(1)]); }
+  return out;
 }
 // [pid, ppid] for this user's processes.
 function psTree() {

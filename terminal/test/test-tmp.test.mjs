@@ -68,6 +68,42 @@ test('the programs of a run are found by their TMPDIR (inside it too) and their 
   }
 }, 15_000);
 
+// 18 Oct 2026: a stand-in MCP server (it never answers, and only a signal ends it) ran on for 39 min after a full
+// check. The hub starts a server with only a few variables, so no TMPDIR; once the app that started it was killed,
+// launchd had it, and nothing of the run's was left in it but its folder.
+test('a program of a run with no TMPDIR and no parent left is found by its folder, and stopped; another run\'s is not', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'tt-'));
+  const dir = join(base, `${RUN_PREFIX}${DEAD}-y`);
+  const project = join(dir, 'demo-project');
+  const elsewhere = join(base, 'another-run', 'demo-project');
+  mkdirSync(project, { recursive: true });
+  mkdirSync(elsewhere, { recursive: true });
+  // What a killed app leaves: started in the project folder with almost no environment, ignoring a polite stop,
+  // and the shell that started it gone at once.
+  const orphan = (cwd) => Number(execFileSync('/bin/sh', ['-c', 'cd "$1" || exit 1; env -i PATH=/usr/bin:/bin "$2" -e \'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)\' </dev/null >/dev/null 2>&1 & echo $!', 'sh', cwd, process.execPath], { encoding: 'utf8', timeout: 5000 }).trim());
+  const mine = orphan(project);
+  const theirs = orphan(elsewhere);
+  // An Apple program too (ps shows no environment for it), as a shell left holding a program is.
+  const apple = Number(execFileSync('/bin/sh', ['-c', 'cd "$1" || exit 1; sleep 60 </dev/null >/dev/null 2>&1 & echo $!', 'sh', project], { encoding: 'utf8', timeout: 5000 }).trim());
+  const ppidOf = (pid) => Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8' }).trim() || 0);
+  try {
+    expect(await until(() => [mine, theirs, apple].every((p) => ppidOf(p) === 1))).toBe(true);
+    expect(processesIn(dir, { orphans: () => [] })).not.toContain(mine); // by the environment and the children alone: missed
+    const found = processesIn(dir);
+    expect(found).toContain(mine);
+    expect(found).toContain(apple);
+    expect(found).not.toContain(theirs);
+    expect(found).not.toContain(process.pid);
+    const { stopped } = await cleanRun(dir, { graceMs: 200 });
+    expect(stopped).toBe(2);
+    expect(await until(() => !isAlive(mine) && !isAlive(apple))).toBe(true);
+    expect(isAlive(theirs)).toBe(true);
+  } finally {
+    for (const p of [mine, theirs, apple]) { try { process.kill(p, 'SIGKILL'); } catch {} }
+    rmSync(base, { recursive: true, force: true });
+  }
+}, 15_000);
+
 test('the sweep cleans the run folders of processes that are gone and keeps a live one and other folders', async () => {
   const base = mkdtempSync(join(tmpdir(), 'tt-'));
   const dead = join(base, `${RUN_PREFIX}${DEAD}-a`);
