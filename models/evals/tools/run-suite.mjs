@@ -37,11 +37,11 @@ function failedIn(text) {
   return out;
 }
 
-function record({ pass, fail, files, code, failed = [], why = {} }) {
+function record({ pass, fail, files, code, failed = [], why = {}, flaky = [] }) {
   if (extra.length || process.env.CI || process.env.AGENTIC_NO_RECORD || pass == null) return;
   const words = skipWords(why);
   recordTest({ kind: 'suite', name: 'Unit tests, both parts', code: codeLabel(root), passed: pass, total: pass + fail, secs: (Date.now() - t0) / 1000,
-    result: code === 0 && fail === 0 ? 'pass' : 'fail', note: [files ? `${files} files` : '', words ? `skipped: ${words}` : '', code !== 0 && fail === 0 ? `bun test ended with code ${code}` : ''].filter(Boolean).join(' · '), raw: '', failed, skipped: why });
+    result: code === 0 && fail === 0 ? 'pass' : 'fail', note: [files ? `${files} files` : '', words ? `skipped: ${words}` : '', flaky.length ? `flaky: ${flaky.length} passed on a second run` : '', code !== 0 && fail === 0 ? `bun test ended with code ${code}` : ''].filter(Boolean).join(' · '), raw: '', failed, skipped: why, flaky });
 }
 
 // One `bun test` over the given paths. Live: its output goes straight to the
@@ -90,36 +90,60 @@ const sum = { pass: 0, fail: 0, skip: 0, todo: 0, expects: 0, tests: 0 };
 const took = {};
 const broken = [];
 const failed = [];
+const flaky = []; // tests that failed in the busy run and passed when their file ran again alone
+const again = []; // the files that failed, for their second run
 const why = {}; // skipped for want of a tool, by reason
 let worst = 0;
+// One file's run, read: its counts, the tests that failed, whether its result could be read at all.
+function readRun({ code, out }) {
+  const text = plain(out);
+  const pass = count(text, 'pass$');
+  // A file that ran no test, or whose counts cannot be read, is a failure:
+  // it must never drop out of the total without a word.
+  const ok = pass != null && /^Ran \d+ tests? across 1 file/m.test(text);
+  return { code, out, text, ok, pass: pass ?? 0, fail: count(text, 'fail$') ?? 0, failed: failedIn(text) };
+}
+function add(file, r) {
+  if (!r.ok) broken.push(file);
+  sum.pass += r.pass; sum.fail += r.fail; sum.skip += count(r.text, 'skip$') ?? 0; sum.todo += count(r.text, 'todo$') ?? 0;
+  sum.expects += count(r.text, 'expect\\(\\) calls') ?? 0; sum.tests += Number(/^Ran (\d+) tests?/m.exec(r.text)?.[1] ?? 0);
+  if (r.code !== 0) worst = worst || r.code;
+  failed.push(...r.failed);
+  skipsIn(r.text, why);
+}
+// The file's own lines, without bun's banner and its per-file summary.
+const show = (out) => { const lines = out.split('\n').filter((l) => { const p = plain(l); return !/^bun test v/.test(p) && !/^\s*\d+ (pass|fail|skip|todo|expect\(\) calls)$/.test(p) && !/^Ran \d+ tests? across/.test(p); }); process.stdout.write(`${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n\n`); };
 async function worker() {
   for (let file = queue.shift(); file; file = queue.shift()) {
     const t = Date.now();
-    const { code, out } = await bunTest([file], { live: false });
+    const r = readRun(await bunTest([file], { live: false }));
     took[file] = Math.round((Date.now() - t) / 100) / 10;
-    const text = plain(out);
-    const pass = count(text, 'pass$');
-    // A file that ran no test, or whose counts cannot be read, is a failure:
-    // it must never drop out of the total without a word.
-    if (pass == null || !/^Ran \d+ tests? across 1 file/m.test(text)) broken.push(file);
-    sum.pass += pass ?? 0; sum.fail += count(text, 'fail$') ?? 0; sum.skip += count(text, 'skip$') ?? 0; sum.todo += count(text, 'todo$') ?? 0;
-    sum.expects += count(text, 'expect\\(\\) calls') ?? 0; sum.tests += Number(/^Ran (\d+) tests?/m.exec(text)?.[1] ?? 0);
-    if (code !== 0) worst = worst || code;
-    failed.push(...failedIn(text));
-    skipsIn(text, why);
-    // The file's own lines, without bun's banner and its per-file summary.
-    const lines = out.split('\n').filter((l) => { const p = plain(l); return !/^bun test v/.test(p) && !/^\s*\d+ (pass|fail|skip|todo|expect\(\) calls)$/.test(p) && !/^Ran \d+ tests? across/.test(p); });
-    process.stdout.write(`${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n\n`);
+    show(r.out);
+    // A file that failed runs once more, alone, once every other file is done (below).
+    if (r.code !== 0 || !r.ok || r.fail) again.push({ file, first: r }); else add(file, r);
   }
 }
 await Promise.all(Array.from({ length: Math.min(jobs, files.length) }, worker));
+// The second run, one file at a time on a quiet Mac. Six files at once while other sessions load the
+// Mac failed one or two app-driving tests in 40 of 137 full runs from 1 Oct to 15 Oct 2026, a
+// different one almost every time. A file that passes now counts as passed, and the tests that
+// failed the first time are kept as flaky (the record's line names them); one that fails again
+// counts as failed, with its second run's counts.
+for (const { file, first } of again) {
+  process.stdout.write(`(again) ${file.slice(2)}: failed in the busy run (${first.failed.length ? first.failed.join('; ') : 'no result could be read'}); running it once more, alone\n`);
+  const r = readRun(await bunTest([file], { live: false }));
+  show(r.out);
+  if (r.code === 0 && r.ok && !r.fail) flaky.push(...(first.failed.length ? first.failed : [`${file.split('/').pop()} › no result could be read`]));
+  add(file, r);
+}
 
 const secs = (Date.now() - t0) / 1000;
 for (const f of broken) process.stdout.write(`(fail) ${f.slice(2)}: no result could be read from this file\n`);
 const fail = sum.fail + broken.length;
 const code = worst || (fail ? 1 : 0);
-process.stdout.write(`\n ${sum.pass} pass\n${sum.skip ? ` ${sum.skip} skip\n` : ''}${skipWords(why) ? ` skipped for want of a tool: ${skipWords(why)}\n` : ''}${sum.todo ? ` ${sum.todo} todo\n` : ''} ${fail} fail\n ${sum.expects} expect() calls\nRan ${sum.tests} tests across ${files.length} files. [${secs.toFixed(2)}s]\n`);
+for (const f of flaky) process.stdout.write(`(flaky) ${f}: failed in the busy run, passed alone\n`);
+process.stdout.write(`\n ${sum.pass} pass\n${sum.skip ? ` ${sum.skip} skip\n` : ''}${skipWords(why) ? ` skipped for want of a tool: ${skipWords(why)}\n` : ''}${sum.todo ? ` ${sum.todo} todo\n` : ''}${flaky.length ? ` ${flaky.length} flaky (passed on a second run)\n` : ''} ${fail} fail\n ${sum.expects} expect() calls\nRan ${sum.tests} tests across ${files.length} files. [${secs.toFixed(2)}s]\n`);
 try { mkdirSync(dirname(timesFile), { recursive: true }); writeFileSync(timesFile, JSON.stringify(took, null, 1)); } catch { /* only a hint for the next run's order */ }
-record({ pass: sum.pass, fail, files: files.length, code, failed: [...failed, ...broken.map((f) => `${f.split('/').pop()} › no result could be read`)], why });
+record({ pass: sum.pass, fail, files: files.length, code, failed: [...failed, ...broken.map((f) => `${f.split('/').pop()} › no result could be read`)], why, flaky });
 sweep();
 process.exit(code);
