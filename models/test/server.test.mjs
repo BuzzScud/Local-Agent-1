@@ -221,3 +221,36 @@ Bun.serve({ port, hostname: '127.0.0.1', fetch: () => new Response('{}') });
   expect(out).toMatchObject({ failed: null, alive: true, crashes: 0 });
   expect(out.port).toBeGreaterThan(out.first); // the next free one (the ones after may be taken too, on a busy Mac)
 }, 90_000);
+
+// The server's log only grew (24.6 MB by 14 Oct 2026): past its limit it is cut at a start to its
+// newest part, from a line's start, in the same file. In its own process, like the rest here.
+test('the server log: under the limit kept whole; over it, cut in place to its newest lines', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-srv-log-'));
+  const log = join(home, 'server.log');
+  const script = `
+    import { writeFileSync, readFileSync, statSync } from 'node:fs';
+    const { trimLog } = await import(${JSON.stringify(join(import.meta.dir, '../runtime/server.mjs'))});
+    const log = ${JSON.stringify(log)};
+    const missing = trimLog(log + '.none');
+    writeFileSync(log, 'short\\n');
+    const small = trimLog(log, { max: 100, keep: 40 });
+    const lines = Array.from({ length: 50 }, (_, i) => 'line ' + String(i).padStart(2, '0')).join('\\n') + '\\n';
+    writeFileSync(log, lines);
+    const ino = statSync(log).ino;
+    const big = trimLog(log, { max: 100, keep: 40 });
+    const text = readFileSync(log, 'utf8');
+    writeFileSync(log, lines);
+    trimLog(log, { max: 100, keep: 44 });
+    const mid = readFileSync(log, 'utf8');
+    console.log(JSON.stringify({ missing, small, big, same: statSync(log).ino === ino, text, mid }));
+  `;
+  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 30000 });
+  const out = JSON.parse(r.stdout.trim().split('\n').pop() || JSON.stringify({ error: r.stderr.slice(-300) }));
+  expect(out).toMatchObject({ missing: false, small: false, big: true, same: true });
+  const [head, ...rest] = out.text.split('\n');
+  expect(head).toMatch(/^=== .* trimmed: the older 0\.0 MB left out$/);
+  // The newest 40 bytes are five whole lines (8 bytes each): all five kept.
+  expect(rest.filter(Boolean)).toEqual(['line 45', 'line 46', 'line 47', 'line 48', 'line 49']);
+  // 44 bytes start in the middle of "line 44": that part line is left out, the five whole ones kept.
+  expect(out.mid.split('\n').slice(1).filter(Boolean)).toEqual(['line 45', 'line 46', 'line 47', 'line 48', 'line 49']);
+});

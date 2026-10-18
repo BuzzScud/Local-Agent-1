@@ -2,13 +2,33 @@
 // port, waits until it is healthy, restarts it once if it crashes, and stops
 // it when Agentic Coder exits.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, openSync, closeSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, openSync, closeSync, appendFileSync, statSync, readSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { serverBinOf, engineOf, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, DEFAULT_MODEL, modelPath, draftPath, visionPath } from '../registry.mjs';
 import { setEndpoint } from './remote.mjs';
+
+// The server's log: every start appends to it and llama-server writes a few lines a request, so it
+// only grew (24.6 MB by 14 Oct 2026). Once past LOG_MAX it is cut at a start to its newest LOG_KEEP,
+// from a line's start, in place (not a new file), so a server another window started keeps writing to it.
+export const LOG_MAX = 8 * 1024 * 1024;
+export const LOG_KEEP = 2 * 1024 * 1024;
+export function trimLog(path, { max = LOG_MAX, keep = LOG_KEEP } = {}) {
+  let size;
+  try { size = statSync(path).size; } catch { return false; }
+  if (size <= max) return false;
+  // One byte before the part kept is read too: when it is the end of a line, the part starts on a
+  // whole line and keeps it; otherwise the part line it starts in is left out.
+  const buf = Buffer.alloc(keep + 1);
+  const fd = openSync(path, 'r');
+  try { readSync(fd, buf, 0, keep + 1, size - keep - 1); } finally { closeSync(fd); }
+  const nl = buf.indexOf(10);
+  const tail = nl >= 0 ? buf.subarray(nl + 1) : buf.subarray(1);
+  writeFileSync(path, Buffer.concat([Buffer.from(`=== ${new Date().toISOString()} trimmed: the older ${((size - tail.length) / 1048576).toFixed(1)} MB left out\n`), tail]));
+  return true;
+}
 
 // One small file per running server: which process owns it, on which port.
 const REG_DIR = join(HOME, 'servers');
@@ -218,6 +238,7 @@ export class ModelServer extends EventEmitter {
     mkdirSync(LOG_DIR, { recursive: true });
     mkdirSync(SLOT_DIR, { recursive: true });
     const logPath = join(LOG_DIR, 'server.log');
+    try { trimLog(logPath); } catch { /* kept whole this time */ }
     const draft = helper === false ? false : hasDraft(this.model);
     this.draft = draft;
     this.vision = Boolean(this.model.visionOn && this.model.vision && existsSync(visionPath(this.model)));
