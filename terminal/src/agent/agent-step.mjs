@@ -10,7 +10,8 @@ import { isHomeFolder } from './prompt.mjs';
 import { folderKind } from './folder.mjs';
 import { filesMade, madeNote } from './made.mjs';
 import { commandWithScripts, inScripts } from './scripts.mjs';
-import { basename, isAbsolute, join, relative } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
+import { outsidePaths } from './command-words.mjs';
 import { isCodeProject, runKind } from '../flows/index.mjs';
 import { changedNote, changesText, printedFiles } from './seen.mjs';
 import { toolInput } from './user-hooks.mjs';
@@ -436,6 +437,11 @@ export class StepPart {
       }
     }
     const at = args.path ? resolvePath(this.cwd, args.path, { open: this.mode === 'bypass' && (call.name === 'List' || call.name === 'Search') }) : null;
+    // A folder it looks at outside the project (Bypass, the Desktop, a file you dropped in): a file of
+    // that folder it then names is not made up (missingFiles; 18 Oct 2026, ~/Desktop listed in Bypass).
+    if (this.turn) for (const p of at && !at.inside ? [at.abs] : call.name === 'Bash' ? outsidePaths(args.command, this.cwd).map((w) => resolvePath(this.cwd, w, { open: true }).abs) : []) {
+      (this.turn.outsideDirs ??= new Set()).add(existsSync(p) && statSync(p).isDirectory() ? p : dirname(p));
+    }
     // On the Desktop (desktopOpen), or a file you dropped into the window (attachedOpen).
     const away = Boolean(at && !at.inside && (this.desktopOpen(call.name, at.abs) || this.attachedOpen?.(call.name, at.abs)));
     const inside = at ? at.inside || away : true;

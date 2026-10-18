@@ -93,6 +93,16 @@ test('an answer naming a file that is not in the project goes back once; one it 
   expect(asked.backs).toEqual([]);
 });
 
+test('in Bypass, a file it saw in a folder outside the project is real; one it made up still goes back', async () => {
+  const desk = mkdtempSync(join(tmpdir(), 'agentic-look-desk-'));
+  writeFileSync(join(desk, 'notes.txt'), 'x\n');
+  for (const look of [{ name: 'List', args: { path: desk } }, { name: 'Bash', args: { command: `find ${desk} -maxdepth 1`, description: 'x' } }]) {
+    const r = await run(remote, 'what is on my desktop?', [{ tool: look }, { text: 'notes.txt and plan.md.' }, { text: 'Only notes.txt.' }]);
+    expect(r.notes).toContain('It named files that are not in the project (plan.md); asked it to check.');
+    expect(r.answer).toBe('Only notes.txt.');
+  }
+});
+
 test('a new file made for a request needs no look, and is not a made-up file', async () => {
   const r = await run(remote, 'create a file hello.txt that says hi', [
     { tool: { name: 'Write', args: { path: 'hello.txt', content: 'hi\n' } } },

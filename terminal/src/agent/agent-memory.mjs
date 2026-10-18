@@ -200,7 +200,8 @@ export class MemoryPart {
 
   // The files an answer names that are not in this project: not at that path, and no file of the
   // project has that name or ends with that path. Left out: files the request names (it may ask
-  // about one that is gone), files made this message, places outside the project (~/…, /…).
+  // about one that is gone), files made this message, places outside the project (~/…, /…), and
+  // files that are in a folder outside the project it looked at this message (turn.outsideDirs).
   missingFiles(text) {
     // From the home folder, the folder the request names stands for the project (turn.workFolder).
     const base = this.turn?.workFolder ?? this.cwd;
@@ -213,9 +214,11 @@ export class MemoryPart {
     if (!all) { try { all = projectFiles(base); } catch { all = []; } if (this.turn) this.turn.projectFiles = all; }
     const made = new Set((this.turn?.created ?? []).map((f) => String(f).replace(/^\.\//, '')));
     const names = new Set(all.map((f) => f.split('/').pop()));
+    const away = [...(this.turn?.outsideDirs ?? [])];
     return named.filter((p) => {
       const rel = p.replace(/^\.\//, '');
       if (made.has(rel) || [...made].some((m) => m.endsWith(`/${rel}`) || m.split('/').pop() === rel)) return false;
+      if (away.some((d) => existsSync(join(d, rel)))) return false;
       if (existsSync(join(this.cwd, rel)) || existsSync(join(base, rel)) || (/^SCRIPTS\//.test(rel) && existsSync(resolvePath(this.cwd, rel).abs))) return false;
       return rel.includes('/') ? !all.some((f) => f === rel || f.endsWith(`/${rel}`)) : !names.has(rel);
     }).concat(full);
