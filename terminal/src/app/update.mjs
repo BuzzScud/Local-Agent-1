@@ -134,6 +134,22 @@ export async function notOnMain(repo, files = null) {
   return cands.filter((f) => onMain.get(f) !== have.get(f));
 }
 
+// What a Mac's app is, put against GitHub's main as this Mac last fetched it (coding status, /jumptomac,
+// coding sessions <mac>): the commit of main it was built from (agentic-coder.commit, which a door hands
+// over). No commit: an app from before 18 Oct 2026, which kept none.
+export async function versionText(commit, repo = findRepo()) {
+  if (!commit) return 'an older Agentic Coder (no version)';
+  const short = commit.slice(0, 7);
+  const main = repo ? await mainRef(repo) : null;
+  if (!main) return `main at ${short}`;
+  if (main === commit) return `GitHub's main (${short})`;
+  const before = async (a, b) => (await git(repo, ['merge-base', '--is-ancestor', a, b])) !== null;
+  if (!(await rev(repo, commit)) || (await before(main, commit))) return `${short}, newer than the main this Mac has seen`;
+  if (!(await before(commit, main))) return `${short}, not on GitHub's main`;
+  if (!(await changed(repo, commit, main)).length) return `GitHub's main (${short}, the same app as ${main.slice(0, 7)})`;
+  return `${short}, behind GitHub's main (${main.slice(0, 7)}): it updates at its next start`;
+}
+
 export const updateText = (u) => (!u ? null : u.kind === 'pull' ? 'Update on GitHub · /update to get it' : 'Update available · /update to use it');
 
 // Where the update may come from: GitHub over https or ssh (both check who

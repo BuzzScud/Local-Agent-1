@@ -8,7 +8,7 @@ import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart, folderArgs, withStartFolder, refreshLauncher, notOnMain } from '../src/app/update.mjs';
+import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart, folderArgs, withStartFolder, refreshLauncher, notOnMain, versionText } from '../src/app/update.mjs';
 import { runCommand } from '../src/tools/run.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { openTerm } from './term.mjs';
@@ -122,6 +122,25 @@ test("what the folder has of the app's code and GitHub's main does not: changed,
   expect(await notOnMain(repo)).toEqual([]); // pushed
   rmSync(join(repo, 'terminal/src/app/a.mjs'));
   expect(await notOnMain(repo)).toEqual(['terminal/src/app/a.mjs']); // deleted here, still on main
+});
+
+test("another Mac's version, put against GitHub's main as this Mac knows it", async () => {
+  const repo = makeRepo();
+  const first = git(repo, 'rev-parse', 'main');
+  const docs = commit(repo, { 'agentic-coder DOCS/y.html': '<p>y</p>' }, 'docs');
+  const code = commit(repo, { 'terminal/src/app/a.mjs': 'export const a = 2;\n' }, 'code');
+  git(repo, 'update-ref', 'refs/remotes/origin/main', code);
+  const s = (c) => c.slice(0, 7);
+  expect(await versionText(code, repo)).toBe(`GitHub's main (${s(code)})`);
+  expect(await versionText(first, repo)).toBe(`${s(first)}, behind GitHub's main (${s(code)}): it updates at its next start`);
+  git(repo, 'update-ref', 'refs/remotes/origin/main', docs);
+  expect(await versionText(first, repo)).toBe(`GitHub's main (${s(first)}, the same app as ${s(docs)})`); // only pages since
+  expect(await versionText(code, repo)).toBe(`${s(code)}, newer than the main this Mac has seen`);
+  expect(await versionText('f'.repeat(40), repo)).toBe('fffffff, newer than the main this Mac has seen'); // not fetched here yet
+  git(repo, 'checkout', '-q', '-b', 'side', first);
+  const side = commit(repo, { 'models/index.mjs': 'export {};\n' }, 'not on main');
+  expect(await versionText(side, repo)).toBe(`${s(side)}, not on GitHub's main`);
+  expect(await versionText(null, repo)).toBe('an older Agentic Coder (no version)');
 });
 
 test.skipIf(needs('python3'))('the real app shows the badge in the lower right when a code commit lands while it runs', async () => {

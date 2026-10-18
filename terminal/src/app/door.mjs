@@ -21,6 +21,7 @@ import { HOME, lanAddresses, readKey, saveKey, removeKey } from '../../../models
 import { F, PROTO, BG_DIR, DETACH_LABEL, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
 import { recentFolders, saveSettings, loadSettings } from './store.mjs';
 import { MAC_NAME } from './jump-box.mjs';
+import { versionText } from './update.mjs';
 
 const home = () => process.env.AGENTIC_HOME ?? HOME;
 export const DOOR_PORT = 7790;
@@ -191,7 +192,14 @@ export function limiter({ tries = 5, windowMs = 60_000, now = () => Date.now() }
 // show(name, size): opens a window here on a session, and start(...): starts one (a test gives
 // its own of both). staleMs: how long a window that checks in may say nothing before it is let go.
 // foldersMs: how long the folders' list may take before the list is answered without it.
-export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {}, mac = '', peerName = tailscalePeer, show = showHere, start = startHost, folders = doorFolders, staleMs = 35_000, foldersMs = 4000 }) {
+// The version of Agentic Coder this Mac runs, for the other Mac's list (main, always, 18 Oct 2026): the commit of
+// GitHub's main its app was built from, beside the app. The door runs that app (it starts again when the app is
+// rebuilt). null: an app from before, which kept none.
+export function appVersion(file = join(homedir(), '.agentic-coder', 'app', 'agentic-coder.commit')) {
+  try { const commit = readFileSync(file, 'utf8').trim(); return /^[0-9a-f]{40}$/.test(commit) ? { commit } : null; } catch { return null; }
+}
+
+export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {}, mac = '', peerName = tailscalePeer, show = showHere, start = startHost, folders = doorFolders, staleMs = 35_000, foldersMs = 4000, version = appVersion }) {
   const recentHere = () => limited(Promise.resolve().then(() => folders()), foldersMs, []);
   const limit = limiter();
   const server = net.createServer((sock) => {
@@ -229,7 +237,7 @@ export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = proces
         return;
       }
       if (h.op === 'list') {
-        recentHere().then((recent) => { if (!sock.destroyed) sock.end(frame(F.LIST, { v: PROTO, mac, sessions: listBackground().map(shown), folders: recent, last: recent[0] ?? null })); });
+        recentHere().then((recent) => { if (!sock.destroyed) sock.end(frame(F.LIST, { v: PROTO, mac, sessions: listBackground().map(shown), folders: recent, last: recent[0] ?? null, app: version() })); });
         return;
       }
       // A window that checks in (PROTO 2) and then says nothing for staleMs has lost its link (its
@@ -555,8 +563,9 @@ async function remoteList({ host, port = DOOR_PORT, askKey = typeKey }) {
     try { r = await ask({ host, port, hello: { key, op: 'list', v: PROTO } }); } catch (e) { throw new Error(reachProblem(e, host)); }
     if (r.kind === F.LIST) {
       if (readKey(id) !== key) { try { saveKey(key, id, `Agentic Coder door (${host})`); } catch {} }
-      // v: what that Mac's door speaks (none: an app from before folders and the check-in).
-      return { sessions: r.body.sessions ?? [], key, v: Number(r.body.v) || 1, folders: r.body.folders ?? [], last: r.body.last ?? null };
+      // v: what that Mac's door speaks (none: an app from before folders and the check-in). app: the commit of main
+      // its app was built from (none: from before 18 Oct 2026).
+      return { sessions: r.body.sessions ?? [], key, v: Number(r.body.v) || 1, folders: r.body.folders ?? [], last: r.body.last ?? null, app: r.body.app ?? null };
     }
     if (r.body?.text === 'wrong key') {
       if (readKey(id) === key) removeKey(id);
@@ -583,8 +592,11 @@ export function newRows({ host, v, folders = [], last = null }) {
 
 // `coding attach <host> [name]` and `coding sessions <host>`: through the door.
 export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnly = false, askSave = false, say = (t) => process.stdout.write(`${t}\n`), typeLine = (p) => typeKey(p, { show: true }), beatMs, retryMs }) {
-  const { sessions, key, v, folders, last } = await remoteList({ host, port });
+  const { sessions, key, v, folders, last, app } = await remoteList({ host, port });
+  // Which Agentic Coder it runs, against GitHub's main as this Mac knows it.
+  const runs = await versionText(typeof app?.commit === 'string' && /^[0-9a-f]{40}$/.test(app.commit) ? app.commit : null).catch(() => null);
   if (listOnly) {
+    if (runs) say(`${host} runs ${runs}.`);
     if (!sessions.length) say(`Nothing is running on ${host}. coding attach ${host} starts a session there.`);
     for (const s of sessions) say(`  ${describe(s, Date.now(), { mac: false })}`);
     return 0;
@@ -609,7 +621,7 @@ export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnl
     const fresh = newRows({ host, v, folders, last });
     const rows = [...sessions.map((s) => describe(s, Date.now(), { mac: false })), ...fresh.map((r) => r.text)];
     // A rule between what runs there and what can be started.
-    const i = await pick(rows, `Sessions on ${host}`, { rule: sessions.length ? sessions.length : -1 });
+    const i = await pick(rows, `Sessions on ${host}${runs ? ` · runs ${runs}` : ''}`, { rule: sessions.length ? sessions.length : -1 });
     if (i === null) return 0;
     if (i < sessions.length) hello = { op: 'attach', name: sessions[i].name };
     else {
