@@ -51,8 +51,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   // and in any window once its name is typed; typed only, nobody saw it.
   // /loop (3 Oct 2026; /loops had a row after it until 9 Oct 2026, when /loop became the one command) follows it, then /mcp
   // and /jobs: one free row shows /jumptomac, four all of them.
-  // /calc (8 Oct 2026) after them: where it shows, it is the row under /help. /bot, then /steps (9 Oct 2026).
-  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'mcp', 'jobs', 'calc', 'bot', 'steps']);
+  // /bot, then /steps (9 Oct 2026). /calc, the row under /help since 8 Oct, went with the calculator link (18 Oct 2026).
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'mcp', 'jobs', 'bot', 'steps']);
   expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'test', 'settings', 'exit']);
   expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('mcp');
   expect(matchCommands('/', { room: 21 }).map((c) => c.name)).toContain('mcp'); // a fourth free row is /mcp's
@@ -60,10 +60,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect(matchCommands('/mc').map((c) => c.name)).toEqual(['mcp']);
   expect(menu).not.toContain('jumptomac');
   const tall = matchCommands('/', { room: 49, side: true }).map((c) => c.name);
-  expect(tall).toEqual(['help', 'calc', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'jobs', 'steps', 'bot', 'test', 'settings', 'exit']);
-  expect(matchCommands('/', { room: 21 }).map((c) => c.name)).not.toContain('calc'); // the fifth free row is /calc's
-  expect(matchCommands('/', { room: 22 }).map((c) => c.name)).toContain('calc');
-  expect(matchCommands('/ca').map((c) => c.name)).toEqual(['calc']); // typed, it shows in any window
+  expect(tall).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'jobs', 'steps', 'bot', 'test', 'settings', 'exit']);
+  expect(COMMANDS.some((c) => c.name === 'calc')).toBe(false); // taken out with the calculator link (18 Oct 2026)
   expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac', 'jobs']);
   expect(matchCommands('/jo').map((c) => c.name)).toEqual(['jobs']);
   expect(matchCommands('/jump').map((c) => c.name)).toEqual(['jumptomac']);
@@ -174,10 +172,11 @@ test('coding hub [tab]: --help lists it once instead of six words; each tab open
   expect(await hubLine(['hub', 'Battle'], env)).toBe('arena'); // and so is the Battle tab
   expect(await hubLine(['tests'], env)).toBe('arena'); // the old word
   expect(await hubLine(['memory'], env)).toBe('memory');
-  expect(await hubLine(['hub', 'calc'], env)).toBe('calc'); // the calculator link (8 Oct 2026)
   const bad = spawnSync('bun', [CLI, 'hub', 'notes'], { encoding: 'utf8', env: { ...process.env, ...env } });
   expect(bad.status).toBe(1);
-  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, profiles, memory, instructions, calc, help.');
+  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, profiles, memory, instructions, help.');
+  // The Calculator tab went with the calculator link (18 Oct 2026).
+  expect(spawnSync('bun', [CLI, 'hub', 'calc'], { encoding: 'utf8', env: { ...process.env, ...env } }).stderr).toContain('coding hub: no tab called calc.');
   const noModel = spawnSync('bun', [CLI, 'hub'], { encoding: 'utf8', env: { ...process.env, ...env } }); // weights is the default, and this home has no model file
   expect(noModel.status).toBe(1);
   expect(noModel.stderr).toContain('open another tab (coding hub docs)');

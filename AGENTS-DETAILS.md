@@ -1406,42 +1406,12 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   whoever their person is and sends it to the Helper's service. Other `coding -p` runs (loops) are unchanged.
 - **Each copy's own sign-in cookie** (`acw_<settings.instance>`, made at the first start): browsers keep cookies by
   address, not port, so a second copy on the same Mac (a preview) signed the first one out with one shared name.
-- **The calculator link** (round 3, 8 Oct 2026 night; the owner: "a daemon that connects to this API … detect that the
-  connection dropped and restore it … refresh the token or session … if it's having an issue with the authentication
-  system design, submit a bug or feature request"; picks: inside the web with its own background service as a switch,
-  their own calculator account, reports filed automatically once each, the seven design requests filed with the first
-  session, /calc under /help and a hub tab). `terminal/src/web/calc-link.mjs`: one `CalcLink` signs in (`POST
-  /api/login`; there is no refresh route, so "refresh" is a new sign-in with the saved password), opens the websocket
-  (the server sends `sessionReady` itself), and tells a refused session (close 1008 "unauthorized": sign in again)
-  from the network (any other close: the same session after 1 s, 2 s … 60 s, ±20%). A websocket ping every 20 s with
-  10 s for the pong (a server that never pongs: `/health` twice) catches a connection that died without closing; a
-  beat far too late means the Mac slept, and a waiting retry runs at once. A wrong login is tried once (no lock-out).
-  It signs in again at 4/5 of a session's life (the login reply's expiry, else the shortest seen). Its one session is
-  shared: `formulasClient({ link })` uses it and reports a 401 to it. Reports go to the calculator's `POST
-  /api/requests` (`DESIGN`, `PROBLEMS`), each once: its own record (`<web home>/calc-link/state.json`, no secrets)
-  then the server's list by title; the password and session are scrubbed from every text. **Where it runs**
-  (`settings.calc.link`, `linkHost`): `web` (default, inside `startWeb`) or `service` (`coding calc on`: a LaunchAgent
-  running `coding calc run`, calc-cmd.mjs); the one that runs it answers on `<web home>/calc-link/link.sock` (0600; the
-  lock too), the service takes it over from the web (`/handover`), and the place whose turn it is not stops (the
-  service exits 0). The hub's Calculator tab (`calc-hub.mjs`, `calc.html`), `/calc [on|off|reconnect|status]` (in
-  `WHEN_ROOM`, the row under /help) and Admin › Settings read it. `AGENTIC_CALC_LINK=off` leaves it out of a web copy.
-  Tests: `terminal/test/calc-link.test.mjs` (a pretend calculator and a TCP pass-through that goes quiet).
-- **The Calculator tab, "2 · Chain"** (9 Oct 2026; the owner, after their Mac restarted and the tab said "Not running":
-  "can we improve / optimize the calculater tab?"; picks: its own background service by default, one row per outage,
-  alerts on the page and the hub's top bar only, then two designs on their real link, "2 · Chain"). `calc.html`: the
-  four things that must work in order (Running, Signed in, Connected, Answering), the first broken one red with its fix
-  (Start it as a background service, Change login, Reconnect now) and the ones after it waiting; the last 24 hours as
-  lanes (the connection's stretches; sign-ins, problems and reports as marks that find their row in the log); the log
-  told as a story and the reports with the text that was sent; the login in a box beside the card that opened it. Only
-  what changed is drawn again (a click or an open report is not lost to the 2 s refresh), nothing while the tab is
-  hidden. `terminal/src/web/calc-story.mjs`: `storyOf` (an outage and its tries as one row, a burst of reports as one,
-  a new login with its sign-in, the Mac's restart) and `dayOf` (up, down, off, none: no record). The link keeps a
-  "still running" mark once a minute (`aliveAt`, state.json) and a start line, so a link that dies with the Mac says
-  when it last ran; the hub reads this Mac's start (`bootTime`, kern.boottime). `GET /calc/brief.json` is the hub's
-  top bar: the status in the Calculator tab's line, and on any other tab a chip while a link with a login is not live.
-  A first login saved in the tab on a Mac, no place picked yet, turns the background service on (`setWhere`). The
-  service runs the installed app when there is one (`programNow`), never a working copy that may go away. The saved
-  counts show only on their own day.
+- **The calculator link** (a daemon kept signed in to the calculator, with its own background service, `/calc` and the
+  hub's Calculator tab; built 8–9 Oct 2026) was taken out on 18 Oct 2026 (the owner: "remove the calculator link").
+  The calculator's tools stay: `formulasClient` signs in by itself and again once on a 401. `coding calc` is now only
+  `web/calc-gone.mjs`: a Mac that ran the link as its own service still has the login item that starts `coding calc
+  run`, which launchd starts again after any failing end, so it removes that item (its plist, then a bootout of the real
+  one only) and ends with 0. Tests: `terminal/test/calc-gone.test.mjs`.
 - **Tests**: `terminal/test/web-app.test.mjs` (pretend calculator and Ollama services: the fixes, the line, accounts,
   nobody in unsigned, two people apart, the gateway's rules, the move to the stand-in, the Laguna question, MCP over HTTP
   and Agentic Coder's own hub connecting to a run's address, the chat, and a real `coding -p` run through the gateway

@@ -21,7 +21,6 @@ import { Runner } from './runner.mjs';
 import { handleMcp } from './mcp-http.mjs';
 import { chat as plainChat } from './chat.mjs';
 import { calculate, capabilities, formulasClient } from '../tools/calculator.mjs';
-import { linkHost } from './calc-link.mjs';
 import { listFiles, showFile, fileResponse, putFile, removePath, zipResponse, MAX_UPLOAD } from './files.mjs';
 
 export const WEB_PORT = 60020;
@@ -48,15 +47,7 @@ export function startWeb({ port = WEB_PORT, hosts = null, mode = null, env = pro
   const gateway = new Gateway({ settings: getSettings, db });
   const queue = new FairQueue({ limits: () => settings.limits });
   let formulas = null;
-  // The calculator link (calc-link.mjs): signed in, its websocket kept open, its one session shared. It runs
-  // here while settings.calc.link is 'web' (the default); as its own background service, this copy uses it
-  // through its socket. A login or address saved elsewhere (the hub's Calculator tab) reaches this copy too.
-  const link = env.AGENTIC_CALC_LINK === 'off' ? null : linkHost({ where: 'web', log, onCalc: (c) => {
-    if (JSON.stringify(c) === JSON.stringify(settings.calc)) return;
-    settings = { ...settings, calc: c }; formulas = null;
-  } });
-  const calc = () => ({ url: settings.calc.url, formulas: settings.calc.user && settings.calc.pass ? (formulas ??= formulasClient({ ...settings.calc, link })) : null });
-  const linkLine = (st) => (st ? { state: st.state, words: st.words, since: st.since, where: st.where, drops: st.counts?.drops ?? 0, filed: st.reports.filter((r) => r.status === 'filed').length } : null);
+  const calc = () => ({ url: settings.calc.url, formulas: settings.calc.user && settings.calc.pass ? (formulas ??= formulasClient({ ...settings.calc })) : null });
   let boundPort = port;
   const runner = new Runner({ db, auth, gateway, settings: getSettings, queue, port: () => boundPort, mcpUrl: (token) => `http://127.0.0.1:${boundPort}/mcp/run/${token}`, calc, runExtra });
   const isMac = () => settings.mode !== 'server';
@@ -191,7 +182,7 @@ export function startWeb({ port = WEB_PORT, hosts = null, mode = null, env = pro
       let calcOk = false;
       try { calcOk = (await fetch(`${settings.calc.url}/health`, { signal: AbortSignal.timeout(5000) })).ok; } catch { /* not answering */ }
       const services = (await gateway.statuses()).map((st) => ({ id: st.id, label: st.label, ok: st.ok, busy: st.busy }));
-      return json({ ok: true, services, calc: { ok: calcOk, ms: Date.now() - t0, set: Boolean(settings.calc.url), link: link ? linkLine(await link.status()) : null } });
+      return json({ ok: true, services, calc: { ok: calcOk, ms: Date.now() - t0, set: Boolean(settings.calc.url) } });
     }
 
     // ---- the calculator ----
@@ -421,13 +412,6 @@ export function startWeb({ port = WEB_PORT, hosts = null, mode = null, env = pro
         return json(await modelBoard(true));
       }
       if (path === '/api/admin/settings' && method === 'GET') return json({ ok: true, settings: publicSettings(settings) });
-      // The calculator link: what it is doing, and Reconnect now / Sign in again (where it runs is the hub's and coding calc's).
-      if (path === '/api/admin/calc-link' && method === 'GET') return json({ ok: true, on: Boolean(link), link: link ? await link.status() : null });
-      if ((path === '/api/admin/calc-link/reconnect' || path === '/api/admin/calc-link/signin') && method === 'POST') {
-        if (!link) return bad('the calculator link is off on this copy (AGENTIC_CALC_LINK=off)', 409);
-        const st = await link.act(path.endsWith('signin') ? 'signin' : 'reconnect');
-        return st ? json({ ok: true, link: st }) : bad('the calculator link is not running: save a calculator login first', 409);
-      }
       if (path === '/api/admin/settings' && method === 'PUT') {
         const b = await body();
         const patch = {};
@@ -461,7 +445,7 @@ export function startWeb({ port = WEB_PORT, hosts = null, mode = null, env = pro
         settings = { ...saveSettings(patch), mode: settings.mode };
         gateway.cache.clear();
         queue.pump();
-        if (patch.calc) link?.tick();
+        if (patch.calc) formulas = null; // a new login is used from the next call
         return json({ ok: true, settings: publicSettings(settings) });
       }
     }
@@ -494,8 +478,7 @@ export function startWeb({ port = WEB_PORT, hosts = null, mode = null, env = pro
   if (setup) log(`No account yet. Make the first admin here (works once, for a day): ${base}/invite/${setup.token}`);
   return {
     port: boundPort, hosts: where, url: base, db, auth, gateway, runner, queue, settings: getSettings, setupPath: setup ? `/invite/${setup.token}` : null,
-    link,
-    async stop() { link?.stop(); for (const s of servers) s.stop(true); for (const id of [...runner.live.keys()]) runner.stop({ id, user: 0 }, { quiet: true }); db.close(); },
+    async stop() { for (const s of servers) s.stop(true); for (const id of [...runner.live.keys()]) runner.stop({ id, user: 0 }, { quiet: true }); db.close(); },
   };
 }
 

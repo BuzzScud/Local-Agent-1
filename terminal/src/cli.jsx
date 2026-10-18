@@ -168,7 +168,7 @@ if (process.argv[2] === 'memory-review') {
 // coding hub [tab]: the hub in the browser, on one of its tabs (weights when
 // none is named). The old one-word forms (coding docs, coding tests…) still work. The Arena is
 // the Tests tab and the Battle tab as one (30 Sep 2026): either name opens it, tests with the record up.
-const HUB_TABS = { weights: 'weights', docs: 'harness', harness: 'harness', structure: 'structure', flow: 'flow', arena: 'arena', tests: 'arena&record=1', builder: 'builder', battle: 'arena', remote: 'remote', profiles: 'profiles', memory: 'memory', instructions: 'instructions', calc: 'calc', help: 'help' };
+const HUB_TABS = { weights: 'weights', docs: 'harness', harness: 'harness', structure: 'structure', flow: 'flow', arena: 'arena', tests: 'arena&record=1', builder: 'builder', battle: 'arena', remote: 'remote', profiles: 'profiles', memory: 'memory', instructions: 'instructions', help: 'help' };
 const OLD_HUB = ['weights', 'docs', 'arena', 'tests', 'battle', 'memory', 'instructions'];
 if (process.argv[2] === 'hub' || OLD_HUB.includes(process.argv[2])) {
   const name = process.argv[2] === 'hub' ? (process.argv[3] ?? 'weights').toLowerCase() : process.argv[2];
@@ -241,10 +241,11 @@ if (process.argv[2] === 'web') {
   const { webCommand } = await import('./web/main.mjs');
   await webCommand(process.argv.slice(3));
 }
-// coding calc …: the calculator link, and where it runs (terminal/src/web/calc-cmd.mjs).
+// coding calc …: the calculator link was taken out (18 Oct 2026). A Mac that ran it as its own background service
+// still has a login item that starts `coding calc run`: this takes that item away and ends cleanly (web/calc-gone.mjs).
 if (process.argv[2] === 'calc') {
-  const { calcCommand } = await import('./web/calc-cmd.mjs');
-  await calcCommand(process.argv.slice(3));
+  const { calcGone } = await import('./web/calc-gone.mjs');
+  process.exit(calcGone());
 }
 if (process.argv[2] === 'serve') {
   const a = process.argv.slice(3);
