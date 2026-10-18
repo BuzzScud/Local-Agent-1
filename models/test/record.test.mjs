@@ -176,6 +176,15 @@ test('a line keeps its bar and the unit tests that failed, by name; a line witho
   expect(rows.filter((r) => r.failed).map((r) => r.failed.length)).toEqual([2]);
 });
 
+test('a suite line keeps the tests that passed only on a second run as flaky; a line without any has no flaky', () => {
+  const { file } = scratch();
+  const a = recordTest({ kind: 'suite', name: 'Unit tests, both parts', passed: 1970, total: 1970, result: 'pass', flaky: ['app-effort.test.mjs › /effort on a server'] }, quiet(file));
+  const b = recordTest({ kind: 'suite', name: 'Unit tests, both parts', passed: 1970, total: 1970, flaky: [] }, quiet(file));
+  expect(a).toMatchObject({ result: 'pass', flaky: ['app-effort.test.mjs › /effort on a server'] });
+  expect('flaky' in b).toBe(false);
+  expect(readRecord(file).filter((r) => r.flaky).map((r) => r.flaky)).toEqual([['app-effort.test.mjs › /effort on a server']]);
+});
+
 test('the Overview grid has a column for each whole test of one model ▶ Run a test can run, and a line for each check of no model', () => {
   const { board, health } = overviewTests();
   expect(board.map((t) => t.id)).toEqual(RUN_TESTS.filter((t) => t.model && !t.pick && !t.own).map((t) => t.id));

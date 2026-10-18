@@ -146,6 +146,8 @@ export function recordTest(row, { file = recordFile(), snapshot = true, quiet = 
     const line = { id: row.id ?? `${row.kind}:${at}`, at, kind: row.kind, name: row.name, code: row.code ?? codeLabel(), model: row.model ?? null, effort: row.effort ?? null, ctx: row.ctx ?? null,
       passed: row.passed ?? null, total: row.total ?? null, secs: row.secs == null ? null : Math.round(row.secs), result, part: Boolean(row.part), note: row.note ?? '', raw: rawPlace(row.raw), page: row.page ?? '',
       ...(row.bar ? { bar: String(row.bar) } : {}), ...(Array.isArray(row.failed) && row.failed.length ? { failed: row.failed.map(String).slice(0, 50) } : {}),
+      // Tests that failed in a full run and passed when their file ran again alone (run-suite.mjs).
+      ...(Array.isArray(row.flaky) && row.flaky.length ? { flaky: row.flaky.map(String).slice(0, 50) } : {}),
       // Tests skipped for want of a tool on this Mac, by reason: { 'no pytest': 9 } (run-suite.mjs).
       ...(row.skipped && Object.keys(row.skipped).length ? { skipped: Object.fromEntries(Object.entries(row.skipped).map(([k, n]) => [String(k), Number(n) || 0])) } : {}),
       // A run of your own tests: its level (Easy, Medium, Hard) and the points it got of those it could.
