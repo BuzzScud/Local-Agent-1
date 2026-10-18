@@ -64,6 +64,12 @@ delete process.env.AGENTIC_WINDOW_SOCK;
 delete process.env.AGENTIC_WINDOW_KEY;
 // Nor are they started as the window's own copy (cli.jsx: that copy keeps its folder, whatever settings.json's startFolder says).
 delete process.env.AGENTIC_WINDOW_CHILD;
+// Nor do they run the `coding` the app itself was started by (the launcher passes these): a session a test started
+// from inside the app ran that real launcher, which rebuilt the real app with NODE_ENV=test in it, and every `coding`
+// after that opened in the terminal with a throwaway home (18 Oct 2026). Run from Claude Code, none of them is set.
+delete process.env.AGENTIC_LAUNCHER;
+delete process.env.AGENTIC_REPO;
+delete process.env.AGENTIC_RESTART_FILE;
 // A window starts in Manual, not in the mode another test's window was left in (store.mjs firstMode).
 process.env.AGENTIC_LAST_MODE ??= 'off';
 // Lost services brought back at a window's start (saved-services.mjs repairNow): off unless a test turns it on,
