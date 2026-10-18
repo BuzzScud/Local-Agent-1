@@ -125,6 +125,33 @@ test("the app's side: each redraw as data, only what changed, and the window's c
   srv.close();
 });
 
+// The window audit (15 Oct 2026): a mode chip switched to Bypass without the note /mode gives, and a conversation picked
+// in the window opened while a reply was under way, its messages swapped under the running turn.
+test('the window\'s clicks do what the same thing typed does: a mode chip as /mode, a conversation as /resume', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'window-acts-'));
+  const path = join(dir, 'b.sock');
+  let conn = null;
+  const srv = net.createServer((s) => { conn = s; });
+  await new Promise((r) => srv.listen(path, r));
+  const bridge = makeBridge(path, 'k');
+  const did = [];
+  const self = { agent: { busy: true }, holdRef: { current: true }, applyChoice: (id, v) => did.push(['choice', id, v]), setMode: (m) => did.push(['setMode', m]), resumeSession: (id) => did.push(['resume', id]), flash: (t) => did.push(['flash', t]), toggleGroup: () => {} };
+  bridge.publish({ items: [], live: { phase: 'idle' }, input: { value: '', cursor: 0 }, mode: 'ask', width: 100, columns: 100, rows: 30, stepsView: { steps: 'grouped', open: new Set() } }, self);
+  for (let i = 0; i < 40 && !conn; i++) await Bun.sleep(25);
+  const act = async (m, n) => { conn.write(`${JSON.stringify({ t: 'act', ...m })}\n`); for (let i = 0; i < 40 && did.length < n; i++) await Bun.sleep(25); };
+  await act({ do: 'mode', mode: 'bypass' }, 1);
+  expect(did[0]).toEqual(['choice', 'mode', 'bypass']); // the note and Bypass's warning come with it
+  await act({ do: 'resume', id: 'conv-1' }, 2);
+  expect(did[1]).toEqual(['flash', 'Wait for Agentic Coder to finish, or press esc first']);
+  expect(self.holdRef.current).toBe(true);
+  self.agent.busy = false;
+  await act({ do: 'resume', id: 'conv-1' }, 3);
+  expect(did[2]).toEqual(['resume', 'conv-1']);
+  expect(self.holdRef.current).toBe(false); // the start page goes, as /resume <n> does
+  bridge.close();
+  srv.close();
+});
+
 test("the pill beside the model: the Claude API's month as the footer said it, a free model's context and memory", () => {
   const GB = 2 ** 30;
   const month = { model: 'claude-opus-5-5', modelName: 'Opus 5.5', cap: 200, tierCap: 500, ownLimit: 200, tier: 'Start', spent: 156.84, left: 43.16, low: false, monthName: 'October', last14: [0, 9.85, 66.81], today: { usd: 1.2 }, window: 0.4, pace: { perDay: 26, runsOut: Date.UTC(2026, 9, 14), beforeReset: true }, limits: null, resetsOn: Date.UTC(2026, 10, 1), capped: null, source: { kind: 'typed', usd: 102.35, at: 1, since: 54.49, days: 1, stale: false } };

@@ -45,11 +45,18 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
 
   // The window's clicks that are not keys: a task row or one of its rows opened, the mode picked, a conversation
   // resumed. Everything else the window does goes as keys.
+  // A mode chip goes as /mode does (applyChoice): its note too, Bypass's warning among them (15 Oct 2026, the window
+  // audit: a chip switched to Bypass without a word). A conversation opens as /resume opens one: not while a reply is
+  // under way (its messages would be swapped under it), and the start page goes (holdRef).
   function act(m) {
     if (!self || m?.t !== 'act') return;
     if (m.do === 'toggle' && m.id) self.toggleGroup?.(m.id);
-    else if (m.do === 'mode' && m.mode) self.setMode?.(m.mode);
-    else if (m.do === 'resume' && m.id) self.resumeSession?.(m.id);
+    else if (m.do === 'mode' && m.mode) { if (self.applyChoice) self.applyChoice('mode', m.mode); else self.setMode?.(m.mode); }
+    else if (m.do === 'resume' && m.id) {
+      if (self.agent?.busy) { self.flash?.('Wait for Agentic Coder to finish, or press esc first'); return; }
+      if (self.holdRef) self.holdRef.current = false;
+      self.resumeSession?.(m.id);
+    }
   }
 
   const ansiOf = (key, el, width) => {
