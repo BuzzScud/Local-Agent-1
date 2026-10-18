@@ -20,7 +20,7 @@ import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
 import { HOME, MODELS, isRealHome } from '../registry.mjs';
 import { CLAUDE_HOST, CLAUDE_CTX, CLAUDE_MODELS, claudeProbe } from './claude.mjs';
-import { ollamaModel, ollamaCtx, floorCtx, isOutOfMemory, OPEN_KEEP } from './ollama.mjs';
+import { ollamaModel, ollamaPs, ollamaCtx, floorCtx, isOutOfMemory, OPEN_KEEP } from './ollama.mjs';
 
 export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
 // The address used: what was typed, or Anthropic's for a Claude API remote left blank.
@@ -302,8 +302,12 @@ async function notLoaded({ url, key, model, bytes, limit, out }) {
   // Its size on the service's disk (the list says; the model's own entry only does once loaded).
   if (!bytes) { try { bytes = ((await getJson(url, '/api/tags', { key, timeoutMs: 4000 })).body?.models ?? []).find((m) => m.name === model)?.size ?? 0; } catch {} }
   const size = bytes ? ` (${GB(bytes)})` : '';
-  let held = [];
-  try { held = ((await getJson(url, '/api/ps', { key, timeoutMs: 4000 })).body?.models ?? []).filter((m) => m.name && m.name !== model); } catch {}
+  let ps = [];
+  try { ps = (await getJson(url, '/api/ps', { key, timeoutMs: 4000 })).body?.models ?? []; } catch {}
+  // Loaded all along: a request ahead of it took longer (18 Oct 2026: a long reply in another window, and
+  // the check said the model was not loaded and to pick the 0.3 GB one beside it).
+  if (ps.some((m) => m.name === model)) return `no answer in ${mins}, though ${model} is loaded on the service: a request ahead of it (another window or Mac) is still running, and Ollama answers one at a time. Try again once that one ends`;
+  const held = ps.filter((m) => m.name && m.name !== model);
   out.loaded = held.map((m) => m.name);
   if (!held.length) return `no answer in ${mins}: the service did not get ${model}${size} loaded. Try again in a minute, or pick a smaller model`;
   const big = held.sort((a, b) => (b.size ?? 0) - (a.size ?? 0))[0];
@@ -365,7 +369,9 @@ export function pickRemoteModel(ids) {
 // onStep({ steps, waiting }): told before the one word is asked for, the only long wait (a service
 // may first load the model): what was found so far, and what is waited for.
 // replyMs: how long the one word may take (a test gives less).
-export async function probe({ url, kind = 'llama', key = null, model = '', numCtx = null, reply = false, autoPick = true, signal, timeoutMs = 8000, onStep = null, replyMs = null }) {
+// busyMs: how long the one word may take from an Ollama model already loaded; after that it is still
+// loaded, so it is ready and only busy with a request ahead of it (it answers one at a time).
+export async function probe({ url, kind = 'llama', key = null, model = '', numCtx = null, reply = false, autoPick = true, signal, timeoutMs = 8000, onStep = null, replyMs = null, busyMs = 10_000 }) {
   const steps = [];
   const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null, needModel: false, vision: kind !== 'llama' };
   const fail = (text) => { steps.push({ ok: false, text }); out.error = text; return out; };
@@ -425,7 +431,9 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
       // An OpenAI-compatible service may first load the model (Ollama: tens of GB from its disk).
       const limit = replyMs ?? Math.max(timeoutMs, kind === 'openai' ? 180_000 : 60_000);
       const t = AbortSignal.timeout(limit);
-      onStep?.({ steps: steps.slice(), waiting: out.ollama ? `asking ${out.model} for one word (the service may first load it: up to ${Math.round(limit / 60_000) || 1} min)` : 'asking it for one word' });
+      // Loaded already, at the context asked for: nothing to load, so a word slow to come waits behind another request.
+      const ready = Boolean(out.ollama?.loaded && (!numCtx || out.ollama.loadedCtx === numCtx));
+      onStep?.({ steps: steps.slice(), waiting: ready ? `asking ${out.model} for one word (it is loaded; a request already on the service goes first)` : out.ollama ? `asking ${out.model} for one word (the service may first load it: up to ${Math.round(limit / 60_000) || 1} min)` : 'asking it for one word' });
       const headers = { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) };
       const words = [{ role: 'user', content: 'Reply with the single word: ready' }];
       let res, j, said;
@@ -433,11 +441,27 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
         // Ollama's own chat, the one that takes a context (the agent's requests go the same way):
         // no thinking first (gpt-oss cannot turn it off, so its least), a few words back.
         const gptoss = /gpt-?oss/i.test(`${out.ollama.family} ${out.model}`);
+        const chat = (...stops) => fetch(`${norm(url)}/api/chat`, {
+          method: 'POST', signal: AbortSignal.any([signal, ...stops].filter(Boolean)), headers,
+          body: JSON.stringify({ model: out.model, messages: words, stream: false, ...(gptoss ? { think: 'low' } : out.ollama.thinking ? { think: false } : {}), options: { num_predict: gptoss ? 512 : 8, ...(numCtx ? { num_ctx: numCtx } : {}) } }),
+        });
         try {
-          res = await fetch(`${norm(url)}/api/chat`, {
-            method: 'POST', signal: signal ? AbortSignal.any([signal, t]) : t, headers,
-            body: JSON.stringify({ model: out.model, messages: words, stream: false, ...(gptoss ? { think: 'low' } : out.ollama.thinking ? { think: false } : {}), options: { num_predict: gptoss ? 512 : 8, ...(numCtx ? { num_ctx: numCtx } : {}) } }),
-          });
+          if (!ready) res = await chat(t);
+          else {
+            const busy = AbortSignal.timeout(busyMs);
+            try { res = await chat(t, busy); } catch (e) {
+              if (signal?.aborted || !busy.aborted) throw e;
+              // Still loaded: it is ready, and busy with a request ahead of this one (18 Oct 2026: a long reply in
+              // another window kept the check waiting its whole 3 min, then it said the model was not loaded).
+              if ((await ollamaPs({ url, key, model: out.model, signal }))?.loaded) {
+                steps.push({ ok: true, text: `loaded · busy with another request (another window or Mac), so the first reply waits for that one` });
+                out.busy = true;
+                out.ok = true;
+                return out;
+              }
+              res = await chat(t);
+            }
+          }
         } catch (e) {
           if (signal?.aborted || !timedOut(e)) throw e;
           // No word in time: the service did not get the model loaded. What it holds instead says
