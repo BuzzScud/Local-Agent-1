@@ -111,6 +111,22 @@ test('the door: the key is checked, the list shows no socket, process or prompt,
   } finally { door.close(); }
 });
 
+// Main, always (18 Oct 2026): the other Mac's list says which commit of GitHub's main its app was built from, so
+// /jumptomac and coding sessions <mac> can say whether it is current. An app from before kept no commit.
+test("the door's list says which commit of main its app was built from; an app from before says none", async () => {
+  const commit = 'a'.repeat(40);
+  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-k', version: () => ({ commit }) });
+  try {
+    expect((await askDoor(door.address().port, { key: 'acd-k', op: 'list' })).body.app).toEqual({ commit });
+  } finally { door.close(); }
+  const dir = mkdtempSync(join(tmpdir(), 'door-version-'));
+  expect(D.appVersion(join(dir, 'agentic-coder.commit'))).toBeNull(); // from before: no stamp
+  writeFileSync(join(dir, 'agentic-coder.commit'), `${commit}\n`);
+  expect(D.appVersion(join(dir, 'agentic-coder.commit'))).toEqual({ commit });
+  writeFileSync(join(dir, 'agentic-coder.commit'), 'not a commit');
+  expect(D.appVersion(join(dir, 'agentic-coder.commit'))).toBeNull();
+});
+
 test('why the door could not be reached, in plain words', () => {
   expect(D.reachProblem({ code: 'ECONNREFUSED' }, 'mac-2')).toContain('On mac-2, run: coding door on');
   expect(D.reachProblem({ code: 'ENOTFOUND' }, 'mac-2')).toContain('Is Tailscale on');

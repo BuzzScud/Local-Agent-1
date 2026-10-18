@@ -418,7 +418,9 @@ closing; quit inside it, or ctrl+b to leave it running.
 
 `coding attach <mac>` lists what runs there, then what can be started there: a new session in a
 folder you worked in on that Mac, in its home, or in a folder you type (`~` is its home), or its
-last conversation carried on. The Mac the session runs on shows it too: a Terminal window opens
+last conversation carried on. Its title, and the first line of `coding sessions <mac>`, say which
+Agentic Coder that Mac runs against GitHub's main: `GitHub's main (abc1234)`, or behind it (it
+updates at its next start), or an older Agentic Coder that keeps no version. The Mac the session runs on shows it too: a Terminal window opens
 there, at your window's size, so both screens show the same session and either can type. The
 footer says `⇄ on <that Mac>` while another Mac has a window on a session.
 
