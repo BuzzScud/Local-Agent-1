@@ -477,12 +477,12 @@ esac
   writeFileSync(launcher, LAUNCHER.replace('__REPO__', local));
   chmodSync(launcher, 0o755);
   const run = (env = {}) => {
-    const r = Bun.spawnSync(['/bin/sh', launcher, 'x'], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, HOME: user, AGENTIC_REPO: '', AGENTIC_PULL_WAIT: '8', ...env } });
+    const r = Bun.spawnSync(['/bin/sh', launcher, 'x'], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, HOME: user, AGENTIC_HOME: '', AGENTIC_REPO: '', AGENTIC_PULL_WAIT: '8', ...env } });
     return { code: r.exitCode, out: `${r.stdout}${r.stderr}` };
   };
   const builtFrom = () => /^# built from: (.*)$/m.exec(readFileSync(app, 'utf8'))?.[1];
   const bunDid = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
-  return { launcher, run, app, user, builtFrom, bunDid };
+  return { launcher, run, app, user, bin, builtFrom, bunDid };
 }
 
 test('coding pulls a push from another Mac before it starts, and says so', () => {
@@ -633,6 +633,38 @@ test('a new launcher on main is installed, used from the next start', () => {
   expect(now).toContain(`REPO="\${AGENTIC_REPO:-${local}}"`);
   expect(now).not.toContain('__REPO__');
   expect(statSync(launcher).mode & 0o111).toBeTruthy();
+});
+
+// The window (a Tauri shell, terminal/app/window) is built again from main's copy when main changed its code: in the
+// background, so the start does not wait, and only on a Mac that has the window. A stand-in cargo here.
+test("a window on this Mac is built again from main in the background when main changed it; a stamp says which", async () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  const win = join(c.user, '.agentic-coder', 'app', 'Agentic Coder Window.app');
+  const exe = join(win, 'Contents', 'MacOS', 'agentic-coder-window');
+  const cargo = join(dirname(c.bin), 'cargo-bin');
+  mkdirSync(cargo);
+  writeFileSync(join(cargo, 'cargo'), '#!/bin/sh\nmkdir -p "$CARGO_TARGET_DIR/release" && cp src/main.rs "$CARGO_TARGET_DIR/release/agentic-coder-window"\n');
+  chmodSync(join(cargo, 'cargo'), 0o755);
+  const sys = '/usr/bin:/bin:/usr/sbin:/sbin';
+  const withRust = { PATH: `${c.bin}:${cargo}:${sys}` }, noRust = { PATH: `${c.bin}:${sys}` };
+  const shell = (v) => ({ 'terminal/app/window/build.sh': readFileSync(join(import.meta.dir, '..', 'app', 'window', 'build.sh'), 'utf8'), 'terminal/app/window/icons/icon.icns': 'icns', 'terminal/app/window/src/main.rs': `// window ${v}\n` });
+  commit(other, shell(1), 'the window'); git(other, 'push', '-q', 'origin', 'main');
+  expect(c.run(withRust).out).not.toContain('The window is being built'); // no window on this Mac: none is made
+  mkdirSync(dirname(exe), { recursive: true });
+  writeFileSync(exe, '// the window from before\n');
+  const r = c.run(withRust);
+  expect(r.out).toContain("The window is being built from GitHub's main in the background");
+  expect(r.out).toContain('APP RAN x'); // the start did not wait for it
+  for (let i = 0; i < 100 && !existsSync(`${win}.tree`); i++) await new Promise((res) => setTimeout(res, 100));
+  expect(readFileSync(`${win}.tree`, 'utf8')).toBe(git(local, 'rev-parse', 'refs/remotes/origin/main:terminal/app/window'));
+  expect(readFileSync(exe, 'utf8')).toBe('// window 1\n');
+  expect(existsSync(join(c.user, '.agentic-coder', 'build', 'window.lock'))).toBe(false);
+  expect(c.run(withRust).out).not.toContain('The window is being built'); // started again: nothing to build
+  // Main changes the window on a Mac without Rust: a note, and the window it has stays.
+  commit(other, shell(2), 'the window, again'); git(other, 'push', '-q', 'origin', 'main');
+  expect(c.run(noRust).out).toContain('building it needs Rust');
+  expect(readFileSync(exe, 'utf8')).toBe('// window 1\n');
 });
 
 // 9 Oct 2026: a window moved by "Work in …? → Yes" saves its conversation under that folder; its restart came back

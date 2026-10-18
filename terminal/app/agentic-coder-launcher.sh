@@ -17,6 +17,9 @@ SRC="$HOME/.agentic-coder/build/main"
 LOG="$HOME/.agentic-coder/logs/update.log"
 BUN="$(command -v bun 2>/dev/null || echo "$HOME/.bun/bin/bun")"
 RESTART="$HOME/.agentic-coder/restart.$$"
+# The window (terminal/src/window/server.mjs windowApp): where `bun run window` puts it.
+WHOME="${AGENTIC_HOME:-$HOME/.agentic-coder}"
+WIN="$WHOME/app/Agentic Coder Window.app"
 
 dim() { printf '\033[2m%s\033[0m\n' "$1" >&2; }
 warn() { printf '\033[33m%s\033[0m\n' "$1" >&2; }
@@ -211,6 +214,34 @@ rebuild() {
   return 0
 }
 
+# Agentic Coder's own window (terminal/app/window, a Tauri shell) is built again from the same copy of main when its
+# code there changed: in the background (a few minutes the first time, Rust's cargo needed), so this start does not
+# wait; the window you have is used until the new one is in place, from the next start. Only on a Mac that has the
+# window (bun run window made it). The stamp beside it is git's id for main's terminal/app/window it was built from.
+window_shell() {
+  [ "${AGENTIC_NO_UPDATE:-0}" != 1 ] && [ -d "$WIN" ] && [ -d "$SRC/terminal/app/window" ] || return 0
+  tree="$(g rev-parse -q --verify "$(cat "$APP.commit" 2>/dev/null):terminal/app/window" 2>/dev/null)" && [ -n "$tree" ] || return 0
+  [ "$(cat "$WIN.tree" 2>/dev/null)" = "$tree" ] && return 0
+  lock="$WHOME/build/window.lock"
+  wlog="$WHOME/logs/window-build.log"
+  if [ -d "$lock" ]; then
+    kill -0 "$(cat "$lock/pid" 2>/dev/null)" 2>/dev/null && return 0 # being built now
+    rm -rf "$lock"
+  fi
+  if ! command -v cargo >/dev/null && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
+    warn "! The window has an update on GitHub's main, and building it needs Rust (rustup). The window you have is used until then."
+    return 0
+  fi
+  mkdir -p "$WHOME/build" "$WHOME/logs" && mkdir "$lock" 2>/dev/null || return 0
+  # Its own copy: a later start may copy main out again while this builds.
+  ws="$WHOME/build/window-src"
+  if ! { rm -rf "$ws" && cp -R "$SRC/terminal/app/window" "$ws"; }; then rm -rf "$lock" "$ws"; return 0; fi
+  dim "↻ The window is being built from GitHub's main in the background (see $(tilde "$wlog")); the next start uses it."
+  # nohup: it carries on when this Terminal closes. The stamp is written only when the build put the window in place.
+  nohup sh -c 'echo $$ > "$1/pid"; if sh "$2/build.sh"; then printf "%s" "$3" > "$4.tree"; fi; rm -rf "$2" "$1"' \
+    window-build "$lock" "$ws" "$tree" "$WIN" >"$wlog" 2>&1 </dev/null &
+}
+
 # The app learns where the repo (and its DOCS folder) is, and where to leave
 # the arguments for a restart. This script waits while it runs (it reads no
 # keys), so the app has the terminal to itself.
@@ -220,6 +251,7 @@ pull
 if [ "${AGENTIC_BUILD_ONLY:-0}" = 1 ]; then rebuild; exit 0; fi
 while :; do
   rebuild
+  window_shell
   rm -f "$RESTART"
   # AGENTIC_BUILD: the clean copy of main the app was built from (its rules and packages are read from there);
   # AGENTIC_BUILT_COMMIT: that commit (the "Update available" badge counts from it, update.mjs checkUpdate).
