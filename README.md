@@ -88,7 +88,9 @@ copy of it when its code changed (`~/.agentic-coder/build/main`), and the door r
 version. A change in the folder is in the app once it is pushed to main; until then, try it with
 `bun run start`. The folder is also fast-forwarded to main for that (only on main, never over files
 you changed). `AGENTIC_NO_PULL=1 coding` skips asking GitHub. A launcher from before this needs one
-last `bun run install-cli`.
+last `bun run install-cli`. `coding status` (or `/status` in the app) shows what runs against
+GitHub's main: this app, the `coding` command, the window, the door, this folder's own changes and
+your other Macs, and what happens next for any that is not main.
 **Uninstall:** delete `~/.local/bin/coding`, `~/.agentic-coder` (the model files and
 settings) and `~/agentic-coder`.
 

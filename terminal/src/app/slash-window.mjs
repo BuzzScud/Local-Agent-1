@@ -4,7 +4,7 @@ import { HOME_LOOKS, lookOf, nextLook } from './home-nav.mjs';
 import { botAllowed, STEPS } from './screen-switches.mjs';
 import { saveSettings } from './store.mjs';
 
-export const WINDOW_COMMANDS = ['meters', 'home', 'steps', 'bot', 'mouse', 'update', 'exit', 'quit'];
+export const WINDOW_COMMANDS = ['meters', 'home', 'steps', 'bot', 'mouse', 'update', 'status', 'exit', 'quit'];
 
 export function slashWindow(self) {
   return async (cmd, arg, busy, line) => {
@@ -59,6 +59,14 @@ export function slashWindow(self) {
         if (/^memory\b/i.test(arg.trim())) { const what = arg.trim().replace(/^memory\b[\s:]*/i, ''); self.sendPrompt(what ? `update memory: ${what}` : 'update memory'); break; }
         await self.updateNow();
         break;
+      case 'status': {
+        // /status: which Agentic Coder runs here and on your other Macs, against GitHub's main (status.mjs).
+        self.push({ type: 'note', text: 'Asking GitHub and your other Macs…', tone: 'dim' });
+        const { statusRows, statusText } = await import('./status.mjs');
+        const s = await statusRows().catch((e) => ({ head: `The status could not be had: ${e.message}`, rows: [] }));
+        self.push({ type: 'note', text: statusText(s), tone: s.rows.some((r) => r.mark === '!') ? 'warn' : 'dim' });
+        break;
+      }
       case 'exit':
       case 'quit':
         await self.quit();

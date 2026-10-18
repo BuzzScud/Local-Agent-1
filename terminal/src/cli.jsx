@@ -344,6 +344,13 @@ if (process.argv[2] === 'loops') {
   const pid = Number(process.argv[3]);
   process.exit(await runBoard({ pid: Number.isInteger(pid) && pid > 0 ? pid : null }));
 }
+// coding status: which Agentic Coder runs here and on your other Macs, against GitHub's main (app/status.mjs).
+if (process.argv[2] === 'status') {
+  const { statusRows, statusText } = await import('./app/status.mjs');
+  const s = await statusRows();
+  process.stdout.write(`${statusText(s)}\n`);
+  process.exit(0);
+}
 // coding door [on|off|new-key]: let your other Macs open the sessions here, over Tailscale, with a key (app/door.mjs).
 if (process.argv[2] === 'door') {
   const { doorCli, runDoor } = await import('./app/door.mjs');
