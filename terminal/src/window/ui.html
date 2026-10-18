@@ -8,7 +8,7 @@
 <style>
 :root {
   --win: #161618; --raise: #1f1f22; --raise2: #29292d; --hair: rgba(255,255,255,.07); --hair2: rgba(255,255,255,.12);
-  --text: #e8e8ea; --dim: #a0a0a7; --faint: #6e6e76; --label: #8c8c93;
+  --text: #e8e8ea; --dim: #a0a0a7; --faint: #96969d; --label: #8c8c93;
   --accent: #5fafff; --accent-bg: rgba(95,175,255,.11); --accent-line: rgba(95,175,255,.5);
   --ok: #4fb59a; --bad: #ff6b6b; --sand: #e2c08d; --warn: #ffaf5f;
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
@@ -133,6 +133,8 @@ button { font: inherit; color: inherit; }
 .thinking { color: var(--faint); font-style: italic; margin: 8px 0 4px 4px; white-space: pre-wrap; }
 .running { color: var(--dim); margin: 6px 0 4px 4px; }
 .back { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); border: 0; border-radius: 16px; padding: 6px 14px; background: var(--accent); color: #0b1a2b; font: 600 12.5px var(--sans); cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+.back[hidden] { display: none; }
+#top.fill { min-height: 100%; display: flex; flex-direction: column; } #top.fill .home { flex: 1; }
 /* the status line */
 .status { display: flex; align-items: center; gap: 14px; padding: 9px 2px; color: var(--dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; min-height: 38px; }
 .status .v { color: var(--text); } .status .ac { color: var(--accent); font-weight: 600; } .status .r { margin-left: auto; color: var(--faint); }
@@ -194,6 +196,7 @@ button { font: inherit; color: inherit; }
 .sect:first-child { padding-top: 0; } .sect .r { margin-left: auto; color: var(--faint); font-size: 12px; }
 .row { display: flex; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; align-items: baseline; }
 .row:hover { background: var(--raise2); }
+.row.static { cursor: default; } .row.static:hover { background: transparent; }
 .row .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 13px var(--sans); color: #dcdce0; }
 .row .a { color: var(--faint); font-size: 11.5px; white-space: nowrap; }
 .drop { position: absolute; top: 58px; right: 14px; width: min(440px, calc(100% - 28px)); background: #202023; border: 1px solid var(--hair2); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.5); padding: 10px; z-index: 7; }
@@ -205,7 +208,16 @@ button { font: inherit; color: inherit; }
 .screen { white-space: pre; font: 12.5px/1.35 var(--mono); padding: 14px 22px; overflow: auto; flex: 1; }
 .screen div { min-height: 1.35em; }
 .gone { flex: 1; display: grid; place-items: center; color: var(--dim); font: 14px var(--sans); }
-</style></head>
+/* the keyboard: the control you are on shows a ring (only when you got there by keys), the search box its edge */
+button:focus-visible, .row:focus-visible, .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.search:focus-within { border-color: var(--accent-line); }
+/* the Mac set to reduce motion: nothing slides, shines or blinks (the spinner holds still too, STILL) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .fuel.live .left::after { display: none; }
+}
+</style>
+</head>
 <body>
 <div class="tb" id="tb" data-tauri-drag-region>
   <div class="l" data-tauri-drag-region>
@@ -386,13 +398,14 @@ function spark(vals, w, h) {
   return '<svg width="' + w + '" height="' + h + '"><polygon points="0,' + h + ' ' + line + ' ' + w + ',' + h + '" fill="rgba(95,175,255,.28)"/><polyline points="' + line + '" fill="none" stroke="#5fafff" stroke-width="1.5"/></svg>';
 }
 const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const STILL = matchMedia('(prefers-reduced-motion: reduce)');
 function statusHtml(L) {
   // A question open below: the reply waits for you, so no timer runs over "↓ 0 tokens" as if it were stuck.
   if (L.phase === 'working' && S.last?.perm) return '<span class="ac">Waiting for your answer below</span>';
   if (L.phase === 'working') {
     const now = Date.now() - S.skew, secs = L.turnStart ? (now - L.turnStart) / 1000 : 0;
     const tps = L.tps ? Math.round(L.tps) : null;
-    return '<span class="ac">' + SPIN[Math.floor(now / 120) % 10] + ' ' + esc(L.verb || 'Working') + '…</span><span>⏱ <span class="v">' + fmtSecs(secs) + '</span></span>' + (tps ? '<span><span class="v">' + tps + '</span> tok/s</span>' + bar10(tps / 80) + spark(S.tps.slice(-30), 200, 18) : '') + '<span>↓ <span class="v">' + (L.tokens || 0) + '</span> tokens</span><span class="r">esc to interrupt</span>';
+    return '<span class="ac">' + (STILL.matches ? '⠿' : SPIN[Math.floor(now / 120) % 10]) + ' ' + esc(L.verb || 'Working') + '…</span><span>⏱ <span class="v">' + fmtSecs(secs) + '</span></span>' + (tps ? '<span><span class="v">' + tps + '</span> tok/s</span>' + bar10(tps / 80) + spark(S.tps.slice(-30), 200, 18) : '') + '<span>↓ <span class="v">' + (L.tokens || 0) + '</span> tokens</span><span class="r">esc to interrupt</span>';
   }
   const lastDone = [...S.order].reverse().map((k) => S.items[k]).find((v) => v?.t === 'done');
   const st = S.last;
@@ -566,59 +579,127 @@ function placeCard() {
   c.style.left = Math.max(14, Math.min(innerWidth - 14 - w, r.left + r.width / 2 - w / 2)) + 'px';
 }
 
-let lastConvo = '';
+// Drawing in parts (15 Oct 2026, the window audit: each state rebuilt the whole conversation, 17 ms a redraw on 1,050
+// items while an answer streamed, and a selection in an earlier answer was lost at every word). Now each item keeps its
+// own element while it is the same, and each other part (the answer under way, the status line, the prompt, the mode
+// row) is written only when its own text changed. frame: which body is up ('main', 'screen' before the app draws as
+// data, 'gone' once it quit); parts: the text last written into each part; drawn: each item's element and what made it.
+let frame = null;
+const parts = {};
+const drawn = new Map();
+let rowsVer = 0; // a step row opened or closed (openRows): the task rows are drawn again
+function put(id, html) {
+  if (parts[id] === html) return false;
+  parts[id] = html;
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+  return true;
+}
+function frameOf(kind, html) {
+  if (frame === kind && kind !== 'main') { if (put('frame', html)) body.innerHTML = html; return; }
+  frame = kind;
+  for (const k of Object.keys(parts)) delete parts[k];
+  drawn.clear();
+  if (kind !== 'main') { parts.frame = html; body.innerHTML = html; return; }
+  body.innerHTML = '<div class="convo-wrap"><div class="convo" id="convo"><div id="top"></div><div id="items"></div><div id="live"></div></div>'
+    + '<button class="back" id="back" data-act="latest" hidden>Jump to the latest</button></div>'
+    + '<div class="status" id="status"></div><div id="bottom"></div><div id="modes"></div><div id="full"></div>';
+  document.getElementById('convo').addEventListener('scroll', backButton, { passive: true });
+}
+// The items in order, each element made again only when its item (or what sits beside it, which decides a task row's
+// corners) changed; the ones kept are left alone, so what you selected in them stays selected.
+function itemsInto(list, box) {
+  const seen = new Set();
+  let at = box.firstChild;
+  list.forEach((v, i) => {
+    const prev = list[i - 1], next = list[i + 1];
+    const ctx = (prev?.t ?? '') + '|' + (next?.t ?? '') + '|' + (v.t === 'taskrun' ? rowsVer : '');
+    let d = drawn.get(v.key);
+    if (!d || d.v !== v || d.ctx !== ctx) {
+      const html = itemHtml(v, prev, next);
+      if (!d || d.html !== html) {
+        const tpl = document.createElement('template');
+        tpl.innerHTML = html;
+        const el = tpl.content.firstElementChild ?? document.createElement('span');
+        if (d?.el === at) at = at.nextSibling;
+        d?.el.remove();
+        d = { el };
+      }
+      Object.assign(d, { v, ctx, html });
+      drawn.set(v.key, d);
+    }
+    seen.add(v.key);
+    if (d.el === at) at = at.nextSibling; else box.insertBefore(d.el, at);
+  });
+  while (at) { const n = at.nextSibling; at.remove(); at = n; }
+  for (const k of drawn.keys()) if (!seen.has(k)) drawn.delete(k);
+}
+const atEnd = (c) => !c || c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+// Scrolled up from the newest: a button back to it (the conversation stops following then).
+function backButton() { const b = document.getElementById('back'); if (b) b.hidden = atEnd(document.getElementById('convo')); }
 function render() {
-  if (S.gone) { body.innerHTML = '<div class="gone">Agentic Coder has quit. Close this window, or run coding again.</div>'; return; }
+  if (S.gone) return frameOf('gone', '<div class="gone">Agentic Coder has quit. Close this window, or run coding again.</div>');
   const st = S.last;
   const pn = document.getElementById('pillname'), name = st?.modelName || 'Agentic Coder';
   if (pn.textContent !== name) { pn.textContent = name; pn.parentElement.title = name; fitBar(); }
   document.getElementById('pilldot').className = 'dot' + (st?.modelOff ? ' off' : st?.starting ? ' busy' : '');
   document.getElementById('folderbtn').title = S.folder;
   renderUsage(st);
-  if (S.usageCard) renderDrops();
-  if (!st) {
-    // Before the app draws as data (the folder question, the safety check): its own screen, as drawn.
-    body.innerHTML = '<div class="screen">' + (S.screen ? runsHtml(S.screen.rows) : '<span style="color:var(--faint)">Starting Agentic Coder…</span>') + '</div>';
-    lastConvo = '';
-    return;
-  }
-  const c0 = document.getElementById('convo');
-  const atBottom = !c0 || c0.scrollHeight - c0.scrollTop - c0.clientHeight < 40;
-  const keepTop = c0 ? c0.scrollTop : 0;
-  const list = S.order.map((k) => S.items[k]).filter(Boolean);
-  let convo;
-  if (st.hold && !list.some((v) => v.t === 'user')) convo = homeHtml(st);
-  else {
-    convo = '<div class="hero">' + bot(st.live?.phase === 'working' ? 'work' : 'ready', 56) + '<div><div class="name">Agentic Coder<small>v0.1</small></div><div class="sub">' + esc(st.modelName) + ' · ' + esc(st.mode === 'bypass' ? 'bypass permissions' : st.mode) + '</div><div class="sub">' + esc(st.cwdShort) + '</div></div></div>';
-    convo += list.map((v, i) => itemHtml(v, list[i - 1], list[i + 1])).join('');
-    if (st.live?.phase === 'working') convo += liveHtml(st.live, st.held);
-  }
-  let bottom = '';
-  if (st.perm) bottom = permHtml(st.perm);
-  else if (st.panel) bottom = panelHtml(st.panel.rows);
-  else bottom = menuHtml(st.menu) + promptHtml(st);
-  const html = '<div class="convo-wrap"><div class="convo" id="convo">' + convo + '</div></div><div class="status" id="status">' + statusHtml(st.live || {}) + '</div>' + bottom + modesHtml(st) + (st.full ? '<div class="full ansi">' + runsHtml(st.full.rows) + '</div>' : '');
-  if (html === lastConvo) return;
-  lastConvo = html;
-  body.innerHTML = html;
-  fitModes();
+  if (S.usageCard || S.find) renderDrops();
+  if (S.side) renderSide();
+  // Before the app draws as data (the folder question, the safety check): its own screen, as drawn.
+  if (!st) return frameOf('screen', '<div class="screen">' + (S.screen ? runsHtml(S.screen.rows) : '<span style="color:var(--faint)">Starting Agentic Coder…</span>') + '</div>');
+  if (frame !== 'main') frameOf('main');
   const c = document.getElementById('convo');
-  if (c) c.scrollTop = atBottom ? c.scrollHeight : keepTop;
-  document.getElementById('menu')?.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
+  const follow = atEnd(c);
+  const all = S.order.map((k) => S.items[k]).filter(Boolean);
+  const home = st.hold && !all.some((v) => v.t === 'user');
+  const top = document.getElementById('top');
+  top.className = home ? 'fill' : '';
+  put('top', home ? homeHtml(st) : '<div class="hero">' + bot(st.live?.phase === 'working' ? 'work' : 'ready', 56) + '<div><div class="name">Agentic Coder<small>v0.1</small></div><div class="sub">' + esc(st.modelName) + ' · ' + esc(st.mode === 'bypass' ? 'bypass permissions' : st.mode) + '</div><div class="sub">' + esc(st.cwdShort) + '</div></div></div>');
+  itemsInto(home ? [] : all, document.getElementById('items'));
+  put('live', !home && st.live?.phase === 'working' ? liveHtml(st.live, st.held) : '');
+  put('status', statusHtml(st.live || {}));
+  const bottomChanged = put('bottom', st.perm ? permHtml(st.perm) : st.panel ? panelHtml(st.panel.rows) : menuHtml(st.menu) + promptHtml(st));
+  if (put('modes', modesHtml(st))) fitModes();
+  put('full', st.full ? '<div class="full ansi">' + runsHtml(st.full.rows) + '</div>' : '');
+  if (follow) c.scrollTop = c.scrollHeight;
+  backButton();
+  if (bottomChanged) document.getElementById('menu')?.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
 }
-setInterval(() => { if (S.last?.live?.phase === 'working') { const s = document.getElementById('status'); if (s) s.innerHTML = statusHtml(S.last.live); } }, 250);
+setInterval(() => { if (S.last?.live?.phase === 'working' && frame === 'main') put('status', statusHtml(S.last.live)); }, 250);
 
+// A search box drawn again keeps its caret (15 Oct 2026, the window audit: the box was made anew at each letter with its
+// caret at the start, so "tax" came out "xat" and found nothing). focus: put the caret in it even if it was elsewhere.
+function keepField(id, draw, focus) {
+  const old = document.getElementById(id);
+  const had = old && document.activeElement === old ? [old.selectionStart, old.selectionEnd] : null;
+  draw();
+  const el = document.getElementById(id);
+  if (!el || !(had || focus)) return;
+  el.focus();
+  const end = el.value.length;
+  el.setSelectionRange(had ? had[0] : end, had ? had[1] : end);
+}
+// The side bar and the drop-downs follow the app while they are open (its files and to-dos), drawn only when changed.
+let sideHtml = '', dropsHtml = '';
 function renderSide() {
-  if (!S.side) { side.classList.remove('open'); return; }
+  // Closed, it is out of reach of Tab too (inert), not only out of sight.
+  side.inert = !S.side;
+  if (!S.side) { side.classList.remove('open'); sideHtml = ''; return; }
   side.classList.add('open');
   const q = S.q.trim().toLowerCase();
   const chats = (S.sessions ?? []).filter((c) => !q || String(c.title).toLowerCase().includes(q));
   const files = S.last?.files ?? [], todos = S.last?.todos ?? [];
   const done = todos.filter((t) => t.status === 'done' || t.status === 'completed').length;
-  side.innerHTML = '<div class="in"><div class="search">' + I.search + '<input id="sq" placeholder="Search conversations" value="' + esc(S.q) + '"></div>'
-    + '<div class="sect"><span class="lbl">Conversations</span><span class="r">' + chats.length + '</span></div>' + chats.map((c) => '<div class="row" data-resume="' + esc(c.id) + '"><span class="t">' + esc(c.title) + '</span><span class="a">' + esc(ago(c.updated)) + '</span></div>').join('')
-    + '<div class="sect"><span class="lbl">Files changed</span><span class="r">' + files.length + '</span></div>' + (files.length ? files.map((f) => '<div class="row"><span class="t">✎ ' + esc(f.name) + '</span><span class="a"><span style="color:var(--accent)">+' + f.add + '</span> <span style="color:var(--bad)">−' + f.del + '</span></span></div>').join('') : '<div class="row"><span class="t" style="color:var(--faint)">None in this conversation yet</span></div>')
-    + '<div class="sect"><span class="lbl">To-do</span><span class="r">' + done + '/' + todos.length + '</span></div>' + (todos.length ? todos.map((t) => { const ok = t.status === 'done' || t.status === 'completed'; return '<div class="row"><span class="a" style="color:' + (ok ? 'var(--accent)' : 'var(--faint)') + '">' + (ok ? '✓' : t.status === 'in_progress' ? '◐' : '○') + '</span><span class="t">' + esc(t.text) + '</span></div>'; }).join('') : '<div class="row"><span class="t" style="color:var(--faint)">No to-do list yet</span></div>') + '</div>';
+  // Only a conversation opens on a click; the files and to-dos are lists to read (row static: no hand, no hover).
+  const h = '<div class="in"><div class="search">' + I.search + '<input id="sq" placeholder="Search conversations" value="' + esc(S.q) + '"></div>'
+    + '<div class="sect"><span class="lbl">Conversations</span><span class="r">' + chats.length + '</span></div>' + (chats.length ? chats.map((c) => '<div class="row" tabindex="0" role="button" data-resume="' + esc(c.id) + '"><span class="t">' + esc(c.title) + '</span><span class="a">' + esc(ago(c.updated)) + '</span></div>').join('') : '<div class="row static"><span class="t" style="color:var(--faint)">' + (S.sessions == null ? 'Loading…' : q ? 'None match “' + esc(S.q.trim()) + '”' : 'None saved in this folder yet') + '</span></div>')
+    + '<div class="sect"><span class="lbl">Files changed</span><span class="r">' + files.length + '</span></div>' + (files.length ? files.map((f) => '<div class="row static"><span class="t">✎ ' + esc(f.name) + '</span><span class="a"><span style="color:var(--accent)">+' + f.add + '</span> <span style="color:var(--bad)">−' + f.del + '</span></span></div>').join('') : '<div class="row static"><span class="t" style="color:var(--faint)">None in this conversation yet</span></div>')
+    + '<div class="sect"><span class="lbl">To-do</span><span class="r">' + done + '/' + todos.length + '</span></div>' + (todos.length ? todos.map((t) => { const ok = t.status === 'done' || t.status === 'completed'; return '<div class="row static"><span class="a" style="color:' + (ok ? 'var(--accent)' : 'var(--faint)') + '">' + (ok ? '✓' : t.status === 'in_progress' ? '◐' : '○') + '</span><span class="t">' + esc(t.text) + '</span></div>'; }).join('') : '<div class="row static"><span class="t" style="color:var(--faint)">No to-do list yet</span></div>') + '</div>';
+  if (h === sideHtml) return;
+  sideHtml = h;
+  keepField('sq', () => { side.innerHTML = h; }, false);
 }
 function renderDrops() {
   let h = '';
@@ -627,16 +708,19 @@ function renderDrops() {
     const chats = (S.sessions ?? []).filter((c) => !q || String(c.title).toLowerCase().includes(q)).slice(0, q ? 12 : 6);
     const files = (S.last?.files ?? []).filter((f) => !q || f.name.toLowerCase().includes(q)).slice(0, 6);
     h += '<div class="drop"><div class="search">' + I.search + '<input id="fq" placeholder="Search conversations, files…" value="' + esc(S.q) + '"><span style="color:var(--faint);font-size:11px">esc</span></div><div class="list">'
-      + '<div class="lbl" style="padding:10px 8px 4px">' + (q ? 'Conversations' : 'Recent conversations') + '</div>' + chats.map((c) => '<div class="row" data-resume="' + esc(c.id) + '"><span class="t">' + esc(c.title) + '</span><span class="a">' + esc(ago(c.updated)) + '</span></div>').join('')
-      + (files.length ? '<div class="lbl" style="padding:10px 8px 4px">Files changed</div>' + files.map((f) => '<div class="row"><span class="t">✎ ' + esc(f.name) + '</span></div>').join('') : '') + '</div></div>';
+      + '<div class="lbl" style="padding:10px 8px 4px">' + (q ? 'Conversations' : 'Recent conversations') + '</div>' + (chats.length ? chats.map((c) => '<div class="row" tabindex="0" role="button" data-resume="' + esc(c.id) + '"><span class="t">' + esc(c.title) + '</span><span class="a">' + esc(ago(c.updated)) + '</span></div>').join('') : '<div class="row static"><span class="t" style="color:var(--faint)">' + (S.sessions == null ? 'Loading…' : q ? 'None match “' + esc(S.q.trim()) + '”' : 'None saved in this folder yet') + '</span></div>')
+      + (files.length ? '<div class="lbl" style="padding:10px 8px 4px">Files changed</div>' + files.map((f) => '<div class="row static"><span class="t">✎ ' + esc(f.name) + '</span></div>').join('') : '') + '</div></div>';
   }
-  if (S.folderMenu) h += '<div class="drop" style="width:360px"><div class="lbl" style="padding:4px 8px 6px">This window works in</div><div class="row"><span class="t" style="font-family:var(--mono)">' + esc(S.folder) + '</span></div><div class="row" data-act="reveal"><span class="t">Show in Finder</span></div><div class="row" data-act="other"><span class="t">Open another folder…</span><span class="a">a new window</span></div></div>';
+  if (S.folderMenu) h += '<div class="drop" style="width:360px"><div class="lbl" style="padding:4px 8px 6px">This window works in</div><div class="row static"><span class="t" style="font-family:var(--mono)">' + esc(S.folder) + '</span></div><div class="row" tabindex="0" role="button" data-act="reveal"><span class="t">Show in Finder</span></div><div class="row" tabindex="0" role="button" data-act="other"><span class="t">Open another folder…</span><span class="a">a new window</span></div></div>';
   if (S.usageCard && S.last?.usage) h += usageCardHtml(S.last.usage, S.last.live?.phase === 'working');
   else if (S.usageCard && S.last?.meter) h += meterCardHtml(S.last.meter);
   if (S.toast) h += '<div class="toast">' + esc(S.toast) + '</div>';
-  drops.innerHTML = h;
+  if (h !== dropsHtml) {
+    dropsHtml = h;
+    const opening = S.find && !document.getElementById('fq');
+    keepField('fq', () => { drops.innerHTML = h; }, opening);
+  }
   placeCard();
-  document.getElementById('fq')?.focus();
 }
 async function loadSessions() { try { S.sessions = await (await fetch('/sessions?t=' + T)).json(); } catch { S.sessions = []; } }
 
@@ -665,7 +749,15 @@ addEventListener('keydown', (e) => {
   if (e.metaKey && e.key.toLowerCase() === 'b') { e.preventDefault(); S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }
   if (e.metaKey && e.key.toLowerCase() === 'k') { e.preventDefault(); S.find = !S.find; S.folderMenu = false; if (S.find) loadSessions().then(renderDrops); renderDrops(); return; }
   if (e.key === 'Escape' && (S.find || S.folderMenu || S.side || S.usageCard)) { e.preventDefault(); S.find = false; S.folderMenu = false; S.side = false; S.usageCard = false; S.q = ''; renderUsage(S.last); renderDrops(); renderSide(); return; }
-  if (inField) return;
+  // In the search drop-down and the side bar, keys work the page's own way: Tab moves between the rows, Enter (or
+  // space) opens the one you are on, and Enter in the box opens the first match. Everywhere else Tab still goes to the
+  // app (shift-Tab picks the mode).
+  const here = document.activeElement, panel = here?.closest?.('.side, .drop');
+  if (panel && !e.metaKey && (e.key === 'Enter' || (e.key === ' ' && !inField))) {
+    const row = inField ? panel.querySelector('[role="button"]') : here.matches('[role="button"]') ? here : null;
+    if (row) { e.preventDefault(); row.click(); return; }
+  }
+  if (inField || panel) return;
   if (e.metaKey) return; // ⌘C copies, ⌘V pastes (the paste event), ⌘Q quits: the Mac's own
   const b = keyBytes(e);
   if (b != null) { e.preventDefault(); keys(b); }
@@ -683,7 +775,8 @@ window.agenticDropped = (paths) => {
   send({ t: 'drop', paths });
 };
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'fq' || e.target.id === 'sq') { S.q = e.target.value; const pos = e.target.selectionStart; if (e.target.id === 'fq') renderDrops(); else { renderSide(); const el = document.getElementById('sq'); el?.focus(); el?.setSelectionRange(pos, pos); } }
+  // Both keep the box's caret where it was (keepField).
+  if (e.target.id === 'fq' || e.target.id === 'sq') { S.q = e.target.value; if (e.target.id === 'fq') renderDrops(); else renderSide(); }
 });
 document.addEventListener('click', (e) => {
   const t = e.target;
@@ -696,10 +789,11 @@ document.addEventListener('click', (e) => {
   if (act === 'reveal') { fetch('/reveal?t=' + T); S.folderMenu = false; renderDrops(); return; }
   if (act === 'other') { S.folderMenu = false; renderDrops(); fetch('/other-folder?t=' + T).then((r) => r.json()).then((r) => { if (r.ok) toast('Opening ' + r.folder + ' in a new window'); }); return; }
   if (act === 'send') { if (S.last?.input?.value) keys('\r'); return; }
-  const res = t.closest('[data-resume]'); if (res) { send({ t: 'act', do: 'resume', id: res.dataset.resume }); S.find = false; S.side = false; renderDrops(); renderSide(); return; }
+  const res = t.closest('[data-resume]'); if (res) { send({ t: 'act', do: 'resume', id: res.dataset.resume }); S.find = false; S.side = false; S.q = ''; renderDrops(); renderSide(); return; }
   const md_ = t.closest('[data-mode]'); if (md_) { send({ t: 'act', do: 'mode', mode: md_.dataset.mode }); return; }
   const task = t.closest('[data-task]'); if (task) { send({ t: 'act', do: 'toggle', id: task.dataset.task }); return; }
-  const row = t.closest('[data-row]'); if (row) { const k = row.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); lastConvo = ''; render(); return; }
+  const row = t.closest('[data-row]'); if (row) { const k = row.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); rowsVer++; render(); return; }
+  if (act === 'latest') { const c = document.getElementById('convo'); if (c) c.scrollTop = c.scrollHeight; backButton(); return; }
   const opt = t.closest('[data-opt]'); if (opt && S.last?.perm) { moveThen(Number(opt.dataset.opt) - S.last.perm.selected, '\r'); return; }
   const pr = t.closest('[data-prow]'); if (pr && S.last?.panel) { const ch = panelChoices(S.last.panel.rows), to = ch ? ch.rows.indexOf(Number(pr.dataset.prow)) : -1; if (to < 0) return; const d = to - ch.rows.indexOf(ch.at); if (d === 0) keys('\r'); else moveThen(d, ''); return; }
   const mi = t.closest('[data-menu]'); if (mi && S.last?.menu) { moveThen(Number(mi.dataset.menu) - S.last.menu.index, '\t'); return; }
