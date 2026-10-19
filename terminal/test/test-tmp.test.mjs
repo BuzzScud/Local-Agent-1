@@ -1,10 +1,12 @@
 // The run folder every test process works in, and the clean-up of what a run leaves (test-tmp.mjs).
 import { test, expect } from 'bun:test';
 import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RUN_BASE, RUN_PREFIX, cleanRun, isAlive, makeRunFolder, pidOf, processesIn, sweepRuns, sweepWords } from './test-tmp.mjs';
+import { RUN_BASE, RUN_PREFIX, cleanRun, isAlive, makeRunFolder, pidOf, procTable, processesIn, sweepRuns, sweepWords } from './test-tmp.mjs';
+import { needs } from './needs.mjs';
+import { SANDBOX_EXEC, sandboxAvailable, sandboxProfile } from '../src/tools/sandbox.mjs';
 
 // A pid no process has (macOS pids stop at 99,998).
 const DEAD = 4_000_000;
@@ -47,7 +49,7 @@ test('the programs of a run are found by their TMPDIR (inside it too) and their 
   const stubborn = spawn('bun', ['-e', 'process.on("SIGTERM", () => {}); require("node:child_process").spawn("sleep", ["60"], { stdio: "ignore" }); setInterval(() => {}, 1000)'], { env: env(dir), stdio: 'ignore' });
   const inner = spawn('bun', ['-e', 'setInterval(() => {}, 1000)'], { env: env(join(dir, 'deeper')), stdio: 'ignore' });
   const other = spawn('bun', ['-e', 'setInterval(() => {}, 1000)'], { env: env(`${dir}-not-this-run`), stdio: 'ignore' });
-  const childOf = (ppid) => execFileSync('ps', ['-o', 'pid=,ppid=', '-u', String(process.getuid())], { encoding: 'utf8' }).split('\n').map((l) => l.trim().split(/\s+/).map(Number)).find(([, p]) => p === ppid)?.[0] ?? null;
+  const childOf = (ppid) => procTable().find((p) => p.ppid === ppid)?.pid ?? null; // not ps: it cannot start inside a sandbox
   let grandchild = null;
   try {
     expect(await until(() => (grandchild = childOf(stubborn.pid)) !== null)).toBe(true);
@@ -85,7 +87,7 @@ test('a program of a run with no TMPDIR and no parent left is found by its folde
   const theirs = orphan(elsewhere);
   // An Apple program too (ps shows no environment for it), as a shell left holding a program is.
   const apple = Number(execFileSync('/bin/sh', ['-c', 'cd "$1" || exit 1; sleep 60 </dev/null >/dev/null 2>&1 & echo $!', 'sh', project], { encoding: 'utf8', timeout: 5000 }).trim());
-  const ppidOf = (pid) => Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8' }).trim() || 0);
+  const ppidOf = (pid) => procTable().find((p) => p.pid === pid)?.ppid ?? 0;
   try {
     expect(await until(() => [mine, theirs, apple].every((p) => ppidOf(p) === 1))).toBe(true);
     expect(processesIn(dir, { orphans: () => [] })).not.toContain(mine); // by the environment and the children alone: missed
@@ -111,7 +113,7 @@ test('the sweep cleans the run folders of processes that are gone and keeps a li
   for (const d of [dead, live, join(base, 'agentic-e2e-c')]) mkdirSync(d);
   try {
     const r = await sweepRuns({ base });
-    expect(r).toEqual({ folders: 1, stopped: 0, kept: 1 });
+    expect(r).toEqual({ folders: 1, stopped: 0, kept: 1, left: 0 });
     expect(existsSync(dead)).toBe(false);
     expect(existsSync(live)).toBe(true);
     expect(existsSync(join(base, 'agentic-e2e-c'))).toBe(true);
@@ -119,7 +121,71 @@ test('the sweep cleans the run folders of processes that are gone and keeps a li
     expect(sweepWords({ folders: 3, stopped: 12 })).toBe('Cleaned up after an earlier test run: 3 folders, 12 programs stopped.\n');
     expect(sweepWords({ folders: 2, stopped: 1 })).toBe('Cleaned up after an earlier test run: 2 folders, 1 program stopped.\n');
     expect(sweepWords({ folders: 0, stopped: 0 })).toBe('');
-    expect(await sweepRuns({ base: join(base, 'not-there') })).toEqual({ folders: 0, stopped: 0, kept: 0 });
+    expect(await sweepRuns({ base: join(base, 'not-there') })).toEqual({ folders: 0, stopped: 0, kept: 0, left: 0 });
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('the process table reads a program as ps does: its parent, name, arguments and environment', async () => {
+  const kid = spawn('bun', ['-e', 'setInterval(() => {}, 1000)'], { env: { ...process.env, TT_MARK: 'table' }, stdio: 'ignore' });
+  try {
+    let row = null;
+    expect(await until(() => (row = procTable().find((p) => p.pid === kid.pid))?.env.includes('TT_MARK=table'))).toBe(true);
+    expect(row.ppid).toBe(process.pid);
+    expect(row.comm).toBe('bun');
+    expect(row.args).toEqual(['bun', '-e', 'setInterval(() => {}, 1000)']);
+    expect(procTable().find((p) => p.pid === process.pid)?.ppid).toBe(process.ppid);
+  } finally { kid.kill('SIGKILL'); }
+});
+
+// 18 Oct 2026: the suite run inside Agentic Coder's fence (Bypass). ps could not start there (/bin/ps is setuid), so
+// nothing was found; and the sweep removed the folders of the run before (cut off at 2 minutes) while its apps and
+// stand-in model servers, another sandbox's to the fence, ran on with nothing left to find them by.
+test.skipIf(needs('sandbox', sandboxAvailable))('inside the fence a run\'s own programs are found and stopped; another sandbox\'s keep the folder, and a run outside stops them', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'tt-'));
+  const dir = join(base, `${RUN_PREFIX}${DEAD}-f`);
+  mkdirSync(dir);
+  const leftover = spawn('bun', ['-e', 'setInterval(() => {}, 1000)'], { env: { ...process.env, TMPDIR: dir }, stdio: 'ignore' });
+  const script = join(base, 'inside.mjs');
+  writeFileSync(script, `const { cleanRun, procTable } = await import(${JSON.stringify(join(import.meta.dir, 'test-tmp.mjs'))});
+const { spawn } = await import('node:child_process');
+const dir = process.argv[2];
+const inner = spawn('bun', ['-e', 'setInterval(() => {}, 1000)'], { env: { ...process.env, TMPDIR: dir }, stdio: 'ignore' });
+while (!procTable().find((p) => p.pid === inner.pid)?.env.includes('TMPDIR=' + dir)) await new Promise((r) => setTimeout(r, 25));
+const r = await cleanRun(dir, { graceMs: 200 });
+console.log(JSON.stringify({ inner: inner.pid, ...r }));
+process.exit(0);
+`);
+  try {
+    expect(await until(() => procTable().find((p) => p.pid === leftover.pid)?.env.includes(`TMPDIR=${dir}`))).toBe(true);
+    const out = execFileSync(SANDBOX_EXEC, ['-p', sandboxProfile(base, { open: true }), process.execPath, script, dir], { encoding: 'utf8', timeout: 20_000 });
+    const r = JSON.parse(out.trim().split('\n').pop());
+    expect([r.stopped, r.left]).toEqual([1, true]); // its own program stopped; the other refused the signal
+    expect(await until(() => !isAlive(r.inner))).toBe(true);
+    expect(isAlive(leftover.pid)).toBe(true);
+    expect(existsSync(dir)).toBe(true);
+    // Outside the fence the next run's sweep stops it, and the folder goes.
+    expect(await cleanRun(dir, { graceMs: 200 })).toEqual({ stopped: 1, left: false });
+    expect(await until(() => !isAlive(leftover.pid))).toBe(true);
+    expect(existsSync(dir)).toBe(false);
+  } finally {
+    leftover.kill('SIGKILL');
+    rmSync(base, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test('a run whose programs cannot be listed keeps its folder, and the sweep says so', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'tt-'));
+  const dead = join(base, `${RUN_PREFIX}${DEAD}-l`);
+  mkdirSync(dead);
+  try {
+    expect(processesIn(dead, { ps: () => null })).toBe(null);
+    const r = await sweepRuns({ base, ps: () => null });
+    expect(r).toEqual({ folders: 0, stopped: 0, kept: 0, left: 1 });
+    expect(existsSync(dead)).toBe(true);
+    expect(sweepWords(r)).toBe('Programs of 1 earlier test run could not be stopped from inside a sandbox (Agentic Coder\'s fence); its folder stays until the tests run once in a Terminal.\n');
+    expect(sweepWords({ folders: 2, stopped: 0, left: 3 })).toBe('Cleaned up after an earlier test run: 2 folders.\nPrograms of 3 earlier test runs could not be stopped from inside a sandbox (Agentic Coder\'s fence); their folders stay until the tests run once in a Terminal.\n');
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
