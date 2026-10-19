@@ -134,7 +134,8 @@ export class NotesPart {
         // The design system (design-system.mjs, plan A of 18 Oct 2026): the look (the project's DESIGN.md, else yours,
         // which takes the rules cards' place), the guide, and the bank's whole page of the kind asked for.
         const sys = systemNotes(text, { cwd: this.cwd, ctx: this.ctx });
-        const own = sys.look ? { ...pick, always: [] } : pick;
+        // A style the request names (sys.style) is the look: the cards' own look card would pull the other way.
+        const own = sys.look || sys.style ? { ...pick, always: [], ...(sys.style ? { look: null } : {}) } : pick;
         const cards = designNotes(studio ? { ...own, examples: [], more: [], look: null } : own);
         // A look with the cards (no pieces): its card, used in the page's own CSS.
         const lookText = look && !studio ? `This page takes the ${look.name} look (asked for): use the colours, type and corners below in place of the rules card's look. Never the brand's name, logo or words on the page.\n${lookCard(look)}` : null;

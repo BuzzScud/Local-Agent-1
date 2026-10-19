@@ -29,9 +29,14 @@ async function loadGuide() {
 }
 const GUIDE = await loadGuide();
 
-export const DESIGN_MD_PLACES = ['DESIGN.md', 'docs/DESIGN.md', '.agentic/DESIGN.md', 'design/DESIGN.md'];
+const DESIGN_MD_PLACES = ['DESIGN.md', 'docs/DESIGN.md', '.agentic/DESIGN.md', 'design/DESIGN.md'];
 export const LOOK_CHARS = 3600; // of a DESIGN.md, in the note
-export const BANK_CHARS = 6000; // of a bank page's skeleton, in the note
+const BANK_CHARS = 6000; // of a bank page's skeleton, in the note
+const SCRIPT_CHARS = 7000; // of its script: given whole or not at all (a script cut in the middle teaches nothing); the bank's longest is 6,600
+// The bank's pages start from one stylesheet (DESIGN/bank/base.css: the look's tokens, .card, .btn, .tag, .field, the
+// toast and dialog), put in each page between these marks. A skeleton leaves it out and the note gives it once: before
+// 18 Oct 2026 it took 5,500 of the skeleton's 6,000 characters, so a model saw about 250 of the page's own markup.
+const BASE_RE = /\/\* base: [^*]*\*\/[\s\S]*?\/\* end base \*\/\n?/;
 const isFile = (p) => { try { return statSync(p).isFile(); } catch { return false; } };
 const read = (p) => { try { return readFileSync(p, 'utf8'); } catch { return ''; } };
 
@@ -99,7 +104,15 @@ export const KINDS = {
   slides: ['slides', 'slide deck', 'deck', 'presentation', 'keynote', 'pitch'],
   diagram: ['diagram', 'architecture', 'org chart', 'mind map', 'sequence', 'swimlane', 'timeline', 'roadmap', 'gantt', 'map of'],
   flowchart: ['flowchart', 'flow chart', 'flow diagram', 'process flow', 'decision tree', 'user flow'],
-  card: ['card', 'widget', 'tile', 'badge', 'notification', 'player', 'pass', 'ticket', 'post'],
+  card: ['card', 'widget', 'tile', 'badge', 'notification', 'player', 'pass', 'ticket', 'post', 'calendar invite', 'to-do list', 'todo list', 'checklist'],
+  // 18 Oct 2026, kinds the requests use that had no page: their own pages in the bank.
+  calendar: ['calendar', 'agenda', 'month view', 'week view', 'event calendar'],
+  chat: ['chat', 'messenger', 'messaging', 'direct messages', 'chat app', 'inbox chat'],
+  docs: ['docs', 'documentation', 'api reference', 'api docs', 'knowledge base', 'help center', 'developer guide'],
+  gallery: ['gallery', 'photo grid', 'image grid', 'lightbox', 'album', 'mood board', 'photo wall'],
+  game: ['game', 'puzzle', 'memory game', 'tic tac toe', 'snake', 'wordle', 'quiz game', 'arcade', 'sudoku', 'crossword'],
+  tool: ['calculator', 'converter', 'estimator', 'mortgage', 'loan', 'unit converter', 'generator'],
+  article: ['blog', 'blog post', 'article', 'essay', 'newsletter', 'long read', 'case study', 'story page'],
 };
 const WORDS = Object.entries(KINDS).flatMap(([kind, words]) => words.map((w) => ({ kind, w, re: new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '[\\s-]+')}s?\\b`, 'i') })));
 
@@ -115,8 +128,8 @@ export function kindOf(text) {
   return best?.kind ?? null;
 }
 
-export const bankDir = (dir = designDir()) => (dir ? join(dir, 'bank') : null);
-// bank.json: [{ id, kind, title, for, words: [], outline: [], file, picture }]; the files beside it.
+const bankDir = (dir = designDir()) => (dir ? join(dir, 'bank') : null);
+// bank.json: [{ id, kind, title, for, words: [], outline: [], works: [], general?, file, picture }]; the files beside it.
 export function readBank(dir = designDir()) {
   const b = bankDir(dir);
   if (!b) return [];
@@ -134,13 +147,14 @@ export function pickBankPage(text, { dir = designDir(), bank = readBank(dir) } =
   const same = bank.filter((e) => e.kind === kind);
   if (!same.length) return null;
   const score = (e) => (e.words ?? []).filter((w) => words.includes(String(w).toLowerCase())).length;
-  return [...same].sort((a, b) => score(b) - score(a) || a.id.localeCompare(b.id))[0];
+  // A tie (often: no words in common) goes to the kind's general page, the one most requests of the kind can grow from.
+  return [...same].sort((a, b) => score(b) - score(a) || Number(Boolean(b.general)) - Number(Boolean(a.general)) || a.id.localeCompare(b.id))[0];
 }
 
 // A page made short enough to hand over and still show how it is built: its scripts left out, long text cut to its
 // first words, a run of more than two lines of the same shape kept to two, then cut at max characters.
 export function skeletonOf(html, max = BANK_CHARS) {
-  let t = String(html ?? '').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '<script>/* … */</script>');
+  let t = String(html ?? '').replace(BASE_RE, '/* the base styles (DESIGN/bank/base.css) */\n').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '<script>/* … */</script>');
   t = t.replace(/>([^<>]{70,})</g, (m, s) => `>${s.trim().split(/\s+/).slice(0, 8).join(' ')} …<`);
   const lines = t.split('\n');
   const out = [];
@@ -158,19 +172,77 @@ export function skeletonOf(html, max = BANK_CHARS) {
   return t.length <= max ? t : `${t.slice(0, t.lastIndexOf('\n', max))}\n<!-- … cut here -->`;
 }
 
-export function bankNote(entry, { dir = designDir(), max = BANK_CHARS } = {}) {
+// A page's own scripts, as one text (those with a src left out).
+export function scriptOf(html) {
+  return [...String(html ?? '').matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1].trim()).filter(Boolean).join('\n\n');
+}
+// The page as the model gets it: what it is for, its outline and how its parts work (works: its controls, in words),
+// the skeleton, its script whole when it fits (the controls working is half of what the page shows; 18 Oct 2026,
+// after 19 of the 40 pages had buttons that did nothing), and the base styles once (base: false points to the file).
+export function bankNote(entry, { dir = designDir(), max = BANK_CHARS, scriptMax = SCRIPT_CHARS, base = true } = {}) {
   if (!entry) return '';
   const html = read(join(bankDir(dir), entry.file));
   if (!html) return '';
-  const outline = (entry.outline ?? []).map((o) => `- ${o}`).join('\n');
-  return `[Whole page · DESIGN/bank/${entry.file} · ${entry.title}: a finished ${entry.kind} page in the user's look]\n${entry.for ? `${entry.for}\n` : ''}${outline ? `How it is laid out:\n${outline}\n` : ''}Its skeleton (scripts left out, text shortened):\n\`\`\`html\n${skeletonOf(html, max)}\n\`\`\`\nBuild yours on this structure and its spacing, with the request's own content and parts; where the request asks for something else, the request wins. Read DESIGN/bank/${entry.file} for the whole page.`;
+  const list = (xs) => (xs ?? []).map((o) => `- ${o}`).join('\n');
+  const outline = list(entry.outline), works = list(entry.works);
+  const script = scriptOf(html);
+  const css = BASE_RE.test(html) ? read(join(bankDir(dir), 'base.css')).trim() : '';
+  const parts = [
+    `[Whole page · DESIGN/bank/${entry.file} · ${entry.title}: a finished ${entry.kind} page in the user's look]`,
+    entry.for ?? '',
+    outline ? `How it is laid out:\n${outline}` : '',
+    works ? `How it works (every control does what it says):\n${works}` : '',
+    `Its skeleton (text shortened, scripts after it):\n\`\`\`html\n${skeletonOf(html, max)}\n\`\`\``,
+    script && script.length <= scriptMax ? `Its script: one state, one draw from it, every control wired:\n\`\`\`js\n${script}\n\`\`\`` : script ? `Its script is ${script.length.toLocaleString('en-US')} characters: Read DESIGN/bank/${entry.file} to see how its parts work.` : '',
+    css ? (base ? `The base styles it starts from (DESIGN/bank/base.css, your look as CSS):\n\`\`\`css\n${css}\n\`\`\`` : 'Its base styles (your look as CSS: tokens, .card, .btn, .tag, .field, the toast and dialog) are in DESIGN/bank/base.css.') : '',
+    `Build yours on this structure, its spacing and its working parts, with the request's own content; where the request asks for something else, the request wins. Read DESIGN/bank/${entry.file} for the whole page.`,
+  ];
+  return parts.filter(Boolean).join('\n');
+}
+
+// ---- styles: a look asked for by name -------------------------------------------------------------------------------
+
+// A style is a DESIGN.md of its own in DESIGN/styles/<id>.md (18 Oct 2026, the owner's ask for "taste cards for
+// specific styles": editorial, terminal, playful, brutalist…). Its front matter names the words a request says it
+// with (words: "editorial, magazine, serif"), and may point to pictures and pages to look at (pictures:, links:).
+// A request that says one gets it in place of the look; the user's own rules still hold.
+const STYLE_CHARS = 3000;
+const stylesDir = (dir = designDir()) => (dir ? join(dir, 'styles') : null);
+const frontKey = (text, key) => (new RegExp(`^${key}:\\s*"?([^"\\n]*)"?\\s*$`, 'm').exec(/^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? '')?.[1] ?? '').trim();
+const listOf = (s) => s.split(',').map((w) => w.trim()).filter(Boolean);
+export function readStyleCards(dir = designDir()) {
+  const d = stylesDir(dir);
+  let files = [];
+  try { files = readdirSync(d).filter((f) => f.endsWith('.md') && !/^readme/i.test(f)).sort(); } catch { return []; }
+  return files.map((f) => {
+    const text = read(join(d, f));
+    return { id: f.replace(/\.md$/, ''), file: f, name: frontKey(text, 'name') || f.replace(/\.md$/, ''), words: listOf(frontKey(text, 'words')), pictures: listOf(frontKey(text, 'pictures')), links: listOf(frontKey(text, 'links')), text };
+  }).filter((s) => s.words.length);
+}
+// "Add a dark mode" or "clean up the code" ask for a switch or a tidy, not a style.
+const NOT_A_STYLE = /\b(?:dark|light)[- ]mode\b|\bclean(?:ed|ing)?[- ]?up\b/gi;
+// The style a request names, or null: the earliest word in it wins, the longer of two at one place.
+export function pickStyle(text, { dir = designDir(), styles = readStyleCards(dir) } = {}) {
+  const t = String(text ?? '').replace(NOT_A_STYLE, ' ');
+  let best = null;
+  for (const s of styles) for (const w of s.words) {
+    const m = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '[\\s-]+')}\\b`, 'i').exec(t);
+    if (m && (!best || m.index < best.at || (m.index === best.at && w.length > best.w.length))) best = { style: s, at: m.index, w };
+  }
+  return best ? { ...best.style, word: best.w } : null;
+}
+export function styleNote(style, { dir = designDir(), max = STYLE_CHARS } = {}) {
+  if (!style) return '';
+  const rules = mdSection(read(yourDesignMd(dir) ?? ''), 'Your rules');
+  const look = [style.pictures.length ? `Pictures of it to look at: ${style.pictures.map((p) => `DESIGN/styles/${p}`).join(', ')}` : '', style.links.length ? `Pages in this style: ${style.links.join(', ')}` : ''].filter(Boolean).join('\n');
+  return `[Style · DESIGN/styles/${style.file} · asked for ("${style.word}"): its colours, type and shapes replace your look for this page. The whole page below uses your look's tokens (--paper, --surface, --ink, --accent…): give them this style's values]\n${cut(style.text.replace(/^---\n[\s\S]*?\n---\n*/, ''), max, `DESIGN/styles/${style.file}`)}${look ? `\n${look}` : ''}${rules ? `\n\n[Your rules · DESIGN/DESIGN.md: they hold in every style]\n${cut(rules, 1600, 'DESIGN/DESIGN.md')}` : ''}`;
 }
 
 // ---- /design init: a DESIGN.md from a project's own styles ----------------------------------------------------------
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage', 'vendor', '.cache', '.turbo', 'target', '.agentic']);
 // The style text of a project: its .css/.scss/.less files and the <style> of its .html pages (at most 300 files).
-export function stylesOf(cwd, { limit = 300 } = {}) {
+function stylesOf(cwd, { limit = 300 } = {}) {
   const found = [];
   const walk = (d, depth) => {
     if (depth > 6 || found.length >= limit) return;
@@ -255,7 +327,7 @@ export function readStyles(cwd) {
 }
 
 // The DESIGN.md text for a project (google-labs design.md: front matter, then sections in words).
-export function designMdFromStyles(cwd, { name = basename(cwd), today = new Date() } = {}) {
+function designMdFromStyles(cwd, { name = basename(cwd), today = new Date() } = {}) {
   const s = readStyles(cwd);
   if (!s.files.length) return null;
   const c = s.colours, d = s.dark;
@@ -337,20 +409,24 @@ export function hasStylesOf(cwd, made = []) {
   return stylesOf(cwd, { limit: 40 }).some((f) => !mine.has(f.file));
 }
 
-// What the design system adds to a page request's notes (agent-notes.mjs), in this order: the look, the guide, the
+// What the design system adds to a page request's notes (agent-notes.mjs), in this order: the look (or the style the
+// request names), the guide, the
 // bank's page of the kind asked for. Every model gets all three (the owner, 18 Oct 2026: "i do want this to be apart of
 // any model used in the agentic coder"); one with less than 64k of memory a shorter look and a shorter skeleton, since
 // its room is for the page it writes. → { text, names, look, page }.
 export function systemNotes(text, { cwd, ctx = 65536, dir = designDir() } = {}) {
   const look = lookFor(cwd, dir);
+  const style = pickStyle(text, { dir });
   const big = ctx >= 65536;
   const parts = [];
   const names = [];
-  if (look) { parts.push(lookNote(look, { cwd, dir, max: big ? LOOK_CHARS : 1800 })); names.push(look.from === 'project' ? relative(cwd, look.abs) || 'DESIGN.md' : 'your DESIGN.md'); }
+  // A style the request names takes the look's place (the user's rules come with it); else the look.
+  if (style) { parts.push(styleNote(style, { dir, max: big ? STYLE_CHARS : 1600 })); names.push(`style/${style.id}`); }
+  else if (look) { parts.push(lookNote(look, { cwd, dir, max: big ? LOOK_CHARS : 1800 })); names.push(look.from === 'project' ? relative(cwd, look.abs) || 'DESIGN.md' : 'your DESIGN.md'); }
   parts.push(`[Design guide · how to use the look]\n${designGuide()}`);
   names.push('the design guide');
   const page = pickBankPage(text, { dir });
-  const pageText = page ? bankNote(page, { dir, max: big ? BANK_CHARS : 2400 }) : '';
+  const pageText = page ? bankNote(page, big ? { dir } : { dir, max: 2400, scriptMax: 1500, base: false }) : '';
   if (pageText) { parts.push(pageText); names.push(`bank/${page.id}`); }
-  return { text: parts.join('\n\n'), names, look, page: pageText ? page : null };
+  return { text: parts.join('\n\n'), names, look, style, page: pageText ? page : null };
 }
