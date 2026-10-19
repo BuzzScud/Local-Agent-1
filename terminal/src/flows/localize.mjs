@@ -57,6 +57,33 @@ export function testsFor(cwd, rel, files) {
   return files.filter((f) => isTestFile(f) && importsOf(cwd, f).includes(rel));
 }
 
+// The test files that check a change, the closest first, at most `max` (18 Oct 2026: the app's own check ran a whole
+// suite of 3 to 6 minutes after every change; its 2-minute limit cut it off, and the apps its tests had started ran
+// on). Closest: a test file the change itself made or changed, then one named after a changed file, then one that
+// imports a changed file, then one that imports a file that does; among equals, the one whose name shares more words
+// with a changed file's. A name alone is not enough when the test's imports go elsewhere (a practice project's own
+// agent.test.mjs is not agent.mjs's). [] when none does: the whole suite runs then.
+export const COVER_MAX = 5;
+const words = (rel) => basename(rel).replace(/\.[^.]+$/, '').replace(/(^test_|[._-](test|spec)$)/, '').split(/[^a-z0-9]+/i).filter(Boolean).map((w) => w.toLowerCase());
+export function coveringTests(cwd, changed, files, max = COVER_MAX) {
+  const tests = files.filter(isTestFile);
+  const code = changed.filter((f) => !isTestFile(f));
+  const stems = new Set(code.map((f) => words(f).join('-')));
+  const imports = new Map();
+  const importsOfCached = (rel) => { if (!imports.has(rel)) imports.set(rel, importsOf(cwd, rel)); return imports.get(rel); };
+  const rank = (t) => {
+    if (changed.includes(t)) return 0;
+    const direct = importsOfCached(t);
+    const first = code.some((f) => direct.includes(f));
+    const second = !first && direct.some((d) => !isTestFile(d) && code.some((f) => importsOfCached(d).includes(f)));
+    if (stems.has(words(t).join('-')) && (first || second || !direct.length)) return 1;
+    return first ? 2 : second ? 3 : null;
+  };
+  const near = (t) => Math.max(0, ...code.map((f) => words(f).filter((w) => words(t).includes(w)).length));
+  return tests.map((t) => ({ t, r: rank(t) })).filter((x) => x.r !== null)
+    .sort((a, b) => a.r - b.r || near(b.t) - near(a.t) || a.t.localeCompare(b.t)).slice(0, max).map((x) => x.t);
+}
+
 // Source files a failing run points at, most likely first.
 export function sourcesFromFailure(cwd, out, files) {
   const hits = [];

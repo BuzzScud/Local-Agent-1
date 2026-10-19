@@ -509,8 +509,26 @@ test('a good change checked only through a cut-off pipe: the app runs the tests 
   agent.on('note', (e) => notes.push(e.text));
   await agent.send('add a note to the export');
   await fake.close();
-  expect(notes).toContain('Checking the change: node --test');
+  expect(notes).toContain('Checking the change: node --test export.test.mjs'); // the test file that covers export.mjs
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain('// a note');
+});
+
+// 18 Oct 2026: the check after a change ran the whole suite, which in Agentic Coder's own folder takes 3 to 6 minutes;
+// the 2-minute limit cut it off and the apps its tests had started ran on. It runs the files that cover the change.
+test('the check after a change runs the test files that cover it, and the whole suite when none does', async () => {
+  const checked = async (path, edit) => {
+    const fake = await startFakeServer([{ tool: { name: 'Write', args: { path, content: edit } } }, { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' }]);
+    const cwd = project();
+    const notes = [];
+    const agent = new Agent({ url: fake.url, model, cwd, home: cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, checkIns: false, ask: async () => ({ choice: 'yes' }) });
+    agent.on('note', (e) => notes.push(e.text));
+    await agent.send(`write ${path}`);
+    await fake.close();
+    return notes.filter((t) => t.startsWith('Checking the change'));
+  };
+  expect(await checked('rates.mjs', 'export const rate = 1;\n')).toEqual(['Checking the change: node --test']); // nothing covers it: all
+  // A test file the change wrote: that file.
+  expect(await checked('rates.test.mjs', "import { test } from 'node:test';\ntest('x', () => {});\n")).toEqual(['Checking the change: node --test rates.test.mjs']);
 });
 
 test('a test run fails by its exit code, or by the failures its runner counted', async () => {

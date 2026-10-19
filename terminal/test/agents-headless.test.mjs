@@ -49,8 +49,8 @@ test('coding -p --agents: the six stages on the real agent, a real failing test 
   expect(readFileSync(join(cwd, 'src/add.mjs'), 'utf8')).toBe('export const add = (a, b) => a + b;\n');
   expect(readFileSync(join(cwd, 'tasks/todo.md'), 'utf8')).toContain('- [x] 1. Add two numbers');
   // the app ran the covering test: it failed before the code and passed after
-  expect(notes).toContain('/agents · checker: bun test ./test/add.test.mjs: fails, as it should');
-  expect(notes).toContain('/agents · checker: bun test ./test/add.test.mjs: passes');
+  expect(notes).toContain('/agents · checker: bun run test ./test/add.test.mjs: fails, as it should');
+  expect(notes).toContain('/agents · checker: bun run test ./test/add.test.mjs: passes');
   expect(notes.some((n) => /^\/agents asks: Approve the plan → Yes, build it$/.test(n))).toBe(true);
   expect(notes.some((n) => n.startsWith('/agents · 2nd opinion: before done:'))).toBe(true);
 }, 120_000);

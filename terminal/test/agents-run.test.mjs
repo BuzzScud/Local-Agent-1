@@ -190,7 +190,11 @@ test('pause holds it between steps; resume goes on; a note you type goes with it
 test('the helpers: the covering command from the suite\'s, test files, JSON in a reply, the line that says what failed, a request about numbers', () => {
   expect(coveringCommand('python3 -m pytest', 'tests/test_kepler.py')).toBe('python3 -m pytest tests/test_kepler.py');
   expect(coveringCommand('pytest', 'tests/test a.py')).toBe("pytest 'tests/test a.py'");
-  expect(coveringCommand('bun run test', 'test/x.test.mjs')).toBe('bun test ./test/x.test.mjs');
+  expect(coveringCommand('bun run test', 'test/x.test.mjs')).toBe('bun run test ./test/x.test.mjs'); // the project's own runner
+  expect(coveringCommand('bun test', 'test/x.test.mjs')).toBe('bun test ./test/x.test.mjs');
+  expect(coveringCommand('npm test', ['a.test.js', 'b c.test.js'])).toBe("npm test -- a.test.js 'b c.test.js'");
+  expect(coveringCommand('bun run test', ['t/a.test.mjs', './t/b.test.mjs'])).toBe('bun run test ./t/a.test.mjs ./t/b.test.mjs');
+  expect(coveringCommand('npm test', [])).toBe('npm test');
   expect(coveringCommand('npm test', 'a.test.js')).toBe('npm test -- a.test.js');
   expect(coveringCommand('node --test', 'a.test.mjs')).toBe('node --test a.test.mjs');
   expect(coveringCommand('cargo test', 'tests/a.rs')).toBe('cargo test');
