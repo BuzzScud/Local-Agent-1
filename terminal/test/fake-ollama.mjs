@@ -58,6 +58,13 @@ export function answerOf(body, { review = 'LGTM', look = 'LGTM', describe = 'A l
     if (!after.some((x) => x.role === 'tool')) return { content: '', tool_calls: [call('Write', { path: 'report.html' })] };
     return { content: 'Wrote report.html.' };
   }
+  // A page pasted into the reply instead of saved (qwen-reread.test.mjs pasteToWrite): the first reply is the
+  // whole file as a fenced block with no tool call; after the app saves it (a tool result arrives), it says so.
+  if (body.tools?.length && /dashboard page/i.test(said)) {
+    const after = body.messages.slice(body.messages.lastIndexOf(u));
+    if (!after.some((x) => x.role === 'tool')) return { content: 'I need to create the dashboard page. Let me write it now.\n\n```html\n<!doctype html>\n<html>\n<head>\n<title>Net Map</title>\n</head>\n<body>\n<h1>Dashboard</h1>\n<p>one</p>\n<p>two</p>\n</body>\n</html>\n```' };
+    return { content: 'Saved the dashboard page.' };
+  }
   if (/Another model read your change/.test(said)) return { content: 'Checked: the second line is right now.' };
   return { content: `From ${m}.` };
 }
@@ -83,8 +90,14 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
       // A call asked for again in raw mode (agent-step.mjs rereadCall): as Qwen3.6 did on 19 Oct 2026, it writes a
       // Write's path and closes the call, unless the prompt has opened its content for it.
       if (body.raw) {
-        const opened = /<parameter=content>\n$/.test(String(body.prompt ?? ''));
-        return json(200, { model: body.model, response: opened ? '<h1>Report</h1>\n</parameter>\n' : '<parameter=path>\nreport.html\n</parameter>\n', done: true, done_reason: 'stop', eval_count: opened ? 9 : 26 });
+        const prompt = String(body.prompt ?? '');
+        const opened = /<parameter=content>\n$/.test(prompt);
+        if (!opened) return json(200, { model: body.model, response: '<parameter=path>\nreport.html\n</parameter>\n', done: true, done_reason: 'stop', eval_count: 26 });
+        // The content opened for it: the file's body. report.html (rereadCall) keeps its old answer; any other
+        // page is the body the model streams when the app opens a Write for a whole file it pasted (pasteToWrite).
+        const path = /<parameter=path>\n([^\n]+)\n<\/parameter>/.exec(prompt)?.[1] ?? '';
+        const resp = /report\.html/.test(path) ? '<h1>Report</h1>\n</parameter>\n' : '<!doctype html>\n<title>Saved</title>\n<h1>Dashboard saved</h1>\n</parameter>\n';
+        return json(200, { model: body.model, response: resp, done: true, done_reason: 'stop', eval_count: 9 });
       }
       if (body.keep_alive === 0) { loaded.delete(body.model); return json(200, { model: body.model, done: true, done_reason: 'unload' }); }
       // opts.noRoom: a load never answers (a busy service with no room beside its model; the Arena's remote runs).
