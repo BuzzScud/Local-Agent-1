@@ -43,6 +43,19 @@ export class AnswerPart {
     // An answer to a question from Claude's notes in place of the request: back once with the request.
     const chasedNow = !this.turn.noteChased ? this.noteChaseDue(`${turn.reasoning ?? ''}\n${text}`) : '';
     if (chasedNow) { this.messages.push({ role: 'user', content: auto(chasedNow.replace(/^\(|\)$/g, '')) }); return 'continue'; }
+    // The server the request names, never tried in Bypass (tools/ssh.mjs): Qwen3.6 wrote "I'll run the SSH command"
+    // with it in a shell block, promised a password prompt and ended (18 Oct 2026). Back once, then a line under it.
+    // Before a question to the user ends the message: at 8:09 PM the same day it answered "What would you like to do
+    // on the server?" with nothing run, and that question ended the message before this was looked at.
+    if (this.turn.ssh && this.mode === 'bypass' && !this.turn.sshRan && !this.isHelper && this.hook('next-step') && text.trim()) {
+      if (!this.turn.sshBack) {
+        this.turn.sshBack = true;
+        this.emit('note', { text: `It answered without running ssh to ${this.turn.ssh.server}; told it to run it.`, tone: 'warn' });
+        this.messages.push({ role: 'user', content: auto(`You answered without running anything, so nothing happened. Bash is one of your tools and commands reach ${this.turn.ssh.server} from here: run ssh now (ssh ${this.turn.ssh.server} alone checks the login). If it fails, its output says what to do or ask.`) });
+        return 'continue';
+      }
+      this.emit('note', { text: `Answered without running ssh: nothing ran on ${this.turn.ssh.server}.`, tone: 'warn' });
+    }
     if (asksTheUser(text)) return 'break';
     // The server says it wrote far more than arrived, and no call came: a call lost on the way, not a
     // step it forgot (Qwen3.6 on the service, 8 Oct 2026: 38 s of writing after "Let me write the scripts
@@ -110,17 +123,6 @@ export class AnswerPart {
         return 'continue';
       }
       this.emit('note', { text: `Answered without reading ${this.turn.web.urls[0]}: what it says about that page is not from the page.`, tone: 'warn' });
-    }
-    // The server the request names, never tried in Bypass (tools/ssh.mjs): Qwen3.6 wrote "I'll run the SSH command"
-    // with it in a shell block, promised a password prompt and ended (18 Oct 2026). Back once, then a line under it.
-    if (this.turn.ssh && this.mode === 'bypass' && !this.turn.sshRan && !this.isHelper && this.hook('next-step') && text.trim()) {
-      if (!this.turn.sshBack) {
-        this.turn.sshBack = true;
-        this.emit('note', { text: `It answered without running ssh to ${this.turn.ssh.server}; told it to run it.`, tone: 'warn' });
-        this.messages.push({ role: 'user', content: auto(`You answered without running anything, so nothing happened. Bash is one of your tools and commands reach ${this.turn.ssh.server} from here: run ssh now (ssh ${this.turn.ssh.server} alone checks the login). If it fails, its output says what to do or ask.`) });
-        return 'continue';
-      }
-      this.emit('note', { text: `Answered without running ssh: nothing ran on ${this.turn.ssh.server}.`, tone: 'warn' });
     }
     // Files that exist: an answer that names files not in the project (and not made this
     // message, nor named in the request) goes back once; the second time, a line says which.
