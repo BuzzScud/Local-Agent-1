@@ -233,3 +233,28 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the task row under 
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
+
+// The thinking as it streams (18 Oct 2026, the owner, with three pictures: "fix the thinking too, it moves the whole
+// page"): the last 400 characters of it were 2 lines one moment and 12 the next, so everything around it jumped.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking as it streams keeps one height, shows its newest line, and nothing around it moves', async () => {
+  const p = await openPage();
+  try {
+    const turnStart = Date.now();
+    const at = async (thinking) => {
+      await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 50, thinking } });
+      return p.js(`(() => { const t = document.querySelector('#live .thinking'); const r = t.getBoundingClientRect(), last = t.firstElementChild.getBoundingClientRect(); const you = [...document.querySelectorAll('.you, .user, [data-key="u1"]')][0]; return { h: Math.round(r.height), bottom: Math.round(r.bottom), live: Math.round(document.getElementById('live').getBoundingClientRect().height), lastIn: last.bottom <= r.bottom + 1, status: Math.round(document.getElementById('status').getBoundingClientRect().top), scroll: document.getElementById('convo').scrollTop, you: you ? Math.round(you.getBoundingClientRect().top) : null }; })()`);
+    };
+    const short = await at('The user wants the totals.');
+    const long = await at(Array.from({ length: 30 }, (_, i) => `Line ${i + 1} of the thinking, about the totals and the rounding in checkout.`).join('\n'));
+    const longer = await at(Array.from({ length: 60 }, (_, i) => `Step ${i + 1}: and more.`).join('\n'));
+    for (const r of [long, longer]) {
+      expect(r.h).toBe(short.h);
+      expect(r.live).toBe(short.live);
+      expect(r.status).toBe(short.status);
+      expect(r.you).toBe(short.you);
+      expect(r.lastIn).toBe(true);
+    }
+    expect(await p.js(`document.querySelector('#live .thinking').textContent.includes('Step 60: and more.')`)).toBe(true);
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
