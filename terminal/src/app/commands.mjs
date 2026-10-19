@@ -11,7 +11,7 @@ export const COMMANDS = [
   { name: 'mode', desc: 'Pick the mode: auto, manual, accept edits, plan or bypass permissions (shift+tab)', arg: '[auto|manual|edits|plan|bypass]', picker: true },
   { name: 'permissions', desc: 'What runs without asking, what never runs, which files always ask, and the start-up mode', arg: '[allow|never|protect|remove|mode|forget|test]' },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
-  { name: 'design', desc: 'Ask with the design examples; alone: the folder and what is on · on|off, check on|off, ask on|off (look before it checks), sets all|<set,set>, style auto|opus|fable|mix, studio [on|off] (the UI pieces)', arg: '[request|on|off|check|ask|sets|style|studio]' },
+  { name: 'design', desc: 'Ask with the design examples; alone: the folder and what is on · on|off, check on|off, ask on|off (look before it checks), sets all|<set,set>, style auto|opus|fable|mix, studio [on|off] (the UI pieces), init (this project\'s DESIGN.md from its styles)', arg: '[request|on|off|check|ask|sets|style|studio|init]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
   { name: 'memory', desc: 'What Agentic Coder remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
   { name: 'instructions', desc: 'Edit the instructions and prompt files (AGENTS, TOOLS, SKILLS.md) in the hub' },

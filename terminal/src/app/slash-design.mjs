@@ -5,6 +5,7 @@ import { mathTopics } from '../agent/expertise.mjs';
 import { designSettings, styleWords, designSummary, STYLES as DESIGN_STYLES, readCards, designDir } from '../agent/design.mjs';
 import { studioSummary, studioDir, ensureStudioDir, studioLooks, checkPiece, readTheme } from '../agent/studio.mjs';
 import { updateLibrary, librarySummary, SOURCES as LIBRARY_SOURCES } from '../agent/library.mjs';
+import { writeDesignMd } from '../agent/design-system.mjs';
 import { saveSettings } from './store.mjs';
 import { IDLE } from './app-common.mjs';
 
@@ -31,7 +32,8 @@ export function slashDesign(self) {
         // sets; style auto|opus|fable|mix: which set's cards win; studio
         // [on|off]: the design studio's pieces; polish, plan, learn on|off: the
         // check and the look before you are asked, the page plan, keeping a page
-        // you call good (8 Oct 2026). Anything else is a request sent with the cards.
+        // you call good (8 Oct 2026); init: this project's DESIGN.md from its styles
+        // (18 Oct 2026). Anything else is a request sent with the cards.
         const saved = { ...(self.settings.design ?? {}) };
         const keep = (patch) => {
           const next = { ...saved, ...patch };
@@ -50,6 +52,16 @@ export function slashDesign(self) {
           break;
         }
         if (/^(on|off)$/i.test(a)) { keep({ auto: /^on$/i.test(a) }); break; }
+        // init (18 Oct 2026, plan A of the design system): this project's DESIGN.md, written from the styles it has.
+        if (/^init$/i.test(a)) {
+          const cwd = self.agent?.cwd ?? self.opts?.cwd ?? process.cwd();
+          let r;
+          try { r = writeDesignMd(cwd); } catch (e) { self.push({ type: 'note', text: `Could not write DESIGN.md: ${e.code ?? e.message}.`, tone: 'warn' }); break; }
+          if (r.exists) self.push({ type: 'note', text: `This project has a DESIGN.md already: ${r.exists.replace(homedir(), '~')}. Pages made here follow it.`, tone: 'dim' });
+          else if (r.none) self.push({ type: 'note', text: 'No styles to read here (no .css files and no <style> in a page): pages made here take your look.', tone: 'warn' });
+          else self.push({ type: 'note', text: `Wrote ${r.abs.replace(homedir(), '~')} from the project's styles: its colours, type, spacing and corners. Pages made here follow it; edit it to change them.`, tone: 'dim' });
+          break;
+        }
         const chk = /^check\s+(on|off)$/i.exec(a);
         if (chk) { keep({ check: /^on$/i.test(chk[1]) }); break; }
         // ask on: a saved page stops the turn and asks you before any check; off: it checks by itself.

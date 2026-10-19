@@ -7,6 +7,10 @@ import { test, expect, afterAll } from 'bun:test';
 import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { BRIEF_SYSTEM } from '../src/agent/design.mjs';
+const PLAN = { text: 'Main thing: the figure\nSize: a card 380 px wide, centred\nParts: title, figure, change\nLook: the theme\nStates: none\nPhone: full width' };
+// The page plan is asked before the model's first step (agent-pages.mjs pageBrief): answered out of turn, so the scripted replies stay the steps'.
+const planRoute = (j) => (j.messages?.[0]?.content === BRIEF_SYSTEM ? PLAN : null);
 
 const FIX = join(tmpdir(), `agentic-studio-fixture-${process.pid}`);
 const CARDS = join(tmpdir(), `agentic-studio-cards-${process.pid}`);
@@ -165,7 +169,7 @@ test('the agent: a page request gets the pieces in the example card\'s place; th
     { tool: { name: 'Write', args: { path: 'sales.html', content: PAGE } } },
     { tool: { name: 'Edit', args: { path: 'sales.html', old_text: 'text-blue-500', new_text: 'text-ink' } } },
     { text: 'I made sales.html from the stat card.' },
-  ]);
+  ], { route: planRoute });
   const notes = [];
   const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, ctx: 32768, mode: 'edits', flows: false, verify: false, checkIns: false, ask: async () => ({ choice: 'yes' }), design: { auto: true, check: false } });
   agent.on('note', (e) => notes.push(e.text));
@@ -175,13 +179,15 @@ test('the agent: a page request gets the pieces in the example card\'s place; th
     for (const [k, v] of [['AGENTIC_DESIGN', keep.d], ['AGENTIC_STUDIO', keep.s], ['AGENTIC_LAYOUT', keep.l]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
     await fake.close();
   }
-  const first = JSON.stringify(fake.requests[0].messages);
+  // the model's steps (the page plan is asked apart, before them)
+  const steps = fake.requests.filter((r) => r.messages?.[0]?.content !== BRIEF_SYSTEM);
+  const first = JSON.stringify(steps[0].messages);
   expect(first).toContain('[Piece · STUDIO/components/cards/stat-card.html');
   expect(first).toContain('[Rules · DESIGN/your rules/rules.md]');
   expect(first).not.toContain('[Example · DESIGN/opus/widget.md]'); // the piece took its place
-  expect(notes.some((t) => /^Design studio: your rules\/rules \+ studio\/cards\/stat-card \(≈[\d,]+ tokens\)\.$/.test(t))).toBe(true);
+  expect(notes.some((t) => /^Design studio: the design guide \+ your rules\/rules \+ studio\/cards\/stat-card \(≈[\d,]+ tokens\)\.$/.test(t))).toBe(true);
   // the Write's result said what was built and which colour draws nothing
-  const afterWrite = JSON.stringify(fake.requests[1].messages.at(-1));
+  const afterWrite = JSON.stringify(steps[1].messages.at(-1));
   expect(afterWrite).toContain('Agentic Coder built the styles');
   expect(afterWrite).toContain('text-blue-500');
   expect(notes.some((t) => /^Built the styles into sales\.html \(\d+ classes, [\d.]+ KB, [\d.]+ s\), in place of the Tailwind link; not in your theme: text-blue-500\.$/.test(t))).toBe(true);
@@ -190,7 +196,7 @@ test('the agent: a page request gets the pieces in the example card\'s place; th
   expect(page.match(/<style id="studio-css">/g).length).toBe(1);
   expect(page).toContain('.text-ink');
   expect(page).not.toContain('cdn.tailwindcss.com');
-  expect(JSON.stringify(fake.requests[2].messages.at(-1))).not.toContain('draw nothing');
+  expect(JSON.stringify(steps[2].messages.at(-1))).not.toContain('draw nothing');
   expect(fake.remaining()).toBe(0);
   rmSync(cwd, { recursive: true, force: true });
 }, 60_000);
@@ -201,7 +207,7 @@ test('the agent: with the studio off, a page request gets the cards as before an
   const { startFakeServer } = await import('./fake-server.mjs');
   const { systemPrompt } = await import('../src/agent/prompt.mjs');
   const cwd = join(tmpdir(), `agentic-studio-off-${process.pid}`); rmSync(cwd, { recursive: true, force: true }); mkdirSync(cwd, { recursive: true });
-  const fake = await startFakeServer([{ tool: { name: 'Write', args: { path: 'sales.html', content: PAGE } } }, { text: 'Done.' }]);
+  const fake = await startFakeServer([{ tool: { name: 'Write', args: { path: 'sales.html', content: PAGE } } }, { text: 'Done.' }], { route: planRoute });
   const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, ctx: 32768, mode: 'edits', flows: false, verify: false, checkIns: false, ask: async () => ({ choice: 'yes' }), design: { auto: true, check: false, studio: false } });
   const keep = { d: process.env.AGENTIC_DESIGN, s: process.env.AGENTIC_STUDIO };
   process.env.AGENTIC_DESIGN = 'on'; delete process.env.AGENTIC_STUDIO;
@@ -209,7 +215,7 @@ test('the agent: with the studio off, a page request gets the cards as before an
     for (const [k, v] of [['AGENTIC_DESIGN', keep.d], ['AGENTIC_STUDIO', keep.s]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
     await fake.close();
   }
-  const first = JSON.stringify(fake.requests[0].messages);
+  const first = JSON.stringify(fake.requests.find((r) => r.messages?.[0]?.content !== BRIEF_SYSTEM).messages);
   expect(first).toContain('[Example · DESIGN/opus/widget.md]');
   expect(first).not.toContain('[Piece ·');
   expect(readFileSync(join(cwd, 'sales.html'), 'utf8')).toBe(PAGE);

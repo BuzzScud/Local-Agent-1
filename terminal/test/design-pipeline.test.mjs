@@ -20,7 +20,7 @@ const S = await import('../src/agent/studio.mjs');
 const { Agent, AUTO } = await import('../src/agent/agent.mjs');
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const { findChrome } = await import('../src/flows/layoutcheck.mjs');
-const { LOOK_OVER } = await import('../src/agent/helper-models.mjs');
+const { REVIEW_SHEET } = await import('../src/agent/helper-models.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
 const { MODELS, DEFAULT_MODEL, setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
 
@@ -142,6 +142,7 @@ test.skipIf(needs('chrome', () => chrome))('fix first, then ask: the layout chec
   const fake = await startFakeServer([
     { tool: { name: 'Write', args: { path: 'pass.html', content: DEAD } } },
     { text: 'Download saves the pass now.' },
+    { text: 'It saves the pass.' }, // round two (18 Oct 2026, look and fix twice): still broken, so back once more
     { text: 'never sent' },
   ]);
   const asked = [];
@@ -152,19 +153,23 @@ test.skipIf(needs('chrome', () => chrome))('fix first, then ask: the layout chec
   const back = lastUser(fake.requests[1]);
   expect(back).toStartWith(AUTO);
   expect(back).toContain('Clicking "Download" (button#download) changes nothing');
-  expect(asked).toEqual(['pass.html is saved and open in your browser (checked first: 1 layout problem sent back). Have a look: is it right?']);
+  expect(lastUser(fake.requests[2])).toContain('Clicking "Download" (button#download) changes nothing');
+  expect(asked).toEqual(['pass.html is saved and open in your browser (checked first: 1 layout problem sent back, 2 rounds). Have a look: is it right?']);
   expect(fake.remaining()).toBe(1);
 }), 60_000);
 
 test.skipIf(needs('chrome', () => chrome))('on a model on another machine that sees: a plan before writing, a look at a picture before you are asked, and "Looks good" keeps the page', () => withEnv({ AGENTIC_LAYOUT: 'on', AGENTIC_DESIGN: 'on' }, async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'agentic-review-'));
   const isPlan = (j) => j.messages?.[0]?.content === D.BRIEF_SYSTEM;
-  const isLook = (j) => j.messages?.[0]?.content === LOOK_OVER;
+  const isLook = (j) => j.messages?.[0]?.content === REVIEW_SHEET;
+  // The reviewer's scores (18 Oct 2026, plan A): the first look finds the route too small, the second after the fix none.
+  let looks = 0;
+  const scored = () => (looks++ === 0 ? 'focus: 3 | the route is no larger than the gate: make the h1 36 px\nspacing: 4 | ok\nalignment: 4 | ok\ncontrast: 4 | ok\nfinish: 4 | ok\nphone: 4 | ok' : 'focus: 5 | ok\nspacing: 5 | ok\nalignment: 5 | ok\ncontrast: 5 | ok\nfinish: 5 | ok\nphone: 5 | ok');
   const fake = await startFakeServer([
     { tool: { name: 'Write', args: { path: 'pass.html', content: GOOD } } },
     { text: 'Made the route larger.' },
     { text: 'never sent' },
-  ], { delayMs: 0, route: (j) => (isPlan(j) ? { text: 'Main thing: the route\nSize: a card 380 px wide, centred\nParts: route, gate, seat\nLook: white card, blue accent\nStates: none\nPhone: full width' } : isLook(j) ? { text: '- The route is no larger than the gate: make the h1 36 px.' } : null) });
+  ], { delayMs: 0, route: (j) => (isPlan(j) ? { text: 'Main thing: the route\nSize: a card 380 px wide, centred\nParts: route, gate, seat\nLook: white card, blue accent\nStates: none\nPhone: full width' } : isLook(j) ? { text: scored() } : null) });
   setEndpoint(fake.url, { remote: true, kind: 'openai', model: 'seer', label: 'svc' });
   try {
     const asked = [];
@@ -184,21 +189,25 @@ test.skipIf(needs('chrome', () => chrome))('on a model on another machine that s
     expect(JSON.stringify(look.messages)).toContain('Its plan:\\nMain thing: the route');
     const sent = fake.requests.filter((j) => !isPlan(j) && !isLook(j)).map(lastUser);
     expect(sent.some((u) => u.startsWith(AUTO) && u.includes('make the h1 36 px'))).toBe(true);
-    expect(asked[0]).toBe('pass.html is saved and open in your browser (checked first: nothing broken, 1 design note from seer sent back). Have a look: is it right?');
+    expect(JSON.stringify(look.messages)).toContain('a desktop window 1440 px wide beside a phone 390 px wide');
+    expect(looks).toBe(2); // look and fix twice: looked again after the fix, and the second look found nothing
+    expect(asked[0]).toBe('pass.html is saved and open in your browser (checked first: nothing broken, 1 design note from seer sent back, its design score 5/5 (from 3.8)). Have a look: is it right?');
     expect(asked[1]).toBe('Keep pass.html as one of your picks? Later requests for a travel boarding pass card get it as their example.');
     expect(existsSync(join(CARDS, 'your picks', 'travel-boarding-pass-card.md'))).toBe(true);
     expect(notes).toContain('Kept as DESIGN/your picks/travel-boarding-pass-card.md, with the page beside it.');
   } finally { await fake.close(); dropEndpoint?.(fake.url); rmSync(join(CARDS, 'your picks'), { recursive: true, force: true }); mkdirSync(join(CARDS, 'your picks')); }
 }), 60_000);
 
-test('who looks at the picture: the model the window is on when it sees; else the helper; never the Claude API or this Mac', () => {
+// 18 Oct 2026 (plan A, the owner's pick "Both, same quality"): the Claude API sees its own pages too.
+test('who looks at the picture: the model the window is on when it sees, whichever it is (a service, the Claude API, this Mac); else the helper', () => {
   const at = (url, model, extra = {}) => Object.assign(new Agent({ url, model, cwd: tmpdir(), system: 'x', memory: false }), extra);
   setEndpoint('http://svc.test:1', { remote: true, kind: 'openai', model: 'seer' });
   setEndpoint('http://claude.test:1', { remote: true, kind: 'claude', model: 'claude-opus-5-5' });
   try {
     expect(at('http://svc.test:1', { ...model, remote: { model: 'seer' } }, { canSee: true }).pageReviewer()).toMatchObject({ name: 'seer' });
     expect(at('http://svc.test:1', { ...model, remote: { model: 'blind' } }, { canSee: false }).pageReviewer()).toBeNull(); // no helper on an OpenAI service
-    expect(at('http://claude.test:1', { ...model, remote: { model: 'claude-opus-5-5' } }, { canSee: true }).pageReviewer()).toBeNull();
-    expect(at('http://127.0.0.1:1', model, { canSee: true }).pageReviewer()).toBeNull();
+    expect(at('http://claude.test:1', { ...model, remote: { model: 'claude-opus-5-5' } }, { canSee: true }).pageReviewer()).toMatchObject({ name: 'claude-opus-5-5' });
+    expect(at('http://127.0.0.1:1', model, { canSee: true }).pageReviewer()).toMatchObject({ name: model.name }); // this Mac's, with its vision add-on
+    expect(at('http://127.0.0.1:1', model, { canSee: false }).pageReviewer()).toBeNull(); // no picture for one that cannot see, and no helper here
   } finally { dropEndpoint?.('http://svc.test:1'); dropEndpoint?.('http://claude.test:1'); }
 });

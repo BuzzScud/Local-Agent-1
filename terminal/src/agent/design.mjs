@@ -178,6 +178,10 @@ const CHART_ASK = /\b(?:show|draw|plot|display|put|turn|visuali[sz]e)\b[^.?!]{0,
 const LOOKS = /\b(?:look(?:s|ing)? (?:better|nicer|good|great|cleaner|modern|professional|prettier|ugly|bad|off|dated|plain|boring)|prettier|nicer looking|better looking|more modern|redesign|restyle|the design|visual(?:ly)?)\b/i;
 const NOT_UI_FILE = /\b[\w-]+\.(py|rb|go|rs|java|kt|swift|c|cc|cpp|h|sh|sql|ya?ml|toml|json|csv|txt|md)\b/i;
 const CODE_ONLY = /\b(function|method|class|helper|endpoint|parser|stdout|stderr|exception|unit tests?|test suite|api route|database|schema|migration|regex|cli|command line|script|matplotlib|seaborn|pandas|numpy|plotly|jupyter|notebook)\b/i;
+// A page asked to be made as an HTML file ("one HTML file", "save it as board.html"): its code words are the page's own
+// ("data made up in the script"), so they do not turn it into a code job (18 Oct 2026: a dashboard and a project board
+// asked for that way got no design help at all).
+const HTML_MADE = /\b(?:save (?:it )?as [\w-]+\.html?|(?:one|a|an|single|self-contained) (?:self-contained |single )?html (?:file|page))\b/i;
 const QUESTION = /^(?:(?:just|please|hey|hi|ok|so)[,\s]+)?(?:what|which|where|why|how|who|when|explain|describe|tell me|does|is|are|do|did|should)\b/i;
 
 export function isDesignRequest(text) {
@@ -186,7 +190,7 @@ export function isDesignRequest(text) {
   const looks = LOOKS.test(t);
   if (QUESTION.test(t) && !/\b(?:can|could|would) you\b/i.test(t.split(/[.?!]/)[0]) && !looks) return false;
   if (NOT_UI_FILE.test(t) && !/\.(html?|css|jsx|tsx|vue|svelte)\b/i.test(t)) return false;
-  if (CODE_ONLY.test(t) && !looks) return false;
+  if (CODE_ONLY.test(t) && !looks && !HTML_MADE.test(t)) return false;
   return looks || ((MAKE.test(t) || DRAW.test(t)) && (THING.test(t) || MADE_THING.test(t) || MADE_MORE.test(t) || MADE_DESIGN.test(t))) || CHART_ASK.test(t);
 }
 

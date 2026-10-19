@@ -92,6 +92,49 @@ export async function checkPagePicture({ url, use, model, image, page, request, 
   return { ...r, ...findingsOf(r.text) };
 }
 
+// The page four ways, scored (18 Oct 2026, plan A of the design system: "look and fix twice" on every model). One
+// picture (flows/page-pictures.mjs: desktop and phone, light above dark), six points each scored 1-5; what scores 3 or
+// less goes back with what to change. The scores are kept for the screen and for the before/after (agent-pages.mjs).
+export const RUBRIC = [
+  ['focus', 'the one thing the page is for comes first and largest; the eye knows where to start'],
+  ['spacing', 'even, roomy spacing; related parts close together and groups apart; nothing cramped, stretched or oversized'],
+  ['alignment', 'parts line up on shared edges; repeated cards and rows have the same size, parts and ends'],
+  ['contrast', 'every word easy to read in light AND in dark; one accent colour; colour used for meaning, not decoration'],
+  ['finish', 'one type scale, one corner radius, one look throughout; nothing placeholder, broken, empty or unfinished'],
+  ['phone', 'on the phone: one readable column in the same order, nothing cut off or sideways, controls big enough to touch'],
+];
+export const REVIEW_SHEET = `You review how a web page looks, as a careful designer would, from one picture of it four ways: a desktop window 1440 px wide beside a phone 390 px wide, light mode on top and dark mode below. Score each point from 1 (poor) to 5 (nothing to change):
+${RUBRIC.map(([k, w]) => `${k}: ${w}`).join('\n')}
+Be strict and specific: 3 or less is something a person notices at a glance. Judge only what you can see; never ask for features the request did not name.`;
+export async function reviewPageSheet({ url, use, model, image, page, request, brief, round = 1, signal }) {
+  const ask = [
+    { role: 'system', content: REVIEW_SHEET },
+    { role: 'user', content: `The page ${page}, made for this request: "${String(request).slice(0, 600)}".${brief ? `\n\nIts plan:\n${brief}` : ''}${round > 1 ? '\n\nThis is after a round of fixes: judge it as it is now.' : ''}\n\nAnswer with exactly six lines, one per point, in this form:\n${RUBRIC.map(([k]) => `${k}: <1-5> | <what to change, naming the part and the change (a size, a spacing, a colour, an order), or ok>`).join('\n')}`, images: [image] },
+  ];
+  const r = await helperText({ url, use, model, messages: ask, maxTokens: 700, signal });
+  return { ...r, ...scoresOf(r.text) };
+}
+// The six lines → { ok, findings, scores: { focus: 4, … }, score: the mean }; an answer not in that form is read as
+// the older list of fixes (findingsOf), with no scores.
+export function scoresOf(text) {
+  const t = String(text ?? '');
+  const scores = {};
+  const fixes = [];
+  for (const line of t.split('\n')) {
+    const m = /^\s*(?:[-*•]\s*)?\**(focus|spacing|alignment|contrast|finish|phone)\**\s*[:=]\s*\**([1-5])\**(?:\s*\/\s*5)?\s*(?:[|—–-]\s*(.*))?$/i.exec(line);
+    if (!m) continue;
+    const k = m[1].toLowerCase();
+    if (k in scores) continue;
+    scores[k] = Number(m[2]);
+    const fix = String(m[3] ?? '').trim().replace(/^["']|["']$/g, '');
+    if (scores[k] <= 3) fixes.push(`${k} (${scores[k]}/5): ${fix && !/^ok\.?$/i.test(fix) ? fix : RUBRIC.find(([n]) => n === k)[1]}`);
+  }
+  const n = Object.keys(scores).length;
+  if (n < 3) return { ...findingsOf(t), scores: null, score: null };
+  const score = Math.round((Object.values(scores).reduce((a, b) => a + b, 0) / n) * 10) / 10;
+  return { ok: fixes.length === 0, findings: fixes.slice(0, 4), scores, score };
+}
+
 // "LGTM" or "- one\n- two" → { ok, findings }.
 export function findingsOf(text) {
   const t = String(text ?? '').trim();
