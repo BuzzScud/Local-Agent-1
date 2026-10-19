@@ -595,7 +595,10 @@ export class StepPart {
       this.turn.edits = (this.turn.edits ?? 0) + 1;
       this.happened?.files.add(prepared.rel);
       // A file on the Desktop: it may be read and edited again; one in the project is what the tests check.
-      if (away) { (this.desktopMade ??= new Set()).add(prepared.abs); this.turn.changedAway = true; } else this.turn.changedHere = true;
+      // Any file outside the project is away, not only the Desktop's opening (18 Oct 2026: in Bypass a page
+      // written straight to ~/Desktop from a project there ran the whole suite, cut off at 2 minutes).
+      if (away) (this.desktopMade ??= new Set()).add(prepared.abs);
+      if (away || (at && !at.inside)) this.turn.changedAway = true; else this.turn.changedHere = true;
       // Each file as it was before this message's first change to it, for the
       // nothing-lost check at the end (lostSinceStart). A new file has none.
       this.turn.startTexts ??= new Map();

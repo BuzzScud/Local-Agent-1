@@ -1074,6 +1074,31 @@ test('from a project, a new file asked for on the Desktop is written right there
   expect(existsSync(join(desk, 'stray.md'))).toBe(false);
 });
 
+// 18 Oct 2026, in Bypass from ~/Desktop/PROJECTS/agentic-coder: a design page written straight to ../../ (the
+// Desktop; Bypass opens every folder, so not through the Desktop's opening) counted as a change in the project,
+// and the whole suite ran for it, failed in the fence and was cut off at 2 minutes.
+test('in Bypass, a file written outside the project does not run its tests; a file in it still does', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-home-'));
+  const cwd = join(home, 'Desktop', 'PROJECTS', 'shop');
+  mkdirSync(cwd, { recursive: true });
+  const run = async (writes) => {
+    const fake = await startFakeServer([...writes.map(([path, content]) => ({ tool: { name: 'Write', args: { path, content } } })), { text: 'Done.' }, { text: 'never sent' }]);
+    const agent = new Agent({ url: fake.url, model, cwd, home, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, mode: 'bypass', flows: false, verify: false, confirmPlan: false, checkIns: false, ask: async () => ({ choice: 'yes' }) });
+    agent.testCmd = 'echo checked'; // a project with tests: they would run after a change in it
+    const notes = [];
+    agent.on('note', (e) => notes.push(e.text));
+    expect(await agent.send('write the design notes')).toBe('done');
+    await fake.close();
+    return notes;
+  };
+  const away = await run([['../../design-notes.md', '# Design\n'], [join(home, 'elsewhere.md'), '# Elsewhere\n']]);
+  expect(readFileSync(join(home, 'Desktop', 'design-notes.md'), 'utf8')).toBe('# Design\n');
+  expect(readFileSync(join(home, 'elsewhere.md'), 'utf8')).toBe('# Elsewhere\n');
+  expect(away.some((t) => /Checking the change/.test(t))).toBe(false);
+  const both = await run([['../../design-notes-2.md', '# Design\n'], ['notes.md', '# In the project\n']]);
+  expect(both).toContain('Checking the change: echo checked');
+});
+
 test('without the app\'s screen (coding -p, the benches) nothing is offered, copied or opened; a no leaves it where it is', async () => {
   // each run in a folder of its own: writing the same page again changes nothing
   const folders = () => {
