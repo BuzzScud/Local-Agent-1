@@ -103,7 +103,7 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the search box type
     await p.js(`(() => { window.__first = document.querySelector('.reply'); const r = document.createRange(); r.selectNodeContents(window.__first); getSelection().removeAllRanges(); getSelection().addRange(r); })()`);
     for (const text of ['The', 'The rounding', 'The rounding happens in roundCents.']) await p.say({ ...base, items: {}, live: { phase: 'working', turnStart: Date.now(), tokens: 3, text } });
     expect(await p.js(`document.querySelector('.reply') === window.__first && String(getSelection()).includes('Math.floor')`)).toBe(true);
-    expect(await p.js(`document.querySelector('#live .writing').textContent`)).toContain('The rounding happens in roundCents.');
+    expect(await p.js(`document.querySelector('#live .said').textContent`)).toContain('The rounding happens in roundCents.');
     // The answer done: it comes as an item, the live part goes.
     await p.say({ ...base, order: [...base.order, 'a2'], items: { a2: { t: 'text', key: 'a2', text: 'The rounding happens in roundCents.' } } });
     expect(await p.js(`[document.querySelectorAll('#items .reply').length, document.getElementById('live').textContent]`)).toEqual([2, '']);
@@ -262,7 +262,7 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking as it 
 // The thinking in a box (18 Oct 2026, the owner: "put thinking in a box, i can expand and collapse too?"): a header as a
 // task row's; open at first with the newest lines, a click closes it to one row with the newest line, and that holds for
 // the next reply too. Nothing goes to the app.
-test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking is a box that opens and closes, one row closed whatever its length, kept for the next reply', async () => {
+test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking, then the answer as it comes, is a box that opens and closes, one row closed whatever its length, kept for the next reply', async () => {
   const p = await openPage();
   try {
     const box = () => p.js(`(() => { const b = document.querySelector('#live .trow.think'); if (!b) return null; return { tag: b.querySelector('.tag').textContent, words: b.querySelector('.w').textContent, open: b.querySelector('.chev').classList.contains('open'), body: Boolean(b.querySelector('.thinking')), h: Math.round(b.getBoundingClientRect().height) }; })()`);
@@ -284,9 +284,16 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking is a b
     expect(await box()).toMatchObject({ open: false, words: 'A new thought.' });
     await p.click('#live .trow.think .task', 0);
     expect(await box()).toMatchObject({ open: true, body: true, h: open.h });
-    // The answer's first words take its place.
+    // The answer as it comes takes its place, in the same box ("thinking isnt in a box … like, what the agent is doing":
+    // a reply streaming its CSS line by line ran down the page): one height however long it gets, its newest line in.
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 9, thinking: 'A new thought.', text: 'Here it is.' } });
-    expect(await box()).toBeNull();
+    expect(await box()).toMatchObject({ tag: 'ANSWERING', open: true, body: true, h: open.h });
+    const css = Array.from({ length: 60 }, (_, i) => `.part-${i + 1} { padding: ${i}px; }`).join('\n');
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 900, text: css } });
+    expect(await box()).toMatchObject({ tag: 'ANSWERING', h: open.h });
+    expect(await p.js(`(() => { const t = document.querySelector('#live .said'), last = t.firstElementChild.getBoundingClientRect(); return t.textContent.includes('.part-60 { padding: 59px; }') && last.bottom <= t.getBoundingClientRect().bottom + 1; })()`)).toBe(true);
+    await p.click('#live .trow.think .task', 0);
+    expect(await box()).toMatchObject({ tag: 'ANSWERING', open: false, words: '.part-60 { padding: 59px; }', h: shut.h });
     expect(p.got()).toEqual([]);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
