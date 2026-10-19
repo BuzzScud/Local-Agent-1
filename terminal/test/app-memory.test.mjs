@@ -99,7 +99,7 @@ test('asking first: after a task the facts are listed, Save keeps them', async (
   const fake = await startFakeServer(demoReplies, { route: (json) => (isSave(json) ? { text: JSON.stringify(learned) } : null) });
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_MEMORY_SAVE: 'ask' }, args: ['--url', fake.url, '--no-flows', '--slots', '2'], timeoutMs: 60_000, steps: [
     ...task, { wait: 'Remember for next time?', ms: 30_000 }, { sleep: 200 }, { snapshot: 'asked' },
-    { key: 'enter' }, { wait: 'Memory: 1 saved' }, ...quit,
+    { key: 'enter' }, { wait: /Memory: noted[\s\S]{0,160}?1 saved/ }, ...quit,
   ] });
   await fake.close();
   expect(r.snapshots.asked).toContain('Learned in that task · 1 change');
@@ -113,7 +113,7 @@ test('asking first: Skip (esc) keeps nothing, and quitting does not save on its 
   const m = memories(base, cwd);
   const fake = await startFakeServer(demoReplies, { route: (json) => (isSave(json) ? { text: JSON.stringify(learned) } : null) });
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_MEMORY_SAVE: 'ask' }, args: ['--url', fake.url, '--no-flows', '--slots', '2'], timeoutMs: 60_000, steps: [
-    ...task, { wait: 'Remember for next time?', ms: 30_000 }, { sleep: 200 }, { key: 'esc' }, { wait: 'Not saved' }, ...quit,
+    ...task, { wait: 'Remember for next time?', ms: 30_000 }, { sleep: 200 }, { key: 'esc' }, { wait: /Memory: noted[\s\S]{0,160}?not saved \(you said no\)/ }, ...quit,
   ] });
   await fake.close();
   expect(r.text).toContain('/update memory saves what matters at any time');
@@ -135,7 +135,7 @@ test('the second look when the window closes: what is new is kept, and the next 
   const fake = await startFakeServer(demoReplies, { route: (json) => (isSave(json) ? { text: JSON.stringify(JSON.stringify(json.messages).includes('read again') ? more : learned) } : null) });
   const e = { ...env, AGENTIC_MEMORY_SAVE: 'ask' };
   const args = ['--url', fake.url, '--no-flows', '--slots', '2'];
-  await runInPty({ cwd, env: e, args, timeoutMs: 60_000, steps: [...task, { wait: 'Remember for next time?', ms: 30_000 }, { sleep: 200 }, { key: 'enter' }, { wait: 'Memory: 1 saved' }, ...quit] });
+  await runInPty({ cwd, env: e, args, timeoutMs: 60_000, steps: [...task, { wait: 'Remember for next time?', ms: 30_000 }, { sleep: 200 }, { key: 'enter' }, { wait: /Memory: noted[\s\S]{0,160}?1 saved/ }, ...quit] });
   const jobs = join(base, 'home', 'memory-jobs');
   for (let i = 0; i < 150 && !(existsSync(jobs) && readdirSync(jobs).some((f) => f.endsWith('.pending'))); i++) await new Promise((r) => setTimeout(r, 100));
   expect(readdirSync(jobs).filter((f) => f.endsWith('.pending'))).toHaveLength(1);

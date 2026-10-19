@@ -99,7 +99,7 @@ export function runPart(self) {
     const ac = new AbortController();
     self.abortRef.current = ac;
     self.setPlaceholder(pick(PLACEHOLDERS));
-    self.autoRef.current.cancel(); // a save in the background steps aside
+    self.autoRef.current.stepAside(); // on a service the save after the last answer goes on beside this one
     self.agent.send(content, { signal: ac.signal, shown, images: blind ? undefined : images, fromServer });
   };
 
@@ -184,7 +184,7 @@ export function runPart(self) {
       on('stats', (st) => self.setStats(st)),
       on('mode', (m) => self.setModeState(m)),
       on('screen-setup', () => self.push({ type: 'note', text: `The model tried to look at the screen, but macOS has not let ${terminalApp()} take pictures of it yet: type /screen setup (once).`, tone: 'warn' })),
-      on('settled', () => self.autoRef.current.schedule()),
+      on('settled', (lesson) => self.autoRef.current.settled(lesson)),
       // A message typed while it worked went to it with this step (App.jsx steering): said where it landed.
       on('steered', ({ notes }) => { for (const text of notes ?? []) self.push({ type: 'note', text: `You, while it worked: "${text.length > 200 ? `${text.slice(0, 199)}…` : text}" (it reads this now)`, tone: 'dim' }); }),
       on('compacted', ({ summary, inPlace, n }) => { self.push({ type: 'note', text: inPlace ? `Picked up from its notes${n ? ` (${n})` : ''}` : `Summarized${n ? ` (${n})` : ''}, carrying on`, tone: 'dim' }); self.fold({ title: 'Summary', text: summary }); }),

@@ -117,6 +117,14 @@ export class MemoryPart {
     try { return usedFacts(h.recalled, [...h.did, ...h.files, h.check?.cmd ?? '', String(answer).slice(0, 4000)].join('\n')); } catch { return []; }
   }
 
+  // The answer this message ended with, for the note written after it (notes.mjs).
+  answerOf(h) {
+    const from = h.message ? this.messages.indexOf(h.message) : -1;
+    if (from < 0) return '';
+    const said = this.messages.slice(from + 1).filter((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim()).at(-1);
+    return String(said?.content ?? '').slice(0, 600);
+  }
+
   trust(recalled, delta, reason) {
     if (!this.memory || !delta || !recalled?.length) return;
     try { for (const dir of new Set(recalled.map((f) => f.dir))) changeTrust(dir, recalled.filter((f) => f.dir === dir).map((f) => f.id), delta, reason); } catch { /* the memory never stops the work */ }
@@ -136,7 +144,7 @@ export class MemoryPart {
       at: h.at, request: h.request.slice(0, 600), kind: this.way === 'model' ? null : this.lastRoute?.kind ?? routeByRules(h.request)?.kind ?? null, reason, outcome,
       files: [...h.files].slice(0, 12), check: h.check ?? null, tries: h.tries.slice(-6), findings: (t?.findings ?? []).slice(-4), asked: (t?.asked ?? []).slice(-3),
       warnings: h.warnings.slice(-4), summary: h.flow?.summary ?? null, recalled: h.recalled,
-      used: this.usedThisTurn(h),
+      used: this.usedThisTurn(h), answer: this.answerOf(h),
     };
     // A turn that went well on what the memory already holds teaches nothing
     // new: no save is started for it (the review at night still reads it).
