@@ -282,6 +282,11 @@ on_open() {
   was="$(cat "$APP.commit" 2>/dev/null)"
   fetch_main
   pull
+  # What earlier test runs left running (a run cut off, one inside Agentic Coder's sandbox, which cannot stop
+  # another's): stopped by the tests' own sweep, from the folder (the build copy has no tests). Outside any sandbox.
+  if [ -f "$REPO/terminal/test/test-tmp.mjs" ] && [ -x "$BUN" ]; then
+    "$BUN" "$REPO/terminal/test/test-tmp.mjs" --sweep >"$WHOME/logs/on-open.sweep" 2>&1
+  fi
   rebuild
   window_shell
   now="$(cat "$APP.commit" 2>/dev/null)"

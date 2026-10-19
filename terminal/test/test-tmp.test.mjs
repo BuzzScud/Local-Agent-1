@@ -4,7 +4,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RUN_BASE, RUN_PREFIX, cleanRun, isAlive, makeRunFolder, pidOf, procTable, processesIn, sweepRuns, sweepWords } from './test-tmp.mjs';
+import { RUN_BASE, RUN_PREFIX, cleanRun, isAlive, makeRunFolder, pidOf, procTable, processesIn, strayProcesses, sweepRuns, sweepWords } from './test-tmp.mjs';
 import { needs } from './needs.mjs';
 import { SANDBOX_EXEC, sandboxAvailable, sandboxProfile } from '../src/tools/sandbox.mjs';
 
@@ -113,7 +113,7 @@ test('the sweep cleans the run folders of processes that are gone and keeps a li
   for (const d of [dead, live, join(base, 'agentic-e2e-c')]) mkdirSync(d);
   try {
     const r = await sweepRuns({ base });
-    expect(r).toEqual({ folders: 1, stopped: 0, kept: 1, left: 0 });
+    expect(r).toEqual({ folders: 1, stopped: 0, kept: 1, left: 0, held: 0 });
     expect(existsSync(dead)).toBe(false);
     expect(existsSync(live)).toBe(true);
     expect(existsSync(join(base, 'agentic-e2e-c'))).toBe(true);
@@ -121,7 +121,7 @@ test('the sweep cleans the run folders of processes that are gone and keeps a li
     expect(sweepWords({ folders: 3, stopped: 12 })).toBe('Cleaned up after an earlier test run: 3 folders, 12 programs stopped.\n');
     expect(sweepWords({ folders: 2, stopped: 1 })).toBe('Cleaned up after an earlier test run: 2 folders, 1 program stopped.\n');
     expect(sweepWords({ folders: 0, stopped: 0 })).toBe('');
-    expect(await sweepRuns({ base: join(base, 'not-there') })).toEqual({ folders: 0, stopped: 0, kept: 0, left: 0 });
+    expect(await sweepRuns({ base: join(base, 'not-there') })).toEqual({ folders: 0, stopped: 0, kept: 0, left: 0, held: 0 });
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
@@ -166,7 +166,7 @@ process.exit(0);
     expect(isAlive(leftover.pid)).toBe(true);
     expect(existsSync(dir)).toBe(true);
     // Outside the fence the next run's sweep stops it, and the folder goes.
-    expect(await cleanRun(dir, { graceMs: 200 })).toEqual({ stopped: 1, left: false });
+    expect(await cleanRun(dir, { graceMs: 200 })).toMatchObject({ stopped: 1, left: false });
     expect(await until(() => !isAlive(leftover.pid))).toBe(true);
     expect(existsSync(dir)).toBe(false);
   } finally {
@@ -182,14 +182,43 @@ test('a run whose programs cannot be listed keeps its folder, and the sweep says
   try {
     expect(processesIn(dead, { ps: () => null })).toBe(null);
     const r = await sweepRuns({ base, ps: () => null });
-    expect(r).toEqual({ folders: 0, stopped: 0, kept: 0, left: 1 });
+    expect(r).toEqual({ folders: 0, stopped: 0, kept: 0, left: 1, held: 0 });
     expect(existsSync(dead)).toBe(true);
-    expect(sweepWords(r)).toBe('Programs of 1 earlier test run could not be stopped from inside a sandbox (Agentic Coder\'s fence); its folder stays until the tests run once in a Terminal.\n');
-    expect(sweepWords({ folders: 2, stopped: 0, left: 3 })).toBe('Cleaned up after an earlier test run: 2 folders.\nPrograms of 3 earlier test runs could not be stopped from inside a sandbox (Agentic Coder\'s fence); their folders stay until the tests run once in a Terminal.\n');
+    const held = 'Some programs of earlier test runs could not be stopped from inside a sandbox (Agentic Coder\'s fence); the next test run in a Terminal stops them.\n';
+    expect(sweepWords(r)).toBe(held);
+    expect(sweepWords({ folders: 2, stopped: 0, left: 3 })).toBe(`Cleaned up after an earlier test run: 2 folders.\n${held}`);
+    expect(sweepWords({ folders: 0, stopped: 4, held: 1 })).toBe(`Cleaned up after an earlier test run: 4 programs stopped.\n${held}`);
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
 });
+
+// 18 Oct 2026: 43 programs of two runs the app had cut off, and five stand-in MCP servers of worktrees' runs, ran on
+// after their folders had gone (an older sweep removed them), so no sweep could find them.
+test('the sweep stops the programs of an ended run whose folder is gone, and leaves a live run\'s and other bases\' alone', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'tt-'));
+  const other = mkdtempSync(join(tmpdir(), 'tt-other-'));
+  const run = (TMPDIR) => spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env: { ...process.env, TMPDIR }, stdio: 'ignore' });
+  const stray = run(join(base, `${RUN_PREFIX}${DEAD}-gone`, 'agentic-e2e-x')); // its folder was never there
+  const live = run(join(base, `${RUN_PREFIX}${process.pid}-live`));
+  const elsewhere = run(join(other, `${RUN_PREFIX}${DEAD}-gone`));
+  try {
+    expect(await until(() => [stray, live, elsewhere].every((p) => procTable().find((r) => r.pid === p.pid)?.env.some((e) => e.startsWith('TMPDIR='))))).toBe(true);
+    const found = strayProcesses(base);
+    expect(found).toContain(stray.pid);
+    expect(found).not.toContain(live.pid);
+    expect(found).not.toContain(elsewhere.pid);
+    const r = await sweepRuns({ base, graceMs: 200 });
+    expect(r).toEqual({ folders: 0, stopped: 1, kept: 0, left: 0, held: 0 });
+    expect(sweepWords(r)).toBe('Cleaned up after an earlier test run: 1 program stopped.\n');
+    expect(await until(() => !isAlive(stray.pid))).toBe(true);
+    expect([isAlive(live.pid), isAlive(elsewhere.pid)]).toEqual([true, true]);
+  } finally {
+    for (const p of [stray, live, elsewhere]) p.kill('SIGKILL');
+    rmSync(base, { recursive: true, force: true });
+    rmSync(other, { recursive: true, force: true });
+  }
+}, 15_000);
 
 test('--sweep from the command line, as run-suite.mjs runs it: a line when something was cleaned, nothing otherwise', () => {
   const base = mkdtempSync(join(tmpdir(), 'tt-'));

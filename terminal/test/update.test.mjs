@@ -475,6 +475,7 @@ function launcherOn(local, { built = true } = {}) {
 case "$1" in
   --version) echo '${BUN_VERSION}' ;;
   -e) exit 0 ;;
+  */terminal/test/test-tmp.mjs) echo "sweep $2 with $1" >> '${log}' ;;
   install) mkdir -p node_modules; echo "install in $(pwd)" >> '${log}' ;;
   build)
     a="$(cat terminal/src/app/a.mjs 2>/dev/null | tr -d '\\n')"
@@ -825,6 +826,19 @@ test('a Terminal opening builds GitHub\'s main without starting the app, at most
   rmSync(said);
   c.run({ AGENTIC_ON_OPEN: '1', AGENTIC_ON_OPEN_EVERY: '0' });
   expect(existsSync(said)).toBe(false);
+});
+
+// 18 Oct 2026: programs earlier test runs left (a run cut off, or one inside Agentic Coder's sandbox) waited for the
+// next test run in a Terminal; a Terminal opening now runs the tests' sweep too, from the folder.
+test('a Terminal opening also sweeps what earlier test runs left running, with the folder\'s own sweep', () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  c.run({ AGENTIC_ON_OPEN: '1' });
+  expect(c.bunDid()).not.toContain('sweep'); // a folder with no tests: nothing to run
+  commit(other, { 'terminal/test/test-tmp.mjs': '// the sweep\n' }, 'the tests\' clean-up');
+  git(other, 'push', '-q', 'origin', 'main');
+  c.run({ AGENTIC_ON_OPEN: '1', AGENTIC_ON_OPEN_EVERY: '0' });
+  expect(c.bunDid()).toContain(`sweep --sweep with ${join(local, 'terminal/test/test-tmp.mjs')}`);
 });
 
 test('a start puts the lines in ~/.zshrc once and says so; lines taken out stay out; not for another shell or with the switch off', () => {
