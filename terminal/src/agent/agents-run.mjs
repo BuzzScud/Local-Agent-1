@@ -53,14 +53,20 @@ export const isMathy = (text) => /\b(math\w*|equations?|solver?|numeric\w*|integ
 // The test file a covering command runs, from the project's whole-suite command.
 export const isTestFile = (rel) => /(^|\/)(tests?|__tests__|spec)\//.test(rel) || /[._-](test|spec)\.[a-z]+$/i.test(rel) || /^test_.*\.py$/.test(basename(rel));
 const q = (s) => (/^[\w./-]+$/.test(s) ? s : `'${String(s).replace(/'/g, "'\\''")}'`);
+// One test file or several (the app's check after a change: agent-answer.mjs). `bun run test` keeps the project's own
+// script with the files after it (its runner may be vitest or jest, which `bun test` is not; 18 Oct 2026).
 export function coveringCommand(testCmd, file) {
-  if (!file) return testCmd;
-  if (!testCmd) return /\.py$/.test(file) ? `python3 -m pytest ${q(file)}` : /\.(m?[jt]sx?)$/.test(file) ? `bun test ./${file}` : null;
-  if (/^(python3? -m )?pytest\b/.test(testCmd)) return `${testCmd} ${q(file)}`;
-  if (/^bun (run )?test\b/.test(testCmd)) return `bun test ./${file}`;
-  if (/^npm (run )?test\b/.test(testCmd)) return `npm test -- ${q(file)}`;
-  if (/^node --test\b/.test(testCmd)) return `node --test ${q(file)}`;
-  if (/^npx (jest|vitest)\b/.test(testCmd)) return `${testCmd} ${q(file)}`;
+  const files = [].concat(file ?? []).filter(Boolean);
+  if (!files.length) return testCmd;
+  const all = files.map(q).join(' ');
+  const dotted = files.map((f) => q(f.startsWith('/') || f.startsWith('.') ? f : `./${f}`)).join(' ');
+  if (!testCmd) return files.every((f) => /\.py$/.test(f)) ? `python3 -m pytest ${all}` : files.every((f) => /\.(m?[jt]sx?)$/.test(f)) ? `bun test ${dotted}` : null;
+  if (/^(python3? -m )?pytest\b/.test(testCmd)) return `${testCmd} ${all}`;
+  if (/^bun run test\b/.test(testCmd)) return `bun run test ${dotted}`;
+  if (/^bun test\b/.test(testCmd)) return `bun test ${dotted}`;
+  if (/^npm (run )?test\b/.test(testCmd)) return `npm test -- ${all}`;
+  if (/^node --test\b/.test(testCmd)) return `node --test ${all}`;
+  if (/^npx (jest|vitest)\b/.test(testCmd)) return `${testCmd} ${all}`;
   return testCmd;
 }
 

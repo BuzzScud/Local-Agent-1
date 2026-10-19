@@ -10,7 +10,7 @@ import { isHomeFolder } from './prompt.mjs';
 import { LOOK_BACKS, lookBackNote } from './look.mjs';
 import { pageReadOn } from './page-read.mjs';
 import { pagesToCheck } from '../flows/layoutcheck.mjs';
-import { basename, join, relative } from 'node:path';
+import { basename, isAbsolute, join, relative } from 'node:path';
 import { STOP_BACKS } from './user-hooks.mjs';
 import { appCodeChanged } from './self.mjs';
 import { wantsDesktop } from '../flows/words.mjs';
@@ -272,11 +272,12 @@ export class AnswerPart {
     // It says it is done after changing files but never ran the tests:
     // run them (through the normal permission prompt); if they fail, send
     // it back to fix them. At most twice per message.
-    const checkCmd = this.turn.check ?? (this.turn.bug?.kind && !this.turn.bug.kind.testsSeeIt ? null : this.testCmd);
     // Only a file on the Desktop changed: the project's tests cannot see it (3 Oct: a helper's
     // .md for the Desktop started the whole suite, more than 10 minutes on this Mac).
     const onlyAway = this.turn.changedAway && !this.turn.changedHere && !this.turn.check;
-    if (checkCmd && this.turn.changed && !onlyAway && !this.turn.testedAfterChange && st.checks < 2 && this.hook('tests')) {
+    const due = this.turn.changed && !onlyAway && !this.turn.testedAfterChange && st.checks < 2 && this.hook('tests');
+    const checkCmd = !due ? null : this.turn.check ?? (this.turn.bug?.kind && !this.turn.bug.kind.testsSeeIt ? null : await this.changeTests());
+    if (checkCmd) {
       st.checks++;
       const call = { id: `check_${Date.now()}`, name: 'Bash', args: JSON.stringify({ command: checkCmd, description: this.turn.check ? 'Run the check the request names' : 'Check the change with the project’s tests' }) };
       assistant.tool_calls = [{ id: call.id, type: 'function', function: { name: 'Bash', arguments: call.args } }];
@@ -441,5 +442,19 @@ export class AnswerPart {
       }
     }
     return 'break';
+  }
+
+  // The project's tests for this message's change: the test files that cover the files it changed in the project
+  // (coveringTests, at most COVER_MAX), with the project's own runner; the whole suite when none does. Before 18 Oct
+  // 2026 it was always the whole suite, which here takes 3 to 6 minutes, so the 2-minute limit cut it off.
+  async changeTests() {
+    if (!this.testCmd) return null;
+    const inside = (p) => { const rel = isAbsolute(p) ? relative(this.cwd, p) : p; return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : null; };
+    const changed = [...new Set([...(this.turn.startTexts?.keys() ?? []), ...(this.happened?.files ?? [])].map((p) => inside(String(p))).filter(Boolean))];
+    if (!changed.length) return this.testCmd;
+    try {
+      const [{ coveringTests, projectFiles }, { coveringCommand }] = await Promise.all([import('../flows/localize.mjs'), import('./agents-run.mjs')]);
+      return coveringCommand(this.testCmd, coveringTests(this.cwd, changed, projectFiles(this.cwd)));
+    } catch { return this.testCmd; }
   }
 }
