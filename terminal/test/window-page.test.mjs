@@ -192,3 +192,44 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a model still loadi
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
+
+// The task row under way (18 Oct 2026, the owner: "when i click on the dropdown or the boxes to expand or collapse, it
+// doesnt work"): it looked clickable and a click did nothing. Its parts open and close in the page, and nothing goes
+// to the app.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the task row under way opens and closes, its parts done so far and the part under way', async () => {
+  const p = await openPage();
+  try {
+    const step = (k, words) => ({ k, words });
+    const held = {
+      t: 'live', first: true,
+      run: { label: 'EXPLORING', color: '#5fafff', last: 'Read the server and its tests', rows: [
+        { id: 'r-server', words: 'Read the server', said: true, facts: { steps: 2 }, steps: [step('read', 'server.mjs'), step('read', 'routes.mjs')] },
+        { id: 'r-tests', words: 'Read its tests', said: true, facts: { steps: 1 }, steps: [step('read', 'server.test.mjs')] },
+      ] },
+      now: { label: 'EDITING', color: '#d7af00', words: 'Fixing the rounding', steps: [step('read', 'cart.mjs'), step('edit', 'cart.mjs')], n: 2 },
+    };
+    const turnStart = Date.now();
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 3 }, held });
+    const live = () => p.js(`(() => { const rows = [...document.querySelectorAll('#live .trow')]; return rows.map((r) => ({ open: Boolean(r.querySelector('.task .chev.open')), rows: [...r.querySelectorAll('.rowx')].map((x) => x.querySelector('.w').textContent), steps: r.querySelectorAll('.step').length })); })()`);
+    // At first: the parts done so far closed, the part under way open with its steps.
+    expect(await live()).toEqual([{ open: false, rows: [], steps: 0 }, { open: true, rows: [], steps: 2 }]);
+    // The part under way closes and opens.
+    await p.click('#live .trow .task', 1);
+    expect(await live()).toEqual([{ open: false, rows: [], steps: 0 }, { open: false, rows: [], steps: 0 }]);
+    await p.click('#live .trow .task', 1);
+    expect((await live())[1]).toEqual({ open: true, rows: [], steps: 2 });
+    // The parts done so far open, and a row of them opens its steps.
+    await p.click('#live .trow .task', 0);
+    expect((await live())[0]).toEqual({ open: true, rows: ['Read the server', 'Read its tests'], steps: 0 });
+    await p.click('#live .rowx', 0);
+    expect((await live())[0].steps).toBe(2);
+    // The next state of the same reply keeps what was opened.
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 9 }, held: { ...held, now: { ...held.now, steps: [...held.now.steps, step('ran', 'npm test')], n: 3 } } });
+    expect(await live()).toEqual([{ open: true, rows: ['Read the server', 'Read its tests'], steps: 2 }, { open: true, rows: [], steps: 3 }]);
+    await p.click('#live .trow .task', 0);
+    expect((await live())[0]).toEqual({ open: false, rows: [], steps: 0 });
+    // Nothing went to the app: no keys, no actions.
+    expect(p.got()).toEqual([]);
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
