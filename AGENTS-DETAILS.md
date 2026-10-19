@@ -1529,6 +1529,40 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   send-back on a scripted model), `sandbox.test.mjs` (the profile, and sandbox-exec reading the public files and not
   a key), `app-permissions.test.mjs` (`-p --mode`).
 
+## Nothing left running (18 Oct 2026)
+
+- **What and why.** In Bypass, Qwen3.6 wrote a page to the Desktop from this folder; the app ran the whole suite after
+  it (3 to 6 minutes), its 2-minute limit cut the run off twice, and the apps those tests had started in terminals of
+  their own ran on with their stand-in model servers (43 programs), beside five stand-in MCP servers of worktrees' runs
+  up to five hours old. Inside the fence `ps` cannot start (/bin/ps is setuid), and a sandbox cannot signal another's
+  programs, so the sweep found nothing and removed the folders they could have been found by. The owner, asked how to
+  prevent it, picked all four parts.
+- **A file outside the project** (agent-step.mjs) counts as away whatever let the model write it (Bypass too), so the
+  project's tests do not run for it.
+- **The check runs the tests for the change** (agent-answer.mjs `changeTests`; flows/localize.mjs `coveringTests`,
+  `COVER_MAX` 5; agents-run.mjs `coveringCommand`, which now takes several files and keeps `bun run test`'s own
+  script): the test files the change wrote, then those named after a changed file (only when their imports reach it, or
+  cannot be read), then those that import a changed file, then those one file further; the whole suite when none does.
+- **A command cut off takes everything it started** (tools/run.mjs `startShell` puts `AGENTIC_COMMAND=<app pid>-<n>`
+  in each command's environment; `markedProcesses`, `signalCommand`): its time limit, esc or a job stopped
+  (jobs.mjs) signal the group and every program carrying the mark, and their children, found with `ps -E` from the app
+  (outside the sandbox). A command that ends by itself keeps what it left running (a server it meant to start).
+- **The tests' clean-up works inside the fence** (test-tmp.mjs): `procTable()` reads the process list from macOS
+  through Bun's FFI (libproc and sysctl KERN_PROCARGS2: arguments and environment) when ps is refused; a folder whose
+  programs cannot be listed or refuse the signal is kept (`cleanRun` `left`); and the sweep stops the programs of runs
+  that ended whether their folder is there or not (`strayProcesses`: TMPDIR, or an orphan's working folder, in a run
+  folder under the sweep's base whose test processes are all gone). What could not be stopped is said in one line.
+  `bun run test` sweeps at its start and end as before, and a Terminal opening (the launcher's `on_open`) runs the
+  folder's `test-tmp.mjs --sweep` too, outside any sandbox.
+- **Stand-ins end with their test** (`terminal/test/end-with-run.mjs`): fake-mcp.mjs as a program and
+  fake-llama-server.mjs look every 2 s for the test process their run folder names (TMPDIR, working folder or path)
+  and end when it is gone; pty.mjs's wrapper has a watch that ends its group (script(1), so the app's terminal hangs
+  up) once its test process is gone.
+- **Tests**: agent.test (Bypass writes away run no tests; the covering files, else the whole suite), agents-run.test
+  (the covering command), jobs.test (a cut-off command and a stopped job take a program in its own session along; one
+  that ends keeps it), test-tmp.test (the process table, inside the fence, the stray sweep, the folder kept),
+  end-with-run.test, app-hangup.test (a driver killed outright: its app ends), update.test (the Terminal-open sweep).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
