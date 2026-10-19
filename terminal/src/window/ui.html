@@ -136,6 +136,11 @@ button { font: inherit; color: inherit; }
    page under and around it holds still. */
 .thinking.live { height: 9em; line-height: 1.5; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 2.2em); mask-image: linear-gradient(to bottom, transparent, #000 2.2em); }
 .thinking.live > div { flex-shrink: 0; }
+/* The thinking in a box (18 Oct 2026, the owner: "put thinking in a box, i can expand and collapse too?"): a header as
+   a task row's, open with the newest lines at that fixed height, closed one row with the newest line. */
+.trow.think { margin-bottom: 6px; }
+.thinkbody { padding: 0 14px 8px 42px; }
+.thinkbody .thinking.live { margin: 0; }
 .running { color: var(--dim); margin: 6px 0 4px 4px; }
 .back { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); border: 0; border-radius: 16px; padding: 6px 14px; background: var(--accent); color: #0b1a2b; font: 600 12.5px var(--sans); cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
 .back[hidden] { display: none; }
@@ -389,6 +394,9 @@ function itemHtml(v, prev, next) {
 const liveOpen = new Map();
 const liveKey = (L, part) => (L.turnStart ?? 0) + ':' + part;
 const liveIsOpen = (L, part) => liveOpen.get(liveKey(L, part)) ?? part === 'now';
+// The thinking box open or closed: one choice for every reply, kept for the next window too (open at first).
+let thinkOpen = true;
+try { thinkOpen = localStorage.getItem('think-open') !== '0'; } catch {}
 function liveHtml(L, held) {
   let h = '';
   if (held?.t === 'live') {
@@ -396,7 +404,11 @@ function liveHtml(L, held) {
     if (held.run) h += '<div class="trow first"><div class="task" data-live="' + esc(liveKey(L, 'run')) + '"><span class="chev' + (runOpen ? ' open' : '') + '"></span><span class="tag" style="color:' + held.run.color + '">' + held.run.label + '</span><span class="w">' + esc(held.run.last) + '</span><span class="end"><span>' + plural(held.run.rows.length, 'part') + '</span></span></div>' + (runOpen ? '<div class="rows">' + held.run.rows.map(rowHtml).join('') + '</div>' : '') + '</div>';
     h += '<div class="trow' + (held.run ? '' : ' first') + ' firstonly" style="' + (held.run ? 'border-radius:0 0 10px 10px;margin-top:0' : '') + '"><div class="task" data-live="' + esc(liveKey(L, 'now')) + '"><span class="chev' + (nowOpen ? ' open' : '') + '"></span><span class="tag" style="color:' + held.now.color + '">' + (held.run && held.run.label === held.now.label ? '' : held.now.label) + '</span><span class="w">' + esc(held.now.words) + '</span><span class="end"><span class="working">Working</span><span>' + plural(held.now.n, 'step') + '</span></span></div>' + (nowOpen && held.now.steps.length ? '<div class="rows"><div class="steps">' + held.now.steps.slice(-3).map(stepHtml).join('') + '</div></div>' : '') + '</div>';
   } else if (held?.t === 'heldsteps' && held.steps.length) h += '<div class="steps">' + held.steps.slice(-3).map(stepHtml).join('') + '</div>';
-  if (L.thinking && !L.text) h += '<div class="thinking live"><div>∴ ' + esc(L.thinking.slice(-900)) + '</div></div>';
+  if (L.thinking && !L.text) {
+    const newest = L.thinking.trim().split('\n').filter((x) => x.trim()).pop() ?? '';
+    h += '<div class="trow first firstonly think"><div class="task" data-think="1"><span class="chev' + (thinkOpen ? ' open' : '') + '"></span><span class="tag" style="color:#8a8a8a">THINKING</span><span class="w guess">' + esc(thinkOpen ? 'newest lines at the bottom' : newest) + '</span><span class="end"><span class="working">Thinking</span></span></div>'
+      + (thinkOpen ? '<div class="thinkbody"><div class="thinking live"><div>' + esc(L.thinking.slice(-900)) + '</div></div></div>' : '') + '</div>';
+  }
   if (L.running) h += '<div class="running">❯ ' + esc(L.running.label || 'Running') + ' ' + esc(L.running.arg) + '</div>';
   if (L.writing) h += '<div class="running">✎ Writing ' + esc(L.writing.path || '') + '</div>';
   if (L.text) h += '<div class="reply writing">' + md(L.text) + '<span class="caret" style="width:7px;height:14px"></span></div>';
@@ -821,6 +833,7 @@ document.addEventListener('click', (e) => {
   if (act === 'send') { if (S.last?.input?.value) keys('\r'); return; }
   const res = t.closest('[data-resume]'); if (res) { send({ t: 'act', do: 'resume', id: res.dataset.resume }); S.find = false; S.side = false; S.q = ''; renderDrops(); renderSide(); return; }
   const md_ = t.closest('[data-mode]'); if (md_) { send({ t: 'act', do: 'mode', mode: md_.dataset.mode }); return; }
+  if (t.closest('[data-think]')) { thinkOpen = !thinkOpen; try { localStorage.setItem('think-open', thinkOpen ? '1' : '0'); } catch {} render(); return; }
   const lv = t.closest('[data-live]'); if (lv) { const k = lv.dataset.live; if (liveOpen.size > 40) liveOpen.clear(); liveOpen.set(k, !(liveOpen.get(k) ?? k.endsWith(':now'))); render(); return; }
   const task = t.closest('[data-task]'); if (task) { send({ t: 'act', do: 'toggle', id: task.dataset.task }); return; }
   const row = t.closest('[data-row]'); if (row) { const k = row.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); rowsVer++; render(); return; }

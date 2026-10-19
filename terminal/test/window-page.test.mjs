@@ -258,3 +258,36 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking as it 
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
+
+// The thinking in a box (18 Oct 2026, the owner: "put thinking in a box, i can expand and collapse too?"): a header as a
+// task row's; open at first with the newest lines, a click closes it to one row with the newest line, and that holds for
+// the next reply too. Nothing goes to the app.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking is a box that opens and closes, one row closed whatever its length, kept for the next reply', async () => {
+  const p = await openPage();
+  try {
+    const box = () => p.js(`(() => { const b = document.querySelector('#live .trow.think'); if (!b) return null; return { tag: b.querySelector('.tag').textContent, words: b.querySelector('.w').textContent, open: b.querySelector('.chev').classList.contains('open'), body: Boolean(b.querySelector('.thinking')), h: Math.round(b.getBoundingClientRect().height) }; })()`);
+    const lines = (n) => Array.from({ length: n }, (_, i) => `Line ${i + 1} of the thinking.`).join('\n');
+    let turnStart = Date.now();
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 50, thinking: lines(3) } });
+    const open = await box();
+    expect(open).toMatchObject({ tag: 'THINKING', open: true, body: true });
+    await p.click('#live .trow.think .task', 0);
+    const shut = await box();
+    expect(shut).toMatchObject({ open: false, body: false, words: 'Line 3 of the thinking.' });
+    expect(shut.h).toBeLessThan(open.h);
+    // Closed, it stays one row as the thinking grows, its newest line in the header.
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 90, thinking: lines(40) } });
+    expect(await box()).toMatchObject({ open: false, words: 'Line 40 of the thinking.', h: shut.h });
+    // The next reply starts closed too.
+    turnStart += 60_000;
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 5, thinking: 'A new thought.' } });
+    expect(await box()).toMatchObject({ open: false, words: 'A new thought.' });
+    await p.click('#live .trow.think .task', 0);
+    expect(await box()).toMatchObject({ open: true, body: true, h: open.h });
+    // The answer's first words take its place.
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 9, thinking: 'A new thought.', text: 'Here it is.' } });
+    expect(await box()).toBeNull();
+    expect(p.got()).toEqual([]);
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
