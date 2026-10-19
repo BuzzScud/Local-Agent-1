@@ -286,6 +286,20 @@ export const countLine = (out) => String(out ?? '').split('\n').map((l) => l.tri
 export { wantsDesktop };
 // An answer that holds code to put in a file (a fenced block of three lines or more) instead of a change.
 export const writesCodeInstead = (text) => /```[^\n]*\n(?:[^\n]*\n){3,}[\s\S]*?```/.test(String(text ?? ''));
+// The first fenced block of a reply: the word after ``` (its language) and its body.
+export function firstFence(text) {
+  const m = /```([^\n]*)\n([\s\S]*?)\n?```/.exec(String(text ?? ''));
+  return m ? { info: m[1].trim(), body: m[2] ?? '' } : null;
+}
+// A WHOLE file pasted into the reply instead of saved with Write (19 Oct 2026, Qwen3.6 on a service wrote the
+// page as text across 11 minutes and never called Write): a fenced block that is a complete file — an HTML
+// document, or ten lines or more. writesCodeInstead is any code block; this is the kind the app can save for
+// the model (agent-step.mjs pasteToWrite). A reply that is mostly prose with a short snippet is not one.
+export function wholeFilePasted(text) {
+  const f = firstFence(text);
+  if (!f) return false;
+  return /<!doctype|<html[\s>]/i.test(f.body) || f.body.split('\n').length >= 10;
+}
 
 export function claimsDone(text) {
   const t = String(text ?? '').replace(/```[\s\S]*?```/g, ' ');

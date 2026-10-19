@@ -44,3 +44,24 @@ test('a Write that came with only its path is asked for again with its content o
     expect(notes.some((t) => /asked for it once more and read it here: it was whole \(path, content\)/.test(t))).toBe(true);
   } finally { dropEndpoint(svc.url); await svc.close(); }
 });
+
+test('a whole file pasted into the reply (no Write) is saved: a Write is opened for it and the body streamed in', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-paste-write-'));
+  const svc = await fakeOllama();
+  setEndpoint(svc.url, { remote: true, kind: 'openai', ollama: true, model: 'thinker:35b', family: 'qwen35moe', numCtx: 131072, keepAlive: -1, free: true });
+  try {
+    const a = new Agent({ url: svc.url, model: { ...local, remote: { model: 'thinker:35b' } }, cwd, system: 'You are the main agent.', ctx: 131072, memory: false, flows: false, verify: false, way: 'app', hooks: [], mode: 'edits', instructions: 'remote', checkIns: false, confirmPlan: false });
+    a.look = 'off';
+    const notes = [];
+    a.on('note', (n) => notes.push(n.text));
+    await a.send('make me a dashboard page in dash.html');
+    // The reply pasted the file, so the app opened a Write in raw mode (content opened) and saved what came.
+    const raw = svc.seen.filter((s) => s.path === '/api/generate' && s.body.raw);
+    expect(raw.length).toBe(1);
+    expect(raw[0].body.prompt.endsWith('<function=Write>\n<parameter=path>\ndash.html\n</parameter>\n<parameter=content>\n')).toBe(true);
+    expect(existsSync(join(cwd, 'dash.html'))).toBe(true);
+    expect(readFileSync(join(cwd, 'dash.html'), 'utf8')).toContain('<h1>Dashboard saved</h1>');
+    expect(notes.some((t) => /pasted the whole file/i.test(t))).toBe(true);
+    expect(notes.some((t) => /Saved it as dash\.html/.test(t))).toBe(true);
+  } finally { dropEndpoint(svc.url); await svc.close(); }
+});

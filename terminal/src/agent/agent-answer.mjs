@@ -15,7 +15,9 @@ import { STOP_BACKS } from './user-hooks.mjs';
 import { appCodeChanged } from './self.mjs';
 import { wantsDesktop } from '../flows/words.mjs';
 import { SERVICE_REPLY } from './room.mjs';
-import { LAYOUT_ROUNDS, LOST_CALL, MENTIONS_WALL, aboutTheCode, announcesNextStep, asksForWork, commandInText, asksTheUser, auto, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, emptyCutNote, kTok, lostCall, searchWords, tokensOf, writesCodeInstead } from './agent-said.mjs';
+import { endpointOf } from '../../../models/index.mjs';
+import { qwenRawFits } from './qwen-raw.mjs';
+import { LAYOUT_ROUNDS, LOST_CALL, MENTIONS_WALL, aboutTheCode, announcesNextStep, asksForWork, commandInText, asksTheUser, auto, claimsAllGood, claimsAlreadyThere, claimsDone, claimsFound, emptyCutNote, kTok, lostCall, searchWords, tokensOf, wholeFilePasted, writesCodeInstead } from './agent-said.mjs';
 
 export class AnswerPart {
   // The answer, with no tool call: the app's checks before it stands (moved out of work() on 13 Oct 2026 so each
@@ -95,6 +97,19 @@ export class AnswerPart {
       st.nudges++;
       this.messages.push({ role: 'user', content: auto('You said what you will do next but did not do it. If you meant to, do it now with the tools; if you are waiting for the user, stop.') });
       return 'continue';
+    }
+    // A whole file pasted into the reply instead of saved (19 Oct 2026, Qwen3.6 on a service wrote the page as
+    // a fenced block across 11 minutes and never called Write; the two words-nudges below did not move it and the
+    // request's minutes went to re-pasting). On the FIRST such reply, open a Write for it in raw mode and let it
+    // stream the file body (pasteToWrite, the lost-Write machinery), then save it. Only where raw mode fits
+    // (a Qwen 3.5-family Ollama service); elsewhere the words-nudges below still run. Before the page/plan nudge,
+    // so a file pasted on the very first reply is saved, not answered with "write it now".
+    if (!this.turn.forcedWrite && !this.isHelper && !this.turn.changed && !this.turn.startTexts?.size && !this.madePages().length
+      && (this.turn.type === 'page' || this.fileNamed()) && asksForWork(this.turn.request)
+      && wholeFilePasted(text) && qwenRawFits(endpointOf(this.url))) {
+      this.turn.forcedWrite = true;
+      const wrote = await this.pasteToWrite(text, turn, signal).catch(() => null);
+      if (wrote) return 'continue';
     }
     // A page asked for and none written: back once to write it (8 Oct 2026: Qwen3.6 on the service
     // answered page requests with the six-line plan, and Look before answering below sent it to

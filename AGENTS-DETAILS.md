@@ -1642,8 +1642,20 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **A server on this Mac said plainly** (sandbox.mjs fenceHint, `LOCAL_SERVER`): in Bypass, a connection refused
   by the fence (psql to its socket or 127.0.0.1, EPERM on connect) says every host, port and socket is closed and
   to give the user the command to run; psql had been tried ten times in one conversation.
+- **A whole file pasted instead of saved** (agent-answer.mjs, agent-step.mjs `pasteToWrite`, `pastePath`;
+  agent-said.mjs `wholeFilePasted`, `firstFence`; 19 Oct 2026, the owner's pick "Force a Write only, on the first
+  pasted file"). Qwen3.6 on a service answered a page request with the whole HTML in a fenced block and never
+  called Write; the app's two words-nudges (the page/plan one, the "make the change" one) did not move it and the
+  request's 11–15 minutes went to re-pasting, ending "Nothing was changed". Now, on the FIRST reply that holds a
+  whole file (`wholeFilePasted`: an HTML document, or ten lines or more) with nothing written, for a page or a
+  named-file request, the app opens a Write for it in raw mode with the path filled and `content` opened (the
+  lost-Write machinery above), so what the model streams next is the file's body, and saves that. The path is the
+  name the request gives, else the pasted HTML's `<title>`, else the request's first words (a page is `.html`).
+  Only where raw mode fits (a Qwen 3.5-family Ollama service); elsewhere the words-nudges still run. The huge
+  pasted block is dropped from the conversation once the file is on disk.
 - **Tests**: agent.test (the Edit without a Read, a change made already, the server hint), qwen-reread.test (the
-  opening, and a Write with only its path on the stand-in Ollama), jobs.test (`longRun`, a build past the limit).
+  opening, a Write with only its path, and a whole file pasted then saved, on the stand-in Ollama), jobs.test
+  (`longRun`, a build past the limit).
 
 ## The UI sweep (19 Oct 2026)
 

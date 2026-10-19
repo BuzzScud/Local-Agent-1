@@ -25,11 +25,16 @@ import { nearParts, openPart, partFor, partsOf, readLadder } from './ladder.mjs'
 import { MAP_DIR } from '../tools/codemap.mjs';
 import { CUT } from '../tools/codeindex.mjs';
 import { MCP_TOOL, findEntry, isMcpCall, madeUpCall } from './mcp.mjs';
-import { CODE_SEARCH_CHARS, CUT_MARK, MODEL_TOOLS, countLine, failsOf, leakedCall, planLine, runLine, tokensOf } from './agent-said.mjs';
+import { CODE_SEARCH_CHARS, CUT_MARK, MODEL_TOOLS, countLine, failsOf, firstFence, leakedCall, planLine, runLine, tokensOf } from './agent-said.mjs';
 import { rawQwenCall } from './client.mjs';
-import { givenParams, readCallText } from './qwen-raw.mjs';
-import { HOME } from '../../../models/index.mjs';
+import { givenParams, qwenRawFits, readCallText } from './qwen-raw.mjs';
+import { HOME, endpointOf } from '../../../models/index.mjs';
 import { usesSsh } from '../tools/ssh.mjs';
+
+// A fenced block's language → the file extension a pasted file of that kind takes (pastePath).
+const EXT_OF = { html: 'html', htm: 'html', md: 'md', markdown: 'md', json: 'json', js: 'js', javascript: 'js', jsx: 'jsx', mjs: 'mjs', ts: 'ts', typescript: 'ts', tsx: 'tsx', css: 'css', py: 'py', python: 'py', sh: 'sh', bash: 'sh', txt: 'txt', text: 'txt', xml: 'xml', svg: 'svg', yaml: 'yaml', yml: 'yaml' };
+// A name from a title or a request: lower-case, words joined by hyphens, the first six (tags stripped first).
+const slugName = (s) => String(s ?? '').toLowerCase().replace(/<[^>]*>/g, ' ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').split('-').filter(Boolean).slice(0, 6).join('-');
 
 export class StepPart {
   // A Write with its content but no path: the content is kept, the call in the
@@ -104,6 +109,70 @@ export class StepPart {
     this.ctxUsed += Math.max(0, tokensOf(json) - tokensOf(c.function.arguments ?? ''));
     c.function.arguments = json;
     return { call: { ...call, args: json }, found };
+  }
+
+  // A whole file pasted into the reply instead of saved (19 Oct 2026, Qwen3.6 on an Ollama service wrote the
+  // page as a fenced block across 11 minutes and never called Write; two words-nudges did not move it). Rather
+  // than nudge again, open a Write for it in raw mode with the path filled and "content" opened (the lost-Write
+  // machinery, rereadCall), so what the model streams next is the file's body, and save that. Answers true when
+  // it was saved; null to let the words-nudges run (another service, no body came, or the Write was refused).
+  async pasteToWrite(text, turn, signal) {
+    if (!qwenRawFits(endpointOf(this.url))) return null;
+    const ask = this.lastAsk;
+    const def = ask?.tools?.find((t) => (t.function?.name ?? t.name) === 'Write');
+    const at = this.messages.length - 1;
+    const msg = this.messages[at];
+    if (!def || at < 1 || msg?.role !== 'assistant' || msg.tool_calls) return null;
+    const path = this.pastePath(text);
+    if (!path) return null;
+    const given = givenParams({ path }, 'content');
+    const reasoning = String(turn?.reasoning ?? msg.reasoning_content ?? '');
+    const started = Date.now();
+    this.emit('note', { text: `It pasted the whole file into its reply instead of saving it; opening a Write to ${path} and reading the file from the model here…`, tone: 'warn' });
+    const r = await rawQwenCall({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages.slice(0, at)), tools: ask.tools, thinking: ask.thinking, effort: ask.effort, model: this.model, sampling: ask.sampling, maxTokens: ask.maxTokens, reasoning, before: '', name: 'Write', given, signal }).catch(() => null);
+    if (!r) return null;
+    const args = readCallText(given + r.text, def);
+    const content = this.unfence(typeof args.content === 'string' ? args.content : '');
+    try {
+      mkdirSync(join(HOME, 'logs'), { recursive: true });
+      appendFileSync(join(HOME, 'logs', 'qwen-reread.jsonl'), `${JSON.stringify({ at: new Date().toISOString(), model: this.model?.remote?.model ?? null, tool: 'Write', missing: 'content', from: 'paste', path, raw: r.text.slice(0, 20000), chars: content.length, tokens: r.tokens, finish: r.finish, secs: Math.round((Date.now() - started) / 1000) })}\n`);
+    } catch { /* the log is for looking back; the step goes on without it */ }
+    if (content.trim().length < 40) { this.emit('note', { text: 'No file body came back; keeping the nudge.', tone: 'dim' }); return null; }
+    const id = `call_${Date.now()}`;
+    const callArgs = JSON.stringify({ path, content });
+    // The pasted reply's giant code block is no longer needed in the conversation (the file is on disk now):
+    // a one-line placeholder in its place, then the Write call and its result.
+    msg.content = '[The whole file was pasted into this reply; Agentic Coder saved it with the Write below.]';
+    delete msg.reasoning_content;
+    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'Write', arguments: callArgs } }] });
+    const out = await this.runTool({ id, name: 'Write', args: callArgs }, signal);
+    this.messages.push({ role: 'tool', tool_call_id: id, content: out.text });
+    if (out.error) { this.emit('note', { text: `Could not save it (${String(out.text).replace(/\s+/g, ' ').slice(0, 120)}); keeping the nudge.`, tone: 'warn' }); return null; }
+    this.emit('note', { text: `Saved it as ${path} — the model had pasted the whole file into its reply.`, tone: 'warn' });
+    return true;
+  }
+
+  // Where a pasted file goes: the name the request itself gives, else the pasted HTML's <title> (a page), else
+  // the first words of the request; a page is .html, anything else keeps the fenced block's own language.
+  pastePath(text) {
+    const named = this.fileNamed();
+    if (named) return named;
+    const block = firstFence(text);
+    const body = block?.body ?? '';
+    if (/<!doctype|<html[\s>]/i.test(body) || this.turn?.type === 'page') {
+      const title = /<title[^>]*>([^<]+)<\/title>/i.exec(body)?.[1];
+      return `${slugName(title) || slugName(this.turn?.request) || 'page'}.html`;
+    }
+    const ext = EXT_OF[String(block?.info ?? '').toLowerCase().split(/\s+/)[0]] ?? 'txt';
+    return `${slugName(this.turn?.request) || 'file'}.${ext}`;
+  }
+
+  // The file's text as the model streamed it for "content": if it wrapped it in a ```lang … ``` fence again
+  // (raw mode usually does not, but a model may), the fence is taken off; the file ends with one newline.
+  unfence(s) {
+    const m = /^\s*```[^\n]*\n([\s\S]*?)\n?```\s*$/.exec(String(s ?? ''));
+    const body = (m ? m[1] : String(s ?? '')).replace(/\s+$/, '');
+    return body ? `${body}\n` : '';
   }
 
   // Replace a call's arguments in the conversation (the model reads the shorter
