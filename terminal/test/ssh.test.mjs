@@ -167,6 +167,24 @@ test('in Bypass the request carries the line, and an answer that never ran ssh g
   expect(JSON.stringify(fake.requests[2].messages)).toContain(`Logged in to ${HOST}: root on box`);
 });
 
+// The owner's window at 8:09 PM the same day (Qwen3.6, Bypass, "log in to the server: ssh <host>"): an answer that
+// ends with a question to the user ended the message before the send-back above was looked at, so nothing ran.
+const ASKED_NOT_RUN = `I can't maintain an interactive SSH session, but I can run commands on that server for you. Just tell me what you'd like to do, and I'll run it like this:\n\n\`\`\`\nssh ${HOST} '<your command>'\n\`\`\`\n\nFor example, if you want to check the server status, I can run:\n\n\`\`\`\nssh ${HOST} 'uptime; df -h; free -m'\n\`\`\`\n\nWhat would you like to do on the server?`;
+test('an answer that asks what to do on the server before running ssh goes back to run it first', async () => {
+  reply('root\nbox\nLinux 6.8.0\n/root\n');
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-ssh-agent-'));
+  const fake = await startFakeServer([{ text: ASKED_NOT_RUN }, { tool: { name: 'Bash', args: { command: `ssh ${HOST}` } } }, { text: 'Logged in to the server as root. What would you like to do there?' }]);
+  const notes = [];
+  const a = agentOn(fake.url, cwd);
+  a.on('note', (e) => notes.push(e.text));
+  expect(await a.send(`log in to the server: ssh ${HOST}`)).toBe('done');
+  await fake.close();
+  expect(fake.requests).toHaveLength(3);
+  expect(fake.requests[1].messages.at(-1).content).toContain('You answered without running anything');
+  expect(notes).toContain(`It answered without running ssh to ${HOST}; told it to run it.`);
+  expect(JSON.stringify(fake.requests[2].messages)).toContain(`Logged in to ${HOST}: root on box`);
+});
+
 test('an answer that ran ssh is let through; outside Bypass the line says where it would run, and nothing goes back', async () => {
   reply('root\nbox\nLinux 6.8.0\n/root\n');
   const cwd = mkdtempSync(join(tmpdir(), 'agentic-ssh-agent-'));
