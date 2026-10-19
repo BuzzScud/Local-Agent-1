@@ -68,3 +68,12 @@ test('the tool is offered only when asked for (a model that can see), and shows 
   expect(display('Screen', { app: 'Safari' })).toEqual({ label: 'Screen', arg: 'Safari' });
   expect(display('Screen', {})).toEqual({ label: 'Screen', arg: 'whole screen' });
 });
+
+// /permissions' Screen row (screen-known.test.mjs has the helper not built): once built, the known answer is macOS's.
+test('with the helper built, screenAccessKnown says what screenAccess says', () => {
+  expect(media.mediaToolBuilt()).toBe(true);
+  allow(true);
+  expect(screen.screenAccessKnown()).toBe(true);
+  allow(false);
+  expect(screen.screenAccessKnown()).toBe(false);
+});

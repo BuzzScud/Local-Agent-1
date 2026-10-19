@@ -44,3 +44,29 @@ test('a step is saved before the reply after it has ended: its tool result is on
   const after = savedNow(home);
   expect(after.messages.at(-1)).toMatchObject({ role: 'assistant', content: answer });
 }, T);
+
+// The UI sweep of 19 Oct 2026: the save as a reply ended ran before its answer and end line were drawn (pushFn adds them a
+// moment later), so the file held the request and steps but not the answer, and a conversation opened again (from Chats,
+// /resume or the start page) showed it without its last answer. Now what is pushed and not yet drawn is saved too.
+test('the save as a reply ends holds its answer and its end line, and the conversation opened again shows that answer', async () => {
+  const { base, cwd, env } = setup();
+  const home = join(base, 'home');
+  const fake = await startFakeServer([{ text: 'The answer is forty-two.' }]);
+  let ended = null;
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' },
+    { type: 'what is the answer?' }, { key: 'enter' },
+    { wait: 'forty-two', ms: 20_000 }, { waitGone: 'esc to interrupt' }, { sleep: 600 },
+    // the reply has ended and nothing has saved since: what the file holds now
+    { fn: () => { ended = savedNow(home); } },
+    { type: '/clear' }, { key: 'enter' }, { waitGone: 'forty-two' }, { sleep: 300 },
+    { type: '/resume' }, { key: 'enter' }, { wait: 'Resume a conversation' }, { sleep: 300 }, { key: 'enter' },
+    { wait: 'resumed' }, { sleep: 600 }, { snapshot: 'resumed' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(ended).not.toBeNull();
+  expect(ended.items.some((it) => it.type === 'text' && it.text.includes('forty-two'))).toBe(true);
+  expect(ended.items.at(-1).type).toBe('done');
+  expect(r.snapshots.resumed).toContain('The answer is forty-two.');
+}, T);

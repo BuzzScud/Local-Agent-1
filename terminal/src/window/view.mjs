@@ -59,7 +59,8 @@ export function viewItem(it) {
       return { t: 'taskrun', key: it.id, id: it.id, open: Boolean(it.open), first: Boolean(it.first), ...taskOf(it.run.task), last: short(last ? last.text : it.run.rows[0].guess, 220), said: Boolean(last), rows: it.run.rows.map(rowOf), openRows: [...(it.openRows ?? [])], facts: factsOf(all) };
     }
     case 'taskend': { const f = groupFacts(it.rows.flatMap((r) => r.list)); return { t: 'taskend', key: `end${it.rows[0]?.id}`, facts: factsOf(f) }; }
-    case 'done': return { t: 'done', key: it.key, past: it.past, secs: it.secs, at: it.at, usd: it.usd ?? 0, steps: it.steps ?? 0, reason: it.reason };
+    // text: why a reply that did not end done stopped ("Interrupted · …", END_WORDS), as the terminal's end line says it.
+    case 'done': return { t: 'done', key: it.key, past: it.past, secs: it.secs, at: it.at, usd: it.usd ?? 0, steps: it.steps ?? 0, reason: it.reason, text: it.text ?? null, left: it.left ?? 0 };
     case 'made': return { t: 'made', key: it.key, files: (it.files ?? []).map((f) => ({ name: base(f.path), created: f.created })) };
     case 'note': return it.check ? null : { t: 'note', key: it.key, text: short(it.text, 600), tone: it.tone ?? 'dim' };
     case 'divider': return { t: 'divider', key: it.key, text: short(it.text, 200) };

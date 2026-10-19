@@ -89,7 +89,9 @@ test('/permissions: six rows with what they hold, enter opens a list, test says 
   expect(p).toMatch(/Never runs\s+12 fixed · 1 yours\s/);
   expect(p).toMatch(/Protected files\s+12 built in · 0 yours\s/); // .agentic/mcp.json and .agentic/hooks.json in, the old .bonsai/settings.json out (3 Oct)
   expect(p).toMatch(/Trusted folders\s+1 trusted\s/);
-  expect(p).toMatch(/Screen\s+(allowed|not allowed yet) · model is blind/); // a --url server shows no vision
+  // a --url server shows no vision; a home whose picture helper is not built yet says "not checked yet" (19 Oct 2026:
+  // the panel no longer builds it first), cut in the list as "not allowed yet" is, and whole in the pane beside it
+  expect(p).toMatch(/Screen\s+(allowed · model is blind|(not allowed yet|not checked yet) · model …)/);
   expect(p).toContain('what it starts in; /mode changes one conversation'); // the row you are on, in full beside the list
   expect(r.snapshots.allow).toMatch(/1\s+node --test\s+this folder/);
   expect(r.snapshots.test).toContain('REFUSED blocked by your rule "npm publish" (/permissions)');

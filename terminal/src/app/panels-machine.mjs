@@ -51,7 +51,13 @@ export function panelsMachine(self, own) {
     if (!s.title) return;
     // lessons: what happened in each turn, for the memory's review at night.
     const slimImages = (m) => (m.images ? { ...m, images: m.images.map(({ data, ...rest }) => rest) } : m);
-    try { saveSession(self.cwd, s.id, { title: s.title, messages: self.agent.messages.map(slimImages), items: s.items.slice(-300), mode: self.agent.mode, lessons: self.agent.lessons, open: s.open ?? [] }); } catch {}
+    // What was pushed but not drawn yet (pushFn adds it a moment later, and s.items follows only after the render).
+    // The save as a reply ends ran before its answer and end line were drawn, so a conversation opened again showed
+    // it without its last answer (19 Oct 2026, the UI sweep). One not drawn in 5 s was dropped on purpose.
+    const drawn = new Set(s.items.map((it) => it.key));
+    s.pending = (s.pending ?? []).filter((p) => !drawn.has(p.it.key) && Date.now() - p.at < 5000);
+    const items = [...s.items, ...s.pending.map((p) => p.it).filter((it) => it.type !== 'welcome')];
+    try { saveSession(self.cwd, s.id, { title: s.title, messages: self.agent.messages.map(slimImages), items: items.slice(-300), mode: self.agent.mode, lessons: self.agent.lessons, open: s.open ?? [] }); } catch {}
   };
   return { readMacMemory, readServicePs, saveNowFn };
 }

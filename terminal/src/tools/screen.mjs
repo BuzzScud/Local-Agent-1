@@ -13,7 +13,7 @@ import { copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { mediaTool, preparedImage } from './media.mjs';
+import { mediaTool, mediaToolBuilt, preparedImage } from './media.mjs';
 
 const fake = () => process.env.AGENTIC_SCREEN_FAKE || null;
 const helper = (args) => {
@@ -32,6 +32,10 @@ export function screenAccess() {
   if (f) return existsSync(join(f, 'access.txt')) && readFileSync(join(f, 'access.txt'), 'utf8').trim() === 'yes';
   try { return helper(['screen-access']) === 'yes'; } catch { return false; }
 }
+// The same without building the helper first: null while it is not built. /permissions shows its Screen row at once
+// (19 Oct 2026, the UI sweep: the first /permissions on a new copy, or after media-tool.swift changed, held the
+// whole app while the Swift compiler ran).
+export const screenAccessKnown = () => (fake() || mediaToolBuilt() ? screenAccess() : null);
 
 // /screen setup: macOS's own question (shown once per app; after a no, only System
 // Settings can change it), then the Settings page itself.

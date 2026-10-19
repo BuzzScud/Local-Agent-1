@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runWindow } from '../src/window/server.mjs';
 import { meterOf, modelNowOf, effortWords } from '../src/window/bridge.mjs';
+import { viewItem } from '../src/window/view.mjs';
 import { knownOf } from '../src/app/start.jsx';
 import { saveSession } from '../src/app/store.mjs';
 import { findChrome } from '../src/flows/layoutcheck.mjs';
@@ -149,6 +150,58 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: Enter and Tab work 
     const marks = [];
     for (let i = 0; i < 4; i++) { marks.push(await p.js(`document.querySelector('.ac')?.textContent.slice(0, 1)`)); await Bun.sleep(300); }
     expect(new Set(marks)).toEqual(new Set(['⠿']));
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
+// What the UI sweep of 19 Oct 2026 found in the window (the real app in this page, on a stand-in service): a reply stopped
+// with esc ended "for 1s · done" as if it had finished, a message sent while a reply worked showed nowhere, and the line
+// under the title named the mode by its id ("ask"). The end items are the bridge's own (view.mjs viewItem).
+test.skipIf(needs('chrome', findChrome))('in a real browser: a stopped reply says why, a message sent while it works shows as queued, and the mode has its name', async () => {
+  const p = await openPage();
+  try {
+    const stopped = viewItem({ type: 'done', key: 'd2', reason: 'interrupted', text: 'Interrupted · What should Agentic Coder do instead?', secs: 1.2, at: Date.now() });
+    const limit = viewItem({ type: 'done', key: 'd3', reason: 'limit', text: 'Stopped at the step limit', secs: 30, at: Date.now() });
+    await p.say({ ...base, order: [...base.order, 'd2', 'd3'], items: { ...items, d2: stopped, d3: limit } });
+    const ends = await p.js(`[...document.querySelectorAll('#items .endline')].map((e) => e.textContent)`);
+    expect(ends).toHaveLength(3);
+    expect(ends[0]).toContain('Worked for 41s');
+    expect(ends[1]).toContain('■Interrupted · What should Agentic Coder do instead?');
+    expect(ends[1]).not.toContain(' for ');
+    expect(ends[2]).toContain('Stopped at the step limit · 30s');
+    expect(await p.js(`document.querySelector('.hero .sub').textContent`)).toBe('Stand-in · manual');
+    // While it works, a message sent waits for the next step, and the status line says so.
+    await p.say({ ...base, live: { phase: 'working', turnStart: Date.now(), tokens: 3 }, queued: 'also check the README' });
+    expect(await p.js(`document.getElementById('status').textContent`)).toContain('⏵ Queued: also check the README');
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
+// A press held as long as a person holds one (19 Oct 2026, the UI sweep): the live part is drawn again with each state while
+// the thinking streams, so the box pressed was gone by the release, the click landed on the part around it, and 0 of 8
+// clicks opened or closed the THINKING box in the real app. The toggles of the live part act on the press now.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the THINKING box opens and closes on a press held while the thinking streams', async () => {
+  const p = await openPage();
+  try {
+    let n = 0, on = true;
+    const think = () => ({ ...base, order: [], items: {}, live: { phase: 'working', turnStart: Date.now(), tokens: n, thinking: Array.from({ length: 6 + n }, (_, i) => `Thought line ${i}`).join('\n') } });
+    await p.say(think());
+    const streaming = (async () => { while (on) { n++; await p.say(think()); } })();
+    const press = async () => {
+      const at = await p.js(`(() => { const r = document.querySelector('[data-think]').getBoundingClientRect(); return { x: r.x + 30, y: r.y + r.height / 2 }; })()`);
+      await p.on('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y });
+      await p.on('Input.dispatchMouseEvent', { type: 'mousePressed', x: at.x, y: at.y, button: 'left', clickCount: 1 });
+      await Bun.sleep(400); // two states or more arrive while it is held
+      await p.on('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', clickCount: 1 });
+      await Bun.sleep(200);
+    };
+    const was = await p.js('thinkOpen');
+    await press();
+    expect(await p.js('thinkOpen')).toBe(!was);
+    await press();
+    expect(await p.js('thinkOpen')).toBe(was);
+    on = false;
+    await streaming;
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);

@@ -809,12 +809,13 @@ async function start() {
     return;
   }
   note('Loading the models…', '', 'Reading each file’s header through the Agentic Coder hub.');
-  let list = [];
-  try { const r = await fetch('/models.json'); if (r.ok) { const d = await r.json(); inUse = d.inUse; list = d.models.map((m) => ({ ...m, src: m.missing ? null : httpFile('/model/' + encodeURIComponent(m.id), m.file, m.size) })); } } catch {}
+  let list = [], answered = false;
+  try { const r = await fetch('/models.json'); if (r.ok) { answered = true; const d = await r.json(); inUse = d.inUse; list = d.models.map((m) => ({ ...m, src: m.missing ? null : httpFile('/model/' + encodeURIComponent(m.id), m.file, m.size) })); } } catch {}
   if (!list.some((m) => m.src)) { // a hub started on one file: that file alone
     try { const one = await (await fetch('/model.json')).json(); if (!one.missing) list = [{ id: 'file', name: one.name.replace(/\.gguf$/i, ''), by: '', file: one.name, size: one.size, tags: [], src: httpFile('/model', one.name, one.size), single: true }]; } catch {}
   }
-  if (!list.some((m) => m.src)) return note('No model yet', 'No model file is on this Mac yet. Run <code>coding setup</code> to download one.', 'Is the Agentic Coder window that opened this page still running?');
+  // The hub answered with no file on this Mac (a window on a service or the Claude API needs none): not a window gone.
+  if (!list.some((m) => m.src)) return note('No model yet', 'No model file is on this Mac yet. Run <code>coding setup</code> to download one.', answered ? 'A model on another machine (/remote) has no file here to show.' : 'Is the Agentic Coder window that opened this page still running?');
   openFiles(list);
 }
 window.__openFile = (f) => openFiles([{ id: 'file', name: f.name.replace(/\.gguf$/i, ''), by: '', file: f.name, size: f.size, tags: [], src: f, single: true }]); // for the checks

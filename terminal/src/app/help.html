@@ -61,7 +61,7 @@ code { font-family: var(--mono); font-size: .92em; background: var(--panel); pad
   <nav class="side" id="side"></nav>
   <main>
     <h1>Agentic Coder help</h1>
-    <p class="lede" id="lede">A coding agent in your terminal that runs its model on this Mac.</p>
+    <p class="lede" id="lede">A coding agent in your terminal and its own window, on a model on this Mac or on another machine.</p>
     <div class="find"><input id="q" type="search" placeholder="find a command, key or setting" autocomplete="off" aria-label="find"><span class="small" id="count"></span></div>
     <div id="content"></div>
     <p class="none" id="none">Nothing matches. Try a shorter word.</p>
@@ -85,7 +85,8 @@ code { font-family: var(--mono); font-size: .92em; background: var(--panel); pad
   ];
 
   function render(h) {
-    $('#lede').textContent = `A coding agent in your terminal${h.modelName ? `, running ${h.modelName}` : ''} on this Mac.${h.version ? ` Version ${h.version}.` : ''} Type / in Agentic Coder for the command list; this page has everything in one place.`;
+    // modelName is this Mac's own model, not the one a window runs now (a service or the Claude API: /remote).
+    $('#lede').textContent = `A coding agent in your terminal and its own window, on a model on this Mac${h.modelName ? ` (${h.modelName} by default)` : ''} or on another machine (/remote).${h.version ? ` Version ${h.version}.` : ''} Type / in Agentic Coder for the command list; this page has everything in one place.`;
     const S = [];
     const cmdRow = (c) => row(`/${esc(c.name)}${c.arg ? ` <span class="arg">${esc(c.arg)}</span>` : ''}`, c.desc, c.menu ? '<span class="badge">menu</span>' : '');
     const byName = Object.fromEntries(h.commands.map((c) => [c.name, c]));
