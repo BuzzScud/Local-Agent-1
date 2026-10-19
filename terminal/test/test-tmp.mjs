@@ -175,36 +175,77 @@ export async function stopProcesses(pids, { graceMs = 500, refused = [] } = {}) 
 // the apps and stand-in model servers of two runs the app had started, still running after it).
 export async function cleanRun(dir, opts = {}) {
   const pids = processesIn(dir, opts);
-  if (!pids) return { stopped: 0, left: true };
+  if (!pids) return { stopped: 0, left: true, pids: [] };
   const refused = [];
   const stopped = await stopProcesses(pids, { ...opts, refused });
-  if (refused.length) return { stopped, left: true };
+  if (refused.length) return { stopped, left: true, pids };
   rmSync(dir, { recursive: true, force: true });
-  return { stopped, left: false };
+  return { stopped, left: false, pids };
 }
 
-// The run folders in `base` whose test process is gone: each cleaned. { folders, stopped, kept, left }:
-// kept are the folders of processes still running (a sibling's, or this one's own); left, the ones whose
-// programs could not be stopped from here (cleanRun).
+// Programs of runs in `base` that have ended, found by the run they carry rather than by its folder: TMPDIR inside
+// such a run's folder, or for a program with no parent left, its working folder; the run's test process gone, and
+// every run's around it. Whether the folder is still there or not: the sweep went by folders alone, so a program
+// whose folder had gone (removed by an older sweep, or by hand) ran on with nothing to find it by (18 Oct 2026: 43
+// programs of two runs the app had cut off, and five stand-in MCP servers of worktrees' runs, up to five hours
+// old). With their children; never the process asking. null when the processes could not be listed.
+export function strayProcesses(base = RUN_BASE, { me = process.pid, ps = psEnv, tree = psTree, orphans = psOrphans, alive = isAlive } = {}) {
+  const listed = ps();
+  if (listed == null) return null;
+  const roots = namesOf(base).map((b) => `${b}/${RUN_PREFIX}`);
+  // The runs below `base` only: a base inside a run folder (a test's) is not one of them.
+  const ended = (path) => {
+    const root = roots.find((r) => path.startsWith(r));
+    if (!root) return false;
+    const runs = [...path.slice(root.length - RUN_PREFIX.length - 1).matchAll(/\/agentic-run-(\d+)-/g)].map((m) => Number(m[1]));
+    return runs.length > 0 && runs.every((pid) => !alive(pid));
+  };
+  const out = [];
+  for (const line of listed.split('\n')) {
+    const m = / TMPDIR=(\S+)/.exec(line);
+    if (!m || !ended(m[1])) continue;
+    const pid = Number(line.trim().split(/\s+/)[0]);
+    if (pid && pid !== me && !out.includes(pid)) out.push(pid);
+  }
+  for (const [pid, cwd] of orphans()) if (pid !== me && !out.includes(pid) && ended(cwd)) out.push(pid);
+  if (!out.length) return out;
+  const parents = tree();
+  for (let i = 0; i < out.length; i++) for (const [pid, ppid] of parents) if (ppid === out[i] && pid !== me && !out.includes(pid)) out.push(pid);
+  return out;
+}
+
+// The run folders in `base` whose test process is gone: each cleaned; then the programs of ended runs whose
+// folders are gone (strayProcesses). { folders, stopped, kept, left, held }: kept are the folders of processes
+// still running (a sibling's, or this one's own); left, the folders whose programs could not be stopped from here
+// (cleanRun); held, the programs of no folder that could not be.
 export async function sweepRuns({ base = RUN_BASE, ...opts } = {}) {
-  const r = { folders: 0, stopped: 0, kept: 0, left: 0 };
+  const r = { folders: 0, stopped: 0, kept: 0, left: 0, held: 0 };
   let names = [];
   try { names = readdirSync(base); } catch { return r; }
+  const done = [];
   for (const name of names) {
     const pid = pidOf(name);
     if (!pid) continue;
     if (isAlive(pid)) { r.kept++; continue; }
     const dir = join(base, name);
     if (!existsSync(dir)) continue;
-    const { stopped, left } = await cleanRun(dir, opts);
+    const { stopped, left, pids } = await cleanRun(dir, opts);
     r.stopped += stopped;
+    done.push(...pids);
     if (left) r.left++; else r.folders++;
+  }
+  const strays = (strayProcesses(base, opts) ?? []).filter((pid) => !done.includes(pid));
+  if (strays.length) {
+    const refused = [];
+    r.stopped += await stopProcesses(strays, { ...opts, refused });
+    r.held += refused.length;
   }
   return r;
 }
 
 // One line for the suite's output, only when something was there to clean, and one for what could not be.
-export const sweepWords = ({ folders, stopped, left = 0 }) => `${folders ? `Cleaned up after an earlier test run: ${folders} folder${folders === 1 ? '' : 's'}${stopped ? `, ${stopped} program${stopped === 1 ? '' : 's'} stopped` : ''}.\n` : ''}${left ? `Programs of ${left} earlier test run${left === 1 ? '' : 's'} could not be stopped from inside a sandbox (Agentic Coder's fence); ${left === 1 ? 'its folder stays' : 'their folders stay'} until the tests run once in a Terminal.\n` : ''}`;
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+export const sweepWords = ({ folders, stopped, left = 0, held = 0 }) => `${folders || stopped ? `Cleaned up after an earlier test run: ${[folders ? plural(folders, 'folder') : '', stopped ? `${plural(stopped, 'program')} stopped` : ''].filter(Boolean).join(', ')}.\n` : ''}${left || held ? 'Some programs of earlier test runs could not be stopped from inside a sandbox (Agentic Coder\'s fence); the next test run in a Terminal stops them.\n' : ''}`;
 
 // bun terminal/test/test-tmp.mjs --sweep [--base <folder>]: the sweep, from run-suite.mjs (a bun of its
 // own: the models part imports no file of the terminal's but its index).
