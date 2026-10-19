@@ -289,11 +289,12 @@ test('an edit repeated after it was applied is recognised', () => {
 });
 import { findEdit as findEditLocal } from '../src/agent/tools.mjs';
 
-test('an existing file must be read before it is edited', async () => {
+test('an existing file must be read before it is edited, when old_text is not in it exactly as written', async () => {
   const replies = [
-    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  return toCsv(rows); // x' } } },
+    // Four spaces where the file has two: a near match, which only a Read makes safe.
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '    return toCsv(rows);', new_text: '    return toCsv(rows); // x' } } },
     { tool: { name: 'Read', args: { path: 'export.mjs' } } },
-    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  return toCsv(rows); // x' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '    return toCsv(rows);', new_text: '    return toCsv(rows); // x' } } },
     { tool: { name: 'Bash', args: { command: 'node --test' } } },
     { text: 'Done.' },
   ];
@@ -302,6 +303,22 @@ test('an existing file must be read before it is edited', async () => {
   expect(tools[0].view.message).toContain('Read export.mjs first');
   expect(tools[2].error).toBeFalsy();
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain('// x');
+});
+
+// 19 Oct 2026: 16 of 45 Edits turned back in three weeks were of files read or written before the conversation
+// went to its notes. An old_text found exactly as written is what the file holds now; a change made already is done.
+test('an Edit whose old_text is in the file exactly as written goes through without a Read; one made already is done, not an error', async () => {
+  const replies = [
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  return toCsv(rows); // x' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows); // x', new_text: '  return toCsv(rows); // y' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows); // x', new_text: '  return toCsv(rows); // y' } } },
+    { text: 'Done.' },
+  ];
+  const { events, cwd, agent } = await run(replies);
+  const edits = events.filter((e) => e.type === 'tool' && e.label === 'Update');
+  expect(edits.map((e) => [e.view.kind, Boolean(e.error)])).toEqual([['diff', false], ['diff', false], ['done', false]]);
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain('return toCsv(rows); // y');
+  expect(agent.messages.some((m) => m.role === 'tool' && String(m.content).includes('already in the file'))).toBe(true);
 });
 
 test("a tool call in the 27B's own format, written as text, still runs", async () => {
@@ -1154,6 +1171,12 @@ test('a blocked app gets its own hint, without the words that send it back to th
   expect(fenceHint('zsh:1: operation not permitted: osascript')).toContain('Apps cannot be started');
   expect(fenceHint('cat: /Users/x/a.txt: Operation not permitted')).toContain('Files outside the project folder cannot be read or changed');
   expect(fenceHint('all fine')).toBe('');
+  // 18 Oct 2026: psql was turned away ten times in one conversation in Bypass, at another host, port or socket each time.
+  for (const out of ['psql: error: connection to server on socket "/tmp/.s.PGSQL.5432" failed: Operation not permitted', 'psql: error: connection to server at "127.0.0.1", port 5435 failed: Operation not permitted', 'Error: connect EPERM 127.0.0.1:6379']) {
+    expect(fenceHint(out, { open: true })).toContain('commands cannot connect to a server already running on this Mac');
+    expect(fenceHint(out, { open: true })).toContain('Do not try again');
+  }
+  expect(fenceHint('ps: Operation not permitted', { open: true })).toContain('servers and services already running on this Mac cannot be reached');
 });
 
 // 3 Oct 2026: Qwen3.6 read a 674-line file with no offset seven times; each repeat was told

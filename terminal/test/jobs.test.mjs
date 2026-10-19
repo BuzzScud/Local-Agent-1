@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Jobs, MAX_RUNNING, capLines, took } from '../src/tools/jobs.mjs';
 import { runCommand } from '../src/tools/run.mjs';
-import { execute, parseArgs, secsOf, toolSchemas, MAX_TIMEOUT_SECS } from '../src/agent/tools.mjs';
+import { execute, parseArgs, secsOf, toolSchemas, longRun, MAX_TIMEOUT_SECS } from '../src/agent/tools.mjs';
 import { decide } from '../src/agent/permissions.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
@@ -128,6 +128,21 @@ test('Bash timeout stops a command sooner and says how to ask for longer', async
   expect(r.view.after).toBe('1 s');
   expect(r.text).toContain('(stopped after 1 s; for longer, send timeout (up to 600 seconds), or background: true');
 });
+
+// 19 Oct 2026: 13 of the 17 commands stopped at the 2-minute limit in three weeks were whole test runs.
+test('a test run or a build gets ten minutes unless the call names its own time; other commands keep the limit', async () => {
+  for (const c of ['bun run test', 'cd a && bun test 2>&1 | tail -25', 'npm test', 'bun run check', 'npm run build', 'cargo build', 'make -j8']) expect([c, longRun(c)]).toEqual([c, true]);
+  for (const c of ['ls -la', 'grep -rn make src', 'echo build', 'npm run dev', 'bun run start', 'sleep 5']) expect([c, longRun(c)]).toEqual([c, false]);
+  const d = dir();
+  writeFileSync(join(d, 'package.json'), JSON.stringify({ scripts: { build: 'sleep 1.5 && echo built' } }));
+  const env = { cwd: d, bash: { timeoutMs: 500, maxLines: 80 } };
+  const build = await execute('Bash', { command: 'bun run build' }, {}, env);
+  expect(build.view.timedOut).toBe(false);
+  expect(build.text).toContain('built');
+  expect((await execute('Bash', { command: 'sleep 1.5' }, {}, env)).view.timedOut).toBe(true);
+  expect((await execute('Bash', { command: 'bun run build', timeout: 1 }, {}, env)).view.timedOut).toBe(true); // its own time wins
+  rmSync(d, { recursive: true, force: true });
+}, 20_000);
 
 test('Bash background and the Jobs tool: started, looked at, listed, stopped; one that ends at once is a plain command', async () => {
   const d = dir();

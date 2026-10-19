@@ -52,6 +52,12 @@ export function answerOf(body, { review = 'LGTM', look = 'LGTM', describe = 'A l
     if (!did.includes('Edit')) return { content: '', tool_calls: [call('Edit', { path: 'notes.txt', old_text: 'Hello wrold', new_text: 'Hello world' })] };
     return { content: 'Fixed the typo in notes.txt.' };
   }
+  // A Write whose content the service's parser lost (qwen-reread.test.mjs): only its path arrives.
+  if (body.tools?.length && /write the report/i.test(said)) {
+    const after = body.messages.slice(body.messages.lastIndexOf(u));
+    if (!after.some((x) => x.role === 'tool')) return { content: '', tool_calls: [call('Write', { path: 'report.html' })] };
+    return { content: 'Wrote report.html.' };
+  }
   if (/Another model read your change/.test(said)) return { content: 'Checked: the second line is right now.' };
   return { content: `From ${m}.` };
 }
@@ -74,6 +80,12 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
     if (req.url === '/api/show') return m ? json(200, { details: details(m), model_info: { [`${m.family}.context_length`]: m.ctx }, capabilities: m.caps }) : json(404, { error: 'not found' });
     if (req.url === '/v1/models') return json(200, { object: 'list', data: FAKE_MODELS.map((x) => ({ id: x.name, object: 'model' })) });
     if (req.url === '/api/generate') {
+      // A call asked for again in raw mode (agent-step.mjs rereadCall): as Qwen3.6 did on 19 Oct 2026, it writes a
+      // Write's path and closes the call, unless the prompt has opened its content for it.
+      if (body.raw) {
+        const opened = /<parameter=content>\n$/.test(String(body.prompt ?? ''));
+        return json(200, { model: body.model, response: opened ? '<h1>Report</h1>\n</parameter>\n' : '<parameter=path>\nreport.html\n</parameter>\n', done: true, done_reason: 'stop', eval_count: opened ? 9 : 26 });
+      }
       if (body.keep_alive === 0) { loaded.delete(body.model); return json(200, { model: body.model, done: true, done_reason: 'unload' }); }
       // opts.noRoom: a load never answers (a busy service with no room beside its model; the Arena's remote runs).
       if (opts.noRoom) return;

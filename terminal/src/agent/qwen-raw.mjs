@@ -168,10 +168,19 @@ export function renderQwen35(messages, tools = [], { thinking = true } = {}) {
 
 // The assistant's opening for a call asked for again: its thinking, closed, the words it wrote before the
 // call, and the call's opening with its tool's name, so what comes is that call's parameters.
-export function callOpening({ thinking, reasoning = '', before = '', name }) {
+// given: the parameters written for it already (givenParams), so what comes is the one that was missing.
+export function callOpening({ thinking, reasoning = '', before = '', name, given = '' }) {
   const think = thinking ? `<think>\n${String(reasoning).trim()}\n</think>\n\n` : '<think>\n\n</think>\n\n';
   const said = String(before).trim();
-  return `${IM_START}assistant\n${think}${said ? `${said}\n\n` : ''}<tool_call>\n<function=${name}>\n`;
+  return `${IM_START}assistant\n${think}${said ? `${said}\n\n` : ''}<tool_call>\n<function=${name}>\n${given}`;
+}
+
+// What did arrive of a call asked for again, as its own parameters, then the opening of the one that was missing
+// (19 Oct 2026: asked again, Qwen3.6 wrote a Write's path and closed the call, three times in one conversation;
+// with that parameter opened for it, what it writes next is the file's text).
+export function givenParams(args, missing) {
+  const has = Object.entries(args ?? {}).filter(([k, v]) => k !== missing && v !== undefined && v !== null);
+  return `${has.map(([k, v]) => `<parameter=${k}>\n${typeof v === 'string' ? v : JSON.stringify(v)}\n</parameter>\n`).join('')}<parameter=${missing}>\n`;
 }
 
 // ---- reading a call ----

@@ -360,7 +360,7 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
 // Ollama does), then the step's thinking and words and the opening of a call to `name`. Answers { text,
 // tokens }: the call's parameters as the model wrote them, up to </function>; null where it does not apply
 // (another model or service, a picture in the conversation: raw mode would need its placeholders).
-export async function rawQwenCall({ url, conversation, messages, tools, thinking, effort, model, sampling, maxTokens, reasoning, before, name, signal, onStart }) {
+export async function rawQwenCall({ url, conversation, messages, tools, thinking, effort, model, sampling, maxTokens, reasoning, before, name, given, signal, onStart }) {
   const ep = endpointOf(url);
   if (!qwenRawFits(ep)) return null;
   const sent = ollamaMessages(ownStartOn(ep) ? ownStart(messages, conversation) : messages);
@@ -369,7 +369,7 @@ export async function rawQwenCall({ url, conversation, messages, tools, thinking
   const lv = thinkingLevel(model ?? {}, Boolean(thinking), effort);
   const think = ep.think !== undefined ? ep.think : lv.effort ? true : ep.thinks ? false : undefined;
   const thinks = think === undefined ? true : Boolean(think);
-  const prompt = renderQwen35(sent, tools ?? [], { thinking: thinks }) + callOpening({ thinking: thinks && Boolean(String(reasoning ?? '').trim()), reasoning, before, name });
+  const prompt = renderQwen35(sent, tools ?? [], { thinking: thinks }) + callOpening({ thinking: thinks && Boolean(String(reasoning ?? '').trim()), reasoning, before, name, given });
   const options = { stop: ['</function>', '<|im_end|>'] };
   for (const k of SAMPLING) if (sampling?.[k] !== undefined) options[k] = sampling[k];
   if (maxTokens) options.num_predict = maxTokens;
