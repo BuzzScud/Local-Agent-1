@@ -15,6 +15,13 @@
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 }
 * { box-sizing: border-box; }
+/* Dark, scroll bars too (19 Oct 2026): with the Mac's "Show scroll bars: Always", a code block that scrolls sideways
+   drew the light system bar, a white strip under the code. What scrolls gets a thin bar in the window's own greys. */
+:root { color-scheme: dark; }
+::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border: 2px solid transparent; border-radius: 6px; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.26); }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 html, body { margin: 0; height: 100%; background: var(--win); color: var(--text); font: 13px/1.5 var(--mono); overflow: hidden; }
 body { display: flex; flex-direction: column; }
 button { font: inherit; color: inherit; }
