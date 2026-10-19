@@ -1645,6 +1645,36 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Tests**: agent.test (the Edit without a Read, a change made already, the server hint), qwen-reread.test (the
   opening, and a Write with only its path on the stand-in Ollama), jobs.test (`longRun`, a build past the limit).
 
+## The UI sweep (19 Oct 2026)
+
+- **What and why.** The owner: "can we ensure the ui is 100% functional? i want to make sure everything works". The
+  window audit of 15 Oct clicked the page against a stand-in app; this sweep drives the REAL app in the real window page
+  (server.mjs + ui.html) in WebKit, on a stand-in Ollama service whose main model follows a short script per request
+  (Read, a command that asks, an Edit that asks, a plan, streamed thinking, a long answer, its own question), with
+  `open`, `osascript` and `pbcopy` stood in for: every title-bar control, the start page's cards, the / menu, the
+  panels, every slash command, paste and a dropped file, the hub's eleven tabs with their safe controls clicked, /update,
+  a narrow window and /exit; and the same commands in the terminal app at 120 × 64 with the owner's look (the Menu, the
+  bot, grouped steps). Its scripts are private: `docs/private/ui-sweep-2026-10-19/` (`bun sweep.mjs [phases]`,
+  `bun tsweep.mjs`; never against the real home: everything is a throwaway, nothing seeded).
+- **What it found, and the fixes.** (1) The save as a reply ended ran before its answer and end line were drawn
+  (`pushFn` adds items a microtask later, and `sessionRef.current.items` follows only after the render), so every
+  conversation opened again (Chats, ⌘K, /resume, the start page) showed it without its last answer, in the terminal
+  too: what is pushed and not yet drawn rides on the conversation (`pending`) and `saveNowFn` saves it.
+  (2) The THINKING and ANSWERING boxes and the task row under way took 0 of 8 clicks at a person's speed while a reply
+  streamed: the live part is drawn again with each state (up to 30 a second), the box pressed was gone by the release,
+  and WebKit then sends no click at all; their toggles act on the press (`LIVE_TOGGLES`, pointerdown). (3) A reply
+  stopped or interrupted ended "for 1s · done" in the window: the end line says why, as the terminal's does (view.mjs
+  passes `text` and `left`). (4) A message sent while a reply worked showed nowhere in the window: the status line says
+  "⏵ Queued: …" then too. (5) The line under the title named the mode by its id ("ask", "edits"). (6) The first
+  /permissions built the picture helper with the Swift compiler to fill its Screen row, holding the whole app
+  (`screenAccessKnown`, `mediaToolBuilt`: "not checked yet" until it is built). (7) Help's first line said the hub's
+  default model ran "on this Mac" whatever the window ran on, and Weights asked whether the window was still running
+  when it simply had no model file. Checked and fine: every other control, command, panel and hub page; a /settings
+  row opens on a second click (the first picks it, the pane beside it says what it is), by design.
+- **Tests**: app-step-save.test (the save as a reply ends, and the conversation opened again), window-page.test (a
+  stopped reply, the Queued line, the mode's name; the THINKING box under a held press while it streams), screen.test
+  and screen-known.test (the Screen row without a build), app-permissions.test (its row says "not checked yet").
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

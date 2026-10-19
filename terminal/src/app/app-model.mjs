@@ -131,6 +131,9 @@ export function modelPart(self) {
       self.setLive((l) => ({ ...l, pre: null }));
     }
     const made = list.map((it) => ({ key: `i${++self.seq}`, ...(self.railOn.current && it.rail === undefined ? { rail: true } : {}), ...it }));
+    // Kept on the conversation until drawn, so a save before then has them too (panels-machine.mjs saveNowFn).
+    const s = self.sessionRef.current;
+    if (s) (s.pending ??= []).push(...made.map((it) => ({ it, at: Date.now() })));
     queueMicrotask(() => {
       try { primeRows(made, self.measure.current); } catch {}
       self.setItems((xs) => [...xs, ...made]);

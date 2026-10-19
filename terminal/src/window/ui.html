@@ -380,7 +380,10 @@ function itemHtml(v, prev, next) {
       if (f.test) bits.push('<span class="' + (f.testBad ? 'bad' : 'ok') + '">' + esc(f.test) + '</span>');
       return '<div class="tend">' + bits.join('<span>·</span>') + '</div>';
     }
-    case 'done': return '<div class="endline"><span class="mk">⠿</span>' + esc(v.past) + ' for ' + fmtSecs(v.secs) + (v.at ? ' · done ' + clock(v.at) : '') + (v.usd > 0 ? ' · ' + money(v.usd) + ' for this request' : '') + (v.steps ? ' · ' + plural(v.steps, 'step') : '') + '</div>';
+    // A reply that did not end done says why, as the terminal's end line does (rail.jsx EndWords): before, an interrupted
+    // or stopped one read "for 1s · done", as if it had finished (19 Oct 2026, the UI sweep).
+    case 'done': if (v.reason && v.reason !== 'done') { const warn = v.reason === 'interrupted' || v.left; return '<div class="endline"><span class="mk" style="color:var(--' + (warn ? 'warn' : 'faint') + ')">' + (v.reason === 'interrupted' ? '■' : '⠿') + '</span><span style="color:var(--' + (warn ? 'warn' : 'dim') + ')">' + esc(v.text || 'Stopped (' + v.reason + ')') + (v.left ? ' · ' + plural(v.left, 'layout problem') + ' left' : '') + '</span>' + (v.secs >= 1 ? ' · ' + fmtSecs(v.secs) : '') + (v.at ? ' · ' + clock(v.at) : '') + (v.usd > 0 ? ' · ' + money(v.usd) + ' for this request' : '') + '</div>'; }
+      return '<div class="endline"><span class="mk">⠿</span>' + esc(v.past) + ' for ' + fmtSecs(v.secs) + (v.at ? ' · done ' + clock(v.at) : '') + (v.usd > 0 ? ' · ' + money(v.usd) + ' for this request' : '') + (v.steps ? ' · ' + plural(v.steps, 'step') : '') + '</div>';
     case 'made': return '<div class="made">Made ' + v.files.map((f) => '<span class="f">' + esc(f.name) + '</span>').join('') + '</div>';
     case 'note': return '<div class="note ' + esc(v.tone) + '">· ' + esc(v.text) + '</div>';
     case 'divider': return '<div class="divider">' + esc(v.text) + '</div>';
@@ -450,7 +453,9 @@ function statusHtml(L) {
   if (L.phase === 'working') {
     const now = Date.now() - S.skew, secs = L.turnStart ? (now - L.turnStart) / 1000 : 0;
     const tps = L.tps ? Math.round(L.tps) : null;
-    return '<span class="ac">' + (STILL.matches ? '⠿' : SPIN[Math.floor(now / 120) % 10]) + ' ' + esc(L.verb || 'Working') + '…</span><span>⏱ <span class="v">' + fmtSecs(secs) + '</span></span>' + (tps ? '<span><span class="v">' + tps + '</span> tok/s</span>' + bar10(tps / 80) + spark(S.tps.slice(-30), 200, 18) : '') + '<span>↓ <span class="v">' + (L.tokens || 0) + '</span> tokens</span><span class="r">esc to interrupt</span>';
+    return '<span class="ac">' + (STILL.matches ? '⠿' : SPIN[Math.floor(now / 120) % 10]) + ' ' + esc(L.verb || 'Working') + '…</span><span>⏱ <span class="v">' + fmtSecs(secs) + '</span></span>' + (tps ? '<span><span class="v">' + tps + '</span> tok/s</span>' + bar10(tps / 80) + spark(S.tps.slice(-30), 200, 18) : '') + '<span>↓ <span class="v">' + (L.tokens || 0) + '</span> tokens</span>'
+      // A message sent while it works waits for its next step, as the terminal's Queued line says (19 Oct 2026, the UI sweep).
+      + (S.last?.queued ? '<span style="color:var(--sand)">⏵ Queued: ' + esc(S.last.queued.slice(0, 60)) + '</span>' : '') + '<span class="r">esc to interrupt</span>';
   }
   const lastDone = [...S.order].reverse().map((k) => S.items[k]).find((v) => v?.t === 'done');
   const st = S.last, now = modelNow(st);
@@ -705,7 +710,7 @@ function render() {
   const home = st.hold && !all.some((v) => v.t === 'user');
   const top = document.getElementById('top');
   top.className = home ? 'fill' : '';
-  put('top', home ? homeHtml(st) : '<div class="hero">' + bot(st.live?.phase === 'working' ? 'work' : 'ready', 56) + '<div><div class="name">Agentic Coder<small>v0.1</small></div><div class="sub">' + esc(st.modelName) + ' · ' + esc(st.mode === 'bypass' ? 'bypass permissions' : st.mode) + '</div><div class="sub">' + esc(st.cwdShort) + '</div></div></div>');
+  put('top', home ? homeHtml(st) : '<div class="hero">' + bot(st.live?.phase === 'working' ? 'work' : 'ready', 56) + '<div><div class="name">Agentic Coder<small>v0.1</small></div><div class="sub">' + esc(st.modelName) + ' · ' + esc(st.mode === 'bypass' ? 'bypass permissions' : MODES.find(([k]) => k === st.mode)?.[1] ?? st.mode) + '</div><div class="sub">' + esc(st.cwdShort) + '</div></div></div>');
   itemsInto(home ? [] : all, document.getElementById('items'));
   put('live', !home && st.live?.phase === 'working' ? liveHtml(st.live, st.held) : '');
   put('status', statusHtml(st.live || {}));
@@ -827,6 +832,17 @@ document.addEventListener('input', (e) => {
   // Both keep the box's caret where it was (keepField).
   if (e.target.id === 'fq' || e.target.id === 'sq') { S.q = e.target.value; if (e.target.id === 'fq') renderDrops(); else renderSide(); }
 });
+// The live part is drawn again as the reply streams, up to 30 times a second, so a row pressed there is mostly gone by
+// the release and the click lands on the part around it: 0 of 8 clicks at a person's speed opened or closed the
+// THINKING box while it streamed (19 Oct 2026, the UI sweep). Its toggles act on the press, while the row is there.
+const LIVE_TOGGLES = '#live [data-think], #live [data-live], #live [data-row]';
+function liveToggle(el) {
+  if (el.dataset.think) { thinkOpen = !thinkOpen; try { localStorage.setItem('think-open', thinkOpen ? '1' : '0'); } catch {} }
+  else if (el.dataset.live) { const k = el.dataset.live; if (liveOpen.size > 40) liveOpen.clear(); liveOpen.set(k, !(liveOpen.get(k) ?? k.endsWith(':now'))); }
+  else { const k = el.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); rowsVer++; }
+  render();
+}
+document.addEventListener('pointerdown', (e) => { const el = e.button === 0 && e.target.closest?.(LIVE_TOGGLES); if (el) liveToggle(el); });
 document.addEventListener('click', (e) => {
   const t = e.target;
   const runBtn = t.closest('[data-run]'); if (runBtn) { if (S.usageCard) { S.usageCard = false; renderUsage(S.last); renderDrops(); } return run(runBtn.dataset.run); }
@@ -840,8 +856,7 @@ document.addEventListener('click', (e) => {
   if (act === 'send') { if (S.last?.input?.value) keys('\r'); return; }
   const res = t.closest('[data-resume]'); if (res) { send({ t: 'act', do: 'resume', id: res.dataset.resume }); S.find = false; S.side = false; S.q = ''; renderDrops(); renderSide(); return; }
   const md_ = t.closest('[data-mode]'); if (md_) { send({ t: 'act', do: 'mode', mode: md_.dataset.mode }); return; }
-  if (t.closest('[data-think]')) { thinkOpen = !thinkOpen; try { localStorage.setItem('think-open', thinkOpen ? '1' : '0'); } catch {} render(); return; }
-  const lv = t.closest('[data-live]'); if (lv) { const k = lv.dataset.live; if (liveOpen.size > 40) liveOpen.clear(); liveOpen.set(k, !(liveOpen.get(k) ?? k.endsWith(':now'))); render(); return; }
+  if (t.closest(LIVE_TOGGLES)) return; // done on the press (liveToggle)
   const task = t.closest('[data-task]'); if (task) { send({ t: 'act', do: 'toggle', id: task.dataset.task }); return; }
   const row = t.closest('[data-row]'); if (row) { const k = row.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); rowsVer++; render(); return; }
   if (act === 'latest') { const c = document.getElementById('convo'); if (c) c.scrollTop = c.scrollHeight; backButton(); return; }

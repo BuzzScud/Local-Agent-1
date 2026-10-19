@@ -29,11 +29,14 @@ async function loadSource() {
 const SOURCE = await loadSource();
 
 let built = null;
+const binPath = () => join(HOME, 'tools', `media-${createHash('sha256').update(SOURCE).digest('hex').slice(0, 12)}`);
+// Whether the helper is built already, without building it (a panel that only shows a fact asks this first).
+export const mediaToolBuilt = () => Boolean(built && existsSync(built)) || existsSync(binPath());
 export function mediaTool() {
   if (built && existsSync(built)) return built;
   const src = SOURCE;
   const dir = join(HOME, 'tools');
-  const bin = join(dir, `media-${createHash('sha256').update(src).digest('hex').slice(0, 12)}`);
+  const bin = binPath();
   if (!existsSync(bin)) {
     mkdirSync(dir, { recursive: true });
     const file = join(tmpdir(), `agentic-media-${process.pid}.swift`);
