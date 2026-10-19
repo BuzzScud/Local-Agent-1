@@ -286,7 +286,9 @@ async function updateThroughLauncher({ keeper = false } = {}) {
     for (let i = 0; i < 16; i++) t.key('backspace');
     await t.type('again'); t.key('enter');
     await t.waitFor('Hello from after.');
-    const ps = execFileSync('ps', ['-axo', 'command='], { encoding: 'utf8' }).split('\n').filter((l) => l.startsWith(join(env.HOME, '.agentic-coder/app/agentic-coder')));
+    // pgrep, not ps: /bin/ps is setuid, which macOS never starts from a sandbox, so inside Agentic Coder's fence
+    // (Bypass) this line failed with EPERM after everything above had passed (18 Oct 2026).
+    const ps = execFileSync('pgrep', ['-lf', '.'], { encoding: 'utf8' }).split('\n').map((l) => l.replace(/^\d+ /, '')).filter((l) => l.startsWith(join(env.HOME, '.agentic-coder/app/agentic-coder')));
     if (!keeper) expect(ps.length).toBe(1); // one app, not a chain of them
     // In a keeper: the window, its keeper, and one app in it (the new one), not a chain of apps.
     else expect([ps.filter((l) => / session-host$/.test(l.trim())).length, ps.length]).toEqual([1, 3]);
