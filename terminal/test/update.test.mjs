@@ -568,6 +568,27 @@ test('coding never pulls over a file you changed, a branch, or with AGENTIC_NO_P
   expect(git(local, 'rev-parse', 'main')).toBe(before);
 });
 
+// 19 Oct 2026, opens faster: the window's app and a session's keeper run the launcher again a second after it asked
+// GitHub (AGENTIC_PULLED_AT, passed on to the app); that run does not ask again, one after AGENTIC_PULL_FRESH does.
+test('a launcher run again by the same start does not ask GitHub twice; one later does, and passes on when', () => {
+  const { local, other } = github();
+  const before = git(local, 'rev-parse', 'main');
+  const pushed = commit(other, { 'docs/note.html': '<p>new</p>' }, 'pushed elsewhere');
+  git(other, 'push', '-q', 'origin', 'main');
+  const c = launcherOn(local);
+  writeFileSync(c.app, '#!/bin/sh\necho "APP RAN $* AT=$AGENTIC_PULLED_AT"\n'); // no app code pushed: not built again
+  const now = Math.floor(Date.now() / 1000);
+  const again = c.run({ AGENTIC_PULLED_AT: String(now - 2) });
+  expect(again.out.trim()).toBe(`APP RAN x AT=${now - 2}`);
+  expect(git(local, 'rev-parse', 'refs/remotes/origin/main')).toBe(before); // GitHub not asked
+  for (const not of [String(now - 31), String(now + 60), 'soon']) {
+    const later = c.run({ AGENTIC_PULLED_AT: not });
+    expect(later.out).toContain('APP RAN x AT=');
+    expect(Number(/AT=(\d+)/.exec(later.out)?.[1])).toBeGreaterThanOrEqual(now);
+  }
+  expect(git(local, 'rev-parse', 'main')).toBe(pushed);
+});
+
 test('coding with GitHub out of reach, or a plain http:// origin, starts the main this Mac last saw', () => {
   const { local } = github();
   const before = git(local, 'rev-parse', 'main');
