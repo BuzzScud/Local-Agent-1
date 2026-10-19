@@ -8,7 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 704 KB | 2026-10-19 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 705 KB | 2026-10-19 |
 | [diagrams/agentic-coder-structure-2026-10-18.html](diagrams/agentic-coder-structure-2026-10-18.html) | page | Agentic Coder folder structure | 758 KB | 2026-10-18 |
 | [tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0918.html](tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0918.html) | page | Cache check · claude-opus-5-5 | 11 KB | 2026-10-13 |
 | [tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0914.html](tests/agentic-coder-cache-check-claude-opus-5-5-2026-10-13-0914.html) | page | Cache check · claude-opus-5-5 | 12 KB | 2026-10-13 |
