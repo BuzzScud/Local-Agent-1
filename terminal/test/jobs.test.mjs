@@ -2,10 +2,11 @@
 // own time limit: a job keeps running while the model works; its end is told with the next step,
 // or, once the reply is over, as a message of its own; one it stopped is not news.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Jobs, MAX_RUNNING, capLines, took } from '../src/tools/jobs.mjs';
+import { runCommand } from '../src/tools/run.mjs';
 import { execute, parseArgs, secsOf, toolSchemas, MAX_TIMEOUT_SECS } from '../src/agent/tools.mjs';
 import { decide } from '../src/agent/permissions.mjs';
 import { Agent } from '../src/agent/agent.mjs';
@@ -81,6 +82,45 @@ test("a command's own time limit: seconds, Claude Code's milliseconds, at most 6
   for (const way of ['app', 'model']) expect(toolSchemas(way).map((t) => t.function.name)).toContain('Jobs');
   expect(decide('Jobs', { id: 'job1', stop: true }, { mode: 'plan', allowedPrefixes: new Set(), inside: true, cwd: tmpdir() }).decision).toBe('allow');
 });
+
+// 18 Oct 2026: a test run cut off at the 2-minute limit left the apps its tests had started in terminals of their
+// own (outside the command's process group) running with their stand-in model servers.
+test('a command stopped before its end takes along what left its group; one that ends by itself keeps it', async () => {
+  const cwd = dir();
+  // A program that starts another in a session of its own and goes, as script(1) or a daemon does: its child
+  // is launchd's then, in no group of the command's.
+  writeFileSync(join(cwd, 'escape.mjs'), `import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+const kid = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' });
+kid.unref();
+writeFileSync(process.argv[2], String(kid.pid));
+`);
+  const pidIn = async (f) => { expect(await until(() => existsSync(join(cwd, f)) && readFileSync(join(cwd, f), 'utf8'))).toBeTruthy(); return Number(readFileSync(join(cwd, f), 'utf8')); };
+  const gone = (pid) => { try { process.kill(pid, 0); return false; } catch (e) { return e.code === 'ESRCH'; } };
+  const pids = [];
+  try {
+    // Cut off by its time limit (in the fence, as the model's commands run).
+    const cut = await runCommand(`${process.execPath} escape.mjs cut.pid; sleep 30`, { cwd, timeoutMs: 1500 });
+    expect(cut.timedOut).toBe(true);
+    pids.push(await pidIn('cut.pid'));
+    expect(await until(() => gone(pids[0]))).toBe(true);
+    // A background job stopped.
+    const jobs = new Jobs({ firstMs: 50 });
+    const { job } = await jobs.start(`${process.execPath} escape.mjs job.pid; sleep 30`, { cwd });
+    pids.push(await pidIn('job.pid'));
+    expect(jobs.stop(job, 'model')).toBe(true);
+    expect(await until(() => job.ended && gone(pids[1]))).toBe(true);
+    // A command that ends by itself: what it left running is meant to run (a server it started).
+    const done = await runCommand(`${process.execPath} escape.mjs done.pid`, { cwd });
+    expect(done.timedOut).toBe(false);
+    pids.push(await pidIn('done.pid'));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(gone(pids[2])).toBe(false);
+  } finally {
+    for (const p of pids) { try { process.kill(p, 'SIGKILL'); } catch {} }
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test('Bash timeout stops a command sooner and says how to ask for longer', async () => {
   const r = await execute('Bash', { command: 'sleep 5', timeout: 1 }, {}, { cwd: tmpdir(), bash: { timeoutMs: 120_000, maxLines: 80 } });
