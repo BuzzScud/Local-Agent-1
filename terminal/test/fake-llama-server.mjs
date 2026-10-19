@@ -5,10 +5,12 @@
 import { createServer } from 'node:http';
 import { writeFileSync, existsSync, appendFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { endWithRun } from './end-with-run.mjs';
 const arg = (n) => process.argv[process.argv.indexOf(n) + 1];
 const port = Number(arg('--port'));
 const slotDir = arg('--slot-save-path');
 const t0 = Date.now();
+endWithRun(); // ends once the test that started it is gone
 // A test that checks how it was started names a file to note its arguments in;
 // one that needs a reply still running sets FAKE_LLAMA_REPLY_MS (below), one that
 // needs the start-up to last longer sets FAKE_LLAMA_LOAD_MS (default 1500), or FAKE_LLAMA_WARM_MS (default
