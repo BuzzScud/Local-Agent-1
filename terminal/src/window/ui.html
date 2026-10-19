@@ -377,11 +377,19 @@ function itemHtml(v, prev, next) {
     default: return '';
   }
 }
+// The task row under way (18 Oct 2026, the owner: "when i click on the dropdown or the boxes to expand or collapse, it
+// doesnt work"): its arrows showed open, it looked clickable, and a click did nothing. Now each part opens and closes
+// in the page, as a finished row does: the parts done so far (run: closed at first; open, its rows, which open their
+// steps as a finished row's do) and the part under way (now: open at first, its last steps). Kept for this reply only.
+const liveOpen = new Map();
+const liveKey = (L, part) => (L.turnStart ?? 0) + ':' + part;
+const liveIsOpen = (L, part) => liveOpen.get(liveKey(L, part)) ?? part === 'now';
 function liveHtml(L, held) {
   let h = '';
   if (held?.t === 'live') {
-    if (held.run) h += '<div class="trow first"><div class="task"><span class="chev open"></span><span class="tag" style="color:' + held.run.color + '">' + held.run.label + '</span><span class="w">' + esc(held.run.last) + '</span><span class="end"><span>' + plural(held.run.rows.length, 'part') + '</span></span></div></div>';
-    h += '<div class="trow' + (held.run ? '' : ' first') + ' firstonly" style="' + (held.run ? 'border-radius:0 0 10px 10px;margin-top:0' : '') + '"><div class="task"><span class="chev open"></span><span class="tag" style="color:' + held.now.color + '">' + (held.run && held.run.label === held.now.label ? '' : held.now.label) + '</span><span class="w">' + esc(held.now.words) + '</span><span class="end"><span class="working">Working</span><span>' + plural(held.now.n, 'step') + '</span></span></div>' + (held.now.steps.length ? '<div class="rows"><div class="steps">' + held.now.steps.slice(-3).map(stepHtml).join('') + '</div></div>' : '') + '</div>';
+    const runOpen = liveIsOpen(L, 'run'), nowOpen = liveIsOpen(L, 'now');
+    if (held.run) h += '<div class="trow first"><div class="task" data-live="' + esc(liveKey(L, 'run')) + '"><span class="chev' + (runOpen ? ' open' : '') + '"></span><span class="tag" style="color:' + held.run.color + '">' + held.run.label + '</span><span class="w">' + esc(held.run.last) + '</span><span class="end"><span>' + plural(held.run.rows.length, 'part') + '</span></span></div>' + (runOpen ? '<div class="rows">' + held.run.rows.map(rowHtml).join('') + '</div>' : '') + '</div>';
+    h += '<div class="trow' + (held.run ? '' : ' first') + ' firstonly" style="' + (held.run ? 'border-radius:0 0 10px 10px;margin-top:0' : '') + '"><div class="task" data-live="' + esc(liveKey(L, 'now')) + '"><span class="chev' + (nowOpen ? ' open' : '') + '"></span><span class="tag" style="color:' + held.now.color + '">' + (held.run && held.run.label === held.now.label ? '' : held.now.label) + '</span><span class="w">' + esc(held.now.words) + '</span><span class="end"><span class="working">Working</span><span>' + plural(held.now.n, 'step') + '</span></span></div>' + (nowOpen && held.now.steps.length ? '<div class="rows"><div class="steps">' + held.now.steps.slice(-3).map(stepHtml).join('') + '</div></div>' : '') + '</div>';
   } else if (held?.t === 'heldsteps' && held.steps.length) h += '<div class="steps">' + held.steps.slice(-3).map(stepHtml).join('') + '</div>';
   if (L.thinking && !L.text) h += '<div class="thinking">∴ ' + esc(L.thinking.slice(-400)) + '</div>';
   if (L.running) h += '<div class="running">❯ ' + esc(L.running.label || 'Running') + ' ' + esc(L.running.arg) + '</div>';
@@ -808,6 +816,7 @@ document.addEventListener('click', (e) => {
   if (act === 'send') { if (S.last?.input?.value) keys('\r'); return; }
   const res = t.closest('[data-resume]'); if (res) { send({ t: 'act', do: 'resume', id: res.dataset.resume }); S.find = false; S.side = false; S.q = ''; renderDrops(); renderSide(); return; }
   const md_ = t.closest('[data-mode]'); if (md_) { send({ t: 'act', do: 'mode', mode: md_.dataset.mode }); return; }
+  const lv = t.closest('[data-live]'); if (lv) { const k = lv.dataset.live; if (liveOpen.size > 40) liveOpen.clear(); liveOpen.set(k, !(liveOpen.get(k) ?? k.endsWith(':now'))); render(); return; }
   const task = t.closest('[data-task]'); if (task) { send({ t: 'act', do: 'toggle', id: task.dataset.task }); return; }
   const row = t.closest('[data-row]'); if (row) { const k = row.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); rowsVer++; render(); return; }
   if (act === 'latest') { const c = document.getElementById('convo'); if (c) c.scrollTop = c.scrollHeight; backButton(); return; }
