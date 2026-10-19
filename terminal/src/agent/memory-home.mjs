@@ -17,6 +17,7 @@ import { join, dirname, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { HOME } from '../../../models/index.mjs';
 import { youDir, memoryDirs, readFacts, readLog } from './facts.mjs';
+import { notesToday } from './notes.mjs';
 
 const isDir = (d) => { try { return statSync(d).isDirectory(); } catch { return false; } };
 const tilde = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
@@ -148,7 +149,9 @@ export function memoryStatus(cwd, home = homedir()) {
   const dirs = memoryDirs(cwd, home);
   const s = youState(home);
   const last = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d)).filter((l) => SAVES.has(l.what)).map((l) => String(l.at)).sort().at(-1) ?? null;
-  return { you: readFacts(dirs.you).length, project: dirs.project ? readFacts(dirs.project).length : null, last, state: s.state, dir: s.dir, target: s.target ?? null };
+  let notes = 0;
+  try { notes = notesToday(dirs); } catch { /* no notes folder yet */ }
+  return { you: readFacts(dirs.you).length, project: dirs.project ? readFacts(dirs.project).length : null, notes, last, state: s.state, dir: s.dir, target: s.target ?? null };
 }
 // "Memory · 13 about you · 22 this project · last saved 18 Oct", and what is wrong with the folder.
 export function statusWords(st) {
@@ -156,6 +159,8 @@ export function statusWords(st) {
   const when = d && !Number.isNaN(d.getTime()) ? `last saved ${d.getDate()} ${MONTHS[d.getMonth()]}` : 'nothing saved yet';
   const parts = [st.state === 'broken' ? 'the folder about you is missing' : `${st.you} about you`];
   if (st.project !== null) parts.push(`${st.project} this project`);
+  // The answers noted today (notes.mjs), once there is one.
+  if (st.notes) parts.push(`${st.notes} answer${st.notes === 1 ? '' : 's'} noted today`);
   parts.push(when);
   return `Memory · ${parts.join(' · ')}`;
 }

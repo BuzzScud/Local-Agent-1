@@ -182,6 +182,24 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   changed (not while you write or edit there). `AGENTIC_MEMORY_LINE=off` (pty.mjs, term.mjs, the keeper and sessions
   tests) leaves the line off the app tests' screens. `terminal/test/memory-home.test.mjs`.
 
+- **A note after every answer** (19 Oct 2026, the owner: "ensure the agentic coder updates memory after every
+  result"; `terminal/src/agent/notes.mjs`, `terminal/src/app/autosave.mjs`). Their saved sessions of that day showed the
+  save after each round running on every answer (`memorySave: "auto"`, a service) and keeping nothing: eight answers
+  (a network scan, ssh, a report) ended "done", nothing passed `allowed()`, and `saveLine` said nothing when nothing was
+  added. Their picks: a note plus the facts, right after each answer, notes two weeks then folded in, build, test,
+  push. Now the agent's `settled` hands the lesson (with `answer`, the message's last words: `answerOf` in
+  agent-memory.mjs) to `AutoSave.settled`: `writeNote` appends one entry to `<memory>/notes/<local day>.md` (the
+  project's memory, else the one about you; under the memory's lock; a line with a key left out, as `looksSecret`
+  does for facts; practice work never), with no model call, then the facts save starts at once (no 10 s pause). On a
+  service it runs beside the next message (`canRunNow` ignores `busy` there, and a send only `stepAside`s, which stops
+  it on a llama.cpp server alone: its side slot is the agent's own checks' too); a second answer while a save runs is
+  read when it ends (`again`). One line under the answer (`sayNoted`): `Memory: noted "<request>" · 1 saved · …`,
+  `· no new facts`, `· facts not saved (you said no)`. After each save, one day's notes kept `NOTE_DAYS` (14) full days
+  are read once as a save with a request (`fold`: kept as facts the usual way, asked first when saves ask), then moved to
+  `notes/folded/` (nothing is deleted). `statusWords` adds "N answers noted today". Notes are not facts: nothing reads
+  them into a request. `AGENTIC_MEMORY_SAVE=off` writes none. `terminal/test/memory-notes.test.mjs`; app-memory.test
+  waits for the new line.
+
 - **The hub's Memory tab** (`terminal/src/app/memory.html`, `memory-hub.mjs`; redone 8 Oct 2026 after the owner's
   "i cant scroll here": the Overview showed 13 of 39 changes and hid the rest, by design, with no way to scroll). Their
   pick of four designs, "1 · Reading pane": the memories on the left (About you, This project, Rules, Pinned, Taken out,

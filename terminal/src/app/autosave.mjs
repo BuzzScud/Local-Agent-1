@@ -8,6 +8,12 @@
 //     2026, in place of the night review). Asking first, what it would save
 //     is kept (a .pending file) and asked about at the next start in that
 //     folder; saving on its own, it saves and leaves a line for the next start.
+// After every answer, too (19 Oct 2026, the owner: "ensure the agentic coder updates memory after
+// every result"; their picks: a note plus the facts, right after each answer): the answer's note is
+// written at once (agent/notes.mjs), the facts save starts with no pause, on a service even while the
+// next message runs, and one line under the answer says what was noted and saved, "no new facts"
+// included (before, a save that kept nothing said nothing). Notes past two weeks are read once for what
+// still matters and folded away (fold).
 // AGENTIC_MEMORY_SAVE=off turns saving on its own off ("update memory" still
 // works); "memory": false in settings.json turns the whole memory off.
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -18,6 +24,7 @@ import { HOME, ModelServer, LINGER_SECS, stopIdleServers, runningServer, modelBy
 import { loadSettings } from './store.mjs';
 import { saveLessons, seedMemory, worthSaving, saveLine, proposeSave, applySave, shownOf, rememberDeclined } from '../agent/lessons.mjs';
 import { memoryDirs, countDay, readFacts } from '../agent/facts.mjs';
+import { writeNote, dueNotes, readNote, foldNote } from '../agent/notes.mjs';
 
 const normText = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -41,7 +48,7 @@ export class AutoSave {
   // say(text, tone): one line on the screen, dim unless a save failed. sessions: where this folder's
   // earlier conversations are, for the first-use reading.
   constructor({ agent, ask = null, say = () => {}, waitMs = WAIT_MS, sessionsDir = null }) {
-    Object.assign(this, { agent, ask, say, waitMs, sessionsDir, timer: null, abort: null, running: null });
+    Object.assign(this, { agent, ask, say, waitMs, sessionsDir, timer: null, abort: null, running: null, noted: [], again: false });
   }
 
   // When the model decides (agent/way.mjs), it saves with its Remember tool as it works: the
@@ -54,22 +61,56 @@ export class AutoSave {
   // server (this Mac's, or `coding serve`) needs its side slot, as its one slot is the conversation's.
   get onService() { const kind = endpointOf(this.agent.url)?.kind; return Boolean(kind) && kind !== 'llama'; }
   // Mid-conversation saves need the side slot or a service; without either (a shared or a
-  // given server) the save waits for the window to close.
-  get canRunNow() { return this.afterTaskOn && (this.agent.slots?.side !== undefined || this.onService) && !this.agent.busy && !this.running; }
+  // given server) the save waits for the window to close. On a service it runs beside the next
+  // message (19 Oct 2026); a llama.cpp server's side slot is the agent's own checks' too, so there it
+  // waits for the reply to end, as before.
+  get canRunNow() { return this.afterTaskOn && (this.agent.slots?.side !== undefined || this.onService) && (this.onService || !this.agent.busy) && !this.running; }
+  dirs() { return memoryDirs(this.agent.cwd, this.agent.memory?.home ?? undefined); }
 
   // On a service each round that ended is read (lessons.mjs worthSaving every); a llama.cpp
   // server's side slot keeps the cheaper rule (a round that taught nothing new is skipped).
   get worth() { return worthSaving(this.agent.lessons, { every: this.onService }); }
 
+  // An answer ended (the agent's 'settled'): its note now, and the facts save at once.
+  settled(lesson) {
+    this.note(lesson);
+    this.schedule(0);
+  }
+
+  // Written by the app, no model call (notes.mjs). Practice work is never noted, as it is never saved.
+  note(lesson) {
+    if (!lesson || lesson.practice || !this.agent.memory || !savingOn()) return;
+    try { writeNote(this.dirs(), lesson); this.noted.push(lesson.request); }
+    catch (e) { this.say(`Memory: this answer's note was not written · ${String(e?.message ?? e).replace(homedir(), '~')}`, 'warn'); }
+  }
+
+  // The one line under an answer: what was noted, then what the save kept (out), or "no new facts".
+  sayNoted(out = null, tone = 'dim') {
+    if (!this.noted.length) { const line = out ? saveLine(out) : ''; if (line) this.say(line, tone); return; }
+    const last = String(this.noted.at(-1) ?? '').replace(/\s+/g, ' ').trim();
+    const more = this.noted.length - 1;
+    this.noted = [];
+    const head = `Memory: noted "${last.length > 60 ? `${last.slice(0, 59)}…` : last}"${more ? ` and ${more} more` : ''}`;
+    if (!out) { this.say(head, tone); return; }
+    if (out.skipped) { this.say(`${head} · facts not saved (you said no) · /update memory saves what matters at any time`, tone); return; }
+    if (out.later) { this.say(`${head} · its facts are asked about at the next pause`, tone); return; }
+    const line = saveLine(out);
+    this.say(line ? `${head} · ${line.replace(/^Memory: /, '')}` : `${head} · no new facts`, out.failed?.length ? 'warn' : tone);
+  }
+
   schedule(ms = this.waitMs) {
     clearTimeout(this.timer);
-    if (!this.afterTaskOn || !this.worth) return;
+    if (!this.afterTaskOn || !this.worth) { this.sayNoted(); return; }
     this.timer = setTimeout(() => { this.now().catch(() => {}); }, ms);
     this.timer.unref?.();
   }
 
-  // You sent a message: the save steps aside. What it had not saved stays
-  // for the next pause.
+  // You sent a message: on a service the save goes on beside it (the owner's pick, "even if you type
+  // your next message straight away"); on a llama.cpp server it steps aside, as before.
+  stepAside() { if (!this.onService) this.cancel(); }
+
+  // The save steps aside (/stop, /btw on the side lane, a llama.cpp server's next message). What it
+  // had not saved stays for the next pause.
   cancel() {
     clearTimeout(this.timer);
     this.timer = null;
@@ -77,14 +118,56 @@ export class AutoSave {
   }
 
   now() {
-    if (!this.canRunNow || !this.worth) return Promise.resolve(null);
+    // A save under way: this answer's turns are read when it ends.
+    if (this.running) { this.again = true; return this.running; }
+    if (!this.canRunNow || !this.worth) { this.sayNoted(); return Promise.resolve(null); }
     const ac = new AbortController();
     this.abort = ac;
     const a = this.agent;
     this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots?.side, use: a.sideUse?.(), cwd: a.cwd, home: a.memory.home, lessons: a.lessons, messages: a.messages, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
-      .then((out) => { if (out?.skipped) this.say('Not saved · /update memory saves what matters at any time'); const line = saveLine(out); if (line) this.say(line, out?.failed?.length ? 'warn' : 'dim'); return out; })
+      .then((out) => {
+        if (out?.skipped && !this.noted.length) this.say('Not saved · /update memory saves what matters at any time');
+        else this.sayNoted(out ?? { added: [], replaced: [], retired: [] });
+        return out;
+      })
       // A save that fails says so (18 Oct 2026: nine days of saves failed unseen); one you stopped by typing does not.
-      .catch((e) => { if (!ac.signal.aborted && e?.name !== 'AbortError') this.say(`Memory: not saved · ${String(e?.message ?? e).replace(homedir(), '~')}`, 'warn'); return null; })
+      .catch((e) => {
+        if (ac.signal.aborted || e?.name === 'AbortError') return null;
+        const why = `not saved · ${String(e?.message ?? e).replace(homedir(), '~')}`;
+        if (this.noted.length) { const n = this.noted.length; this.noted = []; this.say(`Memory: noted ${n === 1 ? 'this answer' : `${n} answers`} · its facts ${why}`, 'warn'); }
+        else this.say(`Memory: ${why}`, 'warn');
+        return null;
+      })
+      .finally(() => {
+        this.running = null;
+        if (this.abort === ac) this.abort = null;
+        if (this.again) { this.again = false; this.schedule(0); } else this.fold().catch(() => {});
+      });
+    return this.running;
+  }
+
+  // Notes kept two weeks (notes.mjs NOTE_DAYS): one day's at a time, after a save, read for what still
+  // matters (kept as facts the usual way, asked first when saves ask), then moved to notes/folded/.
+  fold() {
+    if (!this.canRunNow || !this.agent.memory) return Promise.resolve(null);
+    const dirs = this.dirs();
+    const due = dueNotes(dirs)[0];
+    if (!due) return Promise.resolve(null);
+    const text = readNote(due.file);
+    if (!text.trim()) { foldNote(dirs, due); return Promise.resolve(null); }
+    const ac = new AbortController();
+    this.abort = ac;
+    const a = this.agent;
+    const request = `Keep what still matters from these notes of ${due.day}: what was built, decided, found or set up, as facts. Leave out what only mattered that day.`;
+    this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots?.side, use: a.sideUse?.(), cwd: a.cwd, home: a.memory.home, lessons: [], messages: [{ role: 'user', content: text }], request, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask, why: 'notes folded' })
+      .then((out) => {
+        if (out?.later) return out;
+        foldNote(dirs, due);
+        const line = saveLine(out);
+        this.say(line ? line.replace(/^Memory: /, `Memory: the notes of ${due.day} folded in · `) : `Memory: the notes of ${due.day} folded in · nothing more to keep`, out?.failed?.length ? 'warn' : 'dim');
+        return out;
+      })
+      .catch((e) => { if (!ac.signal.aborted && e?.name !== 'AbortError') this.say(`Memory: the notes of ${due.day} were not folded in · ${String(e?.message ?? e).replace(homedir(), '~')} · tried again after the next save`, 'warn'); return null; })
       .finally(() => { this.running = null; if (this.abort === ac) this.abort = null; });
     return this.running;
   }
