@@ -851,8 +851,8 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   Edit or Write of a file that changed on disk since (a command, a formatter, you, another session) is turned back with
   the changed lines, numbered (`changedBlocks`: a change at line 10 and one at line 500 are two places), and that
   counts as reading it again; past `SHOW_MAX` (40 lines) it asks for a new Read from the first change. A deleted file
-  is not news (Edit says it is missing; Write may make it). Edit still needs a Read first, and on the local set Write
-  still never replaces a file (as before).
+  is not news (Edit says it is missing; Write may make it). Edit still needs a Read first (unless its old_text is in
+  the file exactly as written: "Tool calls that land" below), and on the local set Write still never replaces a file (as before).
 - **Long and background commands** (`terminal/src/tools/jobs.mjs`, Bash's `timeout` and `background`, the `Jobs` tool,
   `/jobs`). `timeout` is seconds up to 600 (`secsOf`: from 10,000 up it is Claude Code's milliseconds; between the cap
   and that, seconds past the cap); /effort's Command timeout stays the default. `background: true` starts the command
@@ -1619,6 +1619,32 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   button the page drew again by its name, and does not call the choice already made (aria-pressed, -selected,
   -checked, -current) dead. Tests: `design.test.mjs`, `design-system.test.mjs`.
 
+## Tool calls that land (19 Oct 2026)
+
+- **What and why.** The owner: "can we make the agentic coder tool calling better?". Measured on their saved
+  conversations (84 in three weeks, 3,930 tool calls): 101 turned back by the app, 121 commands failed. Replayed
+  against the code of that day, most of them were already fixed (the fence's code-not-path of 1 Oct, `shellText`
+  of 8 Oct, the folder's own path of 9 Oct, `(?i)` of 8 Oct); four kinds were still open. Their picks: all four,
+  build, test, push.
+- **An Edit that matches exactly** (agent-step.mjs): an old_text found in the file exactly as written (once, or
+  every one with replace_all: findEdit's `how` 'exact' or 'all', which prepare now passes on) goes through without
+  a Read, and the file counts as read. 16 of 45 refused Edits were "Read … first" of files read or written before
+  the conversation went to its notes, which forget what was read. A near match (spaces, indent, a typo) still
+  needs the Read. A change already in the file (findEdit `done`) is a step of its own kind, `done` ("already made,
+  nothing to change"; rail.jsx, window/view.mjs), not an error.
+- **A missing parameter opened for it** (agent-step.mjs rereadCall, qwen-raw.mjs `givenParams`, client.mjs
+  rawQwenCall `given`): asked for a Write again in raw mode, Qwen3.6 wrote its path and closed the call, three
+  times in one conversation (logs/qwen-reread.jsonl). Now what did arrive is written as the call's parameters and
+  the missing one opened (`<parameter=content>`), so what the model writes next is that text.
+- **Ten minutes for test runs and builds** (tools.mjs `longRun`, `LONG_SECS`): a command that runs tests
+  (`runsTests`) or builds (`BUILDS`: npm/bun run build or check, cargo, make, xcodebuild…) gets 600 s unless the
+  call names its own time. 13 of the 17 commands cut off at 2 minutes were whole test runs (4 to 5 minutes here).
+- **A server on this Mac said plainly** (sandbox.mjs fenceHint, `LOCAL_SERVER`): in Bypass, a connection refused
+  by the fence (psql to its socket or 127.0.0.1, EPERM on connect) says every host, port and socket is closed and
+  to give the user the command to run; psql had been tried ten times in one conversation.
+- **Tests**: agent.test (the Edit without a Read, a change made already, the server hint), qwen-reread.test (the
+  opening, and a Write with only its path on the stand-in Ollama), jobs.test (`longRun`, a build past the limit).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
@@ -1644,7 +1670,8 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   The draft repeated the `index.mjs` seam rule three times; AGENTS.md says it once.
 
 - **Why the full suite is for Claude Code and Codex only.** `bun run test` takes about 3 minutes.
-  Agentic Coder stops a command after 2 minutes (/effort's Command timeout, 120 s by default), and
+  Agentic Coder stops a command after 2 minutes (/effort's Command timeout, 120 s by default; a test run or a build
+  gets 10 minutes since 19 Oct 2026), and
   its own Tool use line (`terminal/rules/TOOLS.md`) says to run only the test file that covers a
   change, not the whole suite. A small model given both rules would have to guess, so for Agentic
   Coder the covering test file is the check, and the recorded full run is the larger agents' job.

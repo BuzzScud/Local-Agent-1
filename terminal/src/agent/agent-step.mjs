@@ -27,7 +27,7 @@ import { CUT } from '../tools/codeindex.mjs';
 import { MCP_TOOL, findEntry, isMcpCall, madeUpCall } from './mcp.mjs';
 import { CODE_SEARCH_CHARS, CUT_MARK, MODEL_TOOLS, countLine, failsOf, leakedCall, planLine, runLine, tokensOf } from './agent-said.mjs';
 import { rawQwenCall } from './client.mjs';
-import { readCallText } from './qwen-raw.mjs';
+import { givenParams, readCallText } from './qwen-raw.mjs';
 import { HOME } from '../../../models/index.mjs';
 import { usesSsh } from '../tools/ssh.mjs';
 
@@ -78,9 +78,15 @@ export class StepPart {
     if (at < 1 || !def) return null;
     const msg = this.messages[at];
     const started = Date.now();
-    const r = await rawQwenCall({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages.slice(0, at)), tools: ask.tools, thinking: ask.thinking, effort: ask.effort, model: this.model, sampling: ask.sampling, maxTokens: ask.maxTokens, reasoning: msg.reasoning_content ?? '', before: typeof msg.content === 'string' ? msg.content : '', name: call.name, signal,
+    // What came is written for it, and the missing parameter opened: asked for the whole call, it wrote the
+    // same path-only call again (logs/qwen-reread.jsonl, 19 Oct 2026).
+    let sent = {};
+    try { sent = JSON.parse(call.args || '{}'); } catch { /* none came whole */ }
+    const given = givenParams(sent && typeof sent === 'object' ? sent : {}, missing);
+    const r = await rawQwenCall({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages.slice(0, at)), tools: ask.tools, thinking: ask.thinking, effort: ask.effort, model: this.model, sampling: ask.sampling, maxTokens: ask.maxTokens, reasoning: msg.reasoning_content ?? '', before: typeof msg.content === 'string' ? msg.content : '', name: call.name, given, signal,
       onStart: () => this.emit('note', { text: `Its ${call.name} came without "${missing}": asking the model for that call once more and reading it here…`, tone: 'dim' }) });
     if (!r) return null;
+    r.text = given + r.text;
     const args = readCallText(r.text, def);
     const json = JSON.stringify(args);
     const whole = !parseArgs(call.name, json, this.way).error;
@@ -395,6 +401,11 @@ export class StepPart {
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
+      // An Edit already made (the model repeating it): done, not a failed step.
+      if (prepared.done) {
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'done', message: prepared.error } });
+        return { text: prepared.error };
+      }
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: prepared.error }, error: true });
       return { text: prepared.error, error: true };
     }
@@ -418,7 +429,11 @@ export class StepPart {
       }
     }
     // Like Claude Code: an existing file must be read before it is edited, so
-    // old_text is copied from what is really there.
+    // old_text is copied from what is really there. An old_text found exactly as written (once, or
+    // every one with replace_all) is what is really there, so that Edit goes through and the file
+    // counts as read (19 Oct 2026: 16 of 45 Edits turned back in three weeks were of files read or
+    // written before the conversation went to its notes, which forget what was read).
+    if (call.name === 'Edit' && prepared.abs && !this.readFiles.has(prepared.abs) && (prepared.how === 'exact' || prepared.how === 'all')) this.readFiles.add(prepared.abs, prepared.before);
     if (call.name === 'Edit' && prepared.abs && !this.readFiles.has(prepared.abs)) {
       const msg = `Read ${prepared.rel} first, then copy old_text from it exactly.`;
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: msg }, error: true });

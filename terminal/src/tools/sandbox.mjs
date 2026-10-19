@@ -149,6 +149,7 @@ export function netHint(output, command) {
   return `\n(Commands cannot reach the internet here: only Bypass permissions opens it to them, and the user turns that on. To read the page, call the WebFetch tool: WebFetch {"url": "${url}"}. Do not try curl, wget or another language again.)`;
 }
 
+const LOCAL_SERVER = /\b(?:connect(?:ion)?|socket)\b[^\n]*(?:Operation not permitted|EPERM)|(?:Operation not permitted|EPERM)[^\n]*\bconnect/i;
 export function fenceHint(output, { open = false, self = false, command = '' } = {}) {
   // ssh says why it failed in its own words; the files hint below sent the model after the wrong cause.
   const ssh = sshHint(output, { open, command });
@@ -159,6 +160,11 @@ export function fenceHint(output, { open = false, self = false, command = '' } =
   const net = open ? '' : netHint(output, command);
   if (net) return net;
   if (!/Operation not permitted|operation not permitted|EPERM|sandbox/i.test(output)) return '';
+  // A server already running here, reached at any address, port or socket: said plainly, so no other way is tried
+  // (18 Oct 2026: psql was turned away ten times in one conversation, each time at another host, port or socket).
+  if (open && LOCAL_SERVER.test(output)) {
+    return `\n(Blocked even in Bypass${self ? ' and when Agentic Coder works on itself' : ''}: commands cannot connect to a server already running on this Mac, such as a database or a dev server, at any host, port or socket, so another way fails the same. Do not try again: tell the user, and give them the exact command to run in their own terminal.)`;
+  }
   // In Bypass the folders are open: what is still closed is what already runs here and the app's own folder.
   return open && self
     ? '\n(Blocked even when Agentic Coder works on itself: apps cannot be opened, servers and services already running on this Mac cannot be reached or stopped, and door.key and trust.json cannot be changed.)'

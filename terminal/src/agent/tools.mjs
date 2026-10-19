@@ -15,7 +15,7 @@ import { listFiles, searchFiles } from '../tools/fs.mjs';
 import { hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
 import { saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint, nodeHint } from './scripts.mjs';
-import { permissionsTable, runsGitPush, splitCommand } from './permissions.mjs';
+import { permissionsTable, runsGitPush, runsTests, splitCommand } from './permissions.mjs';
 import { APP_NOT, PART_DEFAULT, PART_MAX, WHOLE_MAX, oldSteps } from './tools-defs.mjs';
 import { findEdit, stripLineNumbers, syntaxError } from './tools-edit.mjs';
 import { missing, notThere, resolvePath, settlePath } from './tools-paths.mjs';
@@ -68,13 +68,13 @@ export function prepare(name, args, env) {
       args.old_text = realBuilt(args.old_text, before);
       args.new_text = realBuilt(args.new_text, before);
       const m = findEdit(before, args.old_text, args.new_text, { replaceAll: args.replace_all === true, line: Number(args.line) || null });
-      if (!m.ok) return { error: m.error };
+      if (!m.ok) return { error: m.error, ...(m.done ? { done: true } : {}) };
       // Seven times in 40 runs on a service (5 Oct 2026): say where, and that the file may already be right.
       if (m.after === before) return { error: `old_text and new_text are the same, so nothing would change${m.at ? `: line ${m.at} already reads that way` : ''}. If that is what you wanted, the file is already right: go on with the next step. Otherwise new_text must be the corrected version: write the changed lines out in full.` };
       // Refuse an edit that breaks a file which parsed before.
       const broken = syntaxError(p.abs, m.after, { more: env.checks });
       if (broken && !syntaxError(p.abs, before, { more: env.checks })) return { error: `That edit would break ${p.rel}: ${broken}. Nothing was changed. Remember: new_text REPLACES old_text (it is not added after it), so new_text must contain the whole new version of those lines and nothing twice.` };
-      return { abs: p.abs, rel: p.rel, before, after: m.after, ...diffLines(before, m.after), created: false };
+      return { abs: p.abs, rel: p.rel, before, after: m.after, how: m.how, ...diffLines(before, m.after), created: false };
     }
     const before = exists ? readFileSync(p.abs, 'utf8') : '';
     const after = args.content;
@@ -357,7 +357,7 @@ export async function execute(name, args, prepared, env) {
       if (onOff(args.background)) return startJob(args, env, max);
       // Output lines and the timeout move with /effort (env.bash); a call's own timeout wins.
       const own = secsOf(args.timeout);
-      const timeoutMs = own ? own * 1000 : env.bash?.timeoutMs ?? 120_000;
+      const timeoutMs = own ? own * 1000 : Math.max(env.bash?.timeoutMs ?? 120_000, longRun(args.command) ? LONG_SECS * 1000 : 0);
       // A model on another machine gets a test run's passing tests folded into one line (squeezeTests).
       // Bypass permissions lifts the folder fence and the internet block (sandbox.mjs open). So does a
       // push you said yes to (it always asks, permissions.mjs runsGitPush): it needs GitHub and the
@@ -465,6 +465,11 @@ export function differs(command, r) {
 
 // A command's own time limit, in seconds, at most this.
 export const MAX_TIMEOUT_SECS = 600;
+// Test runs and builds get this long unless the call names its own time (19 Oct 2026: 13 of the 17 commands
+// stopped at the 2-minute limit in three weeks were whole test runs, which take 4 to 5 minutes here).
+const LONG_SECS = MAX_TIMEOUT_SECS;
+const BUILDS = /(?:^|[;&|(]\s*)(?:(?:npm|pnpm|yarn|bun)\s+run\s+(?:build|check|typecheck|e2e)\b|bun\s+build\b|cargo\s+(?:build|test)\b|swift\s+(?:build|test)\b|xcodebuild\b|go\s+(?:build|test)\b|make\b|docker\s+(?:compose\s+)?build\b|mvn\b|gradle\b)/;
+export const longRun = (command) => runsTests(command) || BUILDS.test(String(command ?? '').trim());
 const onOff = (v) => v === true || v === 'true' || v === 1;
 // The seconds a call's timeout asks for, at most MAX_TIMEOUT_SECS. From 10,000 up it is milliseconds,
 // as Claude Code's Bash takes them (a model trained on it sends 300000 for five minutes); between the

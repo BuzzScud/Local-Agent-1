@@ -81,7 +81,8 @@ export function findEdit(text, oldText, newText, { replaceAll = false, line = nu
     return { ok: false, error: `old_text appears ${count} times (lines ${lines}).${line ? ` None of them is at line ${line}.` : ''} Pass line with the one you mean (the line it starts on), or include more surrounding lines so it matches once, or set replace_all to true to change all of them.` };
   }
   // The change is already there (the model is repeating an edit it made).
-  if (newText.trim() && text.includes(newText.trim())) return { ok: false, error: 'This change is already in the file: new_text is there and old_text is gone. Do not repeat it; go on with the next step.' };
+  // done: nothing failed, the file is already as asked (agent-step.mjs shows it as done, not as an error).
+  if (newText.trim() && text.includes(newText.trim())) return { ok: false, done: true, error: 'This change is already in the file: new_text is there and old_text is gone, so nothing needed changing. Do not repeat it; go on with the next step.' };
   const fileLines = text.split('\n');
   const want = oldText.replace(/\n$/, '').split('\n');
   for (const mode of ['trailing', 'indent']) {

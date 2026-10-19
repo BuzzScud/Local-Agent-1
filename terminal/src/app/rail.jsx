@@ -466,6 +466,7 @@ export function ToolNode({ it, cwd }) {
     case 'read': return <Node g="○" c={C.dim}><Head verb={v.outline ? 'Outline' : 'Read'} c={PATH} what={what} detail={v.outline ? `${v.parts > 0 ? plural(v.parts, 'part') : 'no parts'} of ${plural(v.total, 'line')}` : `${plural(v.lines, 'line')}${v.total > v.lines ? ` of ${v.total}` : ''}`} /></Node>;
     case 'screen': return <Node g="○" c={C.dim}><Head verb="Looked at" c={PATH} what={v.what} detail={`${v.size} · a picture, nothing clicked`} /></Node>;
     case 'same': return <Node g="○" c={C.dim}><Head verb="Read" c={PATH} what={what} detail="already read above, unchanged" /></Node>;
+    case 'done': return <Node g="○" c={C.dim}><Head verb={it.label} c={PATH} what={what} detail="already made, nothing to change" /></Node>;
     case 'list': return <Node g="○" c={C.dim}><Head verb="Listed" c={PATH} what={shortPath(it.arg, cwd)} detail={plural(v.count, 'path')} /></Node>;
     case 'search': return <Node g="○" c={C.dim}><Head verb="Searched" c={PATH} what={it.arg} detail={plural(v.count, 'match')} /></Node>;
     case 'agent': return <Node g="◆" c={it.error ? C.bad : C.accent}><Head verb={it.label} c={it.error ? C.bad : C.accent} what={it.arg} detail={`${plural(v.steps ?? 0, 'step')} · ${fmtSecs(v.secs ?? 0)}${v.reason && !['done', 'answered'].includes(v.reason) ? ` · ${v.reason}` : ''}`} /></Node>;

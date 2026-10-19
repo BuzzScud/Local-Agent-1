@@ -35,6 +35,7 @@ function stepOf(x) {
   if (v.kind === 'bash') s.end = `${(v.lines ?? []).length} lines · exit ${v.code ?? 0}`;
   else if (v.kind === 'diff') { let a = 0, r = 0; for (const h of v.hunk ?? []) { if (h.type === '+') a++; else if (h.type === '-') r++; } s.words = base(v.path); s.end = `+${a} −${r}`; }
   else if (v.kind === 'read') s.end = `${v.lines ?? 0} lines`;
+  else if (v.kind === 'done') s.end = 'already made';
   else if (v.kind === 'search' || v.kind === 'list') s.end = `${v.count ?? 0} found`;
   else if (v.kind === 'todos') { s.words = `${(v.items ?? []).length} to-dos`; s.label = 'To-do'; }
   else if (v.kind === 'answer') { s.words = short(v.question ?? x.arg, 140); s.end = short(v.text, 80); }
