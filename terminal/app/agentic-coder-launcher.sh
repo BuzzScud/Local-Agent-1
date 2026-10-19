@@ -10,6 +10,8 @@
 #   Installed as ~/.local/bin/coding by `bun run install-cli`; after that it installs itself from GitHub's main.
 #   AGENTIC_NO_UPDATE=1 coding   starts the app as it is, without asking GitHub or building.
 #   AGENTIC_NO_PULL=1 coding     does not ask GitHub: builds the main this Mac last saw.
+#   AGENTIC_PULLED_AT            when this start asked GitHub (seconds; set by fetch_main for what it starts): a
+#                                launcher run again within AGENTIC_PULL_FRESH seconds (30) does not ask again.
 #   AGENTIC_BUILD_ONLY=1 coding  builds and installs as a start does, then ends (bun run install-cli).
 #   AGENTIC_ON_OPEN=1 coding     what a Terminal opening runs (the lines on_open_hook puts in ~/.zshrc): asks GitHub and
 #                                builds as a start does, at most once every 10 minutes, without starting the app.
@@ -40,6 +42,12 @@ g() {
 fetched=0
 fetch_main() {
   [ "${AGENTIC_NO_UPDATE:-0}" != 1 ] && [ "${AGENTIC_NO_PULL:-0}" != 1 ] && [ -e "$REPO/.git" ] && command -v git >/dev/null || return 0
+  # The window's app and a session's keeper run through this script again a second after it has asked GitHub
+  # (window/server.mjs and sessions.mjs appCommand): that run does not ask again (19 Oct 2026: about 0.5 s a start).
+  case "${AGENTIC_PULLED_AT:-}" in
+    '' | *[!0-9]*) ;;
+    *) since=$(($(date +%s) - $AGENTIC_PULLED_AT)); [ "$since" -ge 0 ] && [ "$since" -lt "${AGENTIC_PULL_FRESH:-30}" ] && return 0 ;;
+  esac
   url="$(g remote get-url origin 2>/dev/null)"
   case "$url" in
     '' | *[[:space:]]* | *::*) return 0 ;;
@@ -61,6 +69,9 @@ fetch_main() {
   ok=$?
   # The timer is no longer needed; the shell's "Terminated" notice for it is not news.
   { kill "$watch"; wait "$watch"; } 2>/dev/null
+  # Asked, answered or not: what the app runs this script with again goes by it (above).
+  AGENTIC_PULLED_AT="$(date +%s)"
+  export AGENTIC_PULLED_AT
   if [ "$ok" != 0 ]; then
     dim "↻ Could not reach GitHub; building the main this Mac last saw."
     return 0

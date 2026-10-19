@@ -74,6 +74,8 @@ delete process.env.AGENTIC_REPO;
 delete process.env.AGENTIC_RESTART_FILE;
 delete process.env.AGENTIC_BUILD;
 delete process.env.AGENTIC_BUILT_COMMIT;
+// Nor does a launcher a test runs skip GitHub because the app around the tests asked it a moment ago.
+delete process.env.AGENTIC_PULLED_AT;
 // A window starts in Manual, not in the mode another test's window was left in (store.mjs firstMode).
 process.env.AGENTIC_LAST_MODE ??= 'off';
 // Lost services brought back at a window's start (saved-services.mjs repairNow): off unless a test turns it on,
