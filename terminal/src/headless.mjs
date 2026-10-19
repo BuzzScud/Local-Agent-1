@@ -7,6 +7,7 @@ import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from 
 import { wayEnv, wayOf, hooksOn, hooksEnv, leanFrom, leanEnv, LEAN_AUTO } from './agent/way.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
 import { openMemory } from './agent/facts.mjs';
+import { repairMemory } from './app/memory-start.mjs';
 import { saveLessons, worthSaving } from './agent/lessons.mjs';
 import { helpersOn } from './agent/helpers.mjs';
 import { llmCalls, timers } from './flows/llm.mjs';
@@ -29,7 +30,7 @@ import { agentDriver } from './agent/agents-driver.mjs';
 export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, testsFirst = true, mcp = null, userHooks = false, workRoom = 0, steering = null, maxSteps = null, rewind = null, lean = false, resume = null, helperJobs = null }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
-  if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
+  if (mem) { try { if (!mem.home) repairMemory(); openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
   // Files ranked by meaning before the first step (agent/rank.mjs), as in the
   // app with the memory on; rank: false leaves it to the request's words. The
   // same small model serves the code search of the context helpers.

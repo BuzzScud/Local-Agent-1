@@ -12,16 +12,24 @@
 //   POST /memory/always     { where, id, always }             a fact made a rule, or a rule made a fact again (8 Oct 2026)
 import { homedir } from 'node:os';
 import { memoryDirs, readFacts, readLog, editFact, pinFact, setAlways, applyChanges, restoreFact, undoSave, KINDS, RETIRE_AT, UNUSED_DAYS } from '../agent/facts.mjs';
+import { repairYou, repairWords, memoryStatus, statusWords } from '../agent/memory-home.mjs';
+import { memoryPlaces } from './memory-start.mjs';
 
 const tilde = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
 const plain = ({ dir: _d, ...f }) => f;
 
+// status (18 Oct 2026): the memory in one line, the folder about you and its state (found again here when it moved),
+// and stamp, which changes with every save, so the page redraws when a window saves (memory.html looks every 4 s).
 function memoryData(cwd) {
+  const fixed = repairWords(repairYou({ places: memoryPlaces() }));
+  const st = memoryStatus(cwd);
+  const status = { words: statusWords(st), state: st.state, dir: tilde(st.dir), target: tilde(st.target), last: st.last, fixed: fixed?.text ?? null };
   const dirs = memoryDirs(cwd);
   const part = (where, dir) => ({ where, dir: tilde(dir), facts: dir ? readFacts(dir).map(plain) : [], retired: dir ? readFacts(dir, { retired: true }).map(plain) : [] });
   const parts = [part('you', dirs.you), ...(dirs.project ? [part('project', dirs.project)] : [])];
   const log = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d).map((l) => ({ ...l, where: d === dirs.you ? 'you' : 'project' }))).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 40);
-  return { cwd: tilde(cwd), parts, log, retireAt: RETIRE_AT, unusedDays: UNUSED_DAYS, at: new Date().toISOString() };
+  const stamp = [log[0]?.at ?? '', ...parts.map((p) => `${p.facts.length}/${p.retired.length}`), st.state].join('|');
+  return { cwd: tilde(cwd), parts, log, status, stamp, retireAt: RETIRE_AT, unusedDays: UNUSED_DAYS, at: new Date().toISOString() };
 }
 
 // Only this page may change the memory: a request from another site that a

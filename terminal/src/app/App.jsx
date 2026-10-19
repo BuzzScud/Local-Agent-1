@@ -26,7 +26,7 @@ import { MOUSE_ON, MOUSE_OFF, MOTION_ON, MOTION_OFF, isMouseText } from './mouse
 import { botAllowed } from './bot-layer.jsx';
 import { stepsOf } from './rail.jsx';
 import { COMMANDS } from './commands.mjs';
-import { openMemory } from '../agent/facts.mjs';
+import { startMemory, sayMemory } from './memory-start.mjs';
 import { claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, saveModeOf } from './autosave.mjs';
@@ -403,11 +403,10 @@ export function App({ opts, win, onRestart }) {
   const mcpRef = useRef(undefined);
   if (mcpRef.current === undefined) { try { mcpRef.current = openMcp(cwd); } catch { mcpRef.current = null; } }
   if (!agentRef.current) {
-    // The memory: your two rules and an older notes file are carried in at
-    // the first start; the small model that finds the facts is started with
-    // the first request that needs it.
+    // The memory (memory-start.mjs): its folder found again if it moved, your rules carried in at the first start;
+    // its small model starts with the first request that needs it.
     const remembers = memoryOn(settings);
-    if (remembers) { try { openMemory(cwd, { rules: claudeOn(settings) ? CLAUDE_RULES : null }); } catch {} }
+    if (remembers) { try { startMemory(cwd, { rules: claudeOn(settings) ? CLAUDE_RULES : null }); } catch {} }
     const notesChars = limitsRef.current.rulesRoom || notesRoom(ctx);
     const notes = projectNotes(cwd, notesChars, { memory: remembers });
     // The context helpers (agent/helpers.mjs): all on unless /helpers (in
@@ -493,7 +492,7 @@ export function App({ opts, win, onRestart }) {
   const pendingSaveRef = useRef(null);
   const askRef = useRef(null);
   const saveMode = saveModeOf(settings); // ask · auto · off (off: nothing is saved on its own)
-  autoRef.current ??= new AutoSave({ agent, ask: saveMode === 'ask' ? (p) => askRef.current(p) : null, say: (text) => push({ type: 'note', text, tone: 'dim' }), sessionsDir: join(HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root') });
+  autoRef.current ??= new AutoSave({ agent, ask: saveMode === 'ask' ? (p) => askRef.current(p) : null, say: (text, tone = 'dim') => push({ type: 'note', text, tone }), sessionsDir: join(HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root') });
 
   // Everything the key handler needs, always current.
   const S = useRef({});
@@ -530,6 +529,7 @@ export function App({ opts, win, onRestart }) {
   // Started in the mode the last window was left in: said once, so Bypass is never a surprise.
   useEffect(() => {
     if (startedIn.from === 'last' && startedIn.mode !== 'ask') sayStart({ kind: 'mode', mode: startedIn.mode, word: modeWord(startedIn.mode) }, { type: 'note', text: `Started in ${modeWord(startedIn.mode)}, as the last window left it · shift+tab changes it`, tone: startedIn.mode === 'bypass' ? 'warn' : 'dim' });
+    sayMemory({ sayStart, push });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { useRemote, useLocal, reconnect, openRemoteForm, busyNow, loopsBadgeOf, loopsOf, tickLoops, connectForm, remoteWord, saveOnlyForm, jumpTo, openJumpBox, jumpBoxKey, remoteTo, refreshCatalog, serviceCtx, onService, setServiceCtx, usedHere, noteModels, preloadRemote, switchService, openModelPicker } = remotePart(self);
 

@@ -212,9 +212,11 @@ function MemoryPanel({ it, width }) {
   return (
     <Box flexDirection="column">
       <Row mark="⏺" markColor={C.accent}><Text><Text bold>Memory</Text><Text color={C.dim}> · {it.how === 'meaning' ? 'facts are found by meaning' : 'facts are found by their words (coding setup adds the small model)'}</Text></Text></Row>
+      {it.status ? <Box paddingLeft={2}><Text color={it.warn ? C.warn : C.dim}>{it.status.replace(/^Memory · /, '')}</Text></Box> : null}
       {it.sections.map((sec) => (
         <Box key={sec.title} flexDirection="column">
-          {head(sec.title, `${sec.facts.length + sec.more} fact${sec.facts.length + sec.more === 1 ? '' : 's'}`, sec.where)}
+          {head(sec.title, sec.missing ? 'not reachable' : `${sec.facts.length + sec.more} fact${sec.facts.length + sec.more === 1 ? '' : 's'}`, sec.where)}
+          {sec.missing ? <Box paddingLeft={4}><Text color={C.warn}>{sec.missing}</Text></Box> : null}
           {sec.facts.map((f) => (
             <Box key={f.id} paddingLeft={4} width={W}>
               <Box width={9} flexShrink={0}><Text color={MEM_KIND[f.always ? 'always' : f.kind] ?? C.dim}>{f.always ? 'always' : f.kind}</Text></Box>

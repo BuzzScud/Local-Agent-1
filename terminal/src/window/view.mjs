@@ -63,7 +63,9 @@ export function viewItem(it) {
     case 'note': return it.check ? null : { t: 'note', key: it.key, text: short(it.text, 600), tone: it.tone ?? 'dim' };
     case 'divider': return { t: 'divider', key: it.key, text: short(it.text, 200) };
     case 'sorted': return { t: 'note', key: it.key, text: short(it.text, 300), tone: 'dim' };
-    case 'welcome': case 'startnotes': case 'machine': return { t: 'skip', key: it.key };
+    // The start's memory line shows in the window as a note (memory-start.mjs); the rest of the start is the page's.
+    case 'startnotes': return it.said?.memory ? { t: 'note', key: it.key, text: `${it.said.memory.words} · /memory shows it`, tone: it.said.memory.warn ? 'warn' : 'dim' } : { t: 'skip', key: it.key };
+    case 'welcome': case 'machine': return { t: 'skip', key: it.key };
     default: return null;
   }
 }

@@ -38,6 +38,7 @@ import { hooksFrom, leanFrom } from './agent/way.mjs';
 import { memoryOn } from './app/autosave.mjs';
 import { claudeOn } from './agent/claude-notes.mjs';
 import { openMemory } from './agent/facts.mjs';
+import { repairMemory } from './app/memory-start.mjs';
 import { isTrusted, saveTrust } from './app/trust.mjs';
 import { rulesFor } from './app/perm-store.mjs';
 import { webSettings } from './app/web-form.mjs';
@@ -644,7 +645,7 @@ if (opts.print) {
   try {
     const { projectNotes, gitSummary, notesRoom } = await import('./agent/prompt.mjs');
     const st = loadSettings(opts.cwd);
-    if (memoryOn(st)) { try { openMemory(opts.cwd); } catch {} }
+    if (memoryOn(st)) { try { repairMemory(); openMemory(opts.cwd); } catch {} }
     const names = [...new Set(projectNotes(opts.cwd, notesRoom(), { memory: memoryOn(st) }).files.map((p) => (p.endsWith('/memory') ? 'memory' : p.split('/').pop())))];
     const git = gitSummary(opts.cwd);
     // also: what this folder changes at the start (its own settings file, a start-up mode saved with /permissions).

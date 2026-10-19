@@ -104,6 +104,7 @@ export function actionsOf(s, loading = null, k = 0) {
     modelRow(s),
     modeRow(s),
     ...helpersRow(s),
+    ...memoryRow(s),
     ...(all.length ? [{ id: 'resume', label: `All conversations · ${all.length}`, key: '/resume', does: 'lists every conversation in this folder' }] : []),
     ...(s.notes?.includes('AGENTS.md') ? [] : [{ id: 'init', label: 'Write AGENTS.md', key: '/init', does: 'writes notes about this project for the model to read' }]),
     { id: 'settings', label: 'Settings', key: '/settings', does: 'opens every setting in one menu' },
@@ -123,6 +124,9 @@ function modeRow(s) {
   const kept = s.said?.mode && s.said.mode.mode === s.modeId;
   return { id: 'mode', label: `Mode · ${s.mode ?? 'manual'}`, after: kept ? ' · kept from the last window' : '', key: 'shift+tab', does: 'switches to the next mode', ...(s.modeId === 'bypass' ? { tone: BYPASS } : {}) };
 }
+// The memory in one line (memory-start.mjs, 18 Oct 2026, the owner's pick): enter or a click opens /memory; amber
+// while the folder about you is missing.
+const memoryRow = (s) => (s.said?.memory ? [{ id: 'memory', label: s.said.memory.words, key: '/memory', does: 'shows what it remembers about you and this project', ...(s.said.memory.warn ? { tone: 215 } : {}) }] : []);
 const helpersRow = (s) => (s.said?.remote?.helpers?.length ? [{ id: 'helpers', label: `Helpers · ${helpersWords(s.said.remote.helpers)}`, key: '/profiles', does: 'opens /profiles: which model each helper uses' }] : []);
 // The last row: how to get into the page, or, with an item picked, what enter does with it.
 function hintParts(items, focus, w) {
