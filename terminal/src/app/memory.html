@@ -19,7 +19,7 @@ button,input,textarea{font:inherit;color:inherit}
 .top{display:flex;align-items:flex-end;gap:16px;min-width:0}
 .top .t{min-width:0;flex:1}
 h1{font-size:24px;line-height:1.15;letter-spacing:-.02em;margin:0 0 3px}
-.lede{color:var(--mute);margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lede{color:var(--mute);margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lede.warn{color:var(--down)}
 .search{position:relative;flex:none}
 .search input{width:300px;padding:8px 12px 8px 32px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
 .search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
@@ -319,11 +319,27 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   function draw() {
     if (!VIEWS().some((v) => v.id === view)) view = 'you';
     const all = facts();
-    $('lede').textContent = `${plural(all.length, 'fact')} in use for ${data.cwd} · ${gone().length} taken out · ${changes().length} changes. A fact comes back when a request fits it; rules are read at every start.`;
+    // The memory in one line (memory-hub.mjs status), and what is wrong with its folder when something is.
+    const st = data.status;
+    const missing = st?.state === 'broken';
+    $('lede').className = `lede${missing ? ' warn' : ''}`;
+    $('lede').textContent = missing ? `The folder about you is missing: ${st.dir} points at ${st.target}, which is gone. Facts about you are kept and saved once it is back.`
+      : `${st ? `${st.words.replace(/^Memory · /, '')} · ` : `${plural(all.length, 'fact')} in use for ${data.cwd} · `}${gone().length} taken out · ${changes().length} changes${st?.fixed ? ` · ${st.fixed.replace(/^Memory: /, '')}` : ''}`;
+    $('lede').title = `For ${data.cwd}. A fact comes back when a request fits it; rules are read at every start.`;
     rail();
     reader(list());
   }
   await load();
+  // Live (18 Oct 2026, the owner: "ensure it updates in the hub too"): a save in any window shows here within 4 s.
+  // Not while you write or edit here, and only while the page is in sight.
+  setInterval(async () => {
+    if (document.hidden || composing || editing || !data) return;
+    let next;
+    try { next = await (await fetch('/memory.json', { cache: 'no-store' })).json(); } catch { return; }
+    if (next.stamp === data.stamp || composing || editing) return;
+    data = next;
+    draw();
+  }, 4000);
 })();
 </script>
 </body>

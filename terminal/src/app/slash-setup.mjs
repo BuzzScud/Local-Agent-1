@@ -8,6 +8,8 @@ import { modeOf } from '../agent/permissions.mjs';
 import { thinkingLevel, embedderReady, Embedder } from '../../../models/index.mjs';
 import { MODE_OPTIONS } from './help.mjs';
 import { memoryDirs, healthLine, health, undoSave, readFacts, readLog } from '../agent/facts.mjs';
+import { repairYou, repairWords, memoryStatus, statusWords } from '../agent/memory-home.mjs';
+import { memoryPlaces } from './memory-start.mjs';
 import { rulesList, ALWAYS_MAX, changeRules, looksLikeEvent } from './rules.mjs';
 import { notesCount, notesDir } from '../agent/claude-notes.mjs';
 import { packState } from '../agent/claude-pack.mjs';
@@ -48,6 +50,10 @@ export function slashSetup(self) {
       case 'memory': {
         // What Agentic Coder remembers: your own memory and this project's.
         if (!self.agent.memory) { self.push({ type: 'note', text: 'The memory is off here ("memory": false in settings.json).', tone: 'dim' }); break; }
+        // Its folder found again if it moved since the start (memory-home.mjs, 18 Oct 2026), then the memory in one line.
+        const fixed = repairWords(repairYou({ places: memoryPlaces() }));
+        if (fixed) self.push({ type: 'note', ...fixed });
+        const status = memoryStatus(self.cwd);
         const dirs = memoryDirs(self.cwd);
         const tilde = (p) => (p?.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
         if (/^open\b/i.test(arg.trim())) {
@@ -82,12 +88,13 @@ export function slashSetup(self) {
           // From the pack (claude-pack.mjs): when it was built, and how many of Claude's notes changed since.
           if (c.dir) claude = { used: c.used, where: tilde(c.dir), leftOut: c.leftOut.length, pack: packState(dirname(c.dir)) };
         }
+        if (status.state === 'broken') sections.unshift({ title: 'About you', where: tilde(status.dir), missing: `its folder is gone: ${tilde(status.dir)} points at ${tilde(status.target)}. Facts about you are kept and saved once it is back.`, facts: [], more: 0 });
         if (!sections.length && !claude) { self.push({ type: 'note', text: 'Nothing saved yet. After a task Agentic Coder shows what it would remember and asks; "/update memory" or "remember that …" saves at once.', tone: 'dim' }); break; }
         const last = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d)).filter((l) => l.what !== 'trust').sort((x, y) => String(y.at).localeCompare(String(x.at)))[0];
         const at = last ? new Date(last.at) : null;
         const when = at ? `${at.getDate()} ${at.toLocaleString('en-US', { month: 'short' })}, ${at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : null;
         // How it is doing: is it learning, and do the facts come with requests?
-        self.push({ type: 'memory', how: self.agent.memory.embedder ? 'meaning' : 'words', sections, claude, health: healthLine(health(dirs)), last: when });
+        self.push({ type: 'memory', how: self.agent.memory.embedder ? 'meaning' : 'words', status: statusWords(status), warn: status.state === 'broken', sections, claude, health: healthLine(health(dirs)), last: when });
         break;
       }
       case 'rules': {

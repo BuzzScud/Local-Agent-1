@@ -161,6 +161,27 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   skipped once is kept in `state.json` (`declined`) and not offered again; `/memory` ends with a 7-day health line.
   With `"memory": false` nothing is saved: the old `notes.md` writer is gone, and a leftover notes file is no longer read as rules (since 30 Sep 2026 only AGENTS.md and CLAUDE.md are, from the working folder up to your home folder).
 
+- **The folder about you, found again** (18 Oct 2026, the owner: "i dont see any memorys"; `terminal/src/agent/
+  memory-home.mjs`, `terminal/src/app/memory-start.mjs`). When the project moved into `~/Desktop/PROJECTS` the link
+  `~/.agentic/memory` went on pointing at the old place: from 9 Oct every save about the user failed, `applySave` wrote
+  the folder about you first, so its error took the project's facts of the same round down with it, and the save after
+  each round swallowed the error (`.catch(() => null)`), so nothing said so for nine days. Their picks: keep it in the
+  project's folder; at a start find it, fix the link and say so; a line after each save; the memory in one line at the
+  start, in /memory and in the hub, which updates by itself. Now: `youState` (ok · none · broken) and `repairYou`
+  re-point a broken link only (never a real folder), at the first of `memoryPlaces()` that holds a memory (the app's
+  own private folder; none with `AGENTIC_HOME` or `AGENTIC_MEMORY`, so a test never reaches the real one), else the
+  same folder under a project of the same name one or two folders down from home; once a process (`repairMemory`:
+  the start page's loader, the window's App, `coding -p`), again at `/memory` and in the hub. `applySave` writes each
+  folder on its own and returns `failed` (about, why, kept); what it could not write is kept as
+  `memory-jobs/held-*.json` (`holdSave`) and written at the next start that can (`saveHeld`, two weeks at most).
+  `saveLine` says the split ("3 saved · 2 about you, 1 about this project") and each failure; the save after a round
+  says a failure in amber, and Remember says why instead of "it is already saved". `statusWords` ("Memory · 13 about
+  you · 22 this project · last saved 18 Oct") is a Menu row (enter: /memory), the Launcher's line (dropped first in a
+  narrow window), a note in the Mac window (view.mjs) and after the page has gone, the line under /memory's title, and
+  the hub's lede; `/memory.json` carries `status` and a `stamp`, and memory.html looks every 4 s and redraws when it
+  changed (not while you write or edit there). `AGENTIC_MEMORY_LINE=off` (pty.mjs, term.mjs, the keeper and sessions
+  tests) leaves the line off the app tests' screens. `terminal/test/memory-home.test.mjs`.
+
 - **The hub's Memory tab** (`terminal/src/app/memory.html`, `memory-hub.mjs`; redone 8 Oct 2026 after the owner's
   "i cant scroll here": the Overview showed 13 of 39 changes and hid the rest, by design, with no way to scroll). Their
   pick of four designs, "1 · Reading pane": the memories on the left (About you, This project, Rules, Pinned, Taken out,

@@ -13,6 +13,7 @@
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { HOME, ModelServer, LINGER_SECS, stopIdleServers, runningServer, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord, connectRemote, endpointOf } from '../../../models/index.mjs';
 import { loadSettings } from './store.mjs';
 import { saveLessons, seedMemory, worthSaving, saveLine, proposeSave, applySave, shownOf, rememberDeclined } from '../agent/lessons.mjs';
@@ -37,7 +38,7 @@ const slim = (messages) => messages.filter((m) => (m.role === 'user' || m.role =
 const self = () => (process.env.AGENTIC_BIN ? [process.env.AGENTIC_BIN] : /(^|\/)bun$/.test(process.execPath) ? [process.execPath, process.argv[1]] : [process.execPath]);
 
 export class AutoSave {
-  // say(text): one dim line on the screen. sessions: where this folder's
+  // say(text, tone): one line on the screen, dim unless a save failed. sessions: where this folder's
   // earlier conversations are, for the first-use reading.
   constructor({ agent, ask = null, say = () => {}, waitMs = WAIT_MS, sessionsDir = null }) {
     Object.assign(this, { agent, ask, say, waitMs, sessionsDir, timer: null, abort: null, running: null });
@@ -81,8 +82,9 @@ export class AutoSave {
     this.abort = ac;
     const a = this.agent;
     this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots?.side, use: a.sideUse?.(), cwd: a.cwd, home: a.memory.home, lessons: a.lessons, messages: a.messages, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
-      .then((out) => { if (out?.skipped) this.say('Not saved · /update memory saves what matters at any time'); const line = saveLine(out); if (line) this.say(line); return out; })
-      .catch(() => null)
+      .then((out) => { if (out?.skipped) this.say('Not saved · /update memory saves what matters at any time'); const line = saveLine(out); if (line) this.say(line, out?.failed?.length ? 'warn' : 'dim'); return out; })
+      // A save that fails says so (18 Oct 2026: nine days of saves failed unseen); one you stopped by typing does not.
+      .catch((e) => { if (!ac.signal.aborted && e?.name !== 'AbortError') this.say(`Memory: not saved · ${String(e?.message ?? e).replace(homedir(), '~')}`, 'warn'); return null; })
       .finally(() => { this.running = null; if (this.abort === ac) this.abort = null; });
     return this.running;
   }
@@ -117,7 +119,7 @@ export class AutoSave {
       if (ok) {
         const out = applySave({ cwd: p.cwd, home, adds: p.adds, drops: p.drops }, { why: 'review at quit' });
         const line = saveLine(out);
-        if (line) this.say(line);
+        if (line) this.say(line, out.failed?.length ? 'warn' : 'dim');
         n += out.added.length;
       } else {
         rememberDeclined(memoryDirs(p.cwd, home ?? undefined), p.adds.map((a) => a.text));

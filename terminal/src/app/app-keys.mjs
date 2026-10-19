@@ -160,7 +160,7 @@ export function keysPart(self) {
     if (it.id === 'new') { self.flash('Type what you want in the box below, then press enter', 2500); return; }
     if (it.id === 'start') { self.toggleFnRef.current('home'); return; }
     if (it.id === 'mode') { self.setMode(nextMode(self.S.current.mode)); return; }
-    const slash = { model: '/model', resume: '/resume', init: '/init', settings: '/settings', look: '/home', helpers: '/profiles' }[it.id];
+    const slash = { model: '/model', resume: '/resume', init: '/init', settings: '/settings', look: '/home', helpers: '/profiles', memory: '/memory' }[it.id];
     if (slash) self.runSlash(slash);
   };
   // The start page's items from the keyboard, while it is up in a look that has them: tab from an empty

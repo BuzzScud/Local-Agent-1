@@ -23,6 +23,7 @@ const remoteWords = (r) => `${r.model} on ${r.claude ? 'the Claude API' : r.labe
 // narrower window loses words from the right ("kept from" → "from" → the time → the helpers).
 export function startLine(said, width) {
   const tries = [
+    { kept: ', kept from the last window', ms: true, helpers: true, memory: true },
     { kept: ', kept from the last window', ms: true, helpers: true },
     { kept: ', from the last window', ms: true, helpers: true },
     { kept: '', ms: true, helpers: true },
@@ -35,6 +36,8 @@ export function startLine(said, width) {
     if (m) out.push([{ t: MODE_SHORT[m.mode] ?? m.word, c: C[m.mode] ?? C.warn }, { t: t.kept, c: C.dim }]);
     if (r) out.push([{ t: `${remoteWords(r)}${t.ms && r.ms != null ? `, ${r.ms} ms` : ''}`, c: C.dim }]);
     if (h.length && t.helpers) out.push([{ t: `${plural(h.length, 'helper model')} ${helpersWhere(h)}`, c: C.dim }]);
+    // The memory in one line (memory-start.mjs): the first to go in a narrow window.
+    if (said.memory && t.memory) out.push([{ t: said.memory.words, c: said.memory.warn ? C.warn : C.dim }]);
     return out;
   };
   const len = (ps) => ps.reduce((n, p) => n + p.reduce((k, x) => k + cells(x.t), 0), 0) + Math.max(0, ps.length - 1) * 5;

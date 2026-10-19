@@ -327,7 +327,12 @@ export class MemoryPart {
         ? { added: [], replaced: [], refused: [], retired: applyChanges(dir, { retire: [{ id, reason: `replaced by: ${text.replace(/\s+/g, ' ').trim().slice(0, 120)}` }] }, { why: 'remember' }).retired }
         : applySave({ cwd: this.cwd, home: this.memory.home, adds: [{ text, kind, from: 'saved by the model while it worked', ...(old ? { replaces: id } : {}) }] }, { why: 'remember' });
     } catch (e) { seen({ kind: 'error', message: e.message }, true); return { text: `Not saved: ${e.message}.`, error: true }; }
-    if (!out.added.length && !out.replaced.length && !out.retired.length) return refuse(out.refused[0]?.why ?? 'it is already saved');
+    if (!out.added.length && !out.replaced.length && !out.retired.length) {
+      // The folder could not be written (18 Oct 2026: a link to a folder that moved): said, never "already saved".
+      const f = out.failed?.[0];
+      if (f) { this.emit('note', { text: saveLine(out), tone: 'warn' }); return refuse(`${f.why}${f.kept ? '; it is kept and saved at the next start' : ''}`); }
+      return refuse(out.refused[0]?.why ?? 'it is already saved');
+    }
     seen({ kind: 'saved' });
     const line = saveLine(out);
     if (line) this.emit('note', { text: line, tone: 'dim' });

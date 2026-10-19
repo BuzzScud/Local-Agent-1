@@ -13,6 +13,7 @@ import { complete } from '../flows/llm.mjs';
 import { digest } from './memory.mjs';
 import { memoryDirs, dirFor, readFacts, applyChanges, tidy, readState, writeState, namesMissingFile, fileNames, countDay, KINDS } from './facts.mjs';
 import { closest, factVectors } from './recall.mjs';
+import { holdSave, whyNotSaved } from './memory-home.mjs';
 
 export const MAX_FACTS = 5;
 
@@ -272,10 +273,13 @@ export async function proposeSave({ url, model, slot, use, cwd, home = homedir()
 
 // Writes a proposal into both memories (one batch in each log), then tidies
 // once a day. A proposal kept since the window closed is written the same
-// way: the folders are found again from cwd.
-export function applySave({ cwd, home = homedir(), adds = [], drops = [] }, { today = new Date().toISOString().slice(0, 10), why = 'save' } = {}) {
+// way: the folders are found again from cwd. Each folder on its own (18 Oct
+// 2026): one that cannot be written (the link about you pointing at a folder
+// that moved) no longer takes the other's facts down with it; what it could
+// not write is in `failed`, with why, and kept for the next start (hold).
+export function applySave({ cwd, home = homedir(), adds = [], drops = [] }, { today = new Date().toISOString().slice(0, 10), why = 'save', hold = true } = {}) {
   const dirs = memoryDirs(cwd, home);
-  const out = { added: [], replaced: [], retired: [], refused: [] };
+  const out = { added: [], replaced: [], retired: [], refused: [], failed: [], where: { you: dirs.you, project: dirs.project } };
   const batch = `${why}-${Date.now()}`;
   for (const dir of [dirs.you, dirs.project].filter(Boolean)) {
     const mine = (a) => dirFor(dirs, a.kind) === dir;
@@ -284,7 +288,14 @@ export function applySave({ cwd, home = homedir(), adds = [], drops = [] }, { to
     const add = adds.filter((a) => mine(a) && !(a.replaces && here.has(a.replaces)));
     const retire = drops.filter((d) => here.has(d.id)).map((d) => ({ id: d.id, reason: d.why || 'a turn showed it to be wrong' }));
     if (!add.length && !replace.length && !retire.length) continue;
-    const res = applyChanges(dir, { add, replace, retire }, { batch, today, why });
+    let res;
+    try { res = applyChanges(dir, { add, replace, retire }, { batch, today, why }); } catch (e) {
+      const about = dir === dirs.you ? 'you' : 'project';
+      const facts = [...add, ...replace.map((r) => r.by)];
+      const gone = drops.filter((d) => retire.some((r) => r.id === d.id));
+      out.failed.push({ about, dir, why: whyNotSaved(e, dir, home), n: facts.length, kept: hold ? Boolean(holdSave({ cwd, home: home === homedir() ? null : home, about, adds: facts, drops: gone, why })) : false });
+      continue;
+    }
     out.added.push(...res.added.map((f) => ({ ...f, dir })));
     out.replaced.push(...res.replaced.map((x) => ({ ...x, dir })));
     out.retired.push(...res.retired.map((f) => ({ ...f, dir })));
@@ -292,7 +303,7 @@ export function applySave({ cwd, home = homedir(), adds = [], drops = [] }, { to
   }
   // Once a day the memory is tidied: repeats, facts about files that are
   // gone, facts not used in a long time.
-  out.tidied = tidyDue(dirs, today);
+  try { out.tidied = tidyDue(dirs, today); } catch { out.tidied = null; /* the next save tidies */ }
   return out;
 }
 
@@ -321,12 +332,19 @@ export function tidyDue(dirs, today) {
 }
 
 // One line for the screen.
+// One line after a save (the owner's pick, 18 Oct 2026: "Saved 2 facts · 1 about you, 1 about this project"), and
+// what could not be saved, with why: before, a save that failed said nothing.
 export function saveLine(out) {
   const n = (k, word) => (out[k].length ? `${out[k].length} ${word}` : '');
   const parts = [n('added', 'saved'), n('replaced', 'replaced'), n('retired', 'retired')].filter(Boolean);
-  if (!parts.length) return '';
+  const failed = (out.failed ?? []).map((f) => `not saved about ${f.about === 'you' ? 'you' : 'this project'}: ${f.why}${f.kept ? ' · kept for the next start' : ''}`);
+  if (!parts.length) return failed.length ? `Memory: ${failed.join(' · ')}` : '';
+  const about = (f) => (f.dir && out.where?.you && f.dir === out.where.you ? 'you' : 'project');
+  const facts = [...out.added, ...out.replaced.map((r) => ({ ...r.fact, dir: r.dir }))];
+  const you = facts.filter((f) => about(f) === 'you').length;
+  const split = out.where?.you && facts.length ? [you && `${you} about you`, facts.length - you && `${facts.length - you} about this project`].filter(Boolean).join(', ') : '';
   const first = out.added[0] ?? out.replaced[0]?.fact;
-  return `Memory: ${parts.join(', ')}${first ? ` · "${one(first.text, 70)}${first.text.length > 70 ? '…' : ''}"` : ''} · /memory shows it, /memory undo takes it back`;
+  return `Memory: ${parts.join(', ')}${split ? ` · ${split}` : ''}${first ? ` · "${one(first.text, 70)}${first.text.length > 70 ? '…' : ''}"` : ''}${failed.length ? ` · ${failed.join(' · ')}` : ' · /memory shows it, /memory undo takes it back'}`;
 }
 
 // First use in a project: what is already written becomes the first facts.

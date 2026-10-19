@@ -82,7 +82,7 @@ test('a save: each fact goes to its memory, says where it came from, and the tur
   expect(readFacts(you).map((f) => f.kind)).toEqual(['you']);
   expect(readFacts(project).map((f) => f.kind).sort()).toEqual(['mistake', 'worked']);
   expect(lessons.every((l) => l.saved)).toBe(true);
-  expect(saveLine(out)).toBe('Memory: 3 saved · "Answer the question that was asked before explaining anything else." · /memory shows it, /memory undo takes it back');
+  expect(saveLine(out)).toBe('Memory: 3 saved · 1 about you, 2 about this project · "Answer the question that was asked before explaining anything else." · /memory shows it, /memory undo takes it back');
   // asked on one focused request, with the forced shape
   expect(fake.requests).toHaveLength(1);
   expect(fake.requests[0].response_format.type).toBe('json_schema');

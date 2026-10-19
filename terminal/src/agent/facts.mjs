@@ -36,9 +36,12 @@ export const FIRST_FACTS = [
 // AGENTIC_MEMORY names another folder for what holds for you; with
 // AGENTIC_HOME set (a test's own home for Agentic Coder's files) it is kept in
 // there, so a test never reads or writes the real one.
-export function memoryDirs(cwd, home = homedir()) {
+export function youDir(home = homedir()) {
   const other = process.env.AGENTIC_MEMORY || (process.env.AGENTIC_HOME ? join(process.env.AGENTIC_HOME, 'memory-about-you') : null);
-  const you = (home === homedir() && other) || join(home, '.agentic', 'memory');
+  return (home === homedir() && other) || join(home, '.agentic', 'memory');
+}
+export function memoryDirs(cwd, home = homedir()) {
+  const you = youDir(home);
   const notes = memoryFile(cwd, home);
   const project = resolve(dirname(dirname(notes))) === resolve(home) ? null : join(dirname(notes), 'memory');
   return { you, project };
