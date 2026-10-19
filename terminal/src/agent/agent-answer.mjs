@@ -43,6 +43,18 @@ export class AnswerPart {
     // An answer to a question from Claude's notes in place of the request: back once with the request.
     const chasedNow = !this.turn.noteChased ? this.noteChaseDue(`${turn.reasoning ?? ''}\n${text}`) : '';
     if (chasedNow) { this.messages.push({ role: 'user', content: auto(chasedNow.replace(/^\(|\)$/g, '')) }); return 'continue'; }
+    // The page the request names, never tried (Look before answering): the answer goes back once, with the
+    // tool to use; the second time a line under it says the page was not read. Before a question to the user ends the
+    // message, as the ssh one (18 Oct 2026): "Could you paste the page's text?" with nothing tried had ended it.
+    if (this.turn.web?.urls?.length && !this.turn.fetched && !this.isHelper && this.hook('look-first') && text.trim()) {
+      if (!this.turn.webBack) {
+        this.turn.webBack = true;
+        this.emit('note', { text: `It answered without reading ${this.turn.web.urls[0]}; told it to read the page with WebFetch.`, tone: 'warn' });
+        this.messages.push({ role: 'user', content: auto(`You answered without reading ${this.turn.web.urls.slice(0, 3).join(', ')}. WebFetch is one of your tools here and this address is allowed: call it now, then answer from what the page shows. If it fails, tell the user exactly what it answered; do not say you cannot reach the internet without trying.`) });
+        return 'continue';
+      }
+      this.emit('note', { text: `Answered without reading ${this.turn.web.urls[0]}: what it says about that page is not from the page.`, tone: 'warn' });
+    }
     // The server the request names, never tried in Bypass (tools/ssh.mjs): Qwen3.6 wrote "I'll run the SSH command"
     // with it in a shell block, promised a password prompt and ended (18 Oct 2026). Back once, then a line under it.
     // Before a question to the user ends the message: at 8:09 PM the same day it answered "What would you like to do
@@ -112,17 +124,6 @@ export class AnswerPart {
         return 'continue';
       }
       this.emit('note', { text: 'Answered without looking at the project\'s files: check it before you rely on it.', tone: 'warn' });
-    }
-    // The page the request names, never tried (Look before answering): the answer goes back once, with the
-    // tool to use; the second time a line under it says the page was not read.
-    if (this.turn.web?.urls?.length && !this.turn.fetched && !this.isHelper && this.hook('look-first') && text.trim()) {
-      if (!this.turn.webBack) {
-        this.turn.webBack = true;
-        this.emit('note', { text: `It answered without reading ${this.turn.web.urls[0]}; told it to read the page with WebFetch.`, tone: 'warn' });
-        this.messages.push({ role: 'user', content: auto(`You answered without reading ${this.turn.web.urls.slice(0, 3).join(', ')}. WebFetch is one of your tools here and this address is allowed: call it now, then answer from what the page shows. If it fails, tell the user exactly what it answered; do not say you cannot reach the internet without trying.`) });
-        return 'continue';
-      }
-      this.emit('note', { text: `Answered without reading ${this.turn.web.urls[0]}: what it says about that page is not from the page.`, tone: 'warn' });
     }
     // Files that exist: an answer that names files not in the project (and not made this
     // message, nor named in the request) goes back once; the second time, a line says which.

@@ -266,6 +266,32 @@ test('a page the request names is read before anything is written about it, and 
   } finally { await fake.close(); site.close(); }
 });
 
+// 18 Oct 2026, the owner, after the same slip with ssh: an answer that ends with a question to the user ended the
+// message before the send-back above was looked at, so a page never tried went unread.
+test('an answer that asks the user about a page it never tried goes back to read it first', async () => {
+  const { createServer } = await import('node:http');
+  const site = createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.end('<html><body><main><h1>Thesis API</h1><p>POST /calculate takes a formula.</p></main></body></html>'); });
+  await new Promise((r) => site.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${site.address().port}/api/docs`;
+  const home = mkdtempSync(join(tmpdir(), 'agentic-run3-home8-'));
+  const fake = await startFakeServer([
+    { text: "I can't open web pages from here. Could you paste the page's text, or tell me what you need from it?" },
+    { tool: { name: 'WebFetch', args: { url } } },
+    { text: 'The page says POST /calculate takes a formula.' }, { text: 'again' },
+  ]);
+  try {
+    const a = agentOn(fake.url, { home, mode: 'bypass', hooks: ['look-first'], web: { search: 'off', fetch: true } });
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    await a.send(`what does ${url} say about calculate?`);
+    const back = a.messages.filter((m) => m.role === 'user' && String(m.content).includes('You answered without reading'));
+    expect(back).toHaveLength(1);
+    expect(notes).toContain(`It answered without reading ${url}; told it to read the page with WebFetch.`);
+    expect(a.messages.filter((m) => m.role === 'tool' && !m.opening).some((m) => String(m.content).includes('POST /calculate takes a formula'))).toBe(true);
+    expect(a.messages.at(-1).content).toBe('The page says POST /calculate takes a formula.');
+  } finally { await fake.close(); site.close(); }
+});
+
 test('a command that names a Desktop that is not this user\'s runs with their own, and says so', async () => {
   const was = process.env.AGENTIC_DESKTOP_DEFAULT;
   process.env.AGENTIC_DESKTOP_DEFAULT = 'on';
