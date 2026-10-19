@@ -8,15 +8,21 @@ import { isHomeFolder } from './prompt.mjs';
 import { emptyOf, pageReadLine, pageReadNote, readPage } from './page-read.mjs';
 import { askedThing, briefAsk, designSettings, parseBrief, savePick } from './design.mjs';
 import { complete } from '../flows/llm.mjs';
-import { endpointOf } from '../../../models/index.mjs';
-import { buildNote, buildStyles, isBuilt, themeFor, withLook } from './studio.mjs';
+import { HOME } from '../../../models/index.mjs';
+import { buildNote, buildStyles, isBuilt, readTheme, themeFor, withLook } from './studio.mjs';
+import { lookTheme } from './library.mjs';
+import { addRule, hasStylesOf, markOffered, offeredBefore, projectDesignMd, writeDesignMd, yourDesignMd } from './design-system.mjs';
+import { pagePictures } from '../flows/page-pictures.mjs';
 import { findChrome, layoutCheck, layoutNote, needsServer, pagesToCheck } from '../flows/layoutcheck.mjs';
 import { findProjects, foldersNamed, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { wantsDesktop } from '../flows/words.mjs';
-import { canQuickLook, checkPagePicture, screenshotPage } from './helper-models.mjs';
+import { canQuickLook, reviewPageSheet, screenshotPage } from './helper-models.mjs';
 import { CHECK_IT, asksForWork, auto, looksGood, missingParts, wantsCheck } from './agent-said.mjs';
+
+// Look and fix twice (plan A, 18 Oct 2026): the most rounds of the layout check and the scored look before you are asked.
+const POLISH_ROUNDS = 2;
 
 export class PagesPart {
   // Outside a project, a request naming one ("the chart bug in MAIN2026") asks
@@ -71,7 +77,9 @@ export class PagesPart {
     // A look the request asked for (library.mjs): its meta line on the page, and its colours in the build.
     html = withLook(html, this.turn?.studio?.look);
     let r;
-    try { r = await buildStyles(html, { theme: themeFor(html) }); } catch (e) {
+    // A project's own DESIGN.md (design-system.mjs): its colours, unless the request named a look.
+    const theme = this.turn?.projectLook && !this.turn?.studio?.look ? lookTheme(this.turn.projectLook, readTheme()) : themeFor(html);
+    try { r = await buildStyles(html, { theme }); } catch (e) {
       this.emit('note', { text: `Could not build the styles into ${prepared.rel}: ${e.message}.`, tone: 'warn' });
       return null;
     }
@@ -169,16 +177,16 @@ export class PagesPart {
       const question = `${names} ${pages.length === 1 ? 'is' : 'are'} saved${opened ? ' and open in your browser' : ''}${this.polishSaid()}. Have a look: is ${it} right?`;
       const id = `page_${Date.now()}`;
       this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
-      const answer = await this.ask({ id, name: 'Ask', kind: 'page', args: { question, options: ['Looks good', ...(canCheck ? [CHECK_IT] : [])] }, prepared: {}, label: 'Ask', arg: question });
+      const answer = await this.ask({ id, name: 'Ask', kind: 'page', args: { question, options: ['Looks good', ...(t.design ? ['Not quite'] : []), ...(canCheck ? [CHECK_IT] : [])] }, prepared: {}, label: 'Ask', arg: question });
       if (signal?.aborted) return { end: 'interrupted' };
       const text = (answer.text ?? answer.feedback ?? '').trim();
       if (answer.choice === 'no' && !text) return { end: 'declined' }; // "Stop here"
       this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || 'Looks good' } });
-      if (!text || looksGood(text)) { await this.offerPick(pages, signal); return end(`Saved ${pages.join(' and ')}. You looked at ${it} and said ${it} looks good, so nothing more was checked.`); }
+      if (!text || looksGood(text)) { await this.offerPick(pages, signal); await this.offerDesignMd(pages, signal); return end(`Saved ${pages.join(' and ')}. You looked at ${it} and said ${it} looks good, so nothing more was checked.`); }
       if (!wantsCheck(text) || !canCheck) {
         // "No, this is wrong" and little more: what is wrong, as choices; then back with that and the request.
         let what = '';
-        const wrong = /^\W*(no|nope|wrong|not right|this is wrong|that'?s wrong|incorrect|bad)\b/i.test(text) && text.split(/\s+/).length <= 8;
+        const wrong = /^\W*(no|nope|wrong|not right|not quite|this is wrong|that'?s wrong|incorrect|bad)\b/i.test(text) && text.split(/\s+/).length <= 8;
         if (wrong) {
           const q = pageWrongQuestion(names);
           const id2 = `pagewrong_${Date.now()}`;
@@ -188,6 +196,10 @@ export class PagesPart {
           what = String(a2.text ?? a2.feedback ?? '').trim();
           if (what) this.emit('tool', { id: id2, name: 'Ask', label: 'Ask', arg: q.question, view: { kind: 'answer', question: q.question, text: what } });
         }
+        // What the user says in their own words can be kept for every page (plan A: "Not quite keeps a rule").
+        const own = wrong ? (pageWrongQuestion(names).options.includes(what) ? '' : what) : text;
+        if (own) await this.offerRule(own, signal);
+        if (signal?.aborted) return { end: 'interrupted' };
         // An instruction ("make the total bold") goes back as it was; "wrong" with its detail and the request.
         if (!wrong) return { send: `[Page] You stopped after saving ${names} so the user could look at ${it}. The user answered: ${text}\nFollow that.` };
         const asked = String(t.task ?? t.request ?? '').split('\n\n(')[0].replace(/\s+/g, ' ').trim();
@@ -327,48 +339,47 @@ export class PagesPart {
   // is on, when it is on another machine and can see (Qwen3.6 on the Ollama service, gemma4 on the other);
   // else UI design · checks (/subagents), another model on the same Ollama service. Before, only that
   // helper looked, so a main model that sees never did. Not the Claude API, not this Mac's model, for now.
+  // Since 18 Oct 2026 every model (the owner: "Both, same quality", then "i do want this to be apart of any model used in
+  // the agentic coder"): the Claude API, a service's model and the one on this Mac, whichever sees; else the helper.
   pageReviewer() {
-    if (this.isHelper || !this.model?.remote || endpointOf(this.url)?.kind === 'claude') return null;
+    if (this.isHelper) return null;
     if (this.canSee) return { model: this.model, name: this.model.remote?.model ?? this.model.name };
     const use = this.helperUse('designCheck');
     return use ? { use, name: use.model } : null;
   }
 
-  // Fix + review, then ask (8 Oct 2026, the owner's pick): a page saved for a request is not shown to you
-  // as the model first wrote it. The layout check (under a second, no model) sends what is broken back
-  // once; then the reviewer looks at a picture of it and sends what looks off back once; then it opens and
-  // you are asked (askPage). → the text that goes back, or null when it is ready for you.
-  // /design polish off (AGENTIC_DESIGN_POLISH=off): asked at once, as before.
+  // Fix + review, then ask (8 Oct 2026, the owner's pick): a page saved for a request is not shown to you as the
+  // model first wrote it. Since 18 Oct 2026 (plan A, "look and fix twice"), up to POLISH_ROUNDS rounds, each the layout
+  // check (under a second, no model) and the reviewer's scores on the page four ways (lookAtPages); what either finds
+  // goes back as one message; a round that finds nothing ends it, and then it opens and you are asked (askPage).
+  // /design polish off (AGENTIC_DESIGN_POLISH=off): asked at once, as before. → the text that goes back, or null.
   async polishPage(signal) {
     const t = this.turn;
     if (!t || !designSettings(this.designSaved).polish) return null;
     t.polish ??= {};
-    if (!t.polish.checked) {
-      t.polish.checked = true;
-      const found = await this.checkLayout(false, { send: true });
-      if (found) { t.polish.broken = t.layout?.found?.length ?? 1; return found; }
-    }
-    if (!t.polish.reviewed && !signal?.aborted) {
-      t.polish.reviewed = true;
-      const found = await this.lookAtPages(signal);
-      if (found) return found;
-    }
-    return null;
+    if (t.polish.done || (t.polish.rounds ?? 0) >= POLISH_ROUNDS || signal?.aborted) return null;
+    t.polish.rounds = (t.polish.rounds ?? 0) + 1;
+    const found = await this.checkLayout(t.polish.rounds > 1, { send: true });
+    if (found) { t.polish.broken = Math.max(t.polish.broken ?? 0, t.layout?.found?.length ?? 1); t.polish.brokenRounds = (t.polish.brokenRounds ?? 0) + 1; }
+    const looks = signal?.aborted ? null : await this.lookAtPages(signal);
+    const back = [found, looks].filter(Boolean);
+    if (!back.length) t.polish.done = true;
+    return back.length ? back.join('\n\n') : null;
   }
 
   // What went before you were asked, for the question: '' when nothing ran.
   polishSaid() {
     const p = this.turn?.polish;
     if (!p || (!this.turn.layout?.ran && !p.looked)) return '';
-    const parts = [p.broken ? `${p.broken} layout problem${p.broken === 1 ? '' : 's'} sent back` : this.turn.layout?.ran ? 'nothing broken' : '', p.looked ? (p.looks ? `${p.looks} design note${p.looks === 1 ? '' : 's'} from ${p.looked} sent back` : `${p.looked} saw nothing off`) : ''].filter(Boolean);
+    const parts = [p.broken ? `${p.broken} layout problem${p.broken === 1 ? '' : 's'} sent back${p.brokenRounds > 1 ? `, ${p.brokenRounds} rounds` : ''}` : this.turn.layout?.ran ? 'nothing broken' : '', p.looked ? (p.looks ? `${p.looks} design note${p.looks === 1 ? '' : 's'} from ${p.looked} sent back` : `${p.looked} saw nothing off`) : '', p.score != null ? `its design score ${p.score}/5${p.first != null && p.first !== p.score ? ` (from ${p.first})` : ''}` : ''].filter(Boolean);
     return parts.length ? ` (checked first: ${parts.join(', ')})` : '';
   }
 
   // The page plan (design.mjs briefAsk; the owner's pick "Plan before writing"): six lines from the model
-  // the window is on, before its first step on a page request. Where the review looks (the remote model,
-  // not the Claude API) and /design plan on (AGENTIC_DESIGN_BRIEF). → the plan, or null.
+  // the window is on, before its first step on a page request. On every model since 18 Oct 2026 (before, only one on
+  // another machine), with /design plan on (AGENTIC_DESIGN_BRIEF). → the plan, or null.
   async pageBrief(request, notes, signal) {
-    if (!designSettings(this.designSaved).brief || this.isHelper || !this.model?.remote || endpointOf(this.url)?.kind === 'claude') return null;
+    if (!designSettings(this.designSaved).brief || this.isHelper) return null;
     this.emit('busy', { task: 'planning the page' });
     const { system, user } = briefAsk(request, notes);
     try {
@@ -381,6 +392,51 @@ export class PagesPart {
       this.emit('note', { text: `Page plan skipped: ${e.message}.`, tone: 'dim' });
       return null;
     }
+  }
+
+  // "Not quite" (plan A, 18 Oct 2026): what you say is wrong with a page, in your own words, can be kept for every page
+  // from now on, under "Your rules" in your DESIGN.md (design-system.mjs addRule). Asked once a message, design pages only.
+  async offerRule(rule, signal) {
+    const t = this.turn;
+    const said = String(rule ?? '').replace(/\s+/g, ' ').trim();
+    if (!t?.design || t.ruleOffered || this.isHelper || !yourDesignMd() || said.length < 6 || said.length > 240) return;
+    t.ruleOffered = true;
+    const question = `Keep this for every page from now on? "${said}"`;
+    const id = `pagerule_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'page', args: { question, options: ['Just this page', 'Keep it as a rule'] }, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return;
+    const text = String(answer.text ?? answer.feedback ?? '').trim();
+    const keep = /\b(keep|rule|always|yes)\b/i.test(text) && !/^just\b/i.test(text);
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || 'Just this page' } });
+    if (!keep) return;
+    try { if (addRule(said)) this.emit('note', { text: 'Kept in your DESIGN.md (DESIGN/DESIGN.md) under Your rules: every page gets it from now on.', tone: 'dim' }); } catch (e) { this.emit('note', { text: `Could not keep it: ${e.code ?? e.message}.`, tone: 'warn' }); }
+  }
+
+  // A DESIGN.md offered once a project (plan A: "Your look, then offer one"): a project with styles of its own and no
+  // DESIGN.md gets your look; after a page you call good there, it is asked once whether to write one from its styles
+  // (design-system.mjs writeDesignMd), so later pages keep the project's look. Not in the home folder or on the Desktop.
+  async offerDesignMd(pages, signal) {
+    const t = this.turn;
+    const cwd = this.cwd;
+    if (!t?.design || t.mdOffered || this.isHelper || !cwd) return;
+    t.mdOffered = true;
+    const project = existsSync(join(cwd, '.git')) || existsSync(join(cwd, 'package.json'));
+    if (!project || isHomeFolder(cwd) || resolve(cwd) === join(homedir(), 'Desktop') || projectDesignMd(cwd) || offeredBefore(HOME, cwd) || !hasStylesOf(cwd, pages)) return;
+    const question = `${basename(cwd)} has no DESIGN.md: pages here took your look. Write one from the project's own styles, so the pages made here keep its look?`;
+    const id = `designmd_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'page', args: { question, options: ['Yes, write DESIGN.md', 'No'] }, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return;
+    const text = String(answer.text ?? answer.feedback ?? '').trim();
+    const yes = answer.choice === 'yes' || /^(yes|y|write|ok|okay|sure)\b/i.test(text);
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || (yes ? 'Yes, write DESIGN.md' : 'No') } });
+    markOffered(HOME, cwd, yes ? 'yes' : 'no');
+    if (!yes) return;
+    try {
+      const r = writeDesignMd(cwd);
+      this.emit('note', r.abs ? { text: `Wrote DESIGN.md from ${basename(cwd)}'s styles: pages made here keep its look. Edit it to change them.`, tone: 'dim' } : { text: r.exists ? 'This project has a DESIGN.md already.' : 'No styles to read here.', tone: 'dim' });
+    } catch (e) { this.emit('note', { text: `Could not write DESIGN.md: ${e.code ?? e.message}.`, tone: 'warn' }); }
   }
 
   // Learn from "Looks good" (the owner's pick): a page made for a design request that you call good can be
@@ -407,39 +463,42 @@ export class PagesPart {
     } catch (e) { this.emit('note', { text: `Could not keep ${basename(rel)}: ${e.code ?? e.message}.`, tone: 'warn' }); }
   }
 
-  // Each page this message changed, as a picture, looked at by the reviewer (pageReviewer).
-  // Answers the message that goes back, or null.
+  // Each page this message changed, four ways in one picture (desktop and phone, light and dark: flows/
+  // page-pictures.mjs; a desktop picture where Chrome cannot make it), scored by the reviewer on the design guide's six
+  // points (helper-models.mjs reviewPageSheet). Answers the message that goes back, or null.
   async lookAtPages(signal) {
     const who = this.pageReviewer();
     if (!who || !(this.turn?.startTexts?.size || this.madePages().length)) return null;
     const use = who.use;
     const pages = pagesToCheck(this.cwd, [...(this.turn.startTexts?.keys() ?? []), ...this.madePages()]);
     if (!pages.length) return null;
-    // No Chrome: a Mac takes the picture with Quick Look (helper-models.mjs screenshotPage).
     const chrome = findChrome();
     if (!chrome && !canQuickLook()) return null;
     const notes = [];
     const p = (this.turn.polish ??= {});
     for (const rel of pages) {
       const abs = resolvePath(this.cwd, rel).abs;
-      const image = screenshotPage(abs, chrome);
+      const image = (chrome ? await pagePictures(abs, { chrome }) : null) ?? screenshotPage(abs, chrome);
       if (!image) continue;
-      this.emit('busy', { task: `${who.name} looks at a picture of ${basename(rel)}` });
-      this.emit('note', { text: `UI design: ${who.name} looks at ${rel}…`, tone: 'dim' });
+      const ways = image.views?.length ? 'four ways' : 'on a desktop';
+      this.emit('busy', { task: `${who.name} looks at ${basename(rel)} ${ways}` });
+      this.emit('note', { text: `UI design: ${who.name} looks at ${rel} ${ways}…`, tone: 'dim' });
       try {
-        const r = await checkPagePicture({ url: this.url, use, model: use ? undefined : who.model, image, page: rel, request: this.turn.request, brief: this.turn.brief, signal });
+        const r = await reviewPageSheet({ url: this.url, use, model: use ? undefined : who.model, image, page: rel, request: this.turn.request, brief: this.turn.brief, round: p.rounds ?? 1, signal });
         p.looked = who.name;
-        if (r.ok) { this.emit('note', { text: `UI design: ${who.name} says ${rel} looks right (${r.secs.toFixed(0)} s).`, tone: 'dim', check: { title: 'Design look', page: rel, problems: [], ok: 'looks right', where: `${r.secs.toFixed(0)} s` } }); continue; }
+        if (r.score != null) { p.first ??= r.score; p.score = r.score; p.scores = r.scores; }
+        const scored = r.score != null ? `${r.score}/5 · ${Object.entries(r.scores).map(([k, v]) => `${k} ${v}`).join(' · ')}` : '';
+        if (r.ok) { this.emit('note', { text: `UI design: ${who.name} says ${rel} looks right${scored ? ` (${scored})` : ''} (${r.secs.toFixed(0)} s).`, tone: 'dim', check: { title: 'Design look', page: rel, problems: [], ok: scored || 'looks right', where: `${r.secs.toFixed(0)} s` } }); continue; }
         p.looks = (p.looks ?? 0) + r.findings.length;
-        this.emit('note', { text: `UI design: ${who.name} sees ${r.findings.length} thing${r.findings.length === 1 ? '' : 's'} to change in ${rel}: ${r.findings.join(' · ')}`, tone: 'warn', check: { title: 'Design look', page: rel, problems: r.findings, bad: `${r.findings.length} to change`, where: `${r.secs.toFixed(0)} s`, sent: true } });
-        notes.push(`${rel}:\n${r.findings.map((f) => `- ${f}`).join('\n')}`);
+        this.emit('note', { text: `UI design: ${who.name} sees ${r.findings.length} thing${r.findings.length === 1 ? '' : 's'} to change in ${rel}${scored ? ` (${scored})` : ''}: ${r.findings.join(' · ')}`, tone: 'warn', check: { title: 'Design look', page: rel, problems: r.findings, bad: `${r.findings.length} to change`, where: `${r.secs.toFixed(0)} s`, sent: true } });
+        notes.push(`${rel}${r.score != null ? ` (scored ${r.score}/5)` : ''}:\n${r.findings.map((f) => `- ${f}`).join('\n')}`);
       } catch (e) {
         if (signal?.aborted) throw e;
         this.emit('note', { text: `UI design look skipped: ${who.name} did not answer (${e.message}).`, tone: 'dim' });
         return null;
       }
     }
-    return notes.length ? `A model that can see looked at a screenshot of the page (1440 px wide) as a designer would and suggests these changes (it can be wrong):\n${notes.join('\n')}\nMake the ones that are real with Edit, keeping what already works; then say what you changed in one sentence.` : null;
+    return notes.length ? `A model that can see looked at the page as a person meets it (a desktop window and a phone, light and dark), as a designer would, and scored it on the design guide (it can be wrong):\n${notes.join('\n')}\nMake the ones that are real with Edit, keeping what already works; then say in one sentence what you changed.` : null;
   }
 
   // What a reader sees of each page this message wrote (page-read.mjs, at most 3, newest first): a line

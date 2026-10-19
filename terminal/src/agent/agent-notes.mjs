@@ -9,6 +9,7 @@ import { LOOK_NOTE, LOOK_NOTE_DATA } from './look.mjs';
 import { skillNote } from './prompt-files.mjs';
 import { mathNotes } from './expertise.mjs';
 import { briefNote, designNotes, designSettings, isDesignRequest, mixTurn, pickCards } from './design.mjs';
+import { systemNotes } from './design-system.mjs';
 import { pickPieces, studioNotes, usesReact, pickLookFor } from './studio.mjs';
 import { lookCard } from './library.mjs';
 import { LEAN_NOTE } from './way.mjs';
@@ -130,15 +131,20 @@ export class NotesPart {
         const studio = pieces?.pieces.length && !yours ? studioNotes(pieces, undefined, { look }) : null;
         // mix: opus and fable take turns, one page request each (the turn is taken only when the cards go).
         const style = !studio && design.style === 'mix' ? mixTurn() : design.style;
-        const cards = designNotes(studio ? { ...pick, examples: [], more: [], look: null } : pick);
+        // The design system (design-system.mjs, plan A of 18 Oct 2026): the look (the project's DESIGN.md, else yours,
+        // which takes the rules cards' place), the guide, and the bank's whole page of the kind asked for.
+        const sys = systemNotes(text, { cwd: this.cwd, ctx: this.ctx });
+        const own = sys.look ? { ...pick, always: [] } : pick;
+        const cards = designNotes(studio ? { ...own, examples: [], more: [], look: null } : own);
         // A look with the cards (no pieces): its card, used in the page's own CSS.
         const lookText = look && !studio ? `This page takes the ${look.name} look (asked for): use the colours, type and corners below in place of the rules card's look. Never the brand's name, logo or words on the page.\n${lookCard(look)}` : null;
-        const notes = cards || studio ? { text: [cards?.text, studio?.text, lookText].filter(Boolean).join('\n\n'), names: [...(cards?.cards ?? []).map((c) => c.file.replace(/\.md$/i, '')), ...(studio?.pieces ?? []).map((p) => `studio/${p.file.replace(/^components\//, '').replace(/^library\/(?:pieces|react)\//, '').replace(/\.(html?|tsx?)$/i, '')}`), ...(look ? [`look/${look.id}`] : [])] } : null;
+        const notes = sys.text || cards || studio ? { text: [sys.text, cards?.text, studio?.text, lookText].filter(Boolean).join('\n\n'), names: [...sys.names, ...(cards?.cards ?? []).map((c) => c.file.replace(/\.md$/i, '')), ...(studio?.pieces ?? []).map((p) => `studio/${p.file.replace(/^components\//, '').replace(/^library\/(?:pieces|react)\//, '').replace(/\.(html?|tsx?)$/i, '')}`), ...(look ? [`look/${look.id}`] : [])] } : null;
         if (notes) {
           // The page plan: six lines from the model before it writes (agent-pages.mjs pageBrief).
           const brief = await this.pageBrief(text, notes.text, signal);
           if (brief) { notes.text += `\n\n${briefNote(brief)}`; this.turn.brief = brief; }
           this.turn.design = { request, notes: notes.text, cards: notes.names };
+          this.turn.projectLook = sys.look?.from === 'project' ? sys.look.look : null;
           if (studio) this.turn.studio = { pieces: studio.pieces.map((p) => p.file), look: studio.pieces.every((p) => p.react) ? null : look?.id ?? null };
           this.ctxUsed += tokensOf(notes.text);
           // `design` names the cards for the screen (it folds them into the line under your message).

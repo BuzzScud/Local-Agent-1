@@ -507,7 +507,7 @@ async function fetchFor(url, ms) {
   finally { clearTimeout(t); }
 }
 // Chrome with its debugging connection on a free port: send(method, params, session) → result.
-async function devtools(chrome, scratch) {
+export async function devtools(chrome, scratch) {
   const proc = spawn(chrome, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--mute-audio',
     `--user-data-dir=${join(scratch, 'profile-address')}`, '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', ...(platform() === 'linux' ? ['--no-sandbox'] : []), 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const kill = () => { try { proc.kill('SIGKILL'); } catch {} };

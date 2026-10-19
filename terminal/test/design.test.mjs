@@ -8,6 +8,10 @@ import { needs } from './needs.mjs';
 import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { BRIEF_SYSTEM } from '../src/agent/design.mjs';
+const PLAN = { text: 'Main thing: the figure\nSize: a card 380 px wide, centred\nParts: title, figure, change\nLook: the theme\nStates: none\nPhone: full width' };
+// The page plan is asked before the model's first step (agent-pages.mjs pageBrief): answered out of turn, so the scripted replies stay the steps'.
+const planRoute = (j) => (j.messages?.[0]?.content === BRIEF_SYSTEM ? PLAN : null);
 
 const FIX = join(tmpdir(), `agentic-design-fixture-${process.pid}`);
 process.env.AGENTIC_DESIGN_DIR = FIX;
@@ -48,6 +52,8 @@ const PAGES = ['make a dashboard for my xmr miner fleet', 'create a self contain
   'make a page that shows the test results before and after', 'restyle index.html so it looks more modern', 'make my portfolio site look better', 'build a todo list app',
   'make a countdown timer', 'make a table of my github repos with sort and filter', 'create a login form', 'design a pricing page', 'add a dark mode to the page',
   'can you make a landing page for my trading app?', 'the settings screen looks dated, redesign it',
+  // a page asked for as an HTML file whose words name its own script (18 Oct 2026: both got no design help)
+  'Build one self-contained HTML file for a dashboard. Make up believable data in the script. Save it as shop.html in this folder.', 'Build one HTML file for a project board with cards made up in the script.',
   // the kinds the first cards had nothing for (29 Sep): each is a page when asked for this way
   'make a chat window like messages', 'make a map of my stores', 'make a music player', 'show my sales as a bar chart', 'make a profile card',
   'build a timeline of the project', 'make a small game in the browser', 'build a photo gallery', 'create a kanban board for my tasks', 'make a calendar for this month',
@@ -57,7 +63,7 @@ const PAGES = ['make a dashboard for my xmr miner fleet', 'create a self contain
   'make a survey about lunch', 'add an empty state to the notes list', 'make a pricing table with 3 plans', 'make a 404 page', 'build a docs site for my library',
   'make a receipt for the order', 'make a playful landing page'];
 const NOT = ['fix the bug in export.py', 'what does the dashboard do?', 'add a --json flag to export.mjs', 'rename total to sum', 'add unit tests for the parser',
-  'make the chart function faster', 'build the app', 'add a column to the users table', 'why is the page blank?', 'update the api route for /users', 'write a python script that renames my photos',
+  'make the chart function faster', 'build the app', 'add a column to the users table', 'why is the page blank?', 'update the api route for /users', 'write a python script that renames my photos', 'write a python script that reads index.html and prints its links',
   'explain how the reranker works', 'run the tests',
   'add a map from user ids to names', 'build a chat bot that answers in slack', 'add a card field to the payment endpoint', 'add a player class to the engine',
   'show the logs in the terminal', 'what does the calendar do?', 'plot the loss curve in a graph with matplotlib', 'make a chart of the results in a jupyter notebook',
@@ -372,7 +378,7 @@ test.skipIf(needs('chrome', () => chrome))('the agent: a page request brings the
     { tool: { name: 'Edit', args: { path: 'dash.html', old_text: 'grid-template-columns:300px 300px', new_text: 'grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr))' } } },
     { tool: { name: 'Edit', args: { path: 'dash.html', old_text: 'color:#c8c8c8', new_text: 'color:#595959' } } },
     { text: 'The grid now wraps on a phone and the date is darker.' },
-  ]);
+  ], { route: planRoute });
   const notes = [];
   const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, ctx: 32768, mode: 'edits', flows: false, verify: false, checkIns: false, ask: async () => ({ choice: 'yes' }), design: { auto: true, check: true } });
   agent.on('note', (e) => notes.push(e.text));
@@ -383,10 +389,12 @@ test.skipIf(needs('chrome', () => chrome))('the agent: a page request brings the
     await fake.close();
   }
   // the cards went with the request, and said so
-  expect(notes.some((t) => /^Design examples: your rules\/rules \+ opus\/dashboard \(≈[\d,]+ tokens\)\.$/.test(t))).toBe(true);
-  expect(JSON.stringify(fake.requests[0].messages)).toContain('[Example · DESIGN/opus/dashboard.md]');
+  expect(notes.some((t) => /^Design examples: the design guide \+ your rules\/rules \+ opus\/dashboard \(≈[\d,]+ tokens\)\.$/.test(t))).toBe(true);
+  // the model's steps (the page plan is asked apart, before them)
+  const steps = fake.requests.filter((r) => r.messages?.[0]?.content !== BRIEF_SYSTEM);
+  expect(JSON.stringify(steps[0].messages)).toContain('[Example · DESIGN/opus/dashboard.md]');
   // what was broken went back once, in plain words
-  const back = JSON.stringify(fake.requests[2].messages.at(-1));
+  const back = JSON.stringify(steps[2].messages.at(-1));
   expect(back).toContain('The layout check opened dash.html in a browser');
   expect(back).toContain('scrolls sideways');
   expect(notes.some((t) => /^Layout check, dash\.html: \d+ problems?/.test(t))).toBe(true);
