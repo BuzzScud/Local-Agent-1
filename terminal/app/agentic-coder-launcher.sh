@@ -11,6 +11,8 @@
 #   AGENTIC_NO_UPDATE=1 coding   starts the app as it is, without asking GitHub or building.
 #   AGENTIC_NO_PULL=1 coding     does not ask GitHub: builds the main this Mac last saw.
 #   AGENTIC_BUILD_ONLY=1 coding  builds and installs as a start does, then ends (bun run install-cli).
+#   AGENTIC_ON_OPEN=1 coding     what a Terminal opening runs (the lines on_open_hook puts in ~/.zshrc): asks GitHub and
+#                                builds as a start does, at most once every 10 minutes, without starting the app.
 REPO="${AGENTIC_REPO:-__REPO__}"
 APP="$HOME/.agentic-coder/app/agentic-coder"
 SRC="$HOME/.agentic-coder/build/main"
@@ -259,12 +261,68 @@ window_shell() {
     window-build "$lock" "$ws" "$tree" "$WIN" "$failed" >"$wlog" 2>&1 </dev/null &
 }
 
+# A Terminal that opens updates Agentic Coder (18 Oct 2026, the owner: "update it so if a terminal opens, it updates
+# from git"; their picks: in the background, on every Mac with coding). ~/.zshrc starts `AGENTIC_ON_OPEN=1 coding`
+# behind the prompt; on_open asks GitHub, pulls and builds as a start does, and ends without starting the app: at most
+# once every 10 minutes (AGENTIC_ON_OPEN_EVERY, minutes) and one at a time. A new version is said once, dim, at the
+# next prompt (the lines' precmd reads logs/on-open.said).
+on_open() {
+  stamp="$WHOME/logs/on-open.at"
+  lock="$WHOME/build/on-open.lock"
+  mkdir -p "$WHOME/logs" "$WHOME/build" || return 0
+  now_s="$(date +%s)"
+  last_s="$(cat "$stamp" 2>/dev/null)"
+  case "$last_s" in '' | *[!0-9]*) ;; *) [ $((now_s - last_s)) -lt $((${AGENTIC_ON_OPEN_EVERY:-10} * 60)) ] && return 0 ;; esac
+  if ! mkdir "$lock" 2>/dev/null; then
+    kill -0 "$(cat "$lock/pid" 2>/dev/null)" 2>/dev/null && return 0
+    rm -rf "$lock" && mkdir "$lock" 2>/dev/null || return 0
+  fi
+  echo $$ > "$lock/pid"
+  echo "$now_s" > "$stamp"
+  was="$(cat "$APP.commit" 2>/dev/null)"
+  fetch_main
+  pull
+  rebuild
+  window_shell
+  now="$(cat "$APP.commit" 2>/dev/null)"
+  if [ -n "$now" ] && [ "$now" != "$was" ]; then
+    printf "↻ Agentic Coder updated to GitHub's main (%s)\n" "$(printf '%s' "$now" | cut -c1-7)" > "$WHOME/logs/on-open.said"
+  fi
+  rm -rf "$lock"
+}
+# The lines in ~/.zshrc that start it, put there once by a start or bun run install-cli (the note on-open.hook says they
+# were, so lines you take out stay out). Only for zsh, the Mac's own shell; never with AGENTIC_ON_OPEN_HOOK=off (the
+# tests). A launchd service has no SHELL: the account's own shell is asked then.
+on_open_hook() {
+  [ "${AGENTIC_ON_OPEN_HOOK:-on}" = off ] && return 0
+  [ -e "$WHOME/on-open.hook" ] && return 0
+  sh_="${SHELL:-$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null | awk '{print $2}')}"
+  case "$sh_" in *zsh) ;; *) return 0 ;; esac
+  rc="${ZDOTDIR:-$HOME}/.zshrc"
+  if ! grep -qF '>>> Agentic Coder: update when a Terminal opens' "$rc" 2>/dev/null; then
+    cat >> "$rc" <<'ZSHRC' || return 0
+
+# >>> Agentic Coder: update when a Terminal opens (coding put these lines here; delete them to stop it) >>>
+if [ -x "$HOME/.local/bin/coding" ]; then
+  ( AGENTIC_ON_OPEN=1 nohup "$HOME/.local/bin/coding" >/dev/null 2>&1 </dev/null & )
+  _agentic_said() { local f="$HOME/.agentic-coder/logs/on-open.said"; [ -s "$f" ] && printf '\033[2m%s\033[0m\n' "$(cat "$f")" && rm -f "$f"; return 0; }
+  autoload -Uz add-zsh-hook && add-zsh-hook precmd _agentic_said
+fi
+# <<< Agentic Coder <<<
+ZSHRC
+    dim "Agentic Coder now updates itself from GitHub when a Terminal opens (lines added to $(tilde "$rc"); delete them to stop it)."
+  fi
+  mkdir -p "$WHOME" && date > "$WHOME/on-open.hook"
+}
+
 # The app learns where the repo (and its DOCS folder) is, and where to leave
 # the arguments for a restart. This script waits while it runs (it reads no
 # keys), so the app has the terminal to itself.
 mkdir -p "$(dirname "$RESTART")"
+if [ "${AGENTIC_ON_OPEN:-0}" = 1 ]; then on_open; exit 0; fi
 fetch_main
 pull
+on_open_hook
 if [ "${AGENTIC_BUILD_ONLY:-0}" = 1 ]; then rebuild; exit 0; fi
 while :; do
   rebuild

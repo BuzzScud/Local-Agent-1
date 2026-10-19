@@ -58,6 +58,8 @@ process.env.AGENTIC_OPEN ??= 'off';
 process.env.AGENTIC_SESSIONS ??= 'off';
 // The app the tests drive stays in its pretend terminal: never its own window (terminal/src/window/).
 process.env.AGENTIC_WINDOW ??= 'off';
+// The launcher a test runs never adds its lines to a ~/.zshrc (agentic-coder-launcher.sh on_open_hook).
+process.env.AGENTIC_ON_OPEN_HOOK ??= 'off';
 // Run from inside the window, an app a test starts never reaches that window's socket (bridge.mjs): each one that
 // did made the real window drop its conversation and flash the raw terminal (14 Oct 2026).
 delete process.env.AGENTIC_WINDOW_SOCK;
