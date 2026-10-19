@@ -34,6 +34,16 @@ How to make a page look designed, not generated. It comes with every request to 
 - Buttons look like buttons: one primary per view, the rest quiet. A disabled button stays readable.
 - Every state is designed: empty ("No invoices yet" and the next step), loading, error, and a long name.
 
+## Make it work
+- Every control does what its label says: a filter filters, a search searches, Next pages, Save saves and says so,
+  Delete asks and offers Undo, Export writes a real file (a Blob). Something that needs a server says so in a toast;
+  never a button that does nothing.
+- Keep the data in one list and the view in one state object, and draw the page from them with one function, so every
+  filter, sort, add and remove comes out right, and every count is counted, not typed.
+- Forms check on submit, say what is wrong beside the field and focus the first one. A dialog is `<dialog>` with
+  showModal; Esc closes it. Keys work: Enter sends, ← → move tabs, slides and charts.
+- Zero results say so with a way back. `[hidden]` needs `display: none !important` when a class sets display.
+
 ## Phone
 - From 390 px wide nothing scrolls sideways: grids use `minmax(0, 1fr)`, images `max-width: 100%`.
 - On a phone it becomes one column in the same order; touch targets are at least 40 px tall.

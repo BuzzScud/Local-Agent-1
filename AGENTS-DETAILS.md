@@ -1584,6 +1584,41 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   that ends keeps it), test-tmp.test (the process table, inside the fence, the stray sweep, the folder kept),
   end-with-run.test, app-hangup.test (a driver killed outright: its app ends), update.test (the Terminal-open sweep).
 
+## The design system: look, guide, bank of whole pages, styles (18 Oct 2026)
+
+- **What and why.** The owner: "i want to drastically improve / optimize the Agentic Coder Design System"; their picks
+  (plan A, every model the same): a project's DESIGN.md read first (else theirs, `DESIGN/DESIGN.md`), `/design init`
+  writing one from a project's styles, one short guide on every design request (`terminal/rules/DESIGN-GUIDE.md`),
+  a bank of whole pages picked by kind, a look-and-fix round with four pictures (desktop and phone, light and dark)
+  scored on six points, and "Not quite" kept as a rule. `terminal/src/agent/design-system.mjs`, `systemNotes`.
+- **The bank works, not only looks** (the owner: "add more design examples … make its designs better functionally
+  and mechanically"). The bank is private (`docs/private/design examples/bank/`: `src/<kind>/<id>.html` with
+  `/*BASE*/`, `src/base.css`, `src/meta.json`; `bun build.mjs <repo> [--only ids]` writes the pages, their four-way
+  pictures and `bank.json`, and runs the layout check WITH the click pass). 19 of its first 40 pages had buttons that
+  did nothing and 26 had no script, while models copy them; now every control does what it says (filters, search,
+  sort, pager, dialogs that check their fields, Undo, real CSV and .ics files, keys), 54 pages over 21 kinds (cards,
+  calendar, chat, docs, gallery, game, tool, article added), and a kind's `general` page wins a tie.
+- **What a model gets of a page** (`bankNote`): what it is for, its outline, **how it works** (meta.json `works`),
+  the skeleton, **its script** whole when it fits (`SCRIPT_CHARS`), and the base styles once (`base.css`, marked in
+  each page as `/* base: … */ … /* end base */`, `BASE_RE`). Before, the base CSS sat inside the skeleton and took
+  5,500 of its 6,000 characters: a model saw about 250 of the page's own markup. A model under 64k gets a shorter
+  skeleton, a script only under 1,500 characters and a pointer to `base.css`.
+- **The guide's "Make it work"**: every control does what its label says, one list and one state drawn by one
+  function, forms checked on submit with the message beside the field, `<dialog>`, keys, zero results with a way back,
+  and `[hidden] { display: none !important }` (the bank's base has it: a class setting display had kept hidden panels
+  in sight).
+- **Styles** (the owner's "taste cards for specific styles"): `DESIGN/styles/<id>.md`, a DESIGN.md each, with
+  `words:` (and optional `pictures:`, `links:`) in the front matter (`readStyleCards`, `pickStyle`: the earliest word,
+  the longer at one place; "dark mode" and "clean up" never pick one). A request that names one gets it in the
+  look's place, with the user's rules (`styleNote`); the cards' own look card is then left out (agent-notes.mjs). Ten
+  shipped privately: editorial, terminal, playful, brutalist, neon, swiss, earthy, luxury, retro, enterprise.
+- **The layout check, sharper** (`terminal/src/flows/layoutcheck.mjs`, found building the bank): text cut off with an
+  ellipsis counts only where it shows (`view`); text partly hidden by a box around it that does not scroll is a cut
+  (`cutBy`: a toolbar given a class the base styles made 8 px tall); the click pass counts a file picker opened as
+  done, closes a dialog a click opened (a modal makes the rest inert), names an icon button by its aria-label, finds a
+  button the page drew again by its name, and does not call the choice already made (aria-pressed, -selected,
+  -checked, -current) dead. Tests: `design.test.mjs`, `design-system.test.mjs`.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

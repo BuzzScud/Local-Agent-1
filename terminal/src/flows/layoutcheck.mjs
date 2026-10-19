@@ -88,6 +88,13 @@ const PROBE = String.raw`(function () {
     window.prompt = function () { acted++; return 'test'; };
     window.open = function () { acted++; return null; };
     window.print = function () { acted++; };
+    // A file picker opened (a "Change photo" or "Import" button clicks a hidden file box): the click did its job,
+    // though a headless page shows no picker (18 Oct 2026, the design bank's pages).
+    try {
+      var pick = HTMLInputElement.prototype.click;
+      HTMLInputElement.prototype.click = function () { if (this.type === 'file') { acted++; return undefined; } return pick.apply(this, arguments); };
+      if (HTMLInputElement.prototype.showPicker) HTMLInputElement.prototype.showPicker = function () { acted++; };
+    } catch (x) {}
     counts(URL, 'createObjectURL');
     counts(navigator.clipboard, 'writeText');
     counts(HTMLMediaElement.prototype, 'play');
@@ -122,7 +129,8 @@ const PROBE = String.raw`(function () {
     return true;
   }
   function opacity(el) { var o = 1; for (var e = el; e && e.nodeType === 1; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity); return o; }
-  function said(el) { return (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40); }
+  // What a button says, else its aria-label or title (an icon button: "Olive", not "button"), so each is told apart.
+  function said(el) { return ((el.innerText || el.textContent || '').trim() || (el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || '').replace(/\s+/g, ' ').slice(0, 40); }
   function tag(el) {
     var s = el.tagName.toLowerCase();
     if (el.id) s += '#' + el.id; else if (el.classList && el.classList.length) s += '.' + [].slice.call(el.classList, 0, 2).join('.');
@@ -147,14 +155,28 @@ const PROBE = String.raw`(function () {
       return !clipped(el) && shown(el) && (!pr || (pr.right <= W + 1 && pr.left >= -1));
     }).sort(function (a, b) { return b.getBoundingClientRect().right - a.getBoundingClientRect().right; });
     out.wide = wide.slice(0, 3).map(function (el) { var r = el.getBoundingClientRect(); var p = el.parentElement; return { el: name(el), inside: p && p !== body ? tag(p) : null, width: Math.round(r.width), right: Math.round(r.right), left: Math.round(r.left) }; });
-    // Elements with text of their own, and the boxes that text is drawn in.
+    // Elements with text of their own, and the boxes that text is drawn in: only the part that shows, so text cut
+    // off with "…" (overflow hidden on it or a box around it) is not counted where it is hidden (18 Oct 2026: an
+    // inbox row's preview line read as drawn over the message beside it).
+    function view(el) {
+      var box = { left: -1e9, top: -1e9, right: 1e9, bottom: 1e9 };
+      for (var e = el; e && e !== document.documentElement; e = e.parentElement) {
+        var cs = getComputedStyle(e);
+        if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+        var r = e.getBoundingClientRect();
+        if (cs.overflowX !== 'visible') { box.left = Math.max(box.left, r.left); box.right = Math.min(box.right, r.right); }
+        if (cs.overflowY !== 'visible') { box.top = Math.max(box.top, r.top); box.bottom = Math.min(box.bottom, r.bottom); }
+      }
+      return box;
+    }
+    function inView(r, v) { var x = Math.max(r.left, v.left), y = Math.max(r.top, v.top), x2 = Math.min(r.right, v.right), y2 = Math.min(r.bottom, v.bottom); return { left: x, top: y, right: x2, bottom: y2, width: x2 - x, height: y2 - y }; }
     var texts = [];
     for (var i = 0; i < all.length && texts.length < 500; i++) {
       var el = all[i], own = [].slice.call(el.childNodes).filter(function (n) { return n.nodeType === 3 && n.textContent.trim(); });
       if (!own.length || !shown(el)) continue;
-      var rects = [];
-      own.forEach(function (n) { var rg = document.createRange(); rg.selectNodeContents(n); [].slice.call(rg.getClientRects()).forEach(function (r) { if (r.width > 2 && r.height > 2) rects.push(r); }); });
-      if (rects.length) texts.push({ el: el, rects: rects });
+      var rects = [], raw = [], v = view(el);
+      own.forEach(function (n) { var rg = document.createRange(); rg.selectNodeContents(n); [].slice.call(rg.getClientRects()).forEach(function (r0) { if (r0.width > 2 && r0.height > 2) raw.push(r0); var r = inView(r0, v); if (r.width > 2 && r.height > 2) rects.push(r); }); });
+      if (rects.length) texts.push({ el: el, rects: rects, raw: raw });
     }
     function hit(a, b) {
       for (var x = 0; x < a.length; x++) for (var y = 0; y < b.length; y++) {
@@ -166,8 +188,26 @@ const PROBE = String.raw`(function () {
     for (var a = 0; a < texts.length && out.overlaps.length < 3; a++) for (var b = a + 1; b < texts.length && out.overlaps.length < 3; b++) {
       if (hit(texts[a].rects, texts[b].rects)) out.overlaps.push([name(texts[a].el), name(texts[b].el)]);
     }
+    // The box around a text that cuts it (overflow hidden or clip), when no scroll area comes first: text in a list that
+    // scrolls is meant to go out of sight. Only text partly cut counts; text wholly out of sight (a carousel's next
+    // slide, a drawer) is meant to be (18 Oct 2026: a toolbar given a class the base styles made 8 px tall).
+    function cutBy(el) {
+      var own = getComputedStyle(el); own = own.overflowX + ' ' + own.overflowY;
+      if (/auto|scroll|hidden|clip/.test(own)) return null; // it scrolls, or it cuts itself (the check after this)
+      for (var e = el.parentElement; e && e !== document.body && e !== document.documentElement; e = e.parentElement) {
+        var o = getComputedStyle(e); o = o.overflowX + ' ' + o.overflowY;
+        if (/auto|scroll/.test(o)) return null;
+        if (/hidden|clip/.test(o)) return e;
+      }
+      return null;
+    }
     texts.forEach(function (t) {
-      var el = t.el, cs = getComputedStyle(el);
+      var el = t.el, cs = getComputedStyle(el), anc = cutBy(el);
+      if (anc && out.cuts.length < 3) {
+        var ar = anc.getBoundingClientRect(), whole = 0, seen = 0, by = 0;
+        t.raw.forEach(function (r) { var w = Math.max(0, Math.min(r.right, ar.right) - Math.max(r.left, ar.left)), h = Math.max(0, Math.min(r.bottom, ar.bottom) - Math.max(r.top, ar.top)); whole += r.width * r.height; seen += w * h; if (w * h > 0) by = Math.max(by, r.height - h, r.width - w); });
+        if (seen > 0 && seen < 0.7 * whole) out.cuts.push({ el: name(el) + ' (inside ' + tag(anc) + ')', by: Math.round(by) });
+      }
       if (/^inline/.test(cs.display) && cs.display !== 'inline-block') return;
       var ovW = el.scrollWidth - el.clientWidth, ovH = el.scrollHeight - el.clientHeight;
       if (el.clientWidth > 0 && ovW > 2 && cs.overflowX === 'visible' && out.spills.length < 3) out.spills.push({ el: name(el), by: ovW });
@@ -272,7 +312,11 @@ const PROBE = String.raw`(function () {
       try { press(el); } catch (x) { errs.push(x && x.message ? x.message : String(x)); }
       setTimeout(function () {
         if (errs.length > e0 && out.clickErrors.length < 3) out.clickErrors.push({ el: nm, error: String(errs[e0]).slice(0, 160) });
-        done(acted !== a0 || state() !== before);
+        var changed = acted !== a0 || state() !== before;
+        // A dialog the click opened is closed again: a modal one makes the rest of the page inert, so every button
+        // clicked after it would have read as dead (18 Oct 2026: a calendar's Today after its New event).
+        [].slice.call(document.querySelectorAll('dialog[open]')).forEach(function (d) { try { d.close(); } catch (x) {} });
+        done(changed);
       }, 300);
     }
     function fill() {
@@ -284,16 +328,23 @@ const PROBE = String.raw`(function () {
         f.dispatchEvent(new Event('change', { bubbles: true }));
       });
     }
-    var i = 0;
+    // The names first: a page that draws a group of buttons again on each click (chips, swatches, days) leaves the
+    // list holding buttons no longer on the page, so each is found again by its name when its turn comes (18 Oct 2026:
+    // only the first chip of a gallery's filters was ever clicked).
+    var names = list.map(name), i = 0;
+    function fresh(el, nm) { return el && el.isConnected ? el : clickable().filter(function (c) { return name(c) === nm; })[0]; }
+    // The choice already made (a pressed chip, a picked swatch, the tab shown) does nothing when clicked again, as it
+    // should: not dead.
+    function chosen(el) { return !!el && ['aria-pressed', 'aria-selected', 'aria-checked'].some(function (a) { return el.getAttribute(a) === 'true'; }) || !!(el && el.getAttribute('aria-current') && el.getAttribute('aria-current') !== 'false'); }
     (function first() {
       if (i >= list.length) { fill(); i = 0; return again(); }
-      var el = list[i++], nm = name(el);
-      one(el, function (changed) { if (changed === false) dead.push(nm); first(); });
+      var nm = names[i], el = fresh(list[i++], nm);
+      one(el, function (changed) { if (changed === false && !chosen(fresh(el, nm))) dead.push(nm); first(); });
     })();
     function again() {
       if (i >= dead.length) { report(out); return; }
-      var nm = dead[i++], el = clickable().filter(function (c) { return name(c) === nm; })[0];
-      one(el, function (changed) { if (changed === false && out.dead.length < 5) out.dead.push(nm); again(); });
+      var nm = dead[i++], el = fresh(null, nm);
+      one(el, function (changed) { if (changed === false && !chosen(fresh(el, nm)) && out.dead.length < 5) out.dead.push(nm); again(); });
     }
   }
 })();`;

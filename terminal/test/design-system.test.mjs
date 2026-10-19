@@ -42,9 +42,9 @@ writeFileSync(join(CARDS, 'DESIGN.md'), YOURS);
 
 test('the guide: what every design request gets, on every model; short enough to send each time', () => {
   const g = DS.designGuide();
-  for (const part of ['## Colour', '## Type', '## Space and alignment', '## Surfaces', '## Phone', '## Finish']) expect(g).toContain(part);
+  for (const part of ['## Colour', '## Type', '## Space and alignment', '## Surfaces', '## Make it work', '## Phone', '## Finish']) expect(g).toContain(part);
   expect(g).toContain('One accent');
-  expect(g.length).toBeLessThan(3200); // about 700 tokens
+  expect(g.length).toBeLessThan(4200); // about 1,000 tokens (18 Oct: "Make it work" added)
   expect(g.startsWith('# ')).toBe(false); // its heading is the note's
 });
 
@@ -62,6 +62,17 @@ test('the kind of page a request asks for: the earliest word, the longer at one 
     'Build one HTML file for the project board of a small video studio': 'dashboard',
     'a kanban for my tasks': 'dashboard',
     'a landing page for the app with a waitlist': 'landing',
+    // 18 Oct: the kinds that got pages of their own, and the words that must not pull a request the wrong way
+    'Write a self-contained HTML file for a calendar invite card': 'card',
+    'a month calendar for the studio with its events': 'calendar',
+    'a chat app with a list of conversations': 'chat',
+    'API docs for our payouts endpoint': 'docs',
+    'a photo gallery with a lightbox': 'gallery',
+    'a memory game with a timer': 'game',
+    'a mortgage calculator': 'tool',
+    'a blog post about the street market': 'article',
+    'a weather dashboard for my city': 'dashboard',
+    'the settings area of a photo-sharing app': 'settings',
     'fix the off-by-one in parse()': null,
   };
   for (const [t, k] of Object.entries(kinds)) expect([t, DS.kindOf(t)]).toEqual([t, k]);
@@ -146,6 +157,8 @@ test('the bank: the page of the kind asked for, as its outline and a skeleton cu
   expect(DS.pickBankPage('a dashboard of my trading positions and pnl')?.id).toBe('trading-desk');
   expect(DS.pickBankPage('a dashboard of server uptime')?.id).toBe('ops-status');
   expect(DS.pickBankPage('a slide deck about Q3')).toBeNull(); // no slides in this bank: no page of another kind
+  // No words in common: the kind's general page, not the first by name.
+  expect(DS.pickBankPage('a dashboard of my plants', { bank: [{ id: 'a-first', kind: 'dashboard', words: [] }, { id: 'b-general', kind: 'dashboard', words: [], general: true }] })?.id).toBe('b-general');
   const sk = DS.skeletonOf(page);
   expect(sk).toContain('<script>/* … */</script>');
   expect(sk).toContain('This sentence is long enough that it should …');
@@ -156,6 +169,28 @@ test('the bank: the page of the kind asked for, as its outline and a skeleton cu
   expect(note).toStartWith("[Whole page · DESIGN/bank/dashboard/trading-desk.html · Trading desk: a finished dashboard page in the user's look]");
   expect(note).toContain('How it is laid out:\n- Header with the account and the day\n- Four numbers');
   expect(note).toContain('Read DESIGN/bank/dashboard/trading-desk.html for the whole page.');
+  // 18 Oct: the base styles are given once, not inside the skeleton (they had taken 5,500 of its 6,000 characters),
+  // with how the page's controls work and its script when it fits.
+  const base = `:root { --paper: #f7f6f2; }\n.card { border: 1px solid var(--line); }\n${'.x { color: red; }\n'.repeat(300)}`;
+  writeFileSync(join(bank, 'base.css'), base);
+  const orders = `<!doctype html>\n<html lang="en">\n<head>\n<style>\n/* base: DESIGN/bank/base.css */\n${base}/* end base */\n.chip { height: 32px; }\n</style>\n</head>\n<body>\n  <h1>Orders</h1>\n  <div id="chips"><button class="chip" data-f="all">All</button></div>\n  <table><tbody id="rows"></tbody></table>\n<script>\nconst orders = [];\nfunction render() { document.getElementById('rows').innerHTML = ''; }\nrender();\n</script>\n</body>\n</html>\n`;
+  mkdirSync(join(bank, 'table'), { recursive: true });
+  writeFileSync(join(bank, 'table', 'orders.html'), orders);
+  const entry = { id: 'orders', kind: 'table', title: 'Orders', words: ['orders'], outline: ['Header', 'Filters', 'Rows'], works: ['The chips filter by state', 'The pager shows five at a time'], file: 'table/orders.html' };
+  const sk2 = DS.skeletonOf(orders);
+  expect(sk2).not.toContain('.x { color: red; }');
+  expect(sk2).toContain('/* the base styles (DESIGN/bank/base.css) */');
+  expect(sk2).toContain('<div id="chips"><button class="chip" data-f="all">All</button></div>');
+  const full = DS.bankNote(entry);
+  expect(full).toContain('How it works (every control does what it says):\n- The chips filter by state\n- The pager shows five at a time');
+  expect(full).toContain("Its script: one state, one draw from it, every control wired:\n```js\nconst orders = [];");
+  expect(full).toContain('The base styles it starts from (DESIGN/bank/base.css, your look as CSS):\n```css\n:root { --paper: #f7f6f2; }');
+  expect(full.match(/\.x \{ color: red; \}/g)).toHaveLength(300); // once, in the base block
+  const small = DS.bankNote(entry, { max: 2400, scriptMax: 20, base: false });
+  expect(small).not.toContain('.x { color: red; }');
+  expect(small).toContain('are in DESIGN/bank/base.css');
+  expect(small).toMatch(/Its script is \d+ characters: Read DESIGN\/bank\/table\/orders\.html/);
+  expect(DS.scriptOf('<script src="x.js"></script><script>a()</script><script>b()</script>')).toBe('a()\n\nb()');
 });
 
 test('what a page request gets, in order: the look, the guide, the whole page; a small model gets the same, shorter', () => {
@@ -169,6 +204,33 @@ test('what a page request gets, in order: the look, the guide, the whole page; a
   const small = DS.systemNotes('a trading dashboard with positions', { cwd: plain, ctx: 32768 });
   expect(small.names).toEqual(['your DESIGN.md', 'the design guide', 'bank/trading-desk']);
   expect(small.text.length).toBeLessThanOrEqual(big.text.length); // the same here: these fixtures fit whole either way
+});
+
+// 18 Oct: styles asked for by name ("taste cards"), each a DESIGN.md of its own in DESIGN/styles/.
+test('a style the request names takes the look\'s place, with the user\'s rules; none from a word inside another or a mode switch', () => {
+  mkdirSync(join(CARDS, 'styles'), { recursive: true });
+  writeFileSync(join(CARDS, 'styles', 'editorial.md'), '---\nname: "Editorial"\nwords: "editorial, magazine, print style"\npictures: "editorial-1.png"\nlinks: "https://example.com/mag"\n---\n\n# Editorial\n\n## Colors\n- Light: `--paper: #faf8f3; --accent: #9b2c1f`\n');
+  writeFileSync(join(CARDS, 'styles', 'terminal.md'), '---\nname: "Terminal"\nwords: "terminal, monospace, retro computer"\n---\n\n# Terminal\n');
+  writeFileSync(join(CARDS, 'styles', 'retro.md'), '---\nname: "Retro"\nwords: "retro, vintage"\n---\n\n# Retro\n');
+  writeFileSync(join(CARDS, 'styles', 'README.md'), '# Styles\n');
+  expect(DS.readStyleCards().map((s) => s.id)).toEqual(['editorial', 'retro', 'terminal']); // the README is not a style
+  expect(DS.pickStyle('an editorial landing page for a bookshop')).toMatchObject({ id: 'editorial', word: 'editorial' });
+  expect(DS.pickStyle('a retro computer themed game')?.id).toBe('terminal'); // the longer of two at one place
+  expect(DS.pickStyle('a vintage poster in a magazine look')?.id).toBe('retro'); // the earliest
+  for (const none of ['a landing page for a bookshop', 'add a dark mode to the editorial', 'clean up the page']) expect(DS.pickStyle(none)?.id ?? null).toBe(none.includes('editorial') ? 'editorial' : null);
+  const note = DS.styleNote(DS.pickStyle('a magazine style report'));
+  expect(note).toStartWith('[Style · DESIGN/styles/editorial.md · asked for ("magazine")');
+  expect(note).toContain('--paper: #faf8f3');
+  expect(note).toContain('Pictures of it to look at: DESIGN/styles/editorial-1.png');
+  expect(note).toContain('Pages in this style: https://example.com/mag');
+  expect(note).toContain('[Your rules · DESIGN/DESIGN.md: they hold in every style]\n- Never scroll sideways.');
+  expect(note).not.toContain('name: "Editorial"'); // the front matter is the program's, not the model's
+  const plain = mkdtempSync(join(tmpdir(), 'agentic-ds-style-'));
+  const sys = DS.systemNotes('an editorial landing page', { cwd: plain, ctx: 262144 });
+  expect(sys.names[0]).toBe('style/editorial');
+  expect(sys.text).not.toContain('[Look ·');
+  expect(sys.style?.id).toBe('editorial');
+  expect(DS.systemNotes('a landing page', { cwd: plain, ctx: 262144 }).names[0]).toBe('your DESIGN.md');
 });
 
 test('"Not quite" kept as a rule: under Your rules in the user\'s DESIGN.md, once; a section made when there is none', () => {

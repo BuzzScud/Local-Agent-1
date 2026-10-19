@@ -76,7 +76,7 @@ export async function reviewChange({ url, use, request, diff, signal }) {
 // square for a sync mark, a main thing that is not first). use: a helper on the service; model: the
 // window's own model when it sees (agent-pages.mjs pageReviewer). brief: the page's plan, when one was
 // made. Answers { ok, findings, secs }.
-export const LOOK_OVER = `You review how a web page or component looks, from a screenshot, as a careful designer would. Check:
+const LOOK_OVER = `You review how a web page or component looks, from a screenshot, as a careful designer would. Check:
 1. The main thing the request asks for comes first and largest; the eye knows where to start.
 2. Sizes fit what it is: a card or widget is card-sized (about 320-440 px wide, centred or in a grid), never stretched across the window; a full page keeps a centred column; nothing is oversized or squeezed.
 3. Spacing is even and roomy, and parts line up on shared edges.

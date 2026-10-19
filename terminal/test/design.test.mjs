@@ -319,11 +319,12 @@ test.skipIf(needs('chrome', () => chrome))('in a real browser: a page too wide f
 // Qwen's weather page (29 Sep): "Load Different Data" picked a random scenario
 // and drew the sunny one anyway. Beside it, buttons that are fine but look dead
 // on a first click: a Reset on a fresh page, an Add with nothing typed, a Copy
-// that only copies, a Back that only works after Next.
+// that only copies, a Back that only works after Next, a Change photo that opens a hidden file box (18 Oct).
 const BUTTONS = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Weather</title></head>
 <body><div id="w"></div><ol id="list"></ol><p id="n">0</p><input id="city">
+<button id="info">Details</button><dialog id="dlg"><p>About the weather</p></dialog><button id="zoom" aria-label="Zoom in"></button><div id="chips"></div>
 <button id="load">Load Different Data</button><button id="more">More</button><button id="reset">Reset</button>
-<button id="add">Add</button><button id="copy">Copy</button><button id="next">Next</button><button id="back">Back</button><button id="oops">Oops</button>
+<button id="add">Add</button><button id="copy">Copy</button><button id="next">Next</button><button id="back">Back</button><button id="oops">Oops</button><button id="photo">Change photo</button><input type="file" id="pick" hidden>
 <script>
 var data = { sunny: 'Sunny 24°', rainy: 'Rain 12°', snowy: 'Snow -2°' }, n = 0, card = 0;
 function render() { document.getElementById('w').textContent = data.sunny; }
@@ -336,6 +337,12 @@ document.getElementById('copy').onclick = function () { navigator.clipboard && n
 document.getElementById('next').onclick = function () { card++; document.title = 'Card ' + card; };
 document.getElementById('back').onclick = function () { if (card > 0) { card--; document.title = 'Card ' + card; } };
 document.getElementById('oops').onclick = function () { nothere(); };
+document.getElementById('photo').onclick = function () { document.getElementById('pick').click(); };
+document.getElementById('info').onclick = function () { document.getElementById('dlg').showModal(); };
+var pick = 'All';
+function chips() { document.getElementById('chips').innerHTML = ['All', 'Rain', 'Sun'].map(function (k) { return '<button class="chip" aria-pressed="' + (k === pick) + '">' + k + '</button>'; }).join(''); }
+document.getElementById('chips').onclick = function (e) { var b = e.target.closest('button'); if (b) { pick = b.textContent; chips(); } };
+chips();
 </script></body></html>`;
 
 test.skipIf(needs('chrome', () => chrome))('in a real browser: the click pass finds the dead button and the one that throws, and leaves the working ones alone', async () => {
@@ -345,7 +352,11 @@ test.skipIf(needs('chrome', () => chrome))('in a real browser: the click pass fi
   const clicks = r.problems.filter((p) => /^Clicking /.test(p));
   expect(clicks.some((p) => /^Clicking "Load Different Data" \(button#load\) changes nothing/.test(p))).toBe(true);
   expect(clicks.some((p) => /^Clicking "Oops" \(button#oops\) gives an error: .*nothere/.test(p))).toBe(true);
-  for (const fine of ['more', 'reset', 'add', 'copy', 'next', 'back']) expect(clicks.some((p) => p.includes(`button#${fine})`) && /changes nothing/.test(p))).toBe(false);
+  expect(clicks.some((p) => /^Clicking "Zoom in" \(button#zoom\) changes nothing/.test(p))).toBe(true); // named by its aria-label
+  // The modal Details opens first is closed again, so the buttons after it are still clicked for real.
+  // Chips drawn again on each click are each clicked (found again by name), and the chip already picked is no dead button.
+  for (const chip of ['All', 'Rain', 'Sun']) expect(clicks.some((p) => p.startsWith(`Clicking "${chip}"`))).toBe(false);
+  for (const fine of ['info', 'more', 'reset', 'add', 'copy', 'next', 'back', 'photo']) expect(clicks.some((p) => p.includes(`button#${fine})`) && /changes nothing/.test(p))).toBe(false);
   expect(L.layoutNote('weather.html', r.problems)).toMatch(/clicked its buttons/);
   const plain = await L.layoutCheck(join(dir, 'weather.html'), { chrome, clicks: false });
   expect(plain.problems.some((p) => /^Clicking /.test(p))).toBe(false);
@@ -364,6 +375,41 @@ test.skipIf(needs('chrome', () => chrome))('in a real browser: screen-reader-onl
   writeFileSync(join(dir, 'signin.html'), QUIET);
   const r = await L.layoutCheck(join(dir, 'signin.html'), { chrome });
   expect(r.problems).toEqual([]);
+}, 60_000);
+
+// 18 Oct (the design bank's inbox): text cut off with "…" was measured whole, so its hidden end read as drawn over
+// the message beside it; text really drawn over other text is still found.
+const CUT = (over) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Inbox</title>
+<style>body{margin:0;font:15px sans-serif}.app{display:grid;grid-template-columns:200px minmax(0,1fr)}.s{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pane p{margin:0}${over ? '.pane{margin-left:-120px}' : ''}</style></head>
+<body><div class="app"><div><span class="s">Charged twice for October · Hi Ana, thanks for writing to us about it</span></div><div class="pane"><p>Hi, I see two payments of $29.00 on 1 October.</p></div></div></body></html>`;
+
+// 18 Oct (the design bank's calendar): a toolbar with a class the base styles made 8 px tall and overflow hidden hid its
+// title; a carousel's next slide (wholly out of sight) and a wide table in a scroll area are meant to be cut.
+const CLIPPED = (bad) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Calendar</title>
+<style>body{margin:0;font:15px sans-serif}.bar{height:${bad ? 8 : 48}px;overflow:hidden;display:flex;align-items:center;gap:8px}.bar h1{font-size:22px;margin:0}
+.slides{width:300px;overflow:hidden;white-space:nowrap}.slides p{display:inline-block;width:300px;margin:0}.card{overflow:hidden;width:300px}.scroll{overflow-x:auto}table{width:600px}</style></head>
+<body><div class="bar"><h1>October 2026</h1></div><div class="slides"><p>First slide words</p><p>Second slide words</p></div>
+<div class="card"><div class="scroll"><table><tr><td>Order</td><td>Customer</td><td>Total</td><td>State of the order, long words</td></tr></table></div></div>
+<div class="card"><pre style="overflow-x:auto;margin:0">{ "id": "po_93kd", "status": "pending", "amount": 125000, "arrives": "2026-10-20" }</pre></div></body></html>`;
+
+test.skipIf(needs('chrome', () => chrome))('in a real browser: text partly hidden by a box around it is cut; a carousel and a scroll area are not', async () => {
+  const dir = join(tmpdir(), `agentic-design-clip-${process.pid}`); mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'bad.html'), CLIPPED(true));
+  writeFileSync(join(dir, 'good.html'), CLIPPED(false));
+  const bad = await L.layoutCheck(join(dir, 'bad.html'), { chrome, clicks: false });
+  expect(bad.problems.some((p) => /^Text is cut off .*"October 2026" \(h1\) \(inside div\.bar\)/.test(p))).toBe(true);
+  const good = await L.layoutCheck(join(dir, 'good.html'), { chrome, clicks: false });
+  expect(good.problems.filter((p) => /cut off/.test(p))).toEqual([]);
+}, 60_000);
+
+test.skipIf(needs('chrome', () => chrome))('in a real browser: text cut off with an ellipsis counts only where it shows; text over text is still found', async () => {
+  const dir = join(tmpdir(), `agentic-design-cut-${process.pid}`); mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'cut.html'), CUT(false));
+  writeFileSync(join(dir, 'over.html'), CUT(true));
+  const cut = await L.layoutCheck(join(dir, 'cut.html'), { chrome, clicks: false });
+  expect(cut.problems.filter((p) => /on top of other text/.test(p))).toEqual([]);
+  const over = await L.layoutCheck(join(dir, 'over.html'), { chrome, clicks: false });
+  expect(over.problems.some((p) => /on top of other text/.test(p))).toBe(true);
 }, 60_000);
 
 test.skipIf(needs('chrome', () => chrome))('the agent: a page request brings the cards; the page it wrote is checked, sent back once, and checked again after the fix', async () => {

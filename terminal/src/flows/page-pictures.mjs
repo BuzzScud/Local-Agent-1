@@ -44,7 +44,7 @@ async function shoot(dt, url, v) {
 }
 
 // The sheet: each desktop beside its phone, light above dark, each named; about 1,500 × 1,000.
-export function sheetHtml(shots) {
+function sheetHtml(shots) {
   const cell = (v, data) => `<figure><figcaption>${v.name}</figcaption>${data ? `<img src="data:image/png;base64,${data}" style="width:${v.mobile ? 222 : 760}px;height:${v.mobile ? 480 : 475}px">` : `<div class="none" style="width:${v.mobile ? 222 : 760}px">not drawn</div>`}</figure>`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 body{margin:0;background:#8a8a8a;font:600 15px -apple-system,BlinkMacSystemFont,sans-serif;color:#111}
