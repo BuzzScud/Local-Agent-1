@@ -321,8 +321,10 @@ export async function startFakeMcp(spec = {}, { port = 0 } = {}) {
   };
 }
 
-// Run as a program: the spec from FAKE_MCP (JSON) or FAKE_MCP_SPEC (a file).
+// Run as a program: the spec from FAKE_MCP (JSON) or FAKE_MCP_SPEC (a file). It ends once its test is gone
+// (end-with-run.mjs), even 'deaf' or at an address, where nothing else ends it.
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  (await import('./end-with-run.mjs')).endWithRun();
   let spec = {};
   try { spec = process.env.FAKE_MCP ? JSON.parse(process.env.FAKE_MCP) : process.env.FAKE_MCP_SPEC ? JSON.parse((await import('node:fs')).readFileSync(process.env.FAKE_MCP_SPEC, 'utf8')) : {}; } catch (e) { process.stderr.write(`fake-mcp: the spec is not JSON (${e.message})\n`); process.exit(2); }
   const port = process.argv.indexOf('--http');
