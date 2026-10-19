@@ -4,7 +4,7 @@
 // or stops it. One that ends by itself is said to the model: with its next step while a reply
 // runs, or as a message of its own once the reply is over (agent.mjs jobEnded). Jobs stop when
 // the window closes (stopAll, and the exit hook below for a quit that skips it).
-import { startShell, signalGroup } from './run.mjs';
+import { startShell, signalCommand } from './run.mjs';
 import { fenceHint } from './sandbox.mjs';
 
 // Running at once, at most: a fifth is refused with the list.
@@ -63,9 +63,9 @@ export class Jobs {
   async start(command, { cwd, sandbox = {}, description = '', firstMs = this.firstMs } = {}) {
     const busy = this.running();
     if (busy.length >= MAX_RUNNING) return { error: `${busy.length} background jobs are running already, the most there may be: ${busy.map((j) => j.id).join(', ')}. Stop one with Jobs (its id and "stop": true) first, or run this one without background.` };
-    const { child, fenced } = startShell(command, { cwd, sandbox });
+    const { child, fenced, mark } = startShell(command, { cwd, sandbox });
     const n = ++this.n;
-    const job = { n, id: `job${n}`, command, description, cwd, pid: child.pid, started: Date.now(), ended: null, code: null, out: '', seen: 0, dropped: 0, stopped: null, fenced, child };
+    const job = { n, id: `job${n}`, command, description, cwd, pid: child.pid, started: Date.now(), ended: null, code: null, out: '', seen: 0, dropped: 0, stopped: null, fenced, child, mark, marked: [] };
     this.all.push(job);
     live.add(this);
     hookExit();
@@ -113,13 +113,13 @@ export class Jobs {
     return capLines(job.out, max * 2).slice(-max);
   }
 
-  // Stops job and everything it started: SIGTERM, then SIGKILL after 2 s. by: who stopped it
-  // ('model', 'you', 'quit'), kept so its end is not told to the model as news.
+  // Stops job and everything it started, in its group or not (signalCommand): SIGTERM, then SIGKILL after 2 s.
+  // by: who stopped it ('model', 'you', 'quit'), kept so its end is not told to the model as news.
   stop(job, by = 'model') {
     if (job.ended) return false;
     job.stopped = by;
-    signalGroup(job.child, 'SIGTERM');
-    job.force = setTimeout(() => signalGroup(job.child, 'SIGKILL'), 2000);
+    signalCommand(job.child, job.mark, 'SIGTERM', job.marked);
+    job.force = setTimeout(() => signalCommand(job.child, job.mark, 'SIGKILL', job.marked), 2000);
     job.force.unref?.();
     return true;
   }
@@ -127,8 +127,8 @@ export class Jobs {
   stopAll({ now = false, by = 'quit' } = {}) {
     for (const job of this.running()) {
       job.stopped = by;
-      signalGroup(job.child, now ? 'SIGKILL' : 'SIGTERM');
-      if (!now) { job.force = setTimeout(() => signalGroup(job.child, 'SIGKILL'), 2000); job.force.unref?.(); }
+      signalCommand(job.child, job.mark, now ? 'SIGKILL' : 'SIGTERM', job.marked);
+      if (!now) { job.force = setTimeout(() => signalCommand(job.child, job.mark, 'SIGKILL', job.marked), 2000); job.force.unref?.(); }
     }
   }
 
