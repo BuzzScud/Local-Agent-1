@@ -786,3 +786,92 @@ test('the app puts the repo\'s launcher in place of an old one; a link, another 
   // run from the source (no launcher)
   expect(refreshLauncher(repo, null)).toBe('no launcher');
 });
+
+// ── a Terminal that opens updates Agentic Coder (18 Oct 2026, the owner: "update it so if a terminal opens, it updates
+// from git"; their picks: in the background, every Mac with coding) ─────────────────────────────────────────────
+
+test('a Terminal opening builds GitHub\'s main without starting the app, at most once every 10 minutes and one at a time, and leaves the line to say', () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  const said = join(c.user, '.agentic-coder', 'logs', 'on-open.said');
+  const first = commit(other, { 'terminal/src/app/a.mjs': 'export const a = "on open";\n' }, 'pushed elsewhere');
+  git(other, 'push', '-q', 'origin', 'main');
+  const r = c.run({ AGENTIC_ON_OPEN: '1' });
+  expect(r.code).toBe(0);
+  expect(r.out).not.toContain('APP RAN');
+  expect(c.builtFrom()).toBe('export const a = "on open";');
+  expect(readFileSync(said, 'utf8')).toBe(`↻ Agentic Coder updated to GitHub's main (${first.slice(0, 7)})\n`);
+  // Another Terminal within 10 minutes: GitHub is not asked again.
+  rmSync(said);
+  commit(other, { 'terminal/src/app/a.mjs': 'export const a = "later";\n' }, 'pushed again');
+  git(other, 'push', '-q', 'origin', 'main');
+  c.run({ AGENTIC_ON_OPEN: '1' });
+  expect(c.builtFrom()).toBe('export const a = "on open";');
+  expect(existsSync(said)).toBe(false);
+  // One already at work (a live pid holds the lock): this one leaves it to that one.
+  const lock = join(c.user, '.agentic-coder', 'build', 'on-open.lock');
+  mkdirSync(lock);
+  writeFileSync(join(lock, 'pid'), String(process.pid));
+  c.run({ AGENTIC_ON_OPEN: '1', AGENTIC_ON_OPEN_EVERY: '0' });
+  expect(c.builtFrom()).toBe('export const a = "on open";');
+  // A lock its maker left behind (no such process) is taken over; the 10 minutes are up.
+  writeFileSync(join(lock, 'pid'), '999999');
+  c.run({ AGENTIC_ON_OPEN: '1', AGENTIC_ON_OPEN_EVERY: '0' });
+  expect(c.builtFrom()).toBe('export const a = "later";');
+  expect(existsSync(lock)).toBe(false);
+  // Nothing new: nothing to say.
+  rmSync(said);
+  c.run({ AGENTIC_ON_OPEN: '1', AGENTIC_ON_OPEN_EVERY: '0' });
+  expect(existsSync(said)).toBe(false);
+});
+
+test('a start puts the lines in ~/.zshrc once and says so; lines taken out stay out; not for another shell or with the switch off', () => {
+  const { local } = github();
+  const c = launcherOn(local);
+  const rc = join(c.user, '.zshrc');
+  writeFileSync(rc, 'export PATH="/opt/x:$PATH"\n');
+  const zsh = { AGENTIC_ON_OPEN_HOOK: 'on', SHELL: '/bin/zsh', ZDOTDIR: '' };
+  const r = c.run(zsh);
+  expect(r.out).toContain('Agentic Coder now updates itself from GitHub when a Terminal opens (lines added to ~/.zshrc; delete them to stop it).');
+  expect(r.out).toContain('APP RAN x');
+  const text = readFileSync(rc, 'utf8');
+  expect(text.startsWith('export PATH="/opt/x:$PATH"\n')).toBe(true);
+  expect(text).toContain('( AGENTIC_ON_OPEN=1 nohup "$HOME/.local/bin/coding" >/dev/null 2>&1 </dev/null & )');
+  expect(text.match(/>>> Agentic Coder: update when a Terminal opens/g)).toHaveLength(1);
+  // Started again: nothing more.
+  expect(c.run(zsh).out).not.toContain('now updates itself');
+  expect(readFileSync(rc, 'utf8')).toBe(text);
+  // You took the lines out: they stay out.
+  writeFileSync(rc, 'export PATH="/opt/x:$PATH"\n');
+  c.run(zsh);
+  expect(readFileSync(rc, 'utf8')).toBe('export PATH="/opt/x:$PATH"\n');
+  // bash, or the switch off: no lines.
+  for (const env of [{ ...zsh, SHELL: '/bin/bash' }, { ...zsh, AGENTIC_ON_OPEN_HOOK: 'off' }]) {
+    const d = launcherOn(local);
+    d.run(env);
+    expect(existsSync(join(d.user, '.zshrc'))).toBe(false);
+  }
+});
+
+test.skipIf(!Bun.which('zsh'))('the lines in a real zsh: opening it updates the app behind the prompt, and the next prompt says so once', async () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  mkdirSync(join(c.user, '.local', 'bin'), { recursive: true });
+  cpSync(c.launcher, join(c.user, '.local', 'bin', 'coding'));
+  c.run({ AGENTIC_ON_OPEN_HOOK: 'on', SHELL: '/bin/zsh', ZDOTDIR: '' });
+  const pushed = commit(other, { 'terminal/src/app/a.mjs': 'export const a = "from zsh";\n' }, 'pushed elsewhere');
+  git(other, 'push', '-q', 'origin', 'main');
+  // Not Terminal.app's own session script (/etc/zshrc_Apple_Terminal says "Restored session: …" for its windows).
+  const env = { ...process.env, PATH: `${c.bin}:${process.env.PATH}`, HOME: c.user, ZDOTDIR: c.user, AGENTIC_HOME: '', AGENTIC_REPO: '', AGENTIC_PULL_WAIT: '8', TERM_PROGRAM: '', TERM_SESSION_ID: '' };
+  const t0 = Date.now();
+  const open = Bun.spawnSync(['zsh', '-i', '-c', 'true'], { env });
+  expect(Date.now() - t0).toBeLessThan(5000); // the prompt does not wait for the update
+  expect(open.exitCode).toBe(0);
+  const said = join(c.user, '.agentic-coder', 'logs', 'on-open.said');
+  for (let i = 0; i < 100 && !existsSync(said); i++) await Bun.sleep(100);
+  expect(c.builtFrom()).toBe('export const a = "from zsh";');
+  const next = Bun.spawnSync(['zsh', '-i', '-c', '_agentic_said'], { env });
+  expect(String(next.stdout)).toBe(`\x1b[2m↻ Agentic Coder updated to GitHub's main (${pushed.slice(0, 7)})\x1b[0m\n`);
+  expect(existsSync(said)).toBe(false);
+  expect(String(Bun.spawnSync(['zsh', '-i', '-c', '_agentic_said'], { env }).stdout)).toBe('');
+});
