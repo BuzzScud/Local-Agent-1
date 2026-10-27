@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notes</title>
+<style>
+  :root { color-scheme: light dark; --paper: #ffffff; --ink: #1f2328; --muted: #57606a; --card: #f6f8fa; --line: #d0d7de; --accent: #0b5cad; }
+  @media (prefers-color-scheme: dark) { :root { --paper: #0d1117; --ink: #e6edf3; --muted: #9da7b3; --card: #161b22; --line: #30363d; --accent: #4493f8; } }
+  body { margin: 0; font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--paper); color: var(--ink); }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px; }
+  #new { font: inherit; padding: 8px 16px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+  #list { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  .card h2 { font-size: 17px; margin: 0 0 4px; }
+  .card p { margin: 0; }
+  .card time { color: var(--muted); font-size: 14px; }
+  #shade { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: none; align-items: center; justify-content: center; padding: 16px; }
+  #shade.open { display: flex; }
+  #modal { background: var(--paper); border-radius: 12px; padding: 20px; width: min(100%, 420px); display: grid; gap: 10px; }
+  #modal input, #modal textarea { font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); }
+  #modal textarea { min-height: 120px; resize: vertical; }
+  .buttons { display: flex; justify-content: flex-end; gap: 8px; }
+  .buttons button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  .buttons #save { background: var(--accent); border-color: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<main>
+  <button id="new">+ New note</button>
+  <ul id="list"></ul>
+</main>
+<div id="shade">
+  <div id="modal" role="dialog" aria-modal="true" aria-label="New note">
+    <input id="title" placeholder="Title" aria-label="Title">
+    <textarea id="text" placeholder="Note" aria-label="Note"></textarea>
+    <div class="buttons"><button id="cancel">Cancel</button><button id="save">Save</button></div>
+  </div>
+</div>
+<script>
+  let notes = [];
+  try { notes = JSON.parse(localStorage.getItem('notes') || '[]'); } catch { notes = []; }
+  const shade = document.getElementById('shade');
+  const title = document.getElementById('title');
+  const text = document.getElementById('text');
+  function draw() {
+    const list = document.getElementById('list');
+    list.textContent = '';
+    for (const n of notes) {
+      const li = document.createElement('li');
+      li.className = 'card';
+      const h = document.createElement('h2'); h.textContent = n.title || 'Untitled';
+      const p = document.createElement('p'); p.textContent = n.text.split('\n')[0];
+      const t = document.createElement('time'); t.textContent = n.date;
+      li.append(h, p, t);
+      list.append(li);
+    }
+  }
+  function open() { title.value = ''; text.value = ''; shade.classList.add('open'); title.focus(); }
+  function close() { shade.classList.remove('open'); }
+  document.getElementById('new').addEventListener('click', open);
+  document.getElementById('cancel').addEventListener('click', close);
+  document.getElementById('save').addEventListener('click', () => {
+    const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    notes = [{ title: title.value.trim(), text: text.value, date }, ...notes];
+    localStorage.setItem('notes', JSON.stringify(notes));
+    close();
+    draw();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && shade.classList.contains('open')) close(); });
+  draw();
+</script>
+</body>
+</html>
