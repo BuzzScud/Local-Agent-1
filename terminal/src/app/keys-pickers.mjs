@@ -13,6 +13,7 @@ import { addRule } from './perm-store.mjs';
 import { rememberAllowed } from './mcp-store.mjs';
 import { sendToMain } from '../agent/btw.mjs';
 import { shownLimits, moveLimit, defaultLevelId, defaultLimits } from './limits.mjs';
+import { startTuneTest } from './tune-cmd.mjs';
 import { pick } from './app-common.mjs';
 import { askKey, askState } from './app-ask.mjs';
 
@@ -195,10 +196,13 @@ export function pickerKeysPart(self) {
     const m = pk.model;
     const levels = m.thinkingLevels ?? [];
     const off = levels.length ? 1 : 0; // the Effort row, when the model has levels
-    const shown = shownLimits(m, { own: Boolean(pk.own) });
+    const shown = shownLimits(m, { own: Boolean(pk.own), tune: Boolean(pk.tune) });
     const pr = pk.own?.profile ?? null;
     const extra = pr ? 2 : 0; // the profile's Backup and Spill after
-    const rows = off + shown.length + extra + 1;
+    const rows = off + shown.length + extra + (pk.tune ? 1 : 0) + 1;
+    // /tune: its Instructions row (under the rows), and what was moved since it opened.
+    const onNotes = pk.tune && pk.index === off + shown.length;
+    const moved = pk.level !== pk.savedLevel || Object.keys(pk.values).some((k) => pk.values[k] !== pk.saved[k]);
     const step = key.rightArrow ? 1 : -1;
     const at = pk.index - off - shown.length; // 0 Backup, 1 Spill after
     const svc = Boolean(pk.own) || self.onService();
@@ -209,6 +213,17 @@ export function pickerKeysPart(self) {
     else if ((key.leftArrow || key.rightArrow) && off && pk.index === 0) self.setPicker({ ...pk, level: Math.max(0, Math.min(levels.length - 1, pk.level + step)) });
     else if ((key.leftArrow || key.rightArrow) && pk.index >= off && pk.index < off + shown.length) self.setPicker({ ...pk, values: moveLimit(pk.values, shown[pk.index - off].id, step, m) });
     else if (ch === 's' && !key.ctrl && !key.meta && pk.suggested) self.setPicker(self.fillSuggested(pk));
+    // t: saved (when anything moved), then the three short Arena tasks with these settings (tune-cmd.mjs startTuneTest).
+    else if (ch === 't' && !key.ctrl && !key.meta && pk.tune) {
+      if (moved) self.saveOwnSettings(pk); else self.setPicker(null);
+      startTuneTest(self);
+    }
+    // Enter on Instructions: saved as above, and /tune notes with them in the prompt box to change.
+    else if (key.return && onNotes) {
+      if (moved) self.saveOwnSettings(pk); else self.setPicker(null);
+      const value = `/tune notes ${pk.notes ?? ''}`;
+      self.setInput((s) => withUndo(s, { value, cursor: value.length }));
+    }
     else if (key.return) {
       const reset = pk.index === rows - 1;
       if (pr) { self.saveProfileStep(pk, { reset }); return; }

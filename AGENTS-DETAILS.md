@@ -1758,6 +1758,60 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   off), bonsai-check.test (the commands; the scores, page and record line from kept runs, in Chrome), and the lists of
   checks in arena.test, record.test and app-test-run.test.
 
+## /tune: the model in use, tuned in one panel (27 Oct 2026)
+
+- **What and why.** The owner, running Bonsai 2 9B (Qwen3.5 9B at 2 bits) on this Mac's Ollama: "how can i tune bonsai?",
+  then "can u add a command to tune bonsai?". Its settings were there (/model's menu for a model on a service) but
+  three steps deep; top-p, top-k and repeat penalty had no row (client.mjs could already send them), Thinking time was
+  only `AGENTIC_THINK_BUDGET`, nothing gave a model instructions of its own, and an Arena run of a model on a service
+  ignored its own settings. Their picks: the panel with a Test (of: auto-tune, panel + Test, panel, shortcut), the model
+  in use, every knob offered (presets, Thinking time, top-p/top-k/repeat penalty, its own instructions), the Test on
+  three short Arena tasks, kept in the app only (no Ollama copy of the model).
+- **The rows** (`terminal/src/app/limits.mjs`): Preset (`PRESETS`: Coding 0.6 / 0, Maker's own, Steady 0.2 / 0; read back
+  from the sampling rows by `presetOf`, Custom when they match none, never saved: `derived`), Top-p, Top-k, Repeat
+  penalty ('own' or a value, sent as Ollama's top_p, top_k, repeat_penalty by `modelWithLimits`) and Thinking time (0 =
+  auto: what the agent started with; `applyLimits` sets `thinkBudgetSecs`, and `AGENTIC_THINK_BUDGET`, where set, wins).
+  They are `OWN_ROWS`, kept by model in the service's set-up (`remote.tuned`) like the rest, and `tune: true`: shown
+  only in /tune (`shownLimits(…, { tune })`, `TUNE_ROWS`, under How it writes and Limits), so /effort and /model's menu
+  keep their rows and places.
+- **Its own instructions** (`remote.tuned[<model>].notes`, at most `NOTES_MAX` characters): `readLimits` carries them as
+  `notes`, `modelWithLimits` puts them on the model as `ownNotes`, and the agent makes them the last part of the
+  working instructions ("For this model", `instructionBlock`/`withModelNotes`): in the prompt it starts on, and again
+  between tasks when they change (`loadChanges`, with a line). A save of the rows, Reset all and a switch keep them;
+  `/tune notes <text>` sets them, `/tune notes off` takes them out, `/tune notes` says them; enter on the panel's
+  Instructions row puts `/tune notes …` in the prompt box.
+- **The command** (`slash-model.mjs`, `tune-cmd.mjs` `openTune`, `saveTuneNotes`, `startTuneTest`, each given the
+  window's `self`, so App.jsx, at the readable limit, lists none of them): /tune opens
+  /model's menu for the model in use with those rows (`pk.tune`); off a service it opens /effort and says why. In the /
+  menu on a service only (`SERVICE_MENU`), after /jumptomac among the rows shown when there is room, so the 18 of an
+  80 × 24 window are as they were; a command hidden there takes no room from the ones after it. Bonsai's suggested
+  values are the ones measured on this Mac (64k, 120 steps: the section above); its sampling is left to you, as Qwen's
+  coding values did no better there.
+- **The Test** (t in the panel, or `/tune test`): saved first, then the Arena's set `tune` (`TUNE_TESTS` in
+  models/evals/battle/store.mjs: p02 fix a bug, p03 a function with a test, p05 a question) on the model in use, with
+  its rows as the run's settings (`cleanSettings` takes a model's rows now: `either`, 'own' or a number) and thinking as
+  in the window; one line in the test record when the three end. A runner started before this code has no set `tune`:
+  the three go one by one. **A remote model in the Arena runs as its window runs it** (run-one.mjs): its own rows and
+  instructions under the panel's, and its sampling with them (before, its Modelfile's: Qwen3.6 ran at 1 and 1.5 in the
+  Arena and 0.6 and 0 in the window).
+- **In the hub too** (the owner: "add it to the web ui too"; their pick of the hub's Remote tab over Agentic Coder Web's
+  Admin › Models): the model's 5 · Tune tab (remote.html `tunePane`) has the same rows (selects, each step's words from
+  the server: remote-hub.mjs `tuneOf`), Thinking, its own instructions, Fill in the suggested, Save, Save and test on 3
+  tasks (`/remote/tune-test`: the service must be the one in use, as the Arena runs only those) and Use shared.
+  `/remote/tune` saves as /model's menu does (the moved rows with the ones it had, its Thinking, its Context in
+  `contexts`, its instructions; a value off a row's steps is refused). A draft you have not touched follows what is
+  saved. **An open window follows** within 2 s (app-watch.mjs `followOwn`, in the settings watch), in use from its
+  next step, with its Thinking, said in one line; a Context saved there waits for its next load. The watch is set up
+  once, so it reads the window only through what a render does not change (S.current's model, agentRef, limitsRef,
+  remoteRef, settings, push, the setters): `self.agent` and `self.model` there are the first render's. A switch to
+  another model never carries the last one's instructions (`relimit`, and `notesOf` in modelWithLimits).
+- **Tests**: `terminal/test/tune.test.mjs` (presets, the rows, its instructions in the agent's prompt, Thinking time,
+  Bonsai's values, the menu), `models/test/tune-arena.test.mjs` (the Arena's settings and set), `app-tune.test.mjs`
+  (the real window on a stand-in Ollama: the menu, the panel, a preset and Top-k saved for it alone, /tune notes, its
+  next request, a save in the hub reaching it, the Instructions row), `remote-hub.test.mjs` (the Tune tab's data, a
+  save, a value refused, Use shared, the Test refused off the service in use) and `arena-remote.test.mjs` (a real run
+  on a tuned model; the set `tune`). Not measured on Bonsai yet.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

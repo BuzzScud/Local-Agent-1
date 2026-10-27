@@ -53,7 +53,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   // and /jobs: one free row shows /jumptomac, four all of them.
   // /status (18 Oct 2026) after them: where it shows, it is the row under /help (/calc's, which went with the
   // calculator link that day). /bot, then /steps (9 Oct 2026).
-  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'mcp', 'jobs', 'status', 'bot', 'steps']);
+  // /tune (27 Oct 2026) after /jumptomac, on an Ollama service only (tune.test.mjs).
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'tune', 'loop', 'mcp', 'jobs', 'status', 'bot', 'steps']);
   expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'test', 'settings', 'exit']);
   expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('mcp');
   expect(matchCommands('/', { room: 21 }).map((c) => c.name)).toContain('mcp'); // a fourth free row is /mcp's

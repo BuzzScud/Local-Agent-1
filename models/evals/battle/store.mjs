@@ -50,6 +50,9 @@ const PRACTICE_LIST = join(HERE, 'practice28.json');
 export const KINDS = { code: 'Code change', question: 'Question', page: 'Page', writing: 'Writing' };
 // The sets in the order the page shows them (yours, 'mine', come last).
 export const SUITES = { new28: 'New 28', work28: 'Work 28', practice: 'Practice 28', mine: 'My tests' };
+// /tune's Test (27 Oct 2026): three short Practice 28 tasks, a set of their own in the Arena (the runner's
+// SETS.tune): a fix that makes the tests pass, a function with a test, a question about the code.
+export const TUNE_TESTS = ['p02-fix-bug', 'p03-add-function', 'p05-question'];
 const RANK = Object.keys(SUITES);
 const rank = (suite) => (RANK.includes(suite) ? RANK.indexOf(suite) : RANK.length - 1);
 

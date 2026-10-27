@@ -3,7 +3,7 @@
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
 import { endpointOf } from '../../../models/index.mjs';
-import { focusedInstructions, readInstructions } from './instructions.mjs';
+import { focusedInstructions, readInstructions, replaceInstructionBlock, withModelNotes } from './instructions.mjs';
 import { EXPLORE_TOOLS, resolvePath, toolSchemas } from './tools.mjs';
 import { isSelf, ownBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
 import { gitSummary, isHomeFolder, notesRoom, projectNotes, promptSetOf, systemPrompt, testCommand } from './prompt.mjs';
@@ -123,7 +123,9 @@ export class Agent extends EventEmitter {
     this.testCmd = verify ? testCommand(cwd) : null;
     this.messages = [{ role: 'system', content: leanPrompt(wayPrompt(system, this.way), this.lean) }];
     this.conversation = newConversation(); // its own first line on an Ollama service (client.mjs ownStart)
-    this.workingInstructions = readInstructions().sections;
+    this.workingInstructions = withModelNotes(readInstructions().sections, model?.ownNotes);
+    // A model with its own instructions (/tune) has them in the prompt it starts on, not as news at its first message.
+    if (model?.ownNotes) this.messages[0].content = replaceInstructionBlock(this.messages[0].content, this.workingInstructions);
     // The instructions set (prompt-files.mjs): a prompt built for the other set than this
     // model's (the app and coding -p build the local one) is built again here, once. A helper
     // gets its parent's row, so the prompt it was given (the parent's set) is kept.

@@ -4,7 +4,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { C } from '../ui/theme.mjs';
 import { wrap } from '../ui/parts.jsx';
-import { showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
+import { showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits, tuneGroup } from './limits.mjs';
 import { jumpRows, rowStatus, jumpInfo } from './jump-box.mjs';
 import { DETACH_LABEL } from './sessions.mjs';
 import { spillWord } from './profiles.mjs';
@@ -236,11 +236,14 @@ export function SettingsPicker({ app }) {
 // the Thinking cap is a line saying why it is not there, and the ranks page's values are suggested
 // beside the rows (remote-suggested.mjs). /model's menu for one model (pk.own, 2 Oct 2026) is this
 // panel with only the rows each model keeps for itself, and a line on why those values are suggested.
+// /tune (pk.tune, 27 Oct 2026) is that menu for the model in use with /tune's rows (TUNE_ROWS: Preset on top,
+// How it writes, then Limits) and a row for its own instructions; t saves and tests them.
 export function LimitsPicker({ app }) {
   const pk = app.picker;
   const own = pk.own ?? null;
+  const tune = Boolean(pk.tune);
   const svc = Boolean(own || pk.model.remote?.ollama);
-  const shown = shownLimits(pk.model, { own: Boolean(own) });
+  const shown = shownLimits(pk.model, { own: Boolean(own), tune });
   const sg = pk.suggested ?? null;
   const levels = pk.model.thinkingLevels ?? [];
   const lv = levels[pk.level];
@@ -253,7 +256,8 @@ export function LimitsPicker({ app }) {
   const heading = (name) => <Text key={`h-${name}`} color={C.faint}>{`── ${name} `}{'─'.repeat(Math.max(0, app.width - 8 - name.length))}</Text>;
   const env = { ...pk.env, values: pk.values, effortOn, effortLevel: lv?.effort ?? null, effortWord };
   const pr = own?.profile ?? null; // /model's step 3: a profile's settings (app-profiles.mjs)
-  const reset = pk.index === off + shown.length + (pr ? 2 : 0);
+  const onNotes = tune && pk.index === off + shown.length;
+  const reset = pk.index === off + shown.length + (pr ? 2 : 0) + (tune ? 1 : 0);
   // Its two rows fit 80 × 24 by leaving out three lines there: the Suggested line, the Thinking cap line and the Profile heading.
   const roomy = !pr || (app.rows ?? 24) >= 30;
   const onEffort = off && pk.index === 0;
@@ -261,12 +265,13 @@ export function LimitsPicker({ app }) {
   // What the ranks page suggests for a row: ✓ when it already has it.
   const suggests = (v, want, show) => (want === undefined || want === null ? '' : v === want ? '✓ suggested · ' : `suggested ${show(want)} · `);
   const where = pr ? `${own.id} · enter saves ${pr.name}; the next request that uses it goes there` : own ? (own.inUse ? 'in use · enter saves, from its next step' : 'nothing loads until you press enter') : '←→ moves a row; its cost is on the right. Kept for next time.';
-  const keys = pr ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter saves ${pr.name} · esc back` : own ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter ${own.inUse ? 'saves' : 'switches to it'} · esc ${own.back ? 'back to the list' : 'cancels'}`
+  const keys = tune ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter saves · t saves and tests on 3 Arena tasks · esc cancels`
+    : pr ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter saves ${pr.name} · esc back` : own ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter ${own.inUse ? 'saves' : 'switches to it'} · esc ${own.back ? 'back to the list' : 'cancels'}`
     : `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter saves · esc cancels${svc ? '' : ' · ↻ restarts model'}`;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       {/* The hint sits on the title's line: the panel stays within 22 lines with Who decides in it. */}
-      <Text wrap="truncate-end"><Text bold>{pr ? `/model · 3 of 3: ${pr.name}’s settings` : own ? `${own.id} · its own settings` : svc ? `Effort and limits · ${pk.model.remote.model}` : 'Effort and limits'}</Text><Text color={C.dim}>{'   '}{where}</Text></Text>
+      <Text wrap="truncate-end"><Text bold>{tune ? `/tune · ${own.id}` : pr ? `/model · 3 of 3: ${pr.name}’s settings` : own ? `${own.id} · its own settings` : svc ? `Effort and limits · ${pk.model.remote.model}` : 'Effort and limits'}</Text><Text color={C.dim}>{'   '}{where}</Text></Text>
       {own && roomy ? (
         <Text color={C.dim} wrap="truncate-end">{sg ? `Suggested: ${sg.why} · ${sg.source}` : 'Nothing suggested for it on the ranks page: each row starts from the shared settings.'}</Text>
       ) : null}
@@ -286,9 +291,10 @@ export function LimitsPicker({ app }) {
         // A heading where a group starts: "Search" over the search's rows, "Limits" over the rest.
         // Who decides (group 'Effort') sits under the Effort row with no heading of its own.
         // On a service /effort says which rows the model keeps for itself.
-        const group = l.group ?? 'Limits';
+        const groupOf = (x) => (tune ? tuneGroup(x.id) : x.group ?? 'Limits');
+        const group = groupOf(l);
         const title = svc && !own ? 'Limits · this model’s own' : group;
-        const head = group !== 'Effort' && (i === 0 || (shown[i - 1].group ?? 'Limits') !== group) ? heading(title) : null;
+        const head = group !== 'Effort' && (i === 0 || groupOf(shown[i - 1]) !== group) ? heading(title) : null;
         const on = off + i === pk.index;
         const v = pk.values[l.id];
         const steps = l.steps(pk.model);
@@ -308,7 +314,7 @@ export function LimitsPicker({ app }) {
             <Text color={note.startsWith('⚠') ? C.warn : C.dim}>{suggests(v, sg?.limits?.[l.id], (x) => showLimit(l.id, x))}{isDefault(l.id, pk.values, pk.model) ? 'default · ' : ''}{note}</Text>
           </Text>
           {/* Their place on a service: why there is no Thinking cap there (and, in /effort, where the search went). One line, so the panel keeps its 22. */}
-          {svc && l.id === 'context' && roomy ? (own
+          {svc && l.id === 'context' && roomy && !tune ? (own
             ? <Text color={C.dim} wrap="truncate-end">{'  '}{'Thinking cap'.padEnd(lw)}{'  '}not on a service: Ollama has no thinking limit, so Reply length holds the thinking and the answer</Text>
             : <Text color={C.dim} wrap="truncate-end">{'  '}{'Not here'.padEnd(lw)}{'  '}Thinking cap: Ollama has none, Reply length holds it all · Search: the service’s own, /profiles gives it a model</Text>) : null}
           </React.Fragment>
@@ -338,6 +344,14 @@ export function LimitsPicker({ app }) {
           </>
         );
       })() : null}
+      {/* /tune: its own instructions, one line: enter puts them in the prompt box to change (/tune notes …). */}
+      {tune ? (
+        <Text wrap="truncate-end">
+          <Text color={onNotes ? C.accent : undefined} bold={onNotes}>{onNotes ? '❯' : ' '} {'Instructions'.padEnd(lw)}</Text>
+          <Text color={pk.notes ? undefined : C.dim}>{'  '}{pk.notes ? pk.notes.replace(/\s+/g, ' ') : 'none of its own'}</Text>
+          <Text color={C.dim}>{'  · '}{onNotes ? 'enter: change them in the prompt box (/tune notes …), saved with enter there' : 'the last part of its working instructions'}</Text>
+        </Text>
+      ) : null}
       <Text wrap="truncate-end">
         <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {(svc ? 'Use shared' : 'Reset all').padEnd(lw)}</Text>
         <Text color={C.dim}>{'  '}{reset && svc ? `enter: ${own?.id ?? pk.model.remote?.model ?? 'it'} back to the shared settings${own && !own.inUse ? ', then it switches' : ''}` : keys}</Text>

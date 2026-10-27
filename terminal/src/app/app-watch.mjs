@@ -9,15 +9,53 @@ import { selectedText } from './edit-input.mjs';
 import { copyToClipboard } from './clipboard.mjs';
 import { rulesFor } from './perm-store.mjs';
 import { sinceLastTime } from './autosave.mjs';
+import { thinkingLevel } from '../../../models/index.mjs';
+import { readLimits, OWN_ROWS, ownOf, limitChanges, applyLimits, modelWithLimits } from './limits.mjs';
+import { loadSettings } from './store.mjs';
 
 export function watchPart(self) {
+  // The model in use's own settings saved somewhere else (the hub's Remote › Tune, another window; 27 Oct 2026),
+  // after the file's services are taken: rows and instructions that differ from what is in use go in use from its
+  // next step, and its Thinking; said in one line. Its Context waits for its next load. Compared with what is in
+  // use, so this window's own saves are no news. The watch is set up once, so it reads the window through what does
+  // not change with a render: S (the newest model), agentRef, limitsRef, remoteRef, settings, push and the setters.
+  const followOwn = () => {
+    const m = self.S.current.model, agent = self.agentRef.current;
+    const name = m?.remote?.model;
+    // Only once the switch to it is done (the agent has it: relimit has run) and on an Ollama service.
+    if (!name || !m.remote.ollama || !self.remoteRef.current.conn?.info?.ollama || agent?.model?.remote?.model !== name) return;
+    const own = ownOf(self.settings, name);
+    const was = self.limitsRef.current;
+    const fresh = readLimits({ ...loadSettings(self.opts.cwd), remote: self.settings.remote }, m);
+    const said = [];
+    if (OWN_ROWS.some((id) => fresh[id] !== was[id]) || (fresh.notes ?? '') !== (was.notes ?? '')) {
+      const { notes: _n, notesOf: _o, ...kept } = was;
+      const next = { ...kept, ...Object.fromEntries(OWN_ROWS.map((id) => [id, fresh[id]])), preset: fresh.preset, ...(fresh.notes ? { notes: fresh.notes, notesOf: fresh.notesOf } : {}) };
+      said.push(...limitChanges(was, next).map((c) => `${c.label} ${c.from} → ${c.to}`));
+      if ((fresh.notes ?? '') !== (was.notes ?? '')) said.push(fresh.notes ? 'its own instructions' : 'its own instructions taken out');
+      self.limitsRef.current = next;
+      applyLimits(agent, next);
+      agent.model = modelWithLimits(m, next);
+      self.applyKeep(next);
+    }
+    const levels = m.thinkingLevels ?? [];
+    const lv = own?.level && levels.length > 1 ? levels.find((l) => l.id === own.level) : null;
+    if (lv && lv.id !== thinkingLevel(m, agent.thinking, agent.effort).id) {
+      agent.thinking = Boolean(lv.effort);
+      self.setThinkingState(agent.thinking);
+      if (lv.effort) { agent.effort = lv.id; self.setEffortState(lv.id); }
+      said.push(`Thinking ${lv.label}`);
+    }
+    if (said.length) self.push({ type: 'note', text: `${name}’s own settings were changed in the hub or another window: ${said.join(' · ')}. In use from its next step.`, tone: 'dim' });
+  };
   // Your services stay saved (saved-services.mjs, 12 Oct 2026): what another window saves in settings.json is this
   // window's too within 2 s, and a service it knows that the file lost is written back; at the start, a service
   // settings.json lost (profiles.json still uses it, or its key is still kept) comes back, and a key's end is set right.
   const servicesWatch = () => {
     const tick = savedWatch(self.settings);
     const say = (lines, tone) => { for (const text of lines) self.push({ type: 'note', text, tone }); };
-    const t = setInterval(() => say(tick(), 'warn'), 2000);
+    // Then the model in use's own settings, which the hub's Remote › Tune may have changed (followOwn above).
+    const t = setInterval(() => { say(tick(), 'warn'); followOwn(); }, 2000);
     t.unref?.();
     const first = setTimeout(() => {
       say(repairNow(), 'warn');

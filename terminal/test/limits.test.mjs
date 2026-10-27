@@ -21,7 +21,7 @@ test('/effort is the one command for the panel (/increase is gone), and every li
   expect(COMMANDS.find((c) => c.name === 'effort').picker).toBe(true);
   const d = defaultLimits(model);
   // the search's rows first (BGE-M3, by meaning, no reranker: as before), then the limits
-  expect(d).toEqual({ embedder: 'bge-m3', retriever: 'meaning', reranker: 'off', context: 0, thinking: model.thinkingBudget, replyTokens: 0, temperature: 'own', presence: 'own', keepLoaded: 'open', tries: 8, steps: 40, rulesRoom: 0, upFront: 0, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85, way: 'app', look: 'auto' });
+  expect(d).toEqual({ embedder: 'bge-m3', retriever: 'meaning', reranker: 'off', context: 0, thinking: model.thinkingBudget, replyTokens: 0, temperature: 'own', presence: 'own', keepLoaded: 'open', tries: 8, steps: 40, rulesRoom: 0, upFront: 0, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85, way: 'app', look: 'auto', preset: 'own', topP: 'own', topK: 'own', repeatPenalty: 'own', thinkTime: 0 });
   // Who decides first, under the Effort row with no heading; then the search's three rows
   expect(LIMITS[0]).toMatchObject({ id: 'way', group: 'Effort', label: 'Who decides' });
   expect(LIMITS.slice(1, 4).map((l) => [l.id, l.group])).toEqual([['embedder', 'Search'], ['retriever', 'Search'], ['reranker', 'Search']]);
@@ -94,13 +94,14 @@ test('a model on a service keeps its own rows (/model’s menu): laid over the s
   expect(readLimits(settings, model)).toMatchObject({ steps: 60, timeoutSecs: 300, outputLines: 80 });
   expect(ownOf(settings, 'laguna-s-2.1:latest').level).toBe('high');
   expect(ownOf(settings, 'ornith:35b')).toBe(null);
-  expect(OWN_ROWS).toEqual(['replyTokens', 'temperature', 'presence', 'keepLoaded', 'tries', 'steps', 'rulesRoom', 'upFront', 'outputLines', 'timeoutSecs', 'trimAt', 'summarizeAt', 'look']);
+  expect(OWN_ROWS).toEqual(['replyTokens', 'temperature', 'presence', 'keepLoaded', 'tries', 'steps', 'rulesRoom', 'upFront', 'outputLines', 'timeoutSecs', 'trimAt', 'summarizeAt', 'look', 'topP', 'topK', 'repeatPenalty', 'thinkTime']);
   // the rows: all on this Mac; no Thinking cap on a service; the menu has the model's own and its Context
   // the rows: this Mac's as before (no model rows); on a service no Thinking cap or search, and the model's rows; the menu has the model's own and its Context
-  expect(shownLimits(model).map((l) => l.id)).toEqual(LIMITS.filter((l) => !['replyTokens', 'temperature', 'presence', 'keepLoaded'].includes(l.id)).map((l) => l.id));
-  expect(shownLimits(on('x')).map((l) => l.id)).toEqual(LIMITS.filter((l) => l.id !== 'thinking' && l.group !== 'Search').map((l) => l.id));
+  // (/tune's own rows, l.tune, are in neither: /effort and /model's menu keep their rows and places)
+  expect(shownLimits(model).map((l) => l.id)).toEqual(LIMITS.filter((l) => !l.tune && !['replyTokens', 'temperature', 'presence', 'keepLoaded'].includes(l.id)).map((l) => l.id));
+  expect(shownLimits(on('x')).map((l) => l.id)).toEqual(LIMITS.filter((l) => !l.tune && l.id !== 'thinking' && l.group !== 'Search').map((l) => l.id));
   expect(panelData([model])[model.id].rows.map((r) => r.id)).not.toContain('replyTokens');
-  expect(shownLimits(on('x'), { own: true }).map((l) => l.id)).toEqual(['context', ...OWN_ROWS]);
+  expect(shownLimits(on('x'), { own: true }).map((l) => l.id)).toEqual(['context', ...OWN_ROWS.filter((id) => !['topP', 'topK', 'repeatPenalty', 'thinkTime'].includes(id))]);
 });
 
 test('the model on a service: its Reply length and sampling go with its requests; its own leaves the service’s', () => {

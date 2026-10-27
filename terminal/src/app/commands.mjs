@@ -21,6 +21,8 @@ export const COMMANDS = [
   { name: 'rewind', desc: 'Put the files and the conversation back to before one of your messages (esc twice)' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder; a number opens the one the start page numbers so', arg: '[n]', picker: true },
   { name: 'model', desc: 'Pick the model and its effort' },
+  // /tune (27 Oct 2026): the model in use in one panel; on a model of an Ollama service its own rows (app/limits.mjs TUNE_ROWS).
+  { name: 'tune', desc: 'Tune the model in use: a preset, temperature and sampling, thinking time, steps and its own instructions; t tests them on 3 short Arena tasks', arg: '[notes <text>|notes off|test]', picker: true },
   { name: 'profiles', desc: 'Profiles: a server, a model and its settings by name; give each AI, task type, category and skill one, and a change reaches the next request, mid-task too' },
   // The model is off when a window opens (the user's pick, 30 Sep 2026): /start loads it, /stop gives its memory back.
   { name: 'start', desc: "Load the model (ctrl+t too): it takes the Mac's memory until /stop or you quit" },
@@ -99,6 +101,9 @@ const REMOTE_MENU = new Set(['profiles']);
 // On the Claude API only (8 Oct 2026): /usage reads what Anthropic sends with its replies; typed in full
 // on another model it says so.
 const CLAUDE_MENU = new Set(['usage']);
+// On an Ollama service only (27 Oct 2026): /tune's own rows are a service model's; anywhere else, typed in full,
+// it opens /effort and says so.
+const SERVICE_MENU = new Set(['tune']);
 // In the / menu where it fits (3 Oct 2026, the owner: "i dont see the new command?"; it had been
 // typed only, so nothing showed it, not even /jump): listed in the whole menu in a window with room
 // for one more row than the 18 an 80 × 24 window holds, and found in any window once its name is typed.
@@ -111,7 +116,8 @@ const CLAUDE_MENU = new Set(['usage']);
 // shows, it is the row under /help that /calc had, and typing /sta finds it anywhere.
 // /bot (9 Oct 2026): hides or shows the bot over the prompt box (bot-layer.jsx); last, so it goes first.
 // /steps (9 Oct 2026): how a reply's steps show (task-rows.jsx); after /bot.
-export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'mcp', 'jobs', 'status', 'bot', 'steps']);
+// /tune (27 Oct 2026): after /jumptomac, so the 18 of an 80 × 24 window stay as they were; /tu finds it in any window.
+export const WHEN_ROOM = new Set(['jumptomac', 'tune', 'loop', 'mcp', 'jobs', 'status', 'bot', 'steps']);
 const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On
@@ -125,10 +131,11 @@ export function matchCommands(value, { service = false, room = 18, side = false,
   const m = /^\/(\S*)$/.exec(value);
   if (!m) return [];
   const q = m[1].toLowerCase();
-  const all = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name) && (side || !REMOTE_ONLY.has(c.name)) && (remote || !REMOTE_MENU.has(c.name)) && (claude || !CLAUDE_MENU.has(c.name)));
+  const all = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name) && (side || !REMOTE_ONLY.has(c.name)) && (remote || !REMOTE_MENU.has(c.name)) && (claude || !CLAUDE_MENU.has(c.name)) && (service || !SERVICE_MENU.has(c.name)));
   // Too many for the window: the when-there-is-room ones go, the last of them first.
   const free = room - all.filter((c) => !WHEN_ROOM.has(c.name)).length;
-  const kept = new Set([...WHEN_ROOM].slice(0, Math.max(0, free)));
+  // (Only the ones listed here: /tune off a service takes no row from the ones after it.)
+  const kept = new Set([...WHEN_ROOM].filter((n) => all.some((c) => c.name === n)).slice(0, Math.max(0, free)));
   const shown = q || all.length <= room ? all : all.filter((c) => !WHEN_ROOM.has(c.name) || kept.has(c.name));
   return shown.filter((c) => c.name.startsWith(q)).concat(shown.filter((c) => !c.name.startsWith(q) && c.name.includes(q)));
 }
