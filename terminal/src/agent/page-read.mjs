@@ -12,6 +12,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const OSA = '/usr/bin/osascript';
+// What a person fills in or draws on (no quotes: it goes inside the reader's quoted script). A page with
+// one is an app (27 Oct 2026: Bonsai 2 9B's notes.html, a "+ New note" button and a dialog with a title
+// and a text box, showed 23 characters until a note was added, and was sent back twice to be filled).
+const CONTROLS = 'input:not([type=hidden]),textarea,select,canvas,[contenteditable]:not([contenteditable=false])';
 // The page, loaded from its file in a WebKit view of a laptop's width; its scripts run; errors are
 // kept from the first line (a file page hides their words: "Script error."). Then the text each
 // section and the whole page show.
@@ -28,7 +32,7 @@ function run(argv) {
   for (let i = 0; i < 80 && wv.isLoading; i++) wait(0.1);
   wait(1.0);
   let out = null;
-  const js = "JSON.stringify({errors: window.__errs || [], text: document.body ? document.body.innerText.length : 0, sections: Array.from(document.querySelectorAll('section, article')).filter(function(s){return !s.parentElement.closest('section, article')}).map(function(s){var h=s.querySelector('h1,h2,h3,h4');return {id: s.id, title: h ? h.innerText.trim() : '', chars: s.innerText.trim().length}})})";
+  const js = "JSON.stringify({errors: window.__errs || [], text: document.body ? document.body.innerText.length : 0, controls: document.querySelectorAll('${CONTROLS}').length, sections: Array.from(document.querySelectorAll('section, article')).filter(function(s){return !s.parentElement.closest('section, article')}).map(function(s){var h=s.querySelector('h1,h2,h3,h4');return {id: s.id, title: h ? h.innerText.trim() : '', chars: s.innerText.trim().length}})})";
   wv.evaluateJavaScriptCompletionHandler(js, (res, err) => { out = res ? ObjC.unwrap(res) : ''; });
   for (let i = 0; i < 50 && out === null; i++) wait(0.1);
   return out || '';
@@ -54,7 +58,13 @@ export function readStatic(html) {
     const title = visible(/<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]>/i.exec(m[3])?.[1] ?? '');
     sections.push({ id, title, chars: visible(m[3]).length });
   }
-  return { errors: [], text: visible(/<body\b[\s\S]*$/i.exec(html)?.[0] ?? html).length, sections, ran: false };
+  const body = /<body\b[\s\S]*$/i.exec(html)?.[0] ?? html;
+  return { errors: [], text: visible(body).length, controls: controlsIn(body), sections, ran: false };
+}
+// CONTROLS, counted in the HTML itself (scripts, styles, templates and comments left out).
+function controlsIn(html) {
+  const tags = String(html).replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(script|style|template|noscript)\b[\s\S]*?<\/\1>/gi, ' ').match(/<(input|textarea|select|canvas)\b[^>]*>|<[a-z][\w-]*\b[^>]*\bcontenteditable\b[^>]*>/gi) ?? [];
+  return tags.filter((t) => !/^<input\b[^>]*\btype\s*=\s*["']?hidden\b/i.test(t) && !/\bcontenteditable\s*=\s*["']?false\b/i.test(t)).length;
 }
 
 // { text, sections: [{ id, title, chars }], errors, ran, bytes } or null (not a page, not readable).
@@ -73,13 +83,17 @@ export async function readPage(abs, { timeoutMs = 20_000 } = {}) {
 // A section is empty to a reader when it shows little more than its heading.
 const EMPTY = 40;
 // Mostly empty: of two sections or more, half or more show nothing past their headings; or, with
-// no sections, a page of 5 KB or more that shows under 300 characters. { empty, of, problem }.
+// no sections, a page of 5 KB or more that shows under 300 characters, unless it is an app that
+// starts empty: something to fill in or draw on (CONTROLS), and its scripts opened without an error.
+// { empty, of, problem, app }.
 export function emptyOf(read) {
-  if (!read) return { empty: [], of: 0, problem: false };
+  if (!read) return { empty: [], of: 0, problem: false, app: false };
   const empty = read.sections.filter((s) => s.chars - s.title.length < EMPTY);
   const of = read.sections.length;
-  const problem = of >= 2 ? empty.length * 2 >= of : read.bytes >= 5000 && read.text < 300;
-  return { empty, of, problem };
+  const short = of < 2 && read.bytes >= 5000 && read.text < 300;
+  const app = short && read.controls > 0 && !read.errors?.length;
+  const problem = of >= 2 ? empty.length * 2 >= of : short && !app;
+  return { empty, of, problem, app };
 }
 
 const kb = (b) => `${(b / 1000).toFixed(1)} KB`;
@@ -95,5 +109,5 @@ export function pageReadNote(said, read, e) {
 export function pageReadLine(said, read, e) {
   return e.of
     ? `${said}: ${e.of - e.empty.length} of ${e.of} sections show text, ${read.text.toLocaleString('en-US')} characters on screen of ${kb(read.bytes)}${read.errors?.length ? `, ${read.errors.length} script error${read.errors.length === 1 ? '' : 's'}` : ''}`
-    : `${said}: ${read.text.toLocaleString('en-US')} characters on screen of ${kb(read.bytes)}`;
+    : `${said}: ${read.text.toLocaleString('en-US')} characters on screen of ${kb(read.bytes)}${e.app ? `, an app that starts empty (${read.controls} field${read.controls === 1 ? '' : 's'} to fill in)` : ''}`;
 }
