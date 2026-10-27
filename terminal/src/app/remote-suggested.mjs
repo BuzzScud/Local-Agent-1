@@ -9,11 +9,13 @@ import { shownLimits } from './limits.mjs';
 const SOURCE = 'ranks page, not measured here';
 
 // level: an id of the model's own levels (remoteLevels: Max on Laguna, On on Qwen3.6). limits: rows of /effort.
+// source: where an entry's values come from, when not the ranks page.
 const SUGGESTED = [
   { match: /^laguna-s-2\.1(:|$)/, level: 'high', limits: { context: 131072, replyTokens: 32768, steps: 80, outputLines: 160, timeoutSecs: 600 }, why: 'starved by the defaults: it thinks long, runs long tool loops and long builds' },
   { match: /^laguna-xs-2\.1(:|$)/, level: 'high', limits: { context: 131072, replyTokens: 32768, steps: 80, outputLines: 160, timeoutSecs: 600 }, why: 'the same pinch as Laguna S at laptop size: the same raises' },
   { match: /^qwen3\.6(:|$)/, level: 'high', limits: { context: 131072, replyTokens: 32768, steps: 80 }, why: 'wants 128k of room, 32k out and 80 steps; raise Presence penalty if it loops' },
   { match: /^ornith(:|$)/, level: 'high', limits: { context: 65536, replyTokens: 8192, steps: 80 }, why: 'give it 4–8k out so its thinking does not eat the answer; 40 steps is tight' },
+  { match: /^bonsai-2(:|$)/, limits: { context: 65536, steps: 120 }, why: 'a 9B that thinks long: 64k so a page and its checks fit (32k filled up), and 120 steps (40 ran out at 11 min on the notes page)', source: 'measured on this Mac, 27 Oct 2026' },
   { match: /^qwen3-coder-next(:|$)/, limits: { context: 65536, steps: 80 }, why: 'cannot think, so all of it goes to the edit; 32k cuts its 256k repo window' },
   { match: /^qwen3-coder:30b/, limits: { context: 65536, steps: 80, tries: 12, outputLines: 160 }, why: 'a 30B coder: big-model limits, and more than 32k of its 256k window' },
   { match: /^gpt-oss(:|$)/, level: 'medium', limits: {}, why: 'always thinks: Medium is its own default; High is slow and can loop' },
@@ -33,5 +35,5 @@ export function suggestedFor(name, model) {
   const limits = Object.fromEntries(Object.entries(s.limits).filter(([id, v]) => rows.some((l) => l.id === id && l.steps(model).includes(v))));
   const levels = model?.thinkingLevels ?? [];
   const level = levels.length > 1 && levels.some((l) => l.id === s.level) ? s.level : null;
-  return { level, limits, why: s.why, source: SOURCE };
+  return { level, limits, why: s.why, source: s.source ?? SOURCE };
 }

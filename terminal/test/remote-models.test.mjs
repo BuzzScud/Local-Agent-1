@@ -98,6 +98,9 @@ test('the suggested values come from the ranks page by name, only ones the model
   expect(suggestedFor('Qwen3.6:35B-A3B', asModel('Qwen3.6:35B-A3B'))).toMatchObject({ level: 'high', limits: { context: 131072, steps: 80 } });
   expect(suggestedFor('qwen3-coder:30b', asModel('qwen3-coder:30b'))).toMatchObject({ level: null, limits: { context: 65536, steps: 80, tries: 12, outputLines: 160 } });
   expect(suggestedFor('gpt-oss:120b', asModel('gpt-oss:120b'))).toMatchObject({ level: 'medium', limits: {} });
+  // Bonsai 2 9B on this Mac's Ollama (27 Oct 2026): measured here, not from the ranks page.
+  const bonsai = remoteModel({ kind: 'openai', source: 'machine', address: 'http://localhost:11434' }, { model: 'bonsai-2:9b', ollama: { version: '0.40.11', known: true, chat: true, tools: true, thinking: true, params: '9.0B', ctx: 262144 }, ctx: 262144 });
+  expect(suggestedFor('bonsai-2:9b', bonsai)).toMatchObject({ limits: { context: 65536, steps: 120 }, source: 'measured on this Mac, 27 Oct 2026' });
   // its window is 32k: nothing to raise, and the line says why
   expect(suggestedFor('qwen2.5-coder:14b', asModel('qwen2.5-coder:14b'))).toMatchObject({ level: null, limits: {}, why: 'its window is 32k: the shared settings fit it' });
   // a context longer than the model's own is left out (deepseek-coder-v2 here at 16k)

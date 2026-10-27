@@ -302,7 +302,7 @@ export class Agent extends EventEmitter {
     this.notesRoomUsed = this.notesRoomNow;
     this.promptStampUsed = this.promptStamp();
     this.rulesSetUsed = this.rulesSet();
-    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()), web: Boolean(this.webTools()?.fetch) }));
+    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()), web: Boolean(this.webTools()?.fetch), here: Boolean(this.model?.remote?.here) }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
   }
   // The prompt files as they are now: the rules files (AGENTS.md or CLAUDE.md, whole, without
@@ -315,7 +315,7 @@ export class Agent extends EventEmitter {
       const agents = this.agentsOn();
       const mcp = this.mcpInPrompt ?? '';
       const remote = set === 'remote' ? `${JSON.stringify(harnessOf())}\u0000${guidesList(readGuides(set, { agents, mcp: Boolean(mcp) }), { path: guidePath(this.cwd) })}` : '';
-      return `${set}\u0000${set === 'remote' ? agents : ''}\u0000${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseFor(set, undefined, { mcp, web: Boolean(this.webTools()?.fetch) })}\u0000${skillsList(readSkills(undefined, set), { path: skillPath(this.cwd) })}\u0000${remote}`;
+      return `${set}\u0000${set === 'remote' ? `${agents}${this.model?.remote?.here ? ' here' : ''}` : ''}\u0000${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseFor(set, undefined, { mcp, web: Boolean(this.webTools()?.fetch) })}\u0000${skillsList(readSkills(undefined, set), { path: skillPath(this.cwd) })}\u0000${remote}`;
     } catch { return null; }
   }
   promptFilesChanged() {
@@ -334,7 +334,7 @@ export class Agent extends EventEmitter {
     this.testCmd = this.verify ? testCommand(dir) : null;
     this.notesRoomUsed = this.notesRoomNow;
     this.rulesSetUsed = this.rulesSet();
-    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(dir), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()), web: Boolean(this.webTools()?.fetch) }));
+    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(dir), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()), web: Boolean(this.webTools()?.fetch), here: Boolean(this.model?.remote?.here) }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.promptStampUsed = this.promptStamp();
     this.readFiles = new SeenFiles();

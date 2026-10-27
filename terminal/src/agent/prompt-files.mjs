@@ -57,10 +57,12 @@ export const instructionsEnv = (env = process.env) => env.AGENTIC_INSTRUCTIONS;
 export function savedInstructions(home = HOME) {
   try { const v = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')).instructions; return RULE_SETS.includes(v) ? v : 'auto'; } catch { return 'auto'; }
 }
+// Auto: a model on a service gets the remote set, unless it is one of the small ones that get the local
+// set (models/runtime/remote.mjs OWN_REMOTES: Bonsai 2 9B, 27 Oct 2026).
 export function rulesSetOf(choice, model, env = process.env) {
   const c = instructionsEnv(env) ?? choice ?? savedInstructions();
   if (c === 'local' || c === 'remote') return c;
-  return model?.remote ? 'remote' : 'local';
+  return model?.remote && model.rules !== 'local' ? 'remote' : 'local';
 }
 const fileOf = (which) => PROMPT_FILES[which] ?? (which === 'harness' ? 'HARNESS.md' : `${which}.md`);
 async function loadRemote() {
