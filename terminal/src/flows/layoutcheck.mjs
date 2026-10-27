@@ -17,6 +17,9 @@
 //   dead button   a button that changes nothing when clicked, twice (a pass of
 //                 its own; Qwen, 29 Sep: "Load Different Data" said it swapped
 //                 5 scenarios and always drew the same one)
+//   lost form     words typed into a form and saved that show nowhere on the
+//                 page after (a pass of its own; Bonsai 2 9B, 27 Oct 2026: its
+//                 notes page closed on Save and never added the note)
 // The problems go back to the model (agent.mjs), in plain words with the
 // element and the numbers, and for faint text a colour that would pass; after
 // its fix the check runs again, and what is left goes back once more
@@ -78,6 +81,7 @@ const PROBE = String.raw`(function () {
   console.error = function () { try { errs.push([].slice.call(arguments).map(String).join(' ')); } catch (x) {} return ce.apply(console, arguments); };
   var CLICKS = false;
   var ACCESS = false;
+  var FORMS = false;
   // What a click did that the page itself may not show: a message box, a new
   // window, a copy, a download, a sound, a save, a form sent.
   var acted = 0;
@@ -105,7 +109,7 @@ const PROBE = String.raw`(function () {
     if (AC) { counts(AC.prototype, 'resume'); counts(AC.prototype, 'createOscillator'); counts(AC.prototype, 'createBufferSource'); }
     addEventListener('submit', function (e) { acted++; e.preventDefault(); }, true);
   }
-  addEventListener('load', function () { setTimeout(CLICKS ? clicks : measure, 800); });
+  addEventListener('load', function () { setTimeout(FORMS ? forms : CLICKS ? clicks : measure, 800); });
 
   function rgba(s) {
     var m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null;
@@ -347,6 +351,54 @@ const PROBE = String.raw`(function () {
       one(el, function (changed) { if (changed === false && !chosen(fresh(el, nm)) && out.dead.length < 5) out.dead.push(nm); again(); });
     }
   }
+  // The form look (a pass of its own, 27 Oct 2026): words typed into a form and saved must show on the page
+  // afterwards. Bonsai 2 9B's notes page closed its box on Save and stored the note, but drew its list from the
+  // copy it had read at the start, so no note was ever added; the click look saw the box close and counted
+  // Save as working. Boxes hidden at first (a "+ New note" opens them) are found by pressing the buttons, the
+  // likely openers first, until boxes and a Save show. Not reported: the words on the page afterwards, or
+  // still in a box (a settings form keeps what was typed).
+  var SAVE = /^\s*\+?\s*(save|add|create|post)\b/i;
+  var OPENS = /new|add|create|write|compose|\+/i;
+  function boxes() {
+    return [].slice.call(document.querySelectorAll('input, textarea')).filter(function (f) {
+      var t = (f.getAttribute('type') || 'text').toLowerCase();
+      return !f.disabled && !f.readOnly && shown(f) && (f.tagName === 'TEXTAREA' || t === 'text');
+    });
+  }
+  // The Save nearest the boxes (the same form or box), not an "Add" elsewhere on the page.
+  function saveButton() {
+    var list = boxes();
+    if (!list.length) return null;
+    function apart(el) { for (var e = list[0], n = 0; e; e = e.parentElement, n++) if (e.contains(el)) return n; return 1e9; }
+    return clickable().filter(function (el) { return SAVE.test(said(el)); }).sort(function (a, b) { return apart(a) - apart(b); })[0] || null;
+  }
+  function forms() {
+    var out = { forms: true, words: 'Form check ' + String(1000 + Math.floor(Math.random() * 9000)), opened: null, button: null, lost: false, error: null };
+    function go(btn) {
+      out.button = name(btn);
+      boxes().forEach(function (f) { f.value = out.words; f.dispatchEvent(new Event('input', { bubbles: true })); f.dispatchEvent(new Event('change', { bubbles: true })); });
+      var e0 = errs.length;
+      try { press(btn); } catch (x) { errs.push(x && x.message ? x.message : String(x)); }
+      setTimeout(function () {
+        if (errs.length > e0) out.error = String(errs[e0]).slice(0, 160);
+        var onPage = (document.body.innerText || '').indexOf(out.words) >= 0;
+        var kept = boxes().some(function (f) { return f.value.indexOf(out.words) >= 0; });
+        out.lost = !onPage && !kept;
+        report(out);
+      }, 400);
+    }
+    var openers = clickable().sort(function (a, b) { return (OPENS.test(said(b)) ? 1 : 0) - (OPENS.test(said(a)) ? 1 : 0); }).slice(0, 8), i = 0;
+    (function next() {
+      var btn = saveButton();
+      if (btn) { go(btn); return; }
+      if (i >= openers.length) { report(out); return; }
+      var el = openers[i++];
+      if (!el.isConnected || !shown(el)) { next(); return; }
+      out.opened = name(el);
+      try { press(el); } catch (x) {}
+      setTimeout(next, 300);
+    })();
+  }
 })();`;
 
 // The same probe for the click pass.
@@ -354,6 +406,11 @@ const CLICK_PROBE = PROBE.replace('var CLICKS = false;', 'var CLICKS = true;');
 // The same probe, also looking at who can use the page (accessLook).
 const ACCESS_PROBE = PROBE.replace('var ACCESS = false;', 'var ACCESS = true;');
 const CLICK_PASS = { name: 'clicks', width: 1440, height: 900, clicks: true };
+// The same probe for the form pass (its button stubs on: a Save that opens a message box stays on the page).
+const FORM_PROBE = CLICK_PROBE.replace('var FORMS = false;', 'var FORMS = true;');
+const FORM_PASS = { name: 'forms', width: 1440, height: 900, clicks: true, forms: true };
+// AGENTIC_FORM_CHECK=off: no form pass (the Bonsai check's "before" side, models/evals/tools/bonsai-check.mjs).
+const formsOn = () => process.env.AGENTIC_FORM_CHECK !== 'off';
 
 // The page with the probe and a <base> put first in <head>, on its first line.
 export function withProbe(html, pageDir, probeUrl) {
@@ -407,7 +464,8 @@ export async function layoutCheck(pageAbs, { chrome = findChrome(), passes = PAS
     };
     const page = copy(access ? ACCESS_PROBE : PROBE, 'page');
     const clickPage = clicks ? copy(CLICK_PROBE, 'page-clicks') : null;
-    const results = await Promise.all([...passes.map((p) => pass(chrome, page, scratch, p)), ...(clickPage ? [pass(chrome, clickPage, scratch, CLICK_PASS)] : [])]);
+    const formPage = clicks && formsOn() ? copy(FORM_PROBE, 'page-forms') : null;
+    const results = await Promise.all([...passes.map((p) => pass(chrome, page, scratch, p)), ...(clickPage ? [pass(chrome, clickPage, scratch, CLICK_PASS)] : []), ...(formPage ? [pass(chrome, formPage, scratch, FORM_PASS)] : [])]);
     // A click pass that did not report (a button left the page, say) adds nothing.
     const looks = results.filter((r) => !r.pass.clicks);
     const failed = looks.filter((r) => r.failed);
@@ -486,6 +544,12 @@ export function problemsOf(html, results) {
     const f = r.found;
     if (!f) continue;
     const at = where(r.pass);
+    if (f.forms) {
+      // Keyed as the click look's error on the same button, so an error both find is told once.
+      if (f.error) add(`clickerr:${f.button}`, `Clicking ${f.button} gives an error: ${f.error}.`);
+      else if (f.lost) add('form', `Typing "${f.words}" into the boxes and pressing ${f.button}${f.opened ? ` (after ${f.opened} opened them)` : ''} adds nothing to the page: the words show nowhere afterwards. Make what it saves show up (a list drawn from what was saved); if it is meant to save without showing anything, say so in one sentence.`);
+      continue;
+    }
     if (f.clicks) {
       for (const c of f.clickErrors ?? []) add(`clickerr:${c.el}`, `Clicking ${c.el} gives an error: ${c.error}.`);
       for (const d of f.dead ?? []) add(`dead:${d}`, `Clicking ${d} changes nothing on the page, even after the other buttons were clicked and the empty boxes filled in. Make it do what it is for; if it only works with a server, a sound or something typed first, say so in one sentence.`);

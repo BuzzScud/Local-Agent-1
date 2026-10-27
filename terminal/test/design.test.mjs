@@ -362,6 +362,48 @@ test.skipIf(needs('chrome', () => chrome))('in a real browser: the click pass fi
   expect(plain.problems.some((p) => /^Clicking /.test(p))).toBe(false);
 }, 60_000);
 
+// 27 Oct (Bonsai 2 9B's notes page): Save closed the box and stored the note, but the list was drawn from the copy
+// read at the start, so nothing was ever added. Beside it, forms that are fine: the same page fixed, a settings
+// form that keeps what was typed, and a to-do whose Add empties its box into the list.
+const NOTES = (fixed) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Notes</title>
+<style>#modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4)}#modal.on{display:block}</style></head>
+<body><button id="new">+ New note</button><div id="list"></div>
+<div id="modal"><input id="title"><textarea id="text"></textarea><button id="cancel">Cancel</button><button id="save">Save</button></div>
+<script>
+${fixed ? 'let' : 'const'} notes = JSON.parse(localStorage.getItem('notes') || '[]');
+function draw() { document.getElementById('list').innerHTML = notes.map(function (n) { return '<p>' + n.title + '</p>'; }).join(''); }
+document.getElementById('new').onclick = function () { document.getElementById('modal').classList.add('on'); };
+document.getElementById('cancel').onclick = function () { document.getElementById('modal').classList.remove('on'); };
+document.getElementById('save').onclick = function () {
+  var all = [{ title: document.getElementById('title').value }].concat(notes);
+  localStorage.setItem('notes', JSON.stringify(all));
+  ${fixed ? 'notes = all;' : ''}
+  document.getElementById('modal').classList.remove('on'); draw();
+};
+draw();
+</script></body></html>`;
+const KEEPS = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Settings</title></head>
+<body><label for="name">Display name</label><input id="name"><button id="save">Save</button><p id="said"></p>
+<script>document.getElementById('save').onclick = function () { localStorage.setItem('name', document.getElementById('name').value); document.getElementById('said').textContent = 'Saved'; };</script></body></html>`;
+const TODO = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>To do</title></head>
+<body><input id="what"><button id="add">Add</button><ul id="list"></ul>
+<script>document.getElementById('add').onclick = function () { var f = document.getElementById('what'), li = document.createElement('li'); li.textContent = f.value; document.getElementById('list').appendChild(li); f.value = ''; };</script></body></html>`;
+
+test.skipIf(needs('chrome', () => chrome))('in a real browser: the form pass finds a Save that adds nothing, and leaves working forms alone', async () => {
+  const dir = join(tmpdir(), `agentic-design-forms-${process.pid}`); mkdirSync(dir, { recursive: true });
+  const pages = { 'notes.html': NOTES(false), 'fixed.html': NOTES(true), 'settings.html': KEEPS, 'todo.html': TODO };
+  for (const [f, html] of Object.entries(pages)) writeFileSync(join(dir, f), html);
+  const lost = (r) => r.problems.filter((p) => /^Typing "Form check \d+" into the boxes/.test(p));
+  const bad = await L.layoutCheck(join(dir, 'notes.html'), { chrome });
+  expect(lost(bad)).toHaveLength(1);
+  expect(lost(bad)[0]).toMatch(/pressing "Save" \(button#save\) \(after "\+ New note" \(button#new\) opened them\) adds nothing to the page/);
+  for (const f of ['fixed.html', 'settings.html', 'todo.html']) expect(lost(await L.layoutCheck(join(dir, f), { chrome }))).toEqual([]);
+  // Off for the Bonsai check's "before" side, and with the click look off.
+  expect(lost(await L.layoutCheck(join(dir, 'notes.html'), { chrome, clicks: false }))).toEqual([]);
+  process.env.AGENTIC_FORM_CHECK = 'off';
+  try { expect(lost(await L.layoutCheck(join(dir, 'notes.html'), { chrome }))).toEqual([]); } finally { delete process.env.AGENTIC_FORM_CHECK; }
+}, 60_000);
+
 // 30 Sep (the design studio's pieces): text for screen readers only is never drawn, so it
 // overlaps or is cut by nothing; and a sign-in button works once its password box is filled.
 const QUIET = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in</title>
