@@ -159,7 +159,8 @@ export const LIMITS = [
     // there (readLimits: in range of the row's steps), so a local model keeps its count.
     id: 'steps', label: 'Steps per request',
     steps: (m) => (m?.remote?.kind === 'claude' ? [0, 20, 40, 60, 80, 120] : [20, 40, 60, 80, 120]),
-    def: (m) => (m?.remote?.kind === 'claude' ? 0 : m?.harness?.steps ?? 40),
+    // startSteps: a model on a service with a default of its own (models/runtime/remote.mjs OWN_REMOTES: Bonsai 2 9B, 120).
+    def: (m) => (m?.remote?.kind === 'claude' ? 0 : m?.harness?.steps ?? m?.startSteps ?? 40),
     show: (v) => (v ? String(v) : 'no limit'),
     note: (v) => (v ? `stops a request after ${v} tool steps` : 'runs until the request is done; esc stops it'),
   },

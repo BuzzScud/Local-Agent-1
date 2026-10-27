@@ -68,6 +68,37 @@ test('which set: auto takes the remote one for a model on another machine; setti
   expect(rulesSetOf('local', local, { AGENTIC_INSTRUCTIONS: 'remote' })).toBe('remote');
 });
 
+test('Bonsai 2 on a service gets the local set (OWN_REMOTES, 27 Oct 2026), a saved choice still wins; a service on this Mac is told so', async () => {
+  const { remoteModel, onThisMac } = await import('../../models/index.mjs');
+  const { ANOTHER_MACHINE, ON_THIS_MAC } = await import('../src/agent/prompt.mjs');
+  const ollama = (params) => ({ version: '0.40.11', known: true, chat: true, tools: true, thinking: true, params });
+  const bonsai = remoteModel({ kind: 'openai', source: 'machine', address: 'http://localhost:11434' }, { model: 'bonsai-2:9b', ollama: ollama('9.0B') });
+  expect(bonsai.rules).toBe('local');
+  expect(bonsai.remote.here).toBe(true);
+  expect(rulesSetOf('auto', bonsai, {})).toBe('local');
+  expect(rulesSetOf('remote', bonsai, {})).toBe('remote');
+  expect(rulesSetOf('auto', bonsai, { AGENTIC_INSTRUCTIONS: 'remote' })).toBe('remote');
+  const steps = LIMITS.find((l) => l.id === 'steps');
+  expect(steps.def(bonsai)).toBe(120); // its own default (40 ran out at 11 minutes on the notes page)
+  const qwen = remoteModel({ kind: 'openai', source: 'openai', address: 'http://203.0.113.7:60009' }, { model: 'qwen3.6:35b-a3b', ollama: ollama('36.0B') });
+  expect(qwen.rules).toBeUndefined();
+  expect(qwen.remote.here).toBe(false);
+  expect(rulesSetOf('auto', qwen, {})).toBe('remote');
+  expect(steps.def(qwen)).toBe(80); // big-model mode's, as before
+  const small = remoteModel({ kind: 'openai', address: 'localhost:11434' }, { model: 'qwen3.5:9b', ollama: ollama('9.7B') });
+  expect([rulesSetOf('auto', small, {}), steps.def(small)]).toEqual(['remote', 40]); // only Bonsai switches
+  for (const address of ['localhost:11434', 'http://127.0.0.1:11434', '[::1]:11434']) expect(onThisMac({ kind: 'openai', address })).toBe(true);
+  for (const r of [{ kind: 'openai', address: '192.168.1.5:11434' }, { kind: 'llama', address: 'localhost', connect: 'ssh' }, { kind: 'claude' }]) expect(onThisMac(r)).toBe(false);
+  // The remote set's opening on this Mac: one sentence changed, the rest letter for letter.
+  const d = new Date('2026-10-27T12:00:00');
+  const away = systemPrompt({ cwd: proj, notes: 'N', git: 'g', date: d, set: 'remote' });
+  const here = systemPrompt({ cwd: proj, notes: 'N', git: 'g', date: d, set: 'remote', here: true });
+  expect(away).toContain(ANOTHER_MACHINE);
+  expect(here).not.toContain(ANOTHER_MACHINE);
+  expect(here.replace(ON_THIS_MAC, ANOTHER_MACHINE)).toBe(away);
+  expect(systemPrompt({ cwd: proj, notes: 'N', git: 'g', date: d, here: true })).toBe(systemPrompt({ cwd: proj, notes: 'N', git: 'g', date: d })); // the local set has no such line
+});
+
 test('the local instructions are the same with the remote set beside them, letter for letter', () => {
   const d = new Date('2026-10-02T12:00:00');
   const plain = systemPrompt({ cwd: proj, notes: 'N', git: 'g', date: d });

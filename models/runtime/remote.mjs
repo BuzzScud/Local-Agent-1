@@ -76,6 +76,17 @@ export function isPrivateHost(host) {
 // Facts about the user go in full only there (terminal opening.mjs); an Ollama service on the home
 // network, any OpenAI-compatible service and the Claude API are someone else's machine (3 Oct 2026).
 export const ownMachine = (r) => r?.kind === 'llama' && (r.connect === 'ssh' || isPrivateHost(parseAddress(addressOf(r))?.host ?? ''));
+// A service on this very Mac (an Ollama started here, at localhost:11434): its model is not on another
+// machine, and the remote instructions say so (terminal prompt.mjs). Over SSH it is another machine.
+export const onThisMac = (r) => r?.kind !== 'claude' && r?.connect !== 'ssh' && /^(localhost|127(\.\d{1,3}){3}|::1)$/i.test(parseAddress(addressOf(r))?.host ?? '');
+// Models on a service with settings of their own, by the name the service knows them by (27 Oct 2026, the
+// owner's picks for Bonsai 2 9B on this Mac's Ollama). rules: the instructions it gets when settings.json
+// "instructions" is auto (terminal prompt-files.mjs rulesSetOf): the local set, written for the small models
+// on this Mac, where every other model on a service gets the remote set ("Only Bonsai switches"; on the remote
+// set it tried the design guide as DESIGN.md three times in one run and never read it). steps: /effort's
+// default Steps per request (terminal limits.mjs; at 40 its notes page ran out of steps at 11 minutes, at 120
+// it finished in 36). A row saved in /effort still wins.
+export const OWN_REMOTES = [{ match: /^bonsai-2(:|$)/i, rules: 'local', steps: 120 }];
 
 // An SSH destination as ssh takes it: a name from ~/.ssh/config, host or
 // user@host (a port goes in the config). Never an option ("-o…").
@@ -579,7 +590,7 @@ export function remoteModel(r, info = {}) {
   const where = remoteLabel(r);
   const ctx = r?.context || (r?.kind === 'claude' && info.ctx ? Math.min(info.ctx, CLAUDE_CTX) : info.ctx) || null;
   const o = info.ollama ?? null;
-  const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r), model: info.model || r?.model || null, ollama: o?.version ?? null, mine: ownMachine(r) }, bytes: 0, draft: null, slots: info.slots ?? 1 };
+  const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r), model: info.model || r?.model || null, ollama: o?.version ?? null, mine: ownMachine(r), here: onThisMac(r) }, bytes: 0, draft: null, slots: info.slots ?? 1 };
   if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx, thinkingDefault: canThink(base) };
   // On, at the model's own level (gpt-oss: Medium, its maker's default; its High is slow and can loop),
   // unless the service says it cannot think.
@@ -587,7 +598,9 @@ export function remoteModel(r, info = {}) {
   // An Ollama model's longest context is its own (/effort's Context row goes up to it).
   // A big one carries big-model mode (bigHarness).
   const harness = bigHarness(o);
-  return { ...GENERIC_REMOTE, ...levels, ...common, ...(harness ? { harness } : {}), name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
+  const own = OWN_REMOTES.find((x) => x.match.test(name));
+  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}) } : {};
+  return { ...GENERIC_REMOTE, ...levels, ...common, ...(harness ? { harness } : {}), ...mine, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
 }
 
 // ---- connecting ---------------------------------------------------------------------------------
