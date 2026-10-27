@@ -4,7 +4,7 @@ import { availableBytes, freeWithHandBack, scanServers, searchBytes, thinkingLev
 import { ctxWord } from './remote-models.mjs';
 import { suggestedFor } from './remote-suggested.mjs';
 import { saveSettings, loadSettings } from './store.mjs';
-import { searchModels, ownOf, readLimits, OWN_ROWS, effortNote, limitChanges, applyLimits, applySearch, limitsToSave, modelWithLimits, showLimit } from './limits.mjs';
+import { searchModels, ownOf, readLimits, OWN_ROWS, effortNote, limitChanges, applyLimits, applySearch, limitsToSave, modelWithLimits, showLimit, presetOf, cleanNotes } from './limits.mjs';
 import { IDLE } from './app-common.mjs';
 
 export function panelsEffort(self, own) {
@@ -34,7 +34,9 @@ export function panelsEffort(self, own) {
   // rows, with the ranks page's values suggested beside them, before anything loads; enter switches
   // to it with them, esc goes back to the list (back). On the model in use it is saved at once.
   // A model not in use is read from the service's entry for it (what it can do, its longest context).
-  const openOwnSettings = (entry, { back = null, profile = null } = {}) => {
+  // tune: /tune's panel (tune-cmd.mjs openTune) for the model in use: Preset on top, the sampling rows, Thinking time and its
+  // own instructions (a row of their own, under the others: the picker's notes).
+  const openOwnSettings = (entry, { back = null, profile = null, tune = false } = {}) => {
     const inUse = entry.id === self.model.remote?.model;
     const m = inUse ? self.model : remoteModel(self.settings.remote, { model: entry.id, ollama: { version: self.catalog?.version ?? self.model.remote?.ollama ?? '?', ...entry }, ctx: entry.loadedCtx || entry.ctx || null });
     const levels = m.thinkingLevels ?? [];
@@ -43,7 +45,8 @@ export function panelsEffort(self, own) {
     const level = Math.max(0, levels.findIndex((l) => l.id === lvNow.id));
     const mine = readLimits({ ...loadSettings(self.opts.cwd), remote: self.settings.remote }, m);
     const values = { ...self.limitsRef.current, ...Object.fromEntries(OWN_ROWS.map((id) => [id, mine[id]])), context: self.serviceCtx(entry.id) };
-    self.setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values, saved: { ...values }, model: m, suggested: suggestedFor(entry.id, m),
+    values.preset = presetOf(values);
+    self.setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values, saved: { ...values }, model: m, suggested: suggestedFor(entry.id, m), ...(tune ? { tune: true, notes: cleanNotes(own?.notes) } : {}),
       own: { id: entry.id, entry, inUse, back, profile },
       env: { model: m, switching: !inUse, freeBytes: null, searchBytes: null, tps: self.stats.tps, pps: self.stats.pps, ctxNow: inUse ? self.agent.ctx : entry.loadedCtx || null, lastRerank: null } });
   };
@@ -51,7 +54,9 @@ export function panelsEffort(self, own) {
   const fillSuggested = (pk) => {
     const sg = pk.suggested;
     const li = sg?.level ? (pk.model.thinkingLevels ?? []).findIndex((l) => l.id === sg.level) : -1;
-    return { ...pk, values: { ...pk.values, ...(sg?.limits ?? {}) }, ...(li >= 0 ? { level: li } : {}) };
+    const values = { ...pk.values, ...(sg?.limits ?? {}) };
+    if ('preset' in values) values.preset = presetOf(values);
+    return { ...pk, values, ...(li >= 0 ? { level: li } : {}) };
   };
   // A model on the service back to the shared settings: its own rows as every model has them, its Context the service's own.
   const sharedValues = (pk) => {
@@ -82,7 +87,7 @@ export function panelsEffort(self, own) {
     const moved = OWN_ROWS.filter((r) => pk.values[r] !== pk.saved[r]);
     const limits = reset ? {} : { ...(prev?.limits ?? {}), ...Object.fromEntries(moved.map((r) => [r, pk.values[r]])) };
     const level = reset ? null : levels.length > 1 && lv && pk.level !== pk.savedLevel ? lv.id : prev?.level ?? null;
-    const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}) };
+    const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(prev?.notes ? { notes: prev.notes } : {}) };
     if (Object.keys(own).length || prev) self.setOwn(id, Object.keys(own).length ? own : null);
     const ctx = reset ? 0 : pk.values.context ?? 0;
     if (ctx !== self.serviceCtx(id)) self.setServiceCtx(id, ctx);
@@ -123,7 +128,8 @@ export function panelsEffort(self, own) {
     if (svc && (ownMoved.length || effortChanged || reset)) {
       const limits = reset ? {} : { ...(prevOwn?.limits ?? {}), ...Object.fromEntries(ownMoved.map((id) => [id, next[id]])) };
       const level = reset ? null : effortChanged && self.model.thinkingLevels.length > 1 ? lv.id : prevOwn?.level ?? null;
-      const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}) };
+      // Its own instructions (/tune notes) stay: Reset all is the rows and Effort, not them.
+      const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(prevOwn?.notes ? { notes: prevOwn.notes } : {}) };
       if (Object.keys(own).length || prevOwn) self.setOwn(self.model.remote.model, Object.keys(own).length ? own : null);
       if (reset && prevOwn && !changes.length) self.push({ type: 'note', text: `${self.model.remote.model} follows the shared settings again.`, tone: 'dim' });
     }

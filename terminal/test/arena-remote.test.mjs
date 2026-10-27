@@ -155,6 +155,33 @@ test('a real run on a service that never loads the model (busy, no room): it nam
   expect(r.log).toContain('tiny:3b did not load on the service in 0.03 minutes: coder:30b is loaded there, likely busy, with no room for both');
 }, 30_000);
 
+// /tune (27 Oct 2026): a run on a model with its own settings runs it as its window does, the panel's rows over them.
+test('a real run on a tuned model: its own sampling and instructions go with its requests; the panel’s rows win over its own', async () => {
+  const r0 = { use: true, source: 'openai', kind: 'openai', connect: 'http', address: svc.url, model: 'coder:30b', key: false };
+  writeFileSync(join(HOME, 'settings.json'), JSON.stringify({ remote: { ...r0, tuned: { 'coder:30b': { limits: { temperature: 0.6, presence: 0, topK: 20 }, notes: 'Read each file once, then edit it.' } } } }));
+  const from = svc.seen.length;
+  const r = await runOne(R('coder:30b'), 'tuned', { AGENTIC_TEST_SETTINGS: JSON.stringify({ temperature: 0.2 }) });
+  connect(true);
+  expect(r.code, r.log).toBe(0);
+  const chats = svc.seen.slice(from).filter((x) => x.path === '/api/chat' && x.body.model === 'coder:30b' && x.body.stream);
+  expect(chats.length).toBeGreaterThan(0);
+  expect(chats[0].body.options).toMatchObject({ temperature: 0.2, presence_penalty: 0, top_k: 20 });
+  expect(chats[0].body.messages[0].content).toContain('For this model\nRead each file once, then edit it.');
+}, 120_000);
+
+test('/tune’s Test: the set "tune" is the three short Practice 28 tasks on the model, with its rows', async () => {
+  const { TUNE_TESTS } = await import('../../models/index.mjs');
+  const settings = { temperature: 0.6, presence: 0, topK: 20, steps: 120, context: 65536 };
+  const r = await post('/api/line', { name: 'Tune · coder:30b · Custom', items: [{ kind: 'set', id: 'tune', who: R('coder:30b'), think: true, settings }] });
+  expect(r.status).toBe(200);
+  expect(r.body.added).toBe(3);
+  const bt = await get(`/api/batch?id=${r.body.batch}`);
+  expect(bt.items.map((x) => x.test)).toEqual(TUNE_TESTS);
+  expect(bt.items.every((x) => x.who === R('coder:30b'))).toBe(true);
+  await post('/api/clearline');
+  await idle();
+}, 60_000);
+
 test('a real run with /remote off ends at once with the reason, and asks the service nothing', async () => {
   connect(false);
   const from = svc.seen.length;

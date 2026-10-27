@@ -9,6 +9,7 @@ import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, searchBytes, EMBEDDE
 import { SEARCH } from '../agent/search.mjs';
 import { rulesRoomFor, upFrontFor, CHARS_PER_TOKEN, SERVICE_REPLY } from '../agent/room.mjs';
 import { LOOK_STEPS, LOOK_BACKS, lookSecs, showLook } from '../agent/look.mjs';
+import { THINK_BUDGET_SECS } from '../agent/agent-said.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
 const mins = (s) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`);
@@ -25,6 +26,21 @@ const mb = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math
 // a JSON list. Steering it off words it just used works against a tool call, which repeats its tags and names.
 // Not measured yet. A value picked in /model or /effort still wins.
 const qwenCoding = (m) => Boolean(m?.remote?.ollama) && /^qwen3\.6(:|$)/i.test(String(m?.remote?.model ?? ''));
+
+// /tune's presets (27 Oct 2026): the sampling rows set together. Coding is the makers' values for precise
+// coding (Qwen's temperature 0.6 and presence 0, what Qwen3.6 starts on); Maker's own leaves every row to the
+// model's Modelfile on the service (often 1 and 1, its maker's values for chat). Not measured here yet.
+const SAMPLING_ROWS = ['temperature', 'presence', 'topP', 'topK', 'repeatPenalty'];
+const OWNS = Object.fromEntries(SAMPLING_ROWS.map((r) => [r, 'own']));
+export const PRESETS = {
+  coding: { label: 'Coding', note: 'temperature 0.6, presence 0: the makers’ values for precise coding', values: { ...OWNS, temperature: 0.6, presence: 0 } },
+  own: { label: 'Maker’s own', note: 'every row the model’s own on the service (its Modelfile: often for chat)', values: OWNS },
+  steady: { label: 'Steady', note: 'temperature 0.2, presence 0: much the same answer each time', values: { ...OWNS, temperature: 0.2, presence: 0 } },
+};
+// The preset the sampling rows match, or 'custom'.
+export const presetOf = (values) => Object.keys(PRESETS).find((id) => SAMPLING_ROWS.every((r) => values?.[r] === PRESETS[id].values[r])) ?? 'custom';
+const ownOr = (v) => (v === 'own' ? 'its own' : String(v));
+const thinkEnv = () => (process.env.AGENTIC_THINK_BUDGET != null && process.env.AGENTIC_THINK_BUDGET !== '' && Number.isFinite(Number(process.env.AGENTIC_THINK_BUDGET)) ? Number(process.env.AGENTIC_THINK_BUDGET) : null);
 
 export const LIMITS = [
   // Who decides (agent/way.mjs, 30 Sep 2026): the app, as before, or the model, as in Claude
@@ -217,6 +233,51 @@ export const LIMITS = [
     show: pct,
     note: () => 'of the context, with the next reply: the chat is summarized',
   },
+  // /tune's own rows (27 Oct 2026, the owner: "can u add a command to tune bonsai?"): kept by model like the
+  // rows above (OWN_ROWS) and shown only in /tune (shownLimits' tune), so /effort and /model's menu keep
+  // their rows and places (Look first is still the last of theirs). Preset moves the sampling rows together and is read back from
+  // them (presetOf): it is never saved itself (derived).
+  {
+    id: 'preset', label: 'Preset', model: true, tune: true, choice: true, derived: true,
+    steps: () => Object.keys(PRESETS),
+    def: (m) => presetOf(Object.fromEntries(SAMPLING_ROWS.map((r) => [r, byId[r].def(m)]))),
+    show: (v) => PRESETS[v]?.label ?? 'Custom',
+    note: (v) => PRESETS[v]?.note ?? 'your own mix of the rows below · ←→ picks a preset',
+  },
+  {
+    id: 'topP', label: 'Top-p', model: true, tune: true, choice: true,
+    steps: () => ['own', 0.8, 0.9, 0.95, 1],
+    def: () => 'own',
+    show: ownOr,
+    note: (v) => (v === 'own' ? 'the model’s own on the service' : v < 0.95 ? 'only the likeliest words: steadier' : 'all but the unlikeliest words'),
+  },
+  {
+    id: 'topK', label: 'Top-k', model: true, tune: true, choice: true,
+    steps: () => ['own', 10, 20, 40, 100],
+    def: () => 'own',
+    show: ownOr,
+    note: (v) => (v === 'own' ? 'the model’s own on the service' : `picks among the ${v} likeliest words${v <= 20 ? ': steadier' : ''}`),
+  },
+  {
+    id: 'repeatPenalty', label: 'Repeat penalty', model: true, tune: true, choice: true,
+    steps: () => ['own', 1, 1.05, 1.1, 1.2],
+    def: () => 'own',
+    show: ownOr,
+    note: (v) => (v === 'own' ? 'the model’s own on the service' : v === 1 ? 'off' : 'holds back words it has just written · too high and code suffers'),
+  },
+  {
+    // The time a request thinks fully (agent-model.mjs: past half of it, briefly or not at all). 0 = auto:
+    // THINK_BUDGET_SECS. AGENTIC_THINK_BUDGET, where set, still wins (applyLimits).
+    id: 'thinkTime', label: 'Thinking time', model: true, tune: true,
+    steps: () => [0, 300, 600, 900, 1800, 3600],
+    def: () => 0,
+    show: (v) => (v ? mins(v) : 'auto'),
+    note: (v) => {
+      const env = thinkEnv();
+      if (env != null) return `⚠ AGENTIC_THINK_BUDGET (${env ? mins(env) : 'never'}) is set for this window and wins`;
+      return `${v ? '' : `${mins(THINK_BUDGET_SECS)} · `}it thinks fully for half of it, then briefly, to finish in time`;
+    },
+  },
   {
     // Look first (agent/look.mjs): a minimum of searching and reading before the answer. Last, so
     // the rows above keep their places; auto follows Effort (Low none, Medium 15 s, High 30 s).
@@ -250,9 +311,13 @@ export function defaultLimits(model) {
 // its Effort and these rows, kept by model in the service's set-up ("tuned", beside "contexts",
 // which holds its Context). The rest (Who decides, the search's, this Mac's Context and Thinking
 // cap) every model shares. A row it has not set follows the shared value, as before.
-export const OWN_ROWS = ['replyTokens', 'temperature', 'presence', 'keepLoaded', 'tries', 'steps', 'rulesRoom', 'upFront', 'outputLines', 'timeoutSecs', 'trimAt', 'summarizeAt', 'look'];
-// { level, limits } kept for a remote model (by the name the service knows it by), or null.
+export const OWN_ROWS = ['replyTokens', 'temperature', 'presence', 'keepLoaded', 'tries', 'steps', 'rulesRoom', 'upFront', 'outputLines', 'timeoutSecs', 'trimAt', 'summarizeAt', 'look', 'topP', 'topK', 'repeatPenalty', 'thinkTime'];
+// { level, limits, notes } kept for a remote model (by the name the service knows it by), or null.
+// notes: /tune's instructions for that model alone (the instructions' "For this model" part).
 export const ownOf = (settings, name) => (name ? settings?.remote?.tuned?.[name] ?? null : null);
+export const NOTES_MAX = 1000;
+// A model's own instructions, as kept: trimmed, at most NOTES_MAX characters, '' for none.
+export const cleanNotes = (v) => (typeof v === 'string' ? v.trim().slice(0, NOTES_MAX) : '');
 
 // The values in use: the defaults, with what settings.json holds on top, and a
 // remote model's own rows on top of that (own: false leaves them out: what it
@@ -265,9 +330,15 @@ export function readLimits(settings, model, { own = true } = {}) {
   };
   const saved = settings?.limits ?? {};
   for (const l of LIMITS) if (fits(l, saved[l.id])) out[l.id] = saved[l.id];
-  const mine = own ? ownOf(settings, model?.remote?.model)?.limits ?? {} : {};
+  const kept = own ? ownOf(settings, model?.remote?.model) : null;
+  const mine = kept?.limits ?? {};
   for (const l of LIMITS) if (OWN_ROWS.includes(l.id) && fits(l, mine[l.id])) out[l.id] = mine[l.id];
   if (out.trimAt >= out.summarizeAt) { out.trimAt = defaultLimits(model).trimAt; out.summarizeAt = defaultLimits(model).summarizeAt; }
+  out.preset = presetOf(out);
+  // Its own instructions ride with its values, so every place that puts them in use (modelWithLimits) has them;
+  // notesOf: whose they are, so another model given these values (a profile's, a switch) never gets them.
+  const notes = cleanNotes(kept?.notes);
+  if (notes) { out.notes = notes; out.notesOf = model.remote.model; }
   return out;
 }
 
@@ -277,9 +348,15 @@ export function readLimits(settings, model, { own = true } = {}) {
 // gives one the code search). This Mac's search stays as saved, in /effort on This Mac. The model's
 // own rows (Reply length, Temperature…) are only on a service.
 // own: /model's menu for one model, its own rows only (and its Context).
-export function shownLimits(model, { own = false } = {}) {
+// tune: /tune's panel (a model on a service): the rows that change how it writes first, Preset on top,
+// then the limits a tune moves most. The rest of its own rows stay in /model's menu.
+export const TUNE_ROWS = ['preset', 'temperature', 'presence', 'topP', 'topK', 'repeatPenalty', 'thinkTime', 'replyTokens', 'steps', 'tries', 'look', 'context'];
+// The heading a row sits under in /tune.
+export const tuneGroup = (id) => (['preset', ...SAMPLING_ROWS].includes(id) ? 'How it writes' : 'Limits');
+export function shownLimits(model, { own = false, tune = false } = {}) {
+  if (tune) return TUNE_ROWS.map((id) => byId[id]);
   const svc = Boolean(model?.remote?.ollama);
-  return LIMITS.filter((l) => (svc ? !(l.id === 'thinking' || l.group === 'Search') : !l.model) && (!own || l.id === 'context' || OWN_ROWS.includes(l.id)));
+  return LIMITS.filter((l) => !l.tune && (svc ? !(l.id === 'thinking' || l.group === 'Search') : !l.model) && (!own || l.id === 'context' || OWN_ROWS.includes(l.id)));
 }
 
 // ---------- The Tests page's control panel (its Run tab) ----------
@@ -326,7 +403,7 @@ export function panelData(models, { freeBytes = null } = {}) {
 // Mac's (Steps 80 picked on Qwen is still 80 after a save on a big model).
 export function limitsToSave(values, model, keep = {}) {
   const d = defaultLimits(model);
-  return Object.fromEntries(LIMITS.filter((l) => values[l.id] !== d[l.id] || (keep[l.id] !== undefined && keep[l.id] === values[l.id])).map((l) => [l.id, values[l.id]]));
+  return Object.fromEntries(LIMITS.filter((l) => !l.derived && (values[l.id] !== d[l.id] || (keep[l.id] !== undefined && keep[l.id] === values[l.id]))).map((l) => [l.id, values[l.id]]));
 }
 
 
@@ -340,9 +417,12 @@ export function moveLimit(values, id, dir, model) {
   // A named choice moves along its list; a number to the next step that way.
   const next = l.choice ? steps[steps.indexOf(v) + dir] : dir > 0 ? steps.find((s) => s > v) : [...steps].reverse().find((s) => s < v);
   if (next === undefined) return values;
+  // Preset sets the sampling rows; a sampling row moved by hand makes it whatever they now match (Custom).
+  if (id === 'preset') return { ...values, ...PRESETS[next].values, preset: next };
   const out = { ...values, [id]: next };
   if (id === 'trimAt' && out.trimAt >= out.summarizeAt) return values;
   if (id === 'summarizeAt' && out.trimAt >= out.summarizeAt) return values;
+  if (SAMPLING_ROWS.includes(id) && 'preset' in values) out.preset = presetOf(out);
   return out;
 }
 
@@ -352,7 +432,7 @@ export const isDefault = (id, values, model) => values[id] === byId[id].def(mode
 
 // What changed between two sets of values, for the note after a save.
 export function limitChanges(before, after) {
-  return LIMITS.filter((l) => before[l.id] !== after[l.id]).map((l) => ({ id: l.id, label: l.label, from: l.show(before[l.id]), to: l.show(after[l.id]), restart: !!l.restart }));
+  return LIMITS.filter((l) => !l.derived && before[l.id] !== after[l.id]).map((l) => ({ id: l.id, label: l.label, from: l.show(before[l.id]), to: l.show(after[l.id]), restart: !!l.restart }));
 }
 
 // The model with its thinking cap moved: the server's --reasoning-budget,
@@ -360,7 +440,8 @@ export function limitChanges(before, after) {
 // `model` is always the registry's (its budget is the default); the copy goes
 // to the agent and the server only.
 // A model on a service also takes its own Reply length (replyTokens: the agent's num_predict) and
-// sampling (Temperature, Presence penalty) from here; 'own' leaves the service's.
+// sampling (Temperature, Presence penalty, and /tune's Top-p, Top-k, Repeat penalty) from here; 'own'
+// leaves the service's. Its own instructions (/tune's, values.notes) go with it as ownNotes.
 export function modelWithLimits(model, values) {
   let out = model;
   const want = values?.thinking;
@@ -368,8 +449,13 @@ export function modelWithLimits(model, values) {
   const s = {};
   if (typeof values?.temperature === 'number') s.temperature = values.temperature;
   if (typeof values?.presence === 'number') s.presence_penalty = values.presence;
+  if (typeof values?.topP === 'number') s.top_p = values.topP;
+  if (typeof values?.topK === 'number') s.top_k = values.topK;
+  if (typeof values?.repeatPenalty === 'number') s.repeat_penalty = values.repeatPenalty;
   if (Object.keys(s).length) out = { ...out, sampling: { ...out.sampling, ...s }, thinkingSampling: { ...out.thinkingSampling, ...s } };
   if (values?.replyTokens) out = { ...out, replyTokens: values.replyTokens };
+  const notes = !values?.notesOf || values.notesOf === model?.remote?.model ? cleanNotes(values?.notes) : '';
+  if (notes || out.ownNotes) out = { ...out, ownNotes: notes || undefined };
   return out;
 }
 
@@ -436,6 +522,12 @@ export function applyLimits(agent, values) {
   agent.rulesRoom = values.rulesRoom;
   agent.upFront = values.upFront;
   agent.look = values.look; // Look first: from the next message
+  // Thinking time (/tune): AGENTIC_THINK_BUDGET, where set, wins, as at the agent's start (budgetFromEnv);
+  // auto is what the agent started with (THINK_BUDGET_SECS, or a practice run's own limit).
+  if (values.thinkTime !== undefined && thinkEnv() == null) {
+    agent.thinkAuto ??= agent.thinkBudgetSecs;
+    agent.thinkBudgetSecs = values.thinkTime || agent.thinkAuto;
+  }
   agent.syncRules?.(); // a new Rules room reads the rules again once
   // Who decides: from the next message (the prompt and the tools change with it).
   if (values.way) agent.setWay?.(values.way);

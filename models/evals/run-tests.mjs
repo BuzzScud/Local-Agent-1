@@ -244,13 +244,16 @@ export function practiceChoice(n, home) {
 // (else it is off). `total` is how many tests the run has, where the list can change (My tests).
 // The rows the Tests page's control panel may change for a run (/effort's rows; their ranges are
 // checked again where they are used, terminal/src/app/limits.mjs testLimits). Named choices are ids.
-const PANEL_ROWS = { way: 'choice', embedder: 'choice', retriever: 'choice', reranker: 'choice', context: 'number', thinking: 'number', tries: 'number', steps: 'number', rulesRoom: 'number', upFront: 'number', outputLines: 'number', timeoutSecs: 'number', trimAt: 'number', summarizeAt: 'number', look: 'choice' };
+// A model's own rows (either: 'own' or a number) come with /tune's Test (27 Oct 2026).
+const PANEL_ROWS = { way: 'choice', embedder: 'choice', retriever: 'choice', reranker: 'choice', context: 'number', thinking: 'number', tries: 'number', steps: 'number', rulesRoom: 'number', upFront: 'number', outputLines: 'number', timeoutSecs: 'number', trimAt: 'number', summarizeAt: 'number', look: 'choice',
+  replyTokens: 'number', temperature: 'either', presence: 'either', topP: 'either', topK: 'either', repeatPenalty: 'either', thinkTime: 'number' };
 export function cleanSettings(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const out = {};
   for (const [k, kind] of Object.entries(PANEL_ROWS)) {
     const x = v[k];
-    if (kind === 'choice' ? typeof x === 'string' && /^[a-z0-9][a-z0-9.-]{0,40}$/i.test(x) : typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1e6) out[k] = x;
+    const word = typeof x === 'string' && /^[a-z0-9][a-z0-9.-]{0,40}$/i.test(x), num = typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1e6;
+    if (kind === 'choice' ? word : kind === 'either' ? word || num : num) out[k] = x;
   }
   return Object.keys(out).length ? out : null;
 }

@@ -28,7 +28,7 @@ export { readEdited, readEditedAll, writeEdited, removeEdited, editedModel, edit
 // The Arena (a test on one model, or a battle of Gemma and Qwen): its runner, and the hold that makes an app window wait.
 export { startBattle, battleHold, battleUrl } from './evals/battle/start.mjs';
 export { RUN_TESTS, runCatalog, findRunTest, runTestById } from './evals/run-tests.mjs';
-export { battleCounts } from './evals/battle/store.mjs';
+export { battleCounts, TUNE_TESTS } from './evals/battle/store.mjs';
 // Every test prompt this Mac knows, so the memory never learns from a test pasted into the app.
 export { testPrompts } from './evals/prompts.mjs';
 // The Test builder: your own tests, read and changed straight in the arena's store (no runner needed).

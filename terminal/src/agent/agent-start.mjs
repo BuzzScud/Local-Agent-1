@@ -2,7 +2,7 @@
 // prompt files saved since the last task, a picture described for a model that cannot see, and the focused
 // paths (rename / fix / change). Its methods are put on Agent.prototype by agent.mjs, so this is the Agent:
 // every this.x() is the agent's own. Moved from work() word for word.
-import { readInstructions, replaceInstructionBlock } from './instructions.mjs';
+import { readInstructions, replaceInstructionBlock, withModelNotes } from './instructions.mjs';
 import { describePictures, describedNote } from './helper-models.mjs';
 import { runFlows } from '../flows/index.mjs';
 import { tallies } from '../flows/llm.mjs';
@@ -11,14 +11,17 @@ import { tokensOf } from './agent-said.mjs';
 export class StartPart {
   loadChanges() {
     // A hub save applies between tasks; in-flight requests keep their snapshot.
+    // With the model's own instructions (/tune), which change with a save there or another model.
     const instructions = readInstructions();
-    this.workingInstructions = instructions.sections;
+    const was = this.workingInstructions?.model ?? '';
+    this.workingInstructions = withModelNotes(instructions.sections, this.model?.ownNotes);
     const before = this.messages[0].content;
-    const after = replaceInstructionBlock(before, instructions.sections);
+    const after = replaceInstructionBlock(before, this.workingInstructions);
     if (after !== before) {
       this.setSystem(after);
       this.ctxUsed += tokensOf(after) - tokensOf(before);
-      this.emit('note', { text: 'Updated working instructions loaded.', tone: 'dim' });
+      const mine = this.workingInstructions.model ?? '';
+      this.emit('note', { text: mine !== was ? `${this.model?.remote?.model ?? this.model?.name ?? 'The model'}’s own instructions (/tune) ${mine ? 'loaded' : 'taken out'}.` : 'Updated working instructions loaded.', tone: 'dim' });
     }
     // A save of AGENTS.md, TOOLS.md or SKILLS.md (the hub's Prompt files) applies between tasks too.
     // Not in a helper: its one task keeps the prompt it was handed (the parent's, with its part).

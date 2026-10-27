@@ -18,13 +18,13 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync, appendFileSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { MODELS, ModelServer, Embedder, embedderReady } from '../../index.mjs';
-import { runHeadless, helpersOn, testSettings, modelWithLimits, readLimits, layoutCheck, MODEL_HOOKS } from '../../../terminal/index.mjs';
+import { runHeadless, helpersOn, testSettings, modelWithLimits, readLimits, layoutCheck, MODEL_HOOKS, ownOf, cleanNotes } from '../../../terminal/index.mjs';
 // A run from the Tests page's control panel: its Context and Thinking cap (the rest reaches runHeadless).
 const panel = testSettings();
 import { runChecksWith, snapshot } from './checks.mjs';
 import { readJson, limitSecsOf, pointsOf } from './store.mjs';
 import { keepPage } from './builder.mjs';
-import { isRemoteId, connectEntrant } from './remote-entrants.mjs';
+import { isRemoteId, connectEntrant, connectedRemote, parseRemoteId } from './remote-entrants.mjs';
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
@@ -44,7 +44,13 @@ if (remote) {
   emit({ type: 'note', text: `connecting to ${opt('model').split(':').slice(2).join(':')}` });
   try { entry = await connectEntrant(opt('model'), { ctx: panel?.context ?? null, onLoading: (text) => emit({ type: 'note', text }) }); } catch (e) { emit({ type: 'note', text: `crashed: ${e.message}` }); console.error(e.message); process.exit(1); }
 }
-const model = modelWithLimits(entry ? entry.conn.model : MODELS[opt('model')], panel ?? {});
+// A remote model runs as its window runs it (27 Oct 2026, /tune): its own rows and instructions (/model's menu,
+// /tune: kept by model in the service's set-up) under the panel's, and its sampling with them; this Mac's models
+// keep the panel's alone.
+const own = entry ? ownOf({ remote: connectedRemote() }, parseRemoteId(opt('model')).model) : null;
+const ownNotes = cleanNotes(own?.notes);
+const ownLimits = entry ? { ...readLimits({ limits: { ...(own?.limits ?? {}), ...(panel ?? {}) } }, entry.conn.model, { own: false }), ...(ownNotes ? { notes: ownNotes } : {}) } : null;
+const model = modelWithLimits(entry ? entry.conn.model : MODELS[opt('model')], ownLimits ?? panel ?? {});
 const ctx = Number(opt('ctx', panel?.context ?? entry?.conn.ctx ?? 32768));
 
 const meta = readJson(join(test, 'meta.json'), {});
@@ -74,8 +80,8 @@ process.on('SIGINT', () => { why ??= 'stopped'; ac.abort(); });
 const helpers = helpersOn(undefined);
 const embedder = helpers.has('rag') && embedderReady() ? new Embedder() : null;
 const server = entry ? { url: entry.conn.url, start: async () => ({ slots: entry.conn.slots ?? 1 }), stop: () => entry.done() } : new ModelServer(model);
-// A remote model's own limits (big-model mode on a big one), the panel's rows on top; this Mac's models keep the tests' (runHeadless).
-const limits = entry ? { ...readLimits({ limits: panel ?? {} }, model), context: ctx } : null;
+// A remote model's own limits (big-model mode on a big one, and its own rows), the panel's rows on top; this Mac's models keep the tests' (runHeadless).
+const limits = entry ? { ...ownLimits, context: ctx } : null;
 let run = null;
 try {
   if (!entry) emit({ type: 'note', text: `loading ${model.id}` });

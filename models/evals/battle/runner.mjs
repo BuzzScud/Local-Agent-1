@@ -30,7 +30,7 @@ import { join, dirname, resolve, extname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MODELS, MODELS_DIR, DEFAULT_MODEL, modelPath, scanServers, stopIdleServers, serverProcesses, recordTest, readRecord, codeLabel, availableBytes, needBytes, freeAfterQuit, SERVER_PROCESS, HOME } from '../../index.mjs';
 import { panelData } from '../../../terminal/index.mjs';
-import { paths, BATTLE_PORT, LIMIT_SECS, SUITES, LEVELS, limitSecsOf, pointsOf, readJson, writeJson, seedSuites, listTests, saveTest, trashTest, resetTest, trashBattles, readBattle, listBattles, latestByTest, writeHold, clearHold, inside, runnerPid } from './store.mjs';
+import { paths, BATTLE_PORT, LIMIT_SECS, SUITES, LEVELS, TUNE_TESTS, limitSecsOf, pointsOf, readJson, writeJson, seedSuites, listTests, saveTest, trashTest, resetTest, trashBattles, readBattle, listBattles, latestByTest, writeHold, clearHold, inside, runnerPid } from './store.mjs';
 import { RUN_TESTS, runTestById, runCommand, countLines, cleanSettings, runCatalog } from '../run-tests.mjs';
 import { labelOf } from './checks.mjs';
 import { remoteEntrants, isRemoteId, parseRemoteId, connectedRemote } from './remote-entrants.mjs';
@@ -78,6 +78,8 @@ const SETS = {
   writing: ['New 28 · Writing', (t) => t.suite === 'new28' && t.kind === 'writing'],
   work28: ['Work 28', (t) => t.suite === 'work28'],
   practice: ['Practice 28', (t) => t.suite === 'practice' && !t.copyOf],
+  // /tune's Test: three short Practice 28 tasks on the model being tuned (store.mjs TUNE_TESTS).
+  tune: ['Tune check (3 Practice tasks)', (t) => t.suite === 'practice' && !t.copyOf && TUNE_TESTS.includes(t.id)],
   mine: ['My tests', (t) => !OWN.includes(t.suite)],
   // Your own tests of one level (the Test builder sets a test's level).
   ...Object.fromEntries(Object.entries(LEVELS).map(([lv, L]) => [`mine-${lv}`, [`My tests · ${L.name}`, (t) => !OWN.includes(t.suite) && t.level === lv]])),

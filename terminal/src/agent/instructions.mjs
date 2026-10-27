@@ -74,9 +74,12 @@ export function saveInstructions(sections, revision, { home = instructionHome(),
     if (existsSync(temp)) unlinkSync(temp);
   }
 }
+// sections.model: the model's own instructions (/tune, 27 Oct 2026), its own part at the end; none, no part.
 export function instructionBlock(sections = readInstructions().sections) {
-  return `${INSTRUCTION_START}General\n${sections.general}\n\nPlanning\n${sections.planning}${INSTRUCTION_END}`;
+  return `${INSTRUCTION_START}General\n${sections.general}\n\nPlanning\n${sections.planning}${sections.model ? `\n\nFor this model\n${sections.model}` : ''}${INSTRUCTION_END}`;
 }
+// The working instructions with a model's own (its ownNotes, from modelWithLimits) as their last part.
+export const withModelNotes = (sections, notes) => (notes ? { ...sections, model: notes } : sections);
 export function replaceInstructionBlock(prompt, sections) {
   const start = prompt.indexOf(INSTRUCTION_START), end = prompt.indexOf(INSTRUCTION_END, start);
   if (start < 0 || end < 0) return prompt;

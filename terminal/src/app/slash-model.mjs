@@ -1,10 +1,11 @@
-// The slash commands of the model: /start, /stop, /autostart, /model, /profiles, /subagents, /usage, /stats, /doctor (app-slash.mjs sends each its own).
+// The slash commands of the model: /start, /stop, /autostart, /model, /tune, /profiles, /subagents, /usage, /stats, /doctor (app-slash.mjs sends each its own).
 // Moved word for word out of runSlashFn's switch: the same cases, in the same order.
 import { remoteLabel } from '../../../models/index.mjs';
 import { kindWord } from './remote-form.mjs';
 import { showLimit } from './limits.mjs';
+import { openTune, saveTuneNotes, startTuneTest } from './tune-cmd.mjs';
 
-export const MODEL_COMMANDS = ['start', 'stop', 'autostart', 'model', 'profiles', 'subagents', 'usage', 'stats', 'doctor'];
+export const MODEL_COMMANDS = ['start', 'stop', 'autostart', 'model', 'tune', 'profiles', 'subagents', 'usage', 'stats', 'doctor'];
 
 export function slashModel(self) {
   return async (cmd, arg, busy, line) => {
@@ -22,6 +23,16 @@ export function slashModel(self) {
       }
       case 'model': {
         self.openModelPicker();
+        break;
+      }
+      // /tune: the panel (tune-cmd.mjs openTune); /tune notes <text> or off: the model's own instructions;
+      // /tune test: its settings on the Arena's three short tasks (t in the panel does the same after saving).
+      case 'tune': {
+        const m = /^notes?(?:\s+([\s\S]*))?$/i.exec(arg.trim());
+        if (m && !m[1]?.trim()) { const notes = (self.limitsRef.current.notes ?? ''); self.push({ type: 'note', text: notes ? `${self.model.remote?.model ?? self.model.name}’s own instructions: ${notes}` : 'No instructions of its own: /tune notes <what it should do> gives it some.', tone: 'dim' }); break; }
+        if (m) { saveTuneNotes(self, m[1]); break; }
+        if (/^test$/i.test(arg.trim())) { await startTuneTest(self); break; }
+        openTune(self);
         break;
       }
       case 'profiles': {

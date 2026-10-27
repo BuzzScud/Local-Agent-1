@@ -409,7 +409,9 @@ export function modelPart(self) {
     const was = self.limitsRef.current;
     const fresh = readLimits({ ...loadSettings(self.opts.cwd), remote: self.settings.remote }, m);
     // Who decides moves too: a big model on a service decides for itself (BIG_HARNESS), unless /effort saved one.
-    const next = { ...was, ...Object.fromEntries(OWN_ROWS.map((id) => [id, fresh[id]])), way: fresh.way };
+    // Its own instructions (/tune) are its own: none of the model before it.
+    const { notes: _n, notesOf: _o, ...kept } = was;
+    const next = { ...kept, ...Object.fromEntries(OWN_ROWS.map((id) => [id, fresh[id]])), way: fresh.way, preset: fresh.preset, ...(fresh.notes ? { notes: fresh.notes, notesOf: fresh.notesOf } : {}) };
     const name = m.remote?.model ?? m.name;
     const own = m.remote ? ownOf(self.settings, m.remote.model) : null;
     ownLevel(m, own);
