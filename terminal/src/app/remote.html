@@ -99,6 +99,20 @@ button { font: inherit; color: inherit; }
 .spec .w { color: var(--ink2); }
 .lead { font-size: 15px; margin: 0 0 4px; }
 .from { color: var(--ink3); font-size: 12px; margin: 6px 0 0; }
+/* Tune (27 Oct 2026): /tune's rows, a label, its value and what that value does, in one grid per heading. */
+.tg { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); gap: 7px 10px; align-items: center; font-size: 13px; }
+.tg label, .tg .tl { color: var(--ink2); white-space: nowrap; }
+.tg select { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 3px 6px; min-width: 9em; }
+.tg select:focus-visible, .tune textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tg select.moved { border-color: var(--accent); background: var(--tint); }
+.tg .tn { color: var(--ink3); font-size: 12px; min-width: 0; }
+.tg .mv, .tune .mv { color: var(--accent); font-style: normal; font-weight: 600; }
+.tune textarea { display: block; box-sizing: border-box; width: 100%; resize: vertical; font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 9px; padding: 7px 10px; }
+.tune textarea.moved { border-color: var(--accent); }
+.tacts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.tacts .note { font-size: 12.5px; color: var(--ink3); }
+.tacts .note.ok { color: var(--up); } .tacts .note.no { color: var(--down); }
+@media (max-width: 640px) { .tg { grid-template-columns: max-content minmax(0, 1fr); } .tg .tn { grid-column: 1 / -1; margin-top: -4px; } }
 .can { display: grid; grid-template-columns: 22px max-content minmax(0, 1fr); gap: 7px 10px; font-size: 13.5px; align-items: baseline; }
 .can .w { color: var(--ink2); }
 pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink2); max-height: 46vh; overflow: auto; scrollbar-width: thin; }
@@ -136,14 +150,15 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
     </div>
     <div class="box" id="det"></div>
   </div>
-  <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> model · <kbd>1</kbd>–<kbd>7</kbd> tab · <kbd>/</kbd> find · <kbd>r</kbd> refresh</div>
+  <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> model · <kbd>1</kbd>–<kbd>8</kbd> tab · <kbd>/</kbd> find · <kbd>r</kbd> refresh</div>
 </main>
 <script>
 (() => {
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const TABS = [['overview', 'Overview'], ['abilities', 'Abilities'], ['memory', 'Memory'], ['settings', 'Settings'], ['inside', 'Inside'], ['results', 'Results'], ['license', 'License']];
-  const S = { data: null, service: null, pick: null, tab: 'overview', q: '', open: {}, detail: {}, at: 0, loading: false };
+  const TABS = [['overview', 'Overview'], ['abilities', 'Abilities'], ['memory', 'Memory'], ['settings', 'Settings'], ['tune', 'Tune'], ['inside', 'Inside'], ['results', 'Results'], ['license', 'License']];
+  // draft: /tune's rows moved and not saved yet, by service and model (the Tune tab).
+  const S = { data: null, service: null, pick: null, tab: 'overview', q: '', open: {}, detail: {}, draft: {}, at: 0, loading: false };
   try { const k = JSON.parse(localStorage.getItem('remote-tab') || '{}'); if (k.service) S.service = k.service; if (k.tab) S.tab = k.tab; if (k.pick) S.pick = k.pick; } catch {}
   const keep = () => { try { localStorage.setItem('remote-tab', JSON.stringify({ service: S.service, tab: S.tab, pick: S.pick })); } catch {} };
   const qs = new URL(location.href).searchParams;
@@ -247,9 +262,13 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
     ].join('');
     const last = m.last && !busy ? (m.last.ok ? `<span class="note ok">${m.last.what === 'load' ? 'Loaded' : m.last.what === 'unload' ? 'Unloaded' : 'Tried'} ${ago(m.last.at)}</span>` : `<span class="note no" title="${esc(m.last.error)}">${m.last.what === 'try' ? 'The try' : m.last.what === 'load' ? 'Loading' : 'Unloading'} failed: ${esc(m.last.error)}</span>`) : busy ? `<span class="note warnc">${busy.what === 'try' ? (ol ? 'Trying it: a file, a line, a command…' : 'Asking it to count…') : busy.what === 'load' ? 'Loading it on the service (a big model can take minutes)…' : 'Unloading…'} ${ago(busy.since).replace(' ago', '')}</span>` : '';
     const sub = [d?.service?.label, d?.inUse ? 'the app uses this one' : ''].filter(Boolean).join(' · ');
+    const typing = document.activeElement?.id === 'tune-notes' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
     box.innerHTML = `<div class="dh"><h2>${esc(m.name && m.name !== m.id ? `${m.name}` : m.id)}</h2>${m.loaded && ol ? '<span class="sub ok">● loaded</span>' : ''}<span class="sub">${esc(sub)}</span><div class="acts">${last}${acts}</div></div>
       <nav class="tabs" role="tablist">${TABS.map(([k, n], i) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${i + 1} · ${n}</button>`).join('')}</nav>
       <div class="pane" role="tabpanel">${pane(m, d)}</div>`;
+    // A redraw while you write your instructions (a list read again) keeps you where you were.
+    const notes = typing && document.getElementById('tune-notes');
+    if (notes) { notes.focus(); notes.setSelectionRange(...typing); }
   }
 
   const fact = (k, v, small) => (v === '' || v == null ? '' : `<dt>${esc(k)}</dt><dd>${v}${small ? ` <small>${esc(small)}</small>` : ''}</dd>`);
@@ -327,6 +346,7 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
       const rr = `<div class="sect"><h3>Tests on it <span>from the test record</span></h3>${runs.length ? `<table class="runs"><tr><th class="n">When</th><th>Test</th><th class="n">Result</th><th class="n">Time</th></tr>${runs.map((r) => `<tr><td class="n">${esc(day(r.at))}</td><td>${esc(r.name)}${r.note ? `<br><small class="quiet">${esc(r.note.length > 200 ? `${r.note.slice(0, 200)}…` : r.note)}</small>` : ''}</td><td class="n ${r.result === 'pass' ? 'ok' : 'no'}">${r.total ? `${r.passed} of ${r.total}` : esc(r.result)}</td><td class="n">${esc(r.secs >= 600 ? `${Math.round(r.secs / 60)} min` : secs(r.secs))}</td></tr>`).join('')}</table>` : `<p class="quiet" style="margin:0">${d ? 'No test has run on it yet. The Arena runs one (/test in Agentic Coder).' : 'Reading…'}</p>`}</div>`;
       return `<div class="cols"><div>${tr}</div>${rr}</div>`;
     }
+    if (S.tab === 'tune') return tunePane(m, d);
     if (S.tab === 'license') {
       if (!ol) return nothing(m.kind === 'claude' ? 'Claude is used under Anthropic\'s terms for your API key.' : 'This service does not share a license.');
       if (!x) return waiting(d) || nothing('The service did not say.');
@@ -334,6 +354,113 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
     }
     return '';
   }
+
+  // ---- Tune (27 Oct 2026): /tune in the hub. The model's own rows, as /tune has them in the app (remote-hub.mjs tuneOf),
+  // kept where the app keeps them; the app uses them from its next step (an open window takes them within 2 s).
+  // A draft per model holds what was moved; Save keeps it, Test on 3 tasks saves first, Use shared drops its rows.
+  const SAMPLING = ['temperature', 'presence', 'topP', 'topK', 'repeatPenalty'];
+  const tkey = (m) => `${S.service}\0${m.id}`;
+  const presetOf = (t, v) => Object.keys(t.presets).find((id) => SAMPLING.every((r) => v[r] === t.presets[id][r])) ?? 'custom';
+  // A draft you have not touched follows what is saved (the window or another tab may save meanwhile).
+  const baseOf = (t) => JSON.stringify([t.rows.map((r) => r.value), t.level, t.notes]);
+  const draftOf = (m, t) => {
+    const k = tkey(m), b = baseOf(t), had = S.draft[k];
+    if (had && (had.base === b || had.touched)) return had;
+    return (S.draft[k] = { base: b, touched: false, values: Object.fromEntries(t.rows.map((r) => [r.id, r.value])), level: t.level, notes: t.notes, said: had?.said ?? '', tone: had?.tone ?? '' });
+  };
+  const movedOf = (t, dr) => [...t.rows.filter((r) => r.id !== 'preset' && dr.values[r.id] !== r.value).map((r) => r.id), ...(dr.level !== t.level ? ['level'] : []), ...(dr.notes.trim() !== t.notes ? ['notes'] : [])];
+  function tuneActs(t, dr) {
+    const n = movedOf(t, dr).length;
+    return `<button class="btn main" type="button" data-tune="save" ${n ? '' : 'disabled'}>Save${n ? ` (${n})` : ''}</button>
+      <button class="btn" type="button" data-tune="test" ${t.canTest ? '' : 'disabled'} title="${esc(t.canTest ? 'Its settings on 3 short Arena tasks (a bug fix, a function with a test, a question), up to 10 min each; the score goes in the test record' : t.testWhy)}">${n ? 'Save and test' : 'Test'} on 3 tasks</button>
+      <button class="btn" type="button" data-tune="reset" ${t.own ? '' : 'disabled'} title="Back to the shared settings and the service's context; its own instructions stay">Use shared</button>
+      ${n ? '<button class="btn" type="button" data-tune="undo">Undo changes</button>' : ''}
+      <span class="note ${dr.tone}">${dr.said}</span>`;
+  }
+  function tunePane(m, d) {
+    if (!S.data.ollama) return nothing('Tune is for a model on an Ollama service: its sampling, thinking time and its own instructions. For the Claude API and other services, /effort in the app has what there is to set.');
+    const t = d?.tune;
+    if (!t) return waiting(d) || nothing('Could not read its settings from here.');
+    const dr = draftOf(m, t);
+    const sg = t.suggested;
+    const row = (r) => {
+      const at = r.steps.findIndex((s) => s.v === dr.values[r.id]);
+      const moved = r.id !== 'preset' && dr.values[r.id] !== r.value;
+      const want = sg?.limits?.[r.id];
+      const tip = want === undefined ? '' : want === dr.values[r.id] ? '<span class="ok">✓ suggested</span> · ' : `suggested ${esc(r.steps.find((s) => s.v === want)?.show ?? want)} · `;
+      const opts = (at < 0 ? '<option value="-1" selected>Custom</option>' : '') + r.steps.map((s, i) => `<option value="${i}"${i === at ? ' selected' : ''}>${esc(s.show)}</option>`).join('');
+      const note = at < 0 ? 'your own mix of the rows below: pick a preset to set them together' : r.steps[at].note;
+      return `<label for="tune-${r.id}">${esc(r.label)}${moved ? ' <i class="mv" title="not saved yet">•</i>' : ''}</label><select id="tune-${r.id}" data-row="${r.id}"${moved ? ' class="moved"' : ''}>${opts}</select><span class="tn">${tip}${esc(note)}</span>`;
+    };
+    const lvMoved = dr.level !== t.level;
+    const level = t.levels.length > 1
+      ? `<label for="tune-level">Thinking${lvMoved ? ' <i class="mv" title="not saved yet">•</i>' : ''}</label><select id="tune-level" data-level${lvMoved ? ' class="moved"' : ''}>${t.levels.map((v) => `<option value="${esc(v.id)}"${v.id === dr.level ? ' selected' : ''}>${esc(v.label)}</option>`).join('')}</select><span class="tn">${esc(t.levels.find((v) => v.id === dr.level)?.note ?? '')}</span>`
+      : `<span class="tl">Thinking</span><span class="tl">${esc(t.levels[0]?.label ?? 'None')}</span><span class="tn">it cannot think first</span>`;
+    const group = (g) => t.rows.filter((r) => r.group === g).map(row).join('');
+    const notesMoved = dr.notes.trim() !== t.notes;
+    return `<div class="tune">
+      <p class="lead" style="margin:0 0 4px">${t.inUse ? 'The app uses this model now: what you save is in use from its next step.' : 'Kept for this model: in use whenever the app runs it.'}</p>
+      <p class="from" style="margin:0 0 12px">The same rows as /tune in the app, kept in the same place. ${sg ? `Suggested: ${esc(sg.why)} (${esc(sg.source)}). <button class="btn" type="button" data-tune="suggest" style="padding:2px 9px;font-size:12px">Fill in the suggested</button>` : 'Nothing is suggested for this model: each row starts from the shared settings.'}</p>
+      <div class="cols"><div class="sect"><h3>How it writes</h3><div class="tg">${level}${group('How it writes')}</div></div>
+        <div class="sect"><h3>Limits</h3><div class="tg">${group('Limits')}</div></div></div>
+      <div class="sect" style="margin-top:12px"><h3>Its own instructions${notesMoved ? ' <i class="mv" title="not saved yet">•</i>' : ''} <span>the last part of its working instructions, from its next message · at most ${t.notesMax} characters</span></h3>
+        <textarea id="tune-notes" rows="3" maxlength="${t.notesMax}" placeholder="None of its own. For example: Read a file once, then edit it."${notesMoved ? ' class="moved"' : ''}>${esc(dr.notes)}</textarea></div>
+      <div class="tacts" id="tacts">${tuneActs(t, dr)}</div>
+    </div>`;
+  }
+  async function tuneDo(what) {
+    const m = byId(S.pick);
+    if (!m) return;
+    const k = tkey(m), d = S.detail[k], t = d?.tune;
+    if (!t) return;
+    const dr = draftOf(m, t);
+    if (what === 'undo') { delete S.draft[k]; drawDetail(); return; }
+    if (what === 'suggest') {
+      for (const [id, v] of Object.entries(t.suggested?.limits ?? {})) if (id in dr.values) dr.values[id] = v;
+      if (t.suggested?.level && t.levels.some((v) => v.id === t.suggested.level)) dr.level = t.suggested.level;
+      dr.values.preset = presetOf(t, dr.values); dr.touched = true;
+      drawDetail(); return;
+    }
+    if (what === 'arena') { if (window.parent !== window) window.parent.postMessage({ agentic: 'open-arena' }, '*'); else location.href = '/arena'; return; }
+    const post = async (path, body) => { const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ service: S.service, id: m.id, ...body }) }); return r.json(); };
+    Object.assign(dr, { said: what === 'test' ? 'Starting the test…' : 'Saving…', tone: '' }); drawDetail();
+    let said = '';
+    try {
+      if (what === 'reset' || movedOf(t, dr).length) {
+        const j = await post('/remote/tune', what === 'reset' ? { reset: true } : { values: dr.values, level: dr.level, notes: dr.notes });
+        if (j.error) throw new Error(j.error);
+        d.tune = j.tune; delete S.draft[k];
+        said = j.said === 'nothing changed' ? 'Nothing changed.' : `Saved: ${esc(j.said)}.${j.tune.inUse ? ' In use from its next step.' : ''}`;
+      }
+      if (what === 'test') {
+        const j = await post('/remote/tune-test', {});
+        if (j.error) throw new Error(j.error);
+        said = `${said ? `${said} ` : ''}Testing it on ${j.tests} short Arena tasks, up to 10 min each; the score goes in the test record. <button class="btn" type="button" data-tune="arena" style="padding:2px 9px;font-size:12px">Watch in the Arena</button>`;
+      }
+      Object.assign(draftOf(m, d.tune), { said, tone: 'ok' });
+    } catch (e) { Object.assign(draftOf(m, d.tune), { said: esc(e.message), tone: 'no' }); }
+    drawDetail();
+  }
+  document.addEventListener('change', (e) => {
+    const m = byId(S.pick); const t = m && S.detail[tkey(m)]?.tune; if (!t) return;
+    const dr = draftOf(m, t);
+    const sel = e.target.closest('select[data-row]');
+    if (sel) {
+      const r = t.rows.find((x) => x.id === sel.dataset.row); const i = Number(sel.value); if (!r || i < 0) return;
+      dr.values[r.id] = r.steps[i].v; dr.touched = true;
+      if (r.id === 'preset') Object.assign(dr.values, t.presets[dr.values.preset]);
+      else if (SAMPLING.includes(r.id)) dr.values.preset = presetOf(t, dr.values);
+      dr.said = ''; drawDetail(); document.getElementById(`tune-${r.id}`)?.focus(); return;
+    }
+    if (e.target.matches('select[data-level]')) { dr.level = e.target.value; dr.touched = true; dr.said = ''; drawDetail(); document.getElementById('tune-level')?.focus(); }
+  });
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'tune-notes') return;
+    const m = byId(S.pick); const t = m && S.detail[tkey(m)]?.tune; if (!t) return;
+    const dr = draftOf(m, t); dr.notes = e.target.value; dr.touched = true; dr.said = '';
+    e.target.classList.toggle('moved', dr.notes.trim() !== t.notes);
+    const a = document.getElementById('tacts'); if (a) a.innerHTML = tuneActs(t, dr);
+  });
 
   async function act(what) {
     const m = byId(S.pick);
@@ -362,17 +489,20 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
     const c = e.target.closest('.card'); if (c) { pick(c.dataset.id); return; }
     const t = e.target.closest('[data-tab]'); if (t) { S.tab = t.dataset.tab; keep(); drawDetail(); return; }
     const a = e.target.closest('[data-act]'); if (a && !a.disabled) { act(a.dataset.act); return; }
+    const u = e.target.closest('[data-tune]'); if (u && !u.disabled) { tuneDo(u.dataset.tune); return; }
   });
   $('#refresh').onclick = () => load();
   $('#q').oninput = (e) => { S.q = e.target.value.trim().toLowerCase(); drawList(); };
   document.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // The Tune tab's boxes and lists keep their own keys (arrows, letters, numbers).
+    if (e.target.matches('select, textarea')) return;
     const typing = e.target.matches('input, textarea');
     if (e.key === 'Escape' && typing) { e.target.value = ''; S.q = ''; drawList(); e.target.blur(); return; }
     if (typing && !['ArrowDown', 'ArrowUp'].includes(e.key)) return;
     if (e.key === '/') { e.preventDefault(); $('#q').focus(); return; }
     if (e.key === 'r') { load(); return; }
-    if (/^[1-7]$/.test(e.key)) { S.tab = TABS[+e.key - 1][0]; keep(); drawDetail(); return; }
+    if (/^[1-8]$/.test(e.key)) { S.tab = TABS[+e.key - 1][0]; keep(); drawDetail(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       const o = order(); if (!o.length) return; e.preventDefault();
       const i = o.findIndex((m) => m.id === S.pick);

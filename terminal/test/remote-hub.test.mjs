@@ -169,6 +169,58 @@ test('Try it runs the app\'s own try-out in the background and keeps it where /m
   expect(o.unknown.status).toBe(404);
 });
 
+// /tune in the hub (27 Oct 2026): the Tune tab's rows for a model on an Ollama service, saved where the app keeps them.
+test('Tune: a model’s /tune rows with every step’s words; a save keeps the moved rows, its Thinking, Context and instructions for it alone; a value off its steps is refused; Use shared keeps its instructions; the Test needs the service in use', () => {
+  const o = inChild(`
+    await get('/remote.json');
+    const q = 'qwen3-coder-next:latest';
+    out.before = (await get('/remote/model.json?service=openai&id=' + encodeURIComponent(q))).tune;
+    out.gpt = (await get('/remote/model.json?service=openai&id=' + encodeURIComponent('gpt-oss:120b'))).tune;
+    const values = Object.fromEntries(out.before.rows.map((r) => [r.id, r.value]));
+    out.save = await post('/remote/tune', { service: 'openai', id: q, values: { ...values, temperature: 0.6, presence: 0, topK: 20, steps: 120, context: 131072 }, notes: '  Read each file once.  ' });
+    out.file = JSON.parse(readFileSync(home + '/settings.json', 'utf8'));
+    out.again = await post('/remote/tune', { service: 'openai', id: q, values: out.save.tune.rows.reduce((o, r) => ({ ...o, [r.id]: r.value }), {}), notes: 'Read each file once.' });
+    out.off = await post('/remote/tune', { service: 'openai', id: q, values: { temperature: 0.55 } });
+    out.foreign = await post('/remote/tune', { service: 'openai', id: q, values: { temperature: 0.2 } }, { origin: 'https://example.com' });
+    out.level = await post('/remote/tune', { service: 'openai', id: 'gpt-oss:120b', values: {}, level: out.gpt.levels.at(-1).id });
+    out.reset = await post('/remote/tune', { service: 'openai', id: q, reset: true });
+    out.fileAfter = JSON.parse(readFileSync(home + '/settings.json', 'utf8'));
+    out.test = await post('/remote/tune-test', { service: 'openai', id: q });
+  `, { settings: { ...SAVED, remote: { ...OLLAMA, use: false } } });
+  const ids = o.before.rows.map((r) => r.id);
+  expect(ids).toEqual(['preset', 'temperature', 'presence', 'topP', 'topK', 'repeatPenalty', 'thinkTime', 'replyTokens', 'steps', 'tries', 'look', 'context']);
+  expect(o.before.rows.find((r) => r.id === 'preset')).toMatchObject({ value: 'own', group: 'How it writes' });
+  expect(o.before.rows.find((r) => r.id === 'context').value).toBe(65536); // its own context on the service
+  expect(o.before.rows.find((r) => r.id === 'temperature').steps.map((x) => x.show)).toEqual(['its own', '0', '0.2', '0.4', '0.6', '0.7', '1']);
+  expect(o.before.rows.find((r) => r.id === 'temperature').steps[1].note).toContain('steadier');
+  expect(Object.keys(o.before.presets)).toEqual(['coding', 'own', 'steady']);
+  expect(o.before).toMatchObject({ notes: '', own: false, canTest: false, inUse: false });
+  expect(o.gpt.levels.map((v) => v.label)).toEqual(['Low', 'Medium', 'High']);
+  // the save: only the rows moved, for it alone, in both copies of the service; its context; its instructions trimmed
+  expect(o.save.status).toBe(200);
+  expect(o.save.said).toBe('Temperature its own → 0.6 · Presence penalty its own → 0 · Steps per request 80 → 120 · Top-k its own → 20 · Context 64k → 128k (from its next load) · its own instructions'); // the app's row order, as the window says it
+  for (const svc of [o.file.remote, o.file.remotes.openai]) {
+    expect(svc.tuned['qwen3-coder-next:latest']).toEqual({ limits: { temperature: 0.6, presence: 0, topK: 20, steps: 120 }, notes: 'Read each file once.' });
+    expect(svc.contexts['qwen3-coder-next:latest']).toBe(131072);
+  }
+  expect(o.save.tune.rows.find((r) => r.id === 'preset').value).toBe('custom');
+  expect(o.save.tune.own).toBe(true);
+  expect(o.again.said).toBe('nothing changed');
+  expect(o.off.status).toBe(400);
+  expect(o.off.error).toContain('Temperature: 0.55 is not one of its steps');
+  expect(o.foreign.status).toBe(403);
+  expect(o.level.said).toBe('Thinking High');
+  expect(o.file.remotes.openai.tuned['gpt-oss:120b']).toBe(undefined);
+  // Use shared: its rows and its context go, its instructions stay (as in the window)
+  expect(o.reset.said).toContain('follows the shared settings again');
+  expect(o.fileAfter.remotes.openai.tuned['qwen3-coder-next:latest']).toEqual({ notes: 'Read each file once.' });
+  expect(o.fileAfter.remotes.openai.contexts['qwen3-coder-next:latest']).toBe(undefined);
+  expect(o.fileAfter.remotes.openai.tuned['gpt-oss:120b']).toEqual({ level: 'high' });
+  // the Arena tests a model of the service /remote is on: this one is not in use
+  expect(o.test.status).toBe(409);
+  expect(o.test.error).toContain('connect this one with /remote first');
+});
+
 test('a service that stops answering: the list it gave last time, with its time, and the reason in plain words', () => {
   const o = inChild(`
     out.first = await get('/remote.json');

@@ -10,6 +10,10 @@
 //                                           app's try-outs (tryouts.mjs), so /remote and /model show the same ✔ or ✗
 //   POST /remote/load    { service, id }    loads it on an Ollama service now, at the context the app would ask for
 //   POST /remote/unload  { service, id }    takes it out of the service's memory
+//   POST /remote/tune    { service, id, values, level, notes, reset }   /tune's rows for a model on an Ollama service
+//                                           (27 Oct 2026): kept for it where the app keeps them ("tuned", "contexts");
+//                                           an open window on it takes them within 2 s (app-watch.mjs followOwn)
+//   POST /remote/tune-test { service, id }  its settings on the Arena's three short tasks (tune-test.mjs)
 // A try, a load and an unload run in the background (a big model takes minutes
 // to load); the model's `busy` says so until it is done, and the page asks again.
 // When a service cannot be reached, the list it gave last time is shown, with its time.
@@ -19,8 +23,12 @@ import {
   HOME, REMOTE_SOURCES, sourceOf, keyIdOf, readKey, directUrl, remoteLabel, remoteProblem, openTunnel, SERVE_PORT, probe,
   ollamaCatalog, ollamaDetail, preloadOllama, unloadOllama, ollamaCtxOf, COLD_CTX, isOutOfMemory,
   remoteLevels, bigHarness, CLAUDE_MODELS, CLAUDE_HOST, claudeClient, claudeCaps, claudeName, readRecord, setEndpoint, endpointOf, dropEndpoint,
+  remoteModel, thinkingLevel,
 } from '../../../models/index.mjs';
-import { loadSettings } from './store.mjs';
+import { loadSettings, saveService } from './store.mjs';
+import { readLimits, shownLimits, tuneGroup, showLimit, limitNote, limitChanges, PRESETS, OWN_ROWS, ownOf, cleanNotes, NOTES_MAX } from './limits.mjs';
+import { suggestedFor } from './remote-suggested.mjs';
+import { lineTuneTest } from './tune-test.mjs';
 import { remotesOf, readyRemote, sourceWord } from './remote-form.mjs';
 import { specialtiesOf, categoryGroups } from './remote-specialties.mjs';
 import { readTryouts, saveTryout } from './tryouts.mjs';
@@ -173,8 +181,82 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
       out.runsAt = ollamaCtxOf(r, mid) || (m.loaded ? m.loadedCtx : null) || Math.min(m.ctx || COLD_CTX, COLD_CTX);
       out.runsAtFrom = ollamaCtxOf(r, mid) ? 'your /effort setting' : m.loaded ? 'the context it is loaded at now' : 'the app\'s safe start (32k) until you set one in /effort';
       try { const c = await connOf(sv); out.detail = await ollamaDetail({ url: c.url, key: c.key, model: mid }); } catch (e) { out.detailError = plain(e); }
+      out.tune = tuneOf(sv, mid, m, l);
     } else if (sv.profile.kind === 'claude') out.caps = claudeCaps(mid);
     return json(out);
+  }
+
+  // /tune in the hub (27 Oct 2026): a model on an Ollama service as the app makes it (remoteModel), and its Tune
+  // section: /tune's rows (TUNE_ROWS) with every step's words, its Thinking levels, its own instructions, Bonsai's
+  // and the others' suggested values, and whether the Arena can test it (a model of the service /remote is on).
+  const tuneModel = (sv, mid, m, l) => remoteModel(sv.profile, { model: mid, ollama: { version: String(l?.server ?? '').replace(/^Ollama /, '') || '?', ...m }, ctx: m.loadedCtx || m.ctx || null });
+  const ctxOf = (sv, mid) => Number(sv.profile.contexts?.[mid]) || 0;
+  function tuneOf(sv, mid, m, l) {
+    const model = tuneModel(sv, mid, m, l);
+    const own = ownOf({ remote: sv.profile }, mid);
+    const values = { ...readLimits({ ...settings(), remote: sv.profile }, model), context: ctxOf(sv, mid) };
+    const levels = model.thinkingLevels ?? [];
+    const level = (levels.length > 1 && levels.find((v) => v.id === own?.level)) || thinkingLevel(model, model.thinkingDefault ?? true, model.thinkingEffort);
+    const env = (vals) => ({ model, values: vals, ctxNow: m.loaded ? m.loadedCtx ?? null : null, effortOn: Boolean(level?.effort), effortLevel: level?.effort ?? null, effortWord: 'Thinking' });
+    const rows = shownLimits(model, { tune: true }).map((r) => ({
+      id: r.id, label: r.label, group: tuneGroup(r.id), value: values[r.id], def: r.def(model),
+      steps: r.steps(model).map((v) => ({ v, show: showLimit(r.id, v), note: limitNote(r.id, env({ ...values, [r.id]: v })) })),
+    }));
+    const inUse = sv.inUse;
+    return {
+      rows, presets: Object.fromEntries(Object.entries(PRESETS).map(([id, p]) => [id, p.values])),
+      levels: levels.map((v) => ({ id: v.id, label: v.label, note: v.note ?? '', thinks: Boolean(v.effort) })), level: level?.id ?? null, think: Boolean(level?.effort),
+      notes: cleanNotes(own?.notes), notesMax: NOTES_MAX, suggested: suggestedFor(mid, model), own: Boolean(own),
+      inUse: inUse && sv.model === mid, canTest: inUse, testWhy: inUse ? null : 'the Arena tests a model of the service /remote is connected to: connect this one with /remote first',
+    };
+  }
+  // A save: the rows that differ from what it has (kept with the ones it had), its Thinking, its instructions and
+  // its Context, as /model's menu keeps them; reset: back to the shared rows and the service's Context (its own
+  // instructions stay, as in the window).
+  function saveTune(sv, mid, m, l, body) {
+    const model = tuneModel(sv, mid, m, l);
+    const before = tuneOf(sv, mid, m, l);
+    const cur = Object.fromEntries(before.rows.map((r) => [r.id, r.value]));
+    if (body.reset) {
+      saveService(sv.id, (p) => {
+        const tuned = { ...(p.tuned ?? {}) }, contexts = { ...(p.contexts ?? {}) };
+        if (tuned[mid]?.notes) tuned[mid] = { notes: tuned[mid].notes }; else delete tuned[mid];
+        delete contexts[mid];
+        return { ...p, tuned, contexts };
+      });
+      return json({ ok: true, said: `${mid} follows the shared settings again`, tune: tuneOf(services().find((s) => s.id === sv.id), mid, m, l) });
+    }
+    const want = {};
+    for (const r of shownLimits(model, { tune: true })) {
+      const v = body.values?.[r.id];
+      if (r.derived || v === undefined) continue;
+      if (!r.steps(model).includes(v)) return bad(`${r.label}: ${v} is not one of its steps`);
+      want[r.id] = v;
+    }
+    const moved = Object.keys(want).filter((id) => OWN_ROWS.includes(id) && want[id] !== cur[id]);
+    const ctxMoved = 'context' in want && want.context !== cur.context;
+    const levelNext = typeof body.level === 'string' && body.level !== before.level && before.levels.length > 1 && before.levels.some((v) => v.id === body.level) ? body.level : null;
+    const notesNext = typeof body.notes === 'string' ? cleanNotes(body.notes) : null;
+    const notesMoved = notesNext !== null && notesNext !== before.notes;
+    if (!moved.length && !ctxMoved && !levelNext && !notesMoved) return json({ ok: true, said: 'nothing changed', tune: before });
+    saveService(sv.id, (p) => {
+      const tuned = { ...(p.tuned ?? {}) }, contexts = { ...(p.contexts ?? {}) };
+      const prev = tuned[mid] ?? {};
+      const limits = { ...(prev.limits ?? {}), ...Object.fromEntries(moved.map((id) => [id, want[id]])) };
+      const level = levelNext ?? prev.level ?? null;
+      const notes = notesMoved ? notesNext : prev.notes ?? '';
+      const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(notes ? { notes } : {}) };
+      if (Object.keys(own).length) tuned[mid] = own; else delete tuned[mid];
+      if (ctxMoved) { if (want.context) contexts[mid] = want.context; else delete contexts[mid]; }
+      return { ...p, tuned, contexts };
+    });
+    const said = [
+      ...limitChanges(cur, { ...cur, ...Object.fromEntries(moved.map((id) => [id, want[id]])) }).map((c) => `${c.label} ${c.from} → ${c.to}`),
+      ...(ctxMoved ? [`Context ${showLimit('context', cur.context)} → ${showLimit('context', want.context)} (from its next load)`] : []),
+      ...(levelNext ? [`Thinking ${before.levels.find((v) => v.id === levelNext).label}`] : []),
+      ...(notesMoved ? [notesNext ? 'its own instructions' : 'its own instructions taken out'] : []),
+    ].join(' · ');
+    return json({ ok: true, said, tune: tuneOf(services().find((s) => s.id === sv.id), mid, m, l) });
   }
 
   // The jobs. Each runs in the background; the model's `busy` shows it until it ends.
@@ -242,6 +324,19 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
     const l = lists.get(sv.id);
     if (!mid || !l?.models?.some((m) => m.id === mid)) return bad('no such model on it (refresh the list)', 404);
     if (url.pathname === '/remote/try') return startJob(sv.id, mid, 'try', () => tryModel(sv, mid));
+    if (url.pathname === '/remote/tune' || url.pathname === '/remote/tune-test') {
+      if (!l.ollama) return bad('/tune is for a model on an Ollama service', 400);
+      const m = l.models.find((x) => x.id === mid);
+      if (url.pathname === '/remote/tune') return saveTune(sv, mid, m, l, body);
+      const t = tuneOf(sv, mid, m, l);
+      if (!t.canTest) return bad(t.testWhy, 409);
+      const values = Object.fromEntries(t.rows.map((r) => [r.id, r.value]));
+      if (t.notes) values.notes = t.notes;
+      try {
+        const r = await lineTuneTest({ source: sv.id, model: mid, values, ctx: values.context, think: t.think });
+        return json({ ok: true, tests: r.tests });
+      } catch (e) { return bad(`the test did not start: ${e.message}`, 409); }
+    }
     if (!l.ollama) return bad('only an Ollama service loads and unloads models on request', 400);
     if (url.pathname === '/remote/load') return startJob(sv.id, mid, 'load', async () => { const c = await connOf(sv); await preloadOllama({ url: c.url, key: c.key, model: mid, numCtx: ollamaCtxOf(sv.profile, mid) }); return {}; });
     if (url.pathname === '/remote/unload') return startJob(sv.id, mid, 'unload', async () => { const c = await connOf(sv); if (!(await unloadOllama({ url: c.url, key: c.key, model: mid }))) throw new Error('the service did not let it go'); return {}; });

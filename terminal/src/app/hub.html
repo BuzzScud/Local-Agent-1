@@ -129,6 +129,8 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     // + New in the Arena, its Test builder button, or Edit on a test of yours: the Test builder window.
     if (e.data?.agentic === 'new-test') openBuilder({ fresh: true });
     if (e.data?.agentic === 'open-builder') openBuilder({ test: typeof e.data.test === 'string' ? e.data.test : null });
+    // The Remote tab's Tune, once its test is in the Arena's line: Watch in the Arena.
+    if (e.data?.agentic === 'open-arena') open('arena');
     // From the builder in the window: a test saved (the Arena reads its tests again), or esc.
     if (e.source === bframe.contentWindow && e.data?.agentic === 'tests-changed') arenaSay({ agentic: 'arena-refresh' });
     if (e.source === bframe.contentWindow && e.data?.agentic === 'builder-close') closeBuilder();
