@@ -185,6 +185,11 @@ test('an Ollama service is asked in its own chat: the context with every request
     await drain(streamChat({ url: f.url, messages: [], tools, model: { ...GENERIC_REMOTE, thinkingLevels: [GENERIC_REMOTE.thinkingLevels[0]], thinkingEffort: 'low' }, sampling: {}, thinking: true, effort: 'high', maxTokens: 9 }));
     const plain = f.bodies.at(-1);
     expect(['think' in plain, 'tools' in plain, 'num_ctx' in plain.options]).toEqual([false, false, false]);
+    // toolChoice none on a model that can use tools (a greeting, the notes): the same tools still go, so the prompt the
+    // service has read stays the same (27 Oct 2026: without them Bonsai read 5,016 tokens again after a "hello")
+    setEndpoint(f.url, { remote: true, kind: 'openai', key: null, model: 'thinker:35b', label: 'svc', ollama: true, numCtx: 65536, thinks: true, tools: true, family: 'qwen35' });
+    await drain(streamChat({ url: f.url, messages: [], tools, toolChoice: 'none', model: thinker, sampling: {}, thinking: false, maxTokens: 9 }));
+    expect(f.bodies.at(-1).tools).toEqual(tools);
     // gpt-oss cannot turn its thinking off: Low is its least, the others its own level
     setEndpoint(f.url, { remote: true, kind: 'openai', key: null, model: 'gpt-oss:120b', label: 'svc', ollama: true, numCtx: null, thinks: true, tools: true, family: 'gptoss' });
     const oss = { ...GENERIC_REMOTE, thinkingLevels: [{ id: 'low', effort: null }, { id: 'medium', effort: 'medium' }, { id: 'high', effort: 'high' }], thinkingEffort: 'high' };
@@ -461,6 +466,31 @@ test('the agent connects again only when the connection broke: a server that ans
     await agent.send('hello again');
     expect(waits).toBe(1); // a dropped connection: once, as before
   } finally { s.close(); }
+});
+
+// Small talk on an Ollama service (27 Oct 2026): no thinking first, and the tools the next message has, so that
+// message reads only what is new (the service's template puts the tools at the top of the prompt).
+test('a greeting on an Ollama service: answered with no thinking and with the same tools as the next message, which thinks', async () => {
+  const { Agent } = await import('../src/agent/agent.mjs');
+  const { systemPrompt } = await import('../src/agent/prompt.mjs');
+  const { cpSync } = await import('node:fs');
+  const f = await fakeOllamaChat((body, n) => ({ lines: [{ message: { role: 'assistant', content: n === 1 ? 'Hello! How can I help?' : 'Four.' }, done: false }, done()] }));
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-greet-'));
+  cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  const model = { ...GENERIC_REMOTE, remote: { kind: 'openai', model: 'thinker:35b', ollama: '0.40.11' } };
+  try {
+    setEndpoint(f.url, { remote: true, kind: 'openai', key: null, model: 'thinker:35b', label: 'svc', ollama: true, numCtx: 65536, thinks: true, tools: true, family: 'qwen35' });
+    const agent = new Agent({ url: f.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: true, effort: 'high', ctx: 65536, mode: 'edits', flows: false, verify: false, ask: async () => ({ choice: 'yes' }) });
+    expect(await agent.send('hello')).toBe('done');
+    const greet = f.bodies.find((b) => b.stream);
+    expect(greet.think).toBe(false);
+    expect(greet.tools?.length).toBeGreaterThan(0);
+    await agent.send('what is 2 + 2? answer with one word');
+    const next = f.bodies.filter((b) => b.stream).at(-1);
+    expect(next.think).toBe(true);
+    expect(next.tools.map((t) => t.function?.name)).toEqual(greet.tools.map((t) => t.function?.name));
+    expect(next.messages[0]).toEqual(greet.messages[0]); // the same start: what was read is used again
+  } finally { dropEndpoint(f.url); await f.close(); }
 });
 
 test('while Connect checks: the line says what was found, what it waits for and for how long, not only "checking…"', () => {

@@ -172,7 +172,8 @@ test('coding -p on an Ollama service: a model that can think thinks unless you s
   const think = async (model, { args = [], tuned } = {}) => {
     writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ thinking: false, remote: { ...r0, model, use: true, ...(tuned ? { tuned } : {}) } }));
     const before = srv.chats().length;
-    const p = Bun.spawn(['bun', cli, '-p', 'hello', '--no-flows', ...args], { cwd, env: { ...process.env, ...env, AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_NO_MEMORY: '1' }, stdout: 'pipe', stderr: 'pipe' });
+    // A question, not a greeting: small talk on a service is answered with no thinking (27 Oct 2026, remote.test.mjs).
+    const p = Bun.spawn(['bun', cli, '-p', 'what is 2 + 2?', '--no-flows', ...args], { cwd, env: { ...process.env, ...env, AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_NO_MEMORY: '1' }, stdout: 'pipe', stderr: 'pipe' });
     await p.exited;
     return srv.chats().slice(before).filter((c) => c.stream)[0]?.think;
   };

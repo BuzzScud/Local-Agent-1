@@ -141,14 +141,16 @@ export class ModelPart {
     this.emit('assistant', { text, reasoning: turn?.reasoning ?? '', secs: turn?.secs ?? 0, thinkSecs: turn?.thinkSecs ?? 0, tokens: turn?.tokens ?? 0, final: true });
   }
 
-  // A greeting or thanks: one short reply, no tools, no focused paths.
+  // A greeting or thanks: one short reply, no tools, no focused paths. On an Ollama service with no thinking first
+  // (27 Oct 2026, the owner's pick): there the switch is the request's own `think`, written where the answer starts,
+  // so what was read stays read; on the Claude API and this Mac's server it sits higher up and stays as it is.
   async chat(said, started, signal) {
     let reason = 'done';
     try {
       await this.followProfile({ type: 'chat' });
       await this.fitContext(signal);
-      // Room to think first (at your effort level), then a short answer, then stop.
-      const turn = await this.generate(signal, { textOnly: true, maxTokens: 900 });
+      // Room to think first (at your effort level; none on an Ollama service), then a short answer, then stop.
+      const turn = await this.generate(signal, { textOnly: true, maxTokens: 900, noThink: Boolean(this.model?.remote?.ollama) });
       if (turn.aborted) {
         reason = 'interrupted';
         // Keep what it had written so far on screen, as the loop does.

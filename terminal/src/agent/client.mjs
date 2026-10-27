@@ -279,6 +279,10 @@ export function ownStart(messages, conversation) {
 // false; gpt-oss its level, as it cannot turn it off), the tools only for a model
 // that can use them. Its stream is one JSON object a line, and a tool call comes
 // whole, so it becomes one tool event with all of its arguments.
+// The tools go with a text-only request too (toolChoice 'none': a greeting, the notes): Ollama has no tool_choice, and
+// its template writes the tools at the top of the prompt, so a request without them was read again from the start,
+// and so was the next one with them (27 Oct 2026, Bonsai 2 9B: 5,016 tokens, 24 s, after a "hello"). A call made
+// anyway is the caller's to catch (chat() keeps a plain greeting, the notes ask once more with none).
 const SAMPLING = ['temperature', 'top_p', 'top_k', 'min_p', 'repeat_penalty', 'presence_penalty', 'frequency_penalty', 'seed'];
 async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }) {
   const lv = thinkingLevel(model ?? {}, Boolean(thinking), effort);
@@ -296,7 +300,7 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
     // as long as the window is open; a helper half an hour). Ollama's own is 5 minutes.
     ...(ep.keepAlive !== undefined ? { keep_alive: ep.keepAlive } : {}),
     ...(think !== undefined ? { think } : {}),
-    ...(tools?.length && toolChoice !== 'none' && ep.tools !== false ? { tools } : {}),
+    ...(tools?.length && ep.tools !== false ? { tools } : {}),
     ...(extra?.response_format?.json_schema?.schema ? { format: extra.response_format.json_schema.schema } : {}),
   };
   // What this model refused before (an Ollama too old to list its abilities says so at the first ask).
