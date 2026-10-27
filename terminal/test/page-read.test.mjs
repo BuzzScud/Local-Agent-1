@@ -95,6 +95,53 @@ test('a page the message wrote that is mostly empty goes back once, and is read 
   expect(MODEL_HOOKS).toContain('page-read');
 });
 
+// 27 Oct 2026, Bonsai 2 9B's notes.html: a notes app shows a button and an empty list until a note is
+// added, so it was sent back twice "to fill it" and the model re-read a page that was fine.
+const NOTES_APP = (script = '') => `<!doctype html><html><head><meta charset="utf-8"><title>Notes</title>
+<style>${'.card { padding: 12px; border-radius: 8px; } '.repeat(40)}</style></head><body>
+<header><h1>Notes</h1><button id="new">+ New note</button></header><ul id="list"></ul>
+<dialog id="d"><input id="t" type="text" placeholder="Title"><textarea id="x"></textarea><input type="hidden" name="id"><button>Cancel</button><button>Save</button></dialog>
+<script>${script}
+${Array.from({ length: 60 }, (_, i) => `function step${i}(n) { return n.map((x) => x + ${i}); }`).join('\n')}
+</script></body></html>`;
+
+test('an app that starts empty (something to fill in) is not sent back; a short page with nothing to fill in still is', () => {
+  const app = { ...readStatic(NOTES_APP()), bytes: NOTES_APP().length };
+  expect(app).toMatchObject({ controls: 2, sections: [] });
+  expect(app.text).toBeLessThan(300);
+  expect(app.bytes).toBeGreaterThan(5000);
+  const e = emptyOf(app);
+  expect(e).toMatchObject({ problem: false, app: true });
+  expect(pageReadLine('notes.html', app, e)).toMatch(/^notes\.html: \d+ characters on screen of \d+\.\d KB, an app that starts empty \(2 fields to fill in\)$/);
+  // Its scripts stopped with an error: what it was to show may not be there, so it goes back as before.
+  expect(emptyOf({ ...app, errors: ['ReferenceError: render is not defined'] })).toMatchObject({ problem: true, app: false });
+  // A button alone is not an app: a page whose words are only in its script still goes back.
+  const plain = NOTES_APP().replace(/<dialog[\s\S]*<\/dialog>/, '<button>Dark mode</button>');
+  expect(emptyOf({ ...readStatic(plain), bytes: plain.length })).toMatchObject({ problem: true, app: false });
+  // Fields inside a script, a template or a comment are not on the page; a contenteditable box is.
+  expect(readStatic('<body><script>"<input>"</script><template><textarea></textarea></template><!-- <select> --></body>').controls).toBe(0);
+  expect(readStatic('<body><div contenteditable="true"></div><div contenteditable="false"></div><canvas></canvas></body>').controls).toBe(2);
+  // A page with sections is read as before.
+  expect(emptyOf({ ...readStatic(EMPTY_PAGE), bytes: EMPTY_PAGE.length, controls: 3 }).problem).toBe(true);
+});
+
+test.skipIf(!canRunPages())('on a Mac, the app is opened in WebKit: its fields are counted, and a script error still sends it back', async () => {
+  const was = process.env.AGENTIC_PAGE_READ;
+  process.env.AGENTIC_PAGE_READ = 'on';
+  try {
+    const ok = join(dir, 'notes.html');
+    writeFileSync(ok, NOTES_APP("document.getElementById('list').innerHTML = '<li>No notes yet.</li>';"));
+    const r = await readPage(ok);
+    expect(r).toMatchObject({ ran: true, controls: 2, errors: [] });
+    expect(emptyOf(r)).toMatchObject({ problem: false, app: true });
+    const broken = join(dir, 'broken.html');
+    writeFileSync(broken, NOTES_APP('renderNotes();'));
+    const b = await readPage(broken);
+    expect(b.errors.length).toBe(1);
+    expect(emptyOf(b).problem).toBe(true);
+  } finally { process.env.AGENTIC_PAGE_READ = was; }
+}, 30_000);
+
 test('scripts with settings before them are saved; ~ in a Python string gets a hint; a long output is kept whole', async () => {
   const body = Array.from({ length: 45 }, (_, i) => `v${i} = ${i}`).join('\n');
   expect(heredocScript(`HOME=/Users/x python3 << 'PYEOF'\n${body}\nPYEOF`)).toMatchObject({ interp: 'python3', ext: 'py' });
