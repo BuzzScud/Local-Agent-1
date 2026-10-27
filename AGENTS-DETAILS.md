@@ -1812,6 +1812,26 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   save, a value refused, Use shared, the Test refused off the service in use) and `arena-remote.test.mjs` (a real run
   on a tuned model; the set `tune`). Not measured on Bonsai yet.
 
+## Bonsai faster: what was read stays read (27 Oct 2026)
+
+- **What and why.** The owner: "how do we make bonsai faster?". Measured through a logging relay in front of Ollama
+  (one-off lines in the test record): on this M4 Bonsai 2 9B reads a prompt at ~210 tokens a second and writes at ~28
+  (thinking the same); the instructions and tools are ~4.5-5k tokens, so a prompt read from the start costs 20-24 s
+  before the first word, and a later step reads only what is new (0.2-1 s). A short side request does not push it out,
+  and a bigger read batch (num_batch 2048) is no faster. In the window, a greeting went without tools (a text-only
+  request: Ollama has no tool_choice, so client.mjs left the tools out), and the template puts the tools at the top, so
+  the next message read all 5,016 tokens again (24 s). Their picks: the tools on every turn for every Ollama model, no
+  thinking for small talk, and the side jobs on Bonsai.
+- **What changed.** client.mjs `streamOllama` sends a model's tools with toolChoice 'none' too (a caller catches a call
+  made anyway: chat() keeps a plain greeting, the notes ask once more with none). `chat()` asks with no thinking on an
+  Ollama service, where the switch is the request's `think`, written where the answer starts, so the next message still
+  reuses what was read (measured); on the Claude API and this Mac's server it stays as it was (the switch sits higher
+  there). The window, three short messages: 15.8 s, 32.4 s, 15.4 s before; 23.9 s (the tools read once), 7.8 s, 9.5 s
+  after. The owner's Side jobs profile (Fast) was llama3.2:3b on the droplet, which the service does not have, so every
+  saved note and request sort failed there; it now points at Bonsai (profiles.json, not the repo).
+- **Tests**: `terminal/test/remote.test.mjs` (the tools on a text-only request; a greeting with no thinking and the next
+  message's tools and system prompt).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
