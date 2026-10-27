@@ -1705,6 +1705,59 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   stopped reply, the Queued line, the mode's name; the THINKING box under a held press while it streams), screen.test
   and screen-known.test (the Screen row without a build), app-permissions.test (its row says "not checked yet").
 
+## Bonsai 2 9B on this Mac's Ollama (27 Oct 2026)
+
+- **What and why.** The owner ran Bonsai 2 9B (PrismML's ternary Qwen3.5 9B, `ollama pull bonsai-2:9b`) as the
+  window's model on an Ollama service on this Mac, then asked "can we improve bonsai? can we improve our
+  instructions?". Its two notes-page runs (the owner's test prompt) showed what went wrong: on the remote set it read
+  the design guide as `DESIGN.md` three times and got "File not found"; after Writing the page again at 161 lines it
+  read from line 258, then 400, and got an empty part; at 40 steps it ran out at 11 minutes; and its Save never added
+  a note (it stored the new list and drew the old one), which no check caught: the click look saw the box close.
+  Their picks: everything, the local instructions for Bonsai only ("Only Bonsai switches"), the sampling the tests
+  back, the form check as part of the page check, build, test, measure, report.
+- **Bonsai's own settings** (`models/runtime/remote.mjs` `OWN_REMOTES`, by the name the service knows it by): `rules:
+  'local'` (prompt-files.mjs `rulesSetOf`: auto gives a model on a service the remote set unless its entry says local;
+  settings.json `instructions` and `AGENTIC_INSTRUCTIONS` still win) and `startSteps: 120` (limits.mjs Steps per
+  request's default; a saved row wins). /model's menu suggests 64k and 120 steps for it (`remote-suggested.mjs`, with a
+  `source` of its own: measured here, not the ranks page).
+- **On this Mac** (`onThisMac`, carried as `model.remote.here`): a service at localhost, 127.x or ::1, not over SSH.
+  The remote set's opening then says "You run on this Mac, behind a model service" in place of HARNESS.md's "You run on
+  another machine" (prompt.mjs `ANOTHER_MACHINE`, `ON_THIS_MAC`; a HARNESS.md edited away from that sentence is left as
+  written). The flag is in the prompt's stamp, so a move between services builds the prompt again.
+- **Two step-savers** (tools.mjs Read): a guide asked for by its name alone (`DESIGN.md` for `RULES/DESIGN.md`, any
+  case; prompt-files.mjs `readNearPath`) opens it, and on any set a `DESIGN.md` or `DESIGN-GUIDE.md` the folder does not
+  have opens the design guide the page checks score on (design-system.mjs `designGuide`); a Read whose offset is past
+  the file's end says how many lines it has now and to read from line 1, as an error, instead of an empty part.
+- **The form pass** (flows/layoutcheck.mjs `FORM_PROBE`, `FORM_PASS`, `forms()` in the probe): a pass of its own, beside
+  the click pass, whenever clicks are on. It presses buttons (the likely openers first: new, add, create, +) until text
+  boxes and a Save (save, add, create, post) show, types "Form check NNNN" into every box, presses the Save nearest the
+  boxes and looks for the words on the page; they show nowhere, and no box still holds them (a settings form keeps what
+  was typed), is "lost", said in plain words and sent back like the other findings; an error on that press is told as
+  the click look's, once. `AGENTIC_FORM_CHECK=off` leaves it out (the Bonsai check's before side).
+- **Practice task 29 clicked through** (`bench/tasks/29-notes-page/click-check.mjs`): headless Chrome over its debugging
+  connection with real clicks, typing and keys (16 checks: the button, the box in the middle with the page dimmed,
+  Cancel, Save and its card at the top with title, first line and date, Escape, reopening, dark mode, script errors,
+  the browser's own errors too); check.sh runs it after its word checks (no Chrome: it says so and passes). It agreed
+  check for check with a Playwright click test on four of Bonsai's pages. The task has a reference answer now
+  (`reference/Desktop/notes.html`), so verify-tasks.sh proves the check both ways.
+- **The Bonsai check** (`models/evals/tools/bonsai-check.mjs`, the Arena's `bonsai`, `/test bonsai`): task 29 on Bonsai
+  through bench/run.mjs, thinking on, the page check on (`AGENTIC_DESIGN`, `AGENTIC_LAYOUT` on; practice runs have it
+  off), 30 minutes a run, twice before (`AGENTIC_INSTRUCTIONS=remote AGENTIC_FORM_CHECK=off`) and twice after; each kept
+  page clicked through. Holds when after passes at least as many click checks in all and as many runs. Not measured
+  yet: the first run (after, 120 steps and 64k confirmed in its opening lines) was stopped part-way when the owner
+  said to push and stop.
+- **Sampling, measured first** (a probe outside the app: Bonsai's own page with the Save bug, "find the cause and fix
+  it", the fixed page clicked through): with thinking on it found the cause (the list it draws from is never updated)
+  on Ollama's own values and on Qwen's for precise coding (temperature 0.6, presence 0) alike, and its fix mostly broke
+  the page (it assigned to the `const` it had made): fixed once in 5 tries on Ollama's values, in none of 4 on Qwen's,
+  1½ to 4 minutes a try. With thinking off (about 25 s) it never found the cause, 0 of 6. Nothing backed a change, so
+  Bonsai keeps the service's own sampling.
+- **Tests**: remote-rules.test (Bonsai's set, its steps, a saved choice winning, `onThisMac`, the opening on this Mac
+  letter for letter), remote-models.test (the suggestion), prompt-files.test (a guide by its name), better-tools.test
+  (DESIGN.md, past the end), design.test (the form pass on Bonsai's slip, the page fixed, a settings form, a to-do,
+  off), bonsai-check.test (the commands; the scores, page and record line from kept runs, in Chrome), and the lists of
+  checks in arena.test, record.test and app-test-run.test.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
