@@ -176,3 +176,23 @@ test('the remote Tool use lines gain the two on failed Edits and trying out code
   expect(lines.some((l) => l.startsWith('- To try out code, put it in a test or a script file'))).toBe(true);
   expect(lines.at(-1)).toStartWith('- Send the reads and searches a step needs together');
 });
+
+// 27 Oct 2026, Bonsai 2 9B's notes page: told its page was scored "on the design guide", it read DESIGN.md three times
+// and got "File not found"; after cutting the page to 161 lines it read from line 258, then 400, and got an empty part.
+test('Read: a DESIGN.md not in the folder is the design guide; an offset past the end says how long the file is now', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-read-near-'));
+  const guide = await execute('Read', { path: 'DESIGN.md' }, {}, { cwd: dir });
+  expect(guide.error).toBeUndefined();
+  expect(guide.text).toMatch(/^DESIGN\.md is not a file in this folder; this is the design guide the page checks score on:\n\S/);
+  expect((await execute('Read', { path: './DESIGN-GUIDE.md' }, {}, { cwd: dir })).text).toContain('this is the design guide');
+  writeFileSync(join(dir, 'DESIGN.md'), '# Our look\n');
+  expect((await execute('Read', { path: 'DESIGN.md' }, {}, { cwd: dir })).text).toContain('# Our look');
+  // Long enough not to be shown whole (an offset is then read as given).
+  writeFileSync(join(dir, 'notes.html'), Array.from({ length: 161 }, (_, i) => `line ${i + 1} ${'x'.repeat(90)}`).join('\n') + '\n');
+  const past = await execute('Read', { path: 'notes.html', offset: 258, limit: 150 }, {}, { cwd: dir });
+  expect(past.error).toBe(true);
+  expect(past.text).toBe('notes.html has 161 lines now, so line 258 is past its end: it is shorter than when you last saw it, if you read it before. Read it from line 1 (no offset), or pass an offset up to 161.');
+  const end = await execute('Read', { path: 'notes.html', offset: 150, limit: 50 }, {}, { cwd: dir });
+  expect(end.error).toBeUndefined();
+  expect(end.text).toContain('line 161 ');
+});
