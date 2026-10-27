@@ -14,6 +14,7 @@ import { keysReady, loginAnswer, sshLogin, usesSsh } from '../tools/ssh.mjs';
 import { listFiles, searchFiles } from '../tools/fs.mjs';
 import { hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
+import { designGuide } from './design-system.mjs';
 import { saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint, nodeHint } from './scripts.mjs';
 import { permissionsTable, runsGitPush, runsTests, splitCommand } from './permissions.mjs';
 import { APP_NOT, PART_DEFAULT, PART_MAX, WHOLE_MAX, oldSteps } from './tools-defs.mjs';
@@ -189,6 +190,12 @@ export async function execute(name, args, prepared, env) {
         if (near.error) return { text: near.error, error: true, view: { kind: 'error', message: 'No such skill' } };
         return { text: near.text, view: { kind: 'read', lines: near.text.split('\n').length, total: near.text.split('\n').length, content: near.text } };
       }
+      // "DESIGN.md" with none in the folder: the design guide a page request brings and the design reviewer scores on
+      // (agent-pages.mjs). 27 Oct 2026: Bonsai 2 9B, told its page was scored on the design guide, got "File not found" three times.
+      if (/^(?:\.\/)?DESIGN(?:-GUIDE)?\.md$/i.test(String(args.path ?? '').trim()) && !existsSync(resolvePath(env.cwd, args.path).abs) && designGuide()) {
+        const text = `${String(args.path).trim()} is not a file in this folder; this is the design guide the page checks score on:\n${designGuide()}`;
+        return { text, view: { kind: 'read', lines: text.split('\n').length, total: text.split('\n').length, content: text } };
+      }
       // "NOTES/…": the pack of Claude's notes (claude-pack.mjs) as this model may see it (Memory sent),
       // when the project has no NOTES folder of its own: MAP.md, a topic, notes/<name>.md, history/<name>.md.
       if (NOTES_PATH.test(String(args.path ?? '').trim()) && !existsSync(resolvePath(env.cwd, String(args.path).trim().replace(/^\.\//, '').split('/')[0]).abs)) {
@@ -291,6 +298,10 @@ export async function execute(name, args, prepared, env) {
       // The model gets the plain text (small models copy line numbers into
       // their edits); the screen keeps the numbered view for ctrl+o.
       const from = whole ? 1 : args.offset ?? 1;
+      // An offset past the end: the file is shorter than the model thinks (most often it Wrote it again shorter).
+      // 27 Oct 2026: Bonsai 2 9B asked for line 258, then 400, of a file it had just cut to 161 lines, and was
+      // shown "lines 258-257 of 161" with nothing under it, twice.
+      if (r.lineCount && from > r.lineCount) return { text: `${note}${args.path} has ${r.lineCount} lines now, so line ${from} is past its end: it is shorter than when you last saw it, if you read it before. Read it from line 1 (no offset), or pass an offset up to ${r.lineCount}.`, error: true, view: { kind: 'error', message: `Past the end (${r.lineCount} lines)` } };
       // A part ends at the last whole line that fits the result's room (one line at least, cut): cut
       // in the middle, the next part began after the lines cut off, and they were never read.
       const lines = hideBuilt(r.text).split('\n').slice(from - 1, from - 1 + r.shown);

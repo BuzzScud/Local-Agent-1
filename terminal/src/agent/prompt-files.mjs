@@ -292,6 +292,10 @@ export function readNearPath(cwd, p, { skills, guides = [] } = {}) {
     return { text: `${path}/${s.slug} (${s.name}):\n${s.body}` };
   }
   if (/^(?:RULES|Rules)\.md$/.test(raw) && guides.length) return { text: `${p} is not a file here; the guides open by their own paths.\n${guidesList(guides, { path: guidePath(cwd) })}` };
+  // A guide by its name alone ("DESIGN.md" for RULES/DESIGN.md; 27 Oct 2026: Bonsai 2 9B, three times in one run).
+  const bare = /^([A-Za-z-]+)\.md$/.exec(raw);
+  const g = bare && guides.find((x) => x.name === bare[1].toUpperCase());
+  if (g) return { name: g.name, text: `${p} is not a file here; it is the guide ${guidePath(cwd)}/${g.name}.md:\n${g.body}` };
   return null;
 }
 

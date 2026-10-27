@@ -169,6 +169,12 @@ test('Read SKILLS/<name> opens one skill and SKILLS the list; they are read-only
   expect((await execute('Read', { path: 'RULES/SKILLS/nope' }, {}, { cwd: proj })).text).toBe('No skill nope. The skills: SKILLS/write-a-test, SKILLS/explain-a-file.');
   expect(readNearPath(proj, 'RULES.md', { guides: [{ name: 'TESTING', about: 'before you test' }] }).text).toContain('- RULES/TESTING.md: before you test');
   expect(readNearPath(proj, 'RULES.md')).toBeNull(); // no guides on this set
+  // a guide by its name alone (27 Oct 2026, Bonsai 2 9B: DESIGN.md for RULES/DESIGN.md)
+  const testing = [{ name: 'TESTING', about: 'before you test', body: 'Run the test file.' }];
+  expect(readNearPath(proj, 'TESTING.md', { guides: testing }).text).toBe('TESTING.md is not a file here; it is the guide RULES/TESTING.md:\nRun the test file.');
+  expect(readNearPath(proj, 'testing.md', { guides: testing }).name).toBe('TESTING'); // any case, as RULES/<name> opens
+  expect(readNearPath(proj, 'TESTING.md')).toBeNull();
+  expect(readNearPath(proj, 'README.md', { guides: testing })).toBeNull();
   // the paths the instructions give are not near paths: they open as before
   for (const path of ['SKILLS', 'SKILLS/write-a-test', 'Rules/SKILLS/write-a-test', 'RULES/TESTING.md', 'src/SKILLS.md']) expect(readNearPath(proj, path)).toBeNull();
   // the project's own SKILLS.md is read as it is
