@@ -8,6 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [design rounds/agentic-coder-helpers-on-a-smaller-model-2-designs-2026-10-28.html](design%20rounds/agentic-coder-helpers-on-a-smaller-model-2-designs-2026-10-28.html) | page | Helpers on a smaller model | 11 KB | 2026-10-28 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 730 KB | 2026-10-28 |
 | [tests/bonsai-before-after-2026-10-28.html](tests/bonsai-before-after-2026-10-28.html) | page | Bonsai: speed before and after | 19 KB | 2026-10-28 |
 | [tests/agentic-coder-bonsai-speed-2026-10-27-2030.html](tests/agentic-coder-bonsai-speed-2026-10-27-2030.html) | page | Bonsai speed test · bonsai-2:9b on this Mac’s Ollama | 9 KB | 2026-10-28 |
