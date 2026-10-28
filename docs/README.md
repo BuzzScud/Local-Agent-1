@@ -8,7 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 728 KB | 2026-10-28 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 730 KB | 2026-10-28 |
 | [tests/bonsai-before-after-2026-10-28.html](tests/bonsai-before-after-2026-10-28.html) | page | Bonsai: speed before and after | 19 KB | 2026-10-28 |
 | [tests/agentic-coder-bonsai-speed-2026-10-27-2030.html](tests/agentic-coder-bonsai-speed-2026-10-27-2030.html) | page | Bonsai speed test · bonsai-2:9b on this Mac’s Ollama | 9 KB | 2026-10-28 |
 | [diagrams/agentic-coder-structure-2026-10-18.html](diagrams/agentic-coder-structure-2026-10-18.html) | page | Agentic Coder folder structure | 758 KB | 2026-10-18 |
