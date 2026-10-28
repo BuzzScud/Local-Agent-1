@@ -52,6 +52,8 @@ export { readyRemote } from './src/app/remote-form.mjs';
 export { weightsCore } from './src/app/weights-core.mjs';
 // panelData: the Arena's control panel (/effort's rows, their steps and notes), which its runner hands to the page.
 export { readLimits, modelWithLimits, testSettings, testLimits, testDefaults, TEST_CTX, panelData, ownOf, cleanNotes } from './src/app/limits.mjs';
+// speedTest: the hub's Bonsai tab and the Arena's Bonsai speed test (models/evals/tools/bonsai-speed.mjs) measure the same way.
+export { speedTest, readSpeeds } from './src/app/bonsai-speed.mjs';
 // pickCards, designNotes and scoreCard: which cards go along with a request, for the UI component battle's card pick (models/evals/bench/design/components.mjs).
 export { designDir, readCards, isDesignRequest, pickCards, designNotes, scoreCard } from './src/agent/design.mjs';
 // The design studio's pieces and its build, for the studio check and the UI component battle's studio part.

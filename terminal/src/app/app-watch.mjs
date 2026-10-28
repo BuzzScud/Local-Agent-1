@@ -28,11 +28,13 @@ export function watchPart(self) {
     const was = self.limitsRef.current;
     const fresh = readLimits({ ...loadSettings(self.opts.cwd), remote: self.settings.remote }, m);
     const said = [];
-    if (OWN_ROWS.some((id) => fresh[id] !== was[id]) || (fresh.notes ?? '') !== (was.notes ?? '')) {
-      const { notes: _n, notesOf: _o, ...kept } = was;
-      const next = { ...kept, ...Object.fromEntries(OWN_ROWS.map((id) => [id, fresh[id]])), preset: fresh.preset, ...(fresh.notes ? { notes: fresh.notes, notesOf: fresh.notesOf } : {}) };
+    const toolsMoved = (fresh.toolsOff ?? []).join() !== (was.toolsOff ?? []).join();
+    if (OWN_ROWS.some((id) => fresh[id] !== was[id]) || (fresh.notes ?? '') !== (was.notes ?? '') || toolsMoved) {
+      const { notes: _n, notesOf: _o, toolsOff: _t, ...kept } = was;
+      const next = { ...kept, ...Object.fromEntries(OWN_ROWS.map((id) => [id, fresh[id]])), preset: fresh.preset, ...(fresh.notes || fresh.toolsOff ? { notes: fresh.notes, toolsOff: fresh.toolsOff, notesOf: fresh.notesOf } : {}) };
       said.push(...limitChanges(was, next).map((c) => `${c.label} ${c.from} → ${c.to}`));
       if ((fresh.notes ?? '') !== (was.notes ?? '')) said.push(fresh.notes ? 'its own instructions' : 'its own instructions taken out');
+      if (toolsMoved) said.push(fresh.toolsOff?.length ? `tools off: ${fresh.toolsOff.join(', ')}` : 'every tool on');
       self.limitsRef.current = next;
       applyLimits(agent, next);
       agent.model = modelWithLimits(m, next);

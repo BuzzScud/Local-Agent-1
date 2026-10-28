@@ -220,7 +220,8 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
     if (body.reset) {
       saveService(sv.id, (p) => {
         const tuned = { ...(p.tuned ?? {}) }, contexts = { ...(p.contexts ?? {}) };
-        if (tuned[mid]?.notes) tuned[mid] = { notes: tuned[mid].notes }; else delete tuned[mid];
+        const keep = { ...(tuned[mid]?.notes ? { notes: tuned[mid].notes } : {}), ...(tuned[mid]?.toolsOff?.length ? { toolsOff: tuned[mid].toolsOff } : {}) };
+        if (Object.keys(keep).length) tuned[mid] = keep; else delete tuned[mid];
         delete contexts[mid];
         return { ...p, tuned, contexts };
       });
@@ -245,7 +246,7 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
       const limits = { ...(prev.limits ?? {}), ...Object.fromEntries(moved.map((id) => [id, want[id]])) };
       const level = levelNext ?? prev.level ?? null;
       const notes = notesMoved ? notesNext : prev.notes ?? '';
-      const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(notes ? { notes } : {}) };
+      const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(notes ? { notes } : {}), ...(prev.toolsOff?.length ? { toolsOff: prev.toolsOff } : {}) };
       if (Object.keys(own).length) tuned[mid] = own; else delete tuned[mid];
       if (ctxMoved) { if (want.context) contexts[mid] = want.context; else delete contexts[mid]; }
       return { ...p, tuned, contexts };
