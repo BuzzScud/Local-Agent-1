@@ -6,9 +6,16 @@ import { plainRead, resolvePath, toolNameOf } from './tools.mjs';
 import { basename, relative } from 'node:path';
 import { SeenFiles } from './seen.mjs';
 import { replyTiming } from './timing.mjs';
-import { AUTO, CALL_STOPS, CUT_MARK, KEEP_THOUGHTS, LEAST_THINK, NOTES_ROOM, NOTES_THINK, STEP_DOWN_CAP, TRIM_TO, auto, beforeCall, keyLines, planList, replyRoom, tokensOf } from './agent-said.mjs';
+import { AUTO, CALL_STOPS, CUT_MARK, KEEP_THOUGHTS, LATE_AT, LEAST_THINK, NOTES_ROOM, NOTES_THINK, STEP_DOWN_CAP, TIDY_EARLY, TRIM_TO, auto, beforeCall, keyLines, planList, replyRoom, tokensOf } from './agent-said.mjs';
 
 export class RoomPart {
+  // How full a request may get before it tidies (agent-said.mjs LATE_AT): Trim at, or later.
+  get roomAt() { return Math.max(this.trimAt, LATE_AT); }
+
+  // Between messages (agent-work.mjs, before the read-ahead): what tidying it needs, now, while you read; no
+  // notes and no summary here (they cost a model call and start the conversation over).
+  tidyBetween() { return this.fitContext(null, { at: Math.max(TRIM_TO + 0.05, this.trimAt - TIDY_EARLY), between: true }); }
+
   // What the conversation holds now, the two newest messages counted (they
   // may not be in ctxUsed yet).
   estNow() {
@@ -21,7 +28,7 @@ export class RoomPart {
   thinkRoom(est = this.estNow()) {
     if (!this.thinking) return 0;
     const cap = this.steppedDown() ? STEP_DOWN_CAP : (this.model?.thinkingBudget ?? 2048);
-    const fits = Math.floor(this.ctx * this.trimAt - est - 2048);
+    const fits = Math.floor(this.ctx * this.roomAt - est - 2048);
     return Math.max(Math.min(cap, LEAST_THINK), Math.min(cap, fits));
   }
 
@@ -52,7 +59,9 @@ export class RoomPart {
   // it happens rarely and deeply: past trimAt, the oldest outputs go until
   // the conversation is under TRIM_TO. (Trimming just enough once emptied the
   // file the model had just read, so it read it again, step after step.)
-  async fitContext(signal) {
+  // at: the share that starts it (Trim at when called alone; the step loop passes roomAt); between: a tidy between
+  // messages, which only empties and drops, never notes or a summary.
+  async fitContext(signal, { at = this.trimAt, between = false } = {}) {
     // The next reply needs its room too: at 16k, trimming without counting it
     // let a High reply run into the end of the memory mid-thought. The room is
     // the answer's 2,048 and the thinking that still fits (thinkRoom): in a
@@ -61,15 +70,15 @@ export class RoomPart {
     const room = replyRoom(this.thinking, this.thinkRoom(est));
     // Where the cleanup starts: the model's whole memory, or /remote's Clean up at (cleanCap).
     const cap = this.cleanCap;
-    if (est + room < cap * this.trimAt) return;
+    if (est + room < cap * at) return;
     // Notes and a summary both start over from what a restart keeps. When that
     // alone leaves no room for a reply, they free nothing and come back after
     // the very next step: at 16k a 7,300-token start wrote notes four times in
     // 18 minutes and changed nothing (countdown card, 1 Oct). Then only
     // trimming old output can help.
     const kept = this.keptTokens();
-    const restartFits = kept + NOTES_ROOM + room < cap * this.trimAt;
-    if (!restartFits && this.turn && !this.turn.toldTight) {
+    const restartFits = kept + NOTES_ROOM + room < cap * at;
+    if (!between && !restartFits && this.turn && !this.turn.toldTight) {
       this.turn.toldTight = true;
       this.emit('note', { text: `The ${Math.round(cap / 1024)}k memory is nearly all taken by this request's start (about ${kept.toLocaleString('en-US')} tokens: the instructions, the request and what came with it), so notes would free nothing; carrying on without them. ${cap < this.ctx ? 'A later Clean up at in /remote’s More' : 'A bigger memory in /effort'} gives it room.`, tone: 'warn' });
     }
@@ -82,15 +91,15 @@ export class RoomPart {
         est -= d.freed;
         this.ctxUsed = Math.max(0, this.ctxUsed - d.freed);
         const what = [d.reads ? `${d.reads} older read${d.reads === 1 ? '' : 's'} of ${d.files} file${d.files === 1 ? '' : 's'}` : '', d.writes ? `${d.writes} older version${d.writes === 1 ? '' : 's'} it wrote` : '', d.runs ? `${d.runs} older run${d.runs === 1 ? '' : 's'} of the same command` : ''].filter(Boolean).join(', ');
-        this.emit('note', { text: `Memory: dropped what it has a newer copy of (${what}), about ${d.freed.toLocaleString('en-US')} tokens.`, tone: 'dim' });
-        if (est + room < cap * (this.trimAt - 0.08)) return;
+        this.emit('note', { text: `Memory: dropped what it has a newer copy of (${what}), about ${d.freed.toLocaleString('en-US')} tokens${between ? ', between messages' : ''}.`, tone: 'dim' });
+        if (est + room < cap * (at - 0.08)) return;
       }
     }
     // Notes first. Emptying old output makes the model read again everything
     // after it (measured: 186 to 261 s each time, up to half of a long try).
     // Its notes are written in the conversation it already holds, so only
     // the notes themselves are read afterwards.
-    if (this.whenFull === 'notes' && restartFits && est + NOTES_ROOM + NOTES_THINK < this.ctx * 0.97 && await this.notesInPlace(signal)) return;
+    if (!between && this.whenFull === 'notes' && restartFits && est + NOTES_ROOM + NOTES_THINK < this.ctx * 0.97 && await this.notesInPlace(signal)) return;
     let freed = 0;
     // Old thinking first: every step before the newest KEEP_THOUGHTS keeps
     // only its cause/fix lines (keyLines); the rest served its step already.
@@ -114,8 +123,8 @@ export class RoomPart {
     }
     est -= freed;
     this.ctxUsed = Math.max(0, this.ctxUsed - freed);
-    if (freed) this.emit('note', { text: `Trimmed old tool output to save memory (about ${freed.toLocaleString()} tokens).`, tone: 'dim' });
-    if (restartFits && est + room >= cap * this.fullAt) await this.compact(signal);
+    if (freed) this.emit('note', { text: `Trimmed old tool output to save memory (about ${freed.toLocaleString()} tokens${between ? ', between messages' : ''}).`, tone: 'dim' });
+    if (!between && restartFits && est + room >= cap * this.fullAt) await this.compact(signal);
   }
 
   // Older copies of what the conversation holds a newer copy of (5 Oct 2026: in the hard task's runs a model

@@ -998,7 +998,8 @@ test('a model on an Ollama service gets room for a file when Reply length is aut
   expect(await room(service, 65536)).toBe(32768);
   const tight = await room(service, 32768);
   expect(tight).toBeGreaterThan(8192);
-  expect(tight).toBeLessThan(Math.floor(32768 * 0.78)); // never past what the context has left
+  // never past what the context has left: a request's line (agent-said.mjs LATE_AT, 95% since 28 Oct 2026; 78% before)
+  expect(tight).toBeLessThan(Math.floor(32768 * 0.95));
   expect(await room({ ...service, replyTokens: 8192 }, 65536)).toBe(8192); // its own Reply length still wins
   expect(await room(model, 65536)).toBe(2048); // a model on this Mac: as before
 });

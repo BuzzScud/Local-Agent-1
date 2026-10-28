@@ -47,6 +47,12 @@ export const budgetFromEnv = () => { const v = Number(process.env.AGENTIC_THINK_
 export const TRIM_AT = 0.78; // share of the context that starts a trim
 export const TRIM_TO = 0.45; // …and where it stops
 export const FULL = 0.85; // past this share (with the reply room counted) trimming was not enough: summarize
+// Tidying changes an old message, and every model then reads everything after it again (Bonsai 2 9B on this Mac's
+// Ollama, 28 Oct 2026: an older read dropped at 45k of 64k, then all 40,145 tokens read again, 262 s). So during a
+// request it tidies only when the next reply would not fit (LATE_AT, the reply's room counted), and between messages
+// from TIDY_EARLY under Trim at (60% at the default), where an Ollama service reads it again while you read.
+export const LATE_AT = 0.95;
+export const TIDY_EARLY = 0.18;
 export const RESULT_MAX = 30_000; // the most characters one tool result keeps (Claude Code's own for a command)
 // Room kept free for one reply: thinking (up to the server's reasoning budget)
 // plus the answer. At 16k, a trim at 78% left too little, and a High reply

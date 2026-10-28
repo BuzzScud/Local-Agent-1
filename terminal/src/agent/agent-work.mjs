@@ -95,10 +95,12 @@ export class WorkPart {
     let skill = null;
     if (!follow) { try { skill = pickSkill(text, readSkills(undefined, this.rulesSetUsed ?? this.rulesSet())); } catch {} }
     // First the focused paths (rename / fix / change); the loop handles the rest.
-    // (The model that decides calls them itself: Rename and TestFirst.) A model that takes none (models/runtime/
-    // remote.mjs OWN_REMOTES focused: false, Bonsai 2 9B) goes straight to step by step.
+    // (The model that decides calls them itself: Rename and TestFirst.) A model on a service goes straight to step by
+    // step (28 Oct 2026): Ollama answers one request at a time, so the paths' tests, drafts and 8 tries ran one after
+    // another, 30 and 18 minutes on two of the owner's requests with Bonsai 2 9B, and none of the 16 tries passed.
+    // The other service models let the model decide, where these paths never ran.
     this.carried = null;
-    if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length && !skill && this.model?.focused !== false) {
+    if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length && !skill && !this.model?.remote) {
       const ended = await this.focusedPaths(text, started, signal);
       if (ended) return ended;
     }
@@ -198,7 +200,7 @@ export class WorkPart {
         if (signal?.aborted) { reason = 'interrupted'; break; }
         // Its profile first (profile-router.mjs): a change made since the last step moves it here.
         await this.followProfile();
-        await this.fitContext(signal);
+        await this.fitContext(signal, { at: this.roomAt });
         const turn = await this.generate(signal);
         // Counted for the done line: each reply is a step; its thinking share
         // of the tokens is estimated from the characters it wrote.
@@ -493,7 +495,8 @@ export class WorkPart {
     if (this.remoteSet() || this.model?.remote) this.bakeTurnNotes();
     await this.stillBroken(reason);
     await this.deliverDesktop(reason);
-    if (reason !== 'interrupted') this.warmNext();
+    // Tidied now if it needs it, then read ahead: an Ollama service reads the tidied conversation while you read.
+    if (reason !== 'interrupted') { await this.tidyBetween(); this.warmNext(); }
     this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, steps: t.steps ?? 0, reads: (t.readsRun ?? 0) + (t.given ?? 0), readFirst: t.ranked?.files?.length ?? 0, thinkTokens: t.thinkTokens ?? 0, tokens: t.tokens ?? 0, stuckAsks: t.stuckAsks ?? 0, made: this.madeSummary() });
     return reason;
   }

@@ -265,7 +265,7 @@ export class AnswerPart {
       // at 8.2k thought for 3½ minutes and none of its page arrived; "build it in parts" made
       // one write many steps). Ollama's limit holds the thinking and the answer together.
       const own = this.model?.replyTokens;
-      const more = Math.min(SERVICE_REPLY, Math.floor(this.ctx * this.trimAt) - this.estNow());
+      const more = Math.min(SERVICE_REPLY, Math.floor(this.ctx * this.roomAt) - this.estNow());
       if (own && !this.turn.roomUp && more >= own * 2) {
         this.turn.roomUp = more;
         this.messages.pop();

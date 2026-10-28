@@ -85,10 +85,8 @@ export const onThisMac = (r) => r?.kind !== 'claude' && r?.connect !== 'ssh' && 
 // on this Mac, where every other model on a service gets the remote set ("Only Bonsai switches"; on the remote
 // set it tried the design guide as DESIGN.md three times in one run and never read it). steps: /effort's
 // default Steps per request (terminal limits.mjs; at 40 its notes page ran out of steps at 11 minutes, at 120
-// it finished in 36). A row saved in /effort still wins. focused: false goes straight to step by step, never the
-// focused paths (28 Oct 2026: Ollama answers one request at a time, so their tests, drafts and 8 tries ran one after
-// another, 45-70 s each; on two of the owner's requests they took 30 and 18 minutes, and none of the 16 tries passed).
-export const OWN_REMOTES = [{ match: /^bonsai-2(:|$)/i, rules: 'local', steps: 120, focused: false }];
+// it finished in 36). A row saved in /effort still wins.
+export const OWN_REMOTES = [{ match: /^bonsai-2(:|$)/i, rules: 'local', steps: 120 }];
 
 // An SSH destination as ssh takes it: a name from ~/.ssh/config, host or
 // user@host (a port goes in the config). Never an option ("-o…").
@@ -601,7 +599,7 @@ export function remoteModel(r, info = {}) {
   // A big one carries big-model mode (bigHarness).
   const harness = bigHarness(o);
   const own = OWN_REMOTES.find((x) => x.match.test(name));
-  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}), ...(own.focused === false ? { focused: false } : {}) } : {};
+  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}) } : {};
   return { ...GENERIC_REMOTE, ...levels, ...common, ...(harness ? { harness } : {}), ...mine, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
 }
 

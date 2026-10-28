@@ -1860,15 +1860,30 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   stand-in conversation, the cache matching the first 871). Their picks: the first three fixes below, not a thinking cap.
 - **What changed.** `ownWords` (flows/words.mjs) leaves what a dropped or @-named file or folder brought in out of the
   word rules (`routeByRules`), the model's sort (`route`), the bug kinds (`sortBug`) and the skills' words (`pickSkill`).
-  `OWN_REMOTES` gives Bonsai `focused: false` (remoteModel carries it), so agent-work.mjs goes straight to step by step.
+  A model on a service goes straight to step by step (agent-work.mjs: `!this.model?.remote`; first Bonsai's own
+  `focused: false`, made general the same day, the owner: "can we make all of this general fixes?"): the other service
+  models let the model decide, where the focused paths never ran.
   `bakeTurnNotes` runs for any model on a service, not only on the remote set. `warmNext` (agent-model.mjs): after an
   answer that thought, on an Ollama service, the conversation goes once as the next message will send it (a stand-in
   message, one token, the last step's tools, thinking and effort), so the service reads it while the owner reads; the
   next message aborts it (what was read stays read); `AGENTIC_WARM_NEXT=off` turns it off (test-env.mjs does).
+- **Tidying late in a request, early between messages** (the same day, their pick "Tidy between messages"; replay 2 had
+  dropped an older read at 45k of 64k and Bonsai read all 40,145 tokens again, 262 s). agent-said.mjs `LATE_AT` (0.95)
+  and `TIDY_EARLY` (0.18): the step loop and chat() call `fitContext(signal, { at: this.roomAt })` (agent-room.mjs
+  `roomAt` = the later of Trim at and LATE_AT), and the reply's own room (agent-model.mjs maxTokens, agent-answer.mjs's
+  room-up) and the thinking room follow the same line, so a reply late in a request is not squeezed to 2,048 tokens.
+  At the end of an answer, before the read-ahead, `tidyBetween()` tidies from Trim at less TIDY_EARLY (60% at the
+  default) down to TRIM_TO, emptying and dropping only (no notes, no summary: those cost a model call and start the
+  conversation over); its notes end "between messages". `fitContext()` called alone keeps Trim at, as before.
+  For every model: on Ollama the read-ahead reads the tidied conversation while you read; elsewhere the next request
+  reads it once, as a tidy mid-request did, but at a message's start.
+- **Lost file writes** were not rescued: Ollama's parser drops the whole call, so nothing reaches the app to read, and
+  a retry in raw mode (qwen-raw.mjs) writes the file again in the same time as the LOST_CALL retry does.
 - **Measured**: the replay of the two requests (a copy of the folder, their settings at 64k, a 90 s pause between) and
   the page `docs/tests/bonsai-before-after-2026-10-28.html`, built from `models/remote/results/bonsai-before-after-2026-10-28/`.
-- **Tests**: `terminal/test/bonsai-cache.test.mjs` (the sorting, the own entry, no tries on a stand-in Ollama that
-  thinks, the notes baked, the read-ahead's messages and settings, the next message stopping it, none without thinking).
+- **Tests**: `terminal/test/bonsai-cache.test.mjs` (the sorting, no tries on a service model and tries on this Mac's,
+  the notes baked, the read-ahead's messages and settings, the next message stopping it, none without thinking; the
+  request's 95% line and the between tidy, a reply's room late in a request, the read-ahead reading the tidied one).
 
 ## The hub's Bonsai tab: everything about Bonsai, live (27 Oct 2026)
 
