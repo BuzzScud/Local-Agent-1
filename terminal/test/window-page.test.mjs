@@ -9,7 +9,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runWindow } from '../src/window/server.mjs';
 import { meterOf, modelNowOf, effortWords } from '../src/window/bridge.mjs';
-import { viewItem } from '../src/window/view.mjs';
+import { viewItem, heldView, stepView } from '../src/window/view.mjs';
+import { printedOf } from '../src/app/screen.jsx';
 import { knownOf } from '../src/app/start.jsx';
 import { saveSession } from '../src/app/store.mjs';
 import { findChrome } from '../src/flows/layoutcheck.mjs';
@@ -104,10 +105,10 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the search box type
     await p.js(`(() => { window.__first = document.querySelector('.reply'); const r = document.createRange(); r.selectNodeContents(window.__first); getSelection().removeAllRanges(); getSelection().addRange(r); })()`);
     for (const text of ['The', 'The rounding', 'The rounding happens in roundCents.']) await p.say({ ...base, items: {}, live: { phase: 'working', turnStart: Date.now(), tokens: 3, text } });
     expect(await p.js(`document.querySelector('.reply') === window.__first && String(getSelection()).includes('Math.floor')`)).toBe(true);
-    expect(await p.js(`document.querySelector('#live .said').textContent`)).toContain('The rounding happens in roundCents.');
-    // The answer done: it comes as an item, the live part goes.
+    expect(await p.js(`document.querySelector('.ch7.live .tail7').textContent`)).toContain('The rounding happens in roundCents.');
+    // The answer done: it comes as an item, the part under way goes.
     await p.say({ ...base, order: [...base.order, 'a2'], items: { a2: { t: 'text', key: 'a2', text: 'The rounding happens in roundCents.' } } });
-    expect(await p.js(`[document.querySelectorAll('#items .reply').length, document.getElementById('live').textContent]`)).toEqual([2, '']);
+    expect(await p.js(`[document.querySelectorAll('#items .reply').length, document.querySelectorAll('.ch7.live').length, document.getElementById('live').textContent]`)).toEqual([2, 0, '']);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
@@ -177,31 +178,33 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a stopped reply say
   } finally { await p.close(); }
 }, 60_000);
 
-// A press held as long as a person holds one (19 Oct 2026, the UI sweep): the live part is drawn again with each state while
-// the thinking streams, so the box pressed was gone by the release, the click landed on the part around it, and 0 of 8
-// clicks opened or closed the THINKING box in the real app. The toggles of the live part act on the press now.
-test.skipIf(needs('chrome', findChrome))('in a real browser: the THINKING box opens and closes on a press held while the thinking streams', async () => {
+// A press held as long as a person holds one (19 Oct 2026, the UI sweep): the part under way is drawn again with each
+// state while the thinking streams, so a box pressed was gone by the release and 0 of 8 clicks opened or closed it. The
+// line under way shows or hides what streams on the press (27 Oct 2026, the timeline: steps-page.js).
+test.skipIf(needs('chrome', findChrome))('in a real browser: what streams shows and hides on a press of the line under way, held while the thinking streams', async () => {
   const p = await openPage();
   try {
     let n = 0, on = true;
     const think = () => ({ ...base, order: [], items: {}, live: { phase: 'working', turnStart: Date.now(), tokens: n, thinking: Array.from({ length: 6 + n }, (_, i) => `Thought line ${i}`).join('\n') } });
     await p.say(think());
     const streaming = (async () => { while (on) { n++; await p.say(think()); } })();
+    const shown = () => p.js(`Boolean(document.querySelector('.ch7.live .tail7'))`);
     const press = async () => {
-      const at = await p.js(`(() => { const r = document.querySelector('[data-think]').getBoundingClientRect(); return { x: r.x + 30, y: r.y + r.height / 2 }; })()`);
+      const at = await p.js(`(() => { const r = document.querySelector('[data-tail7]').getBoundingClientRect(); return { x: r.x + 30, y: r.y + r.height / 2 }; })()`);
       await p.on('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y });
       await p.on('Input.dispatchMouseEvent', { type: 'mousePressed', x: at.x, y: at.y, button: 'left', clickCount: 1 });
       await Bun.sleep(400); // two states or more arrive while it is held
       await p.on('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', clickCount: 1 });
       await Bun.sleep(200);
     };
-    const was = await p.js('thinkOpen');
+    expect(await shown()).toBe(true);
     await press();
-    expect(await p.js('thinkOpen')).toBe(!was);
+    expect([await shown(), await p.js(`localStorage.getItem('think-open')`)]).toEqual([false, '0']);
     await press();
-    expect(await p.js('thinkOpen')).toBe(was);
+    expect([await shown(), await p.js(`localStorage.getItem('think-open')`)]).toEqual([true, '1']);
     on = false;
     await streaming;
+    expect(p.got()).toEqual([]);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
@@ -246,107 +249,182 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a model still loadi
   } finally { await p.close(); }
 }, 60_000);
 
-// The task row under way (18 Oct 2026, the owner: "when i click on the dropdown or the boxes to expand or collapse, it
-// doesnt work"): it looked clickable and a click did nothing. Its parts open and close in the page, and nothing goes
-// to the app.
-test.skipIf(needs('chrome', findChrome))('in a real browser: the task row under way opens and closes, its parts done so far and the part under way', async () => {
+// The reply as the bridge sends it (view.mjs viewItem, heldView, stepView over the app's own grouping): its items, the part
+// under way and every step. The turn: a line, a plan that moves from its first to-do to its second, a read, a thought, an
+// edit and a test run.
+const todosAt = (now) => ({ kind: 'todos', items: [{ text: 'Find the bug', status: now === 0 ? 'in_progress' : 'done' }, { text: 'Fix and test it', status: now === 1 ? 'in_progress' : 'pending' }] });
+const turnRaw = (t0) => [
+  { key: 'u2', type: 'user', text: 'fix the rounding', cards: [] },
+  { key: 't1', rail: true, type: 'text', text: 'Looking at the cart first.', at: t0 + 1000 },
+  { key: 'p1', rail: true, type: 'tool', label: 'TodoWrite', arg: '2 to-dos', view: todosAt(0), at: t0 + 2000, ms: 3 },
+  { key: 'r1', rail: true, type: 'tool', label: 'Read', arg: 'cart.mjs', view: { kind: 'read', lines: 2, total: 2, content: 'export const total = (x) =>\n  Math.floor(x * 100) / 100;' }, at: t0 + 3000, ms: 4 },
+  { key: 'k1', rail: true, type: 'thinking', text: 'It floors. It should round.', secs: 2.5, tokens: 12, at: t0 + 4000 },
+  { key: 'p2', rail: true, type: 'tool', label: 'TodoWrite', arg: '2 to-dos', view: todosAt(1), at: t0 + 7000, ms: 2 },
+  { key: 'e1', rail: true, type: 'tool', label: 'Update', arg: 'cart.mjs', view: { kind: 'diff', path: 'cart.mjs', hunk: [{ type: '-', text: '  Math.floor(x * 100) / 100;', oldNo: 2 }, { type: '+', text: '  Math.round(x * 100) / 100;', newNo: 2 }] }, at: t0 + 8000, ms: 5 },
+  { key: 'b1', rail: true, type: 'tool', label: 'Bash', arg: 'bun test', view: { kind: 'bash', code: 1, lines: ['cart.test.mjs:', '(pass) rounds', '(fail) totals', '', ' 4 pass', ' 1 fail'] }, at: t0 + 9000, ms: 900 },
+];
+const turnState = (raw, working) => {
+  const ctx = { plan: null, raws: new Map() };
+  const { printed, held } = printedOf(raw, working, { steps: 'grouped', open: new Set() });
+  const views = printed.map((it) => viewItem(it, ctx)).filter((v) => v && v.t !== 'skip');
+  const live = working ? heldView(held, ctx) : null;
+  return { order: views.map((v) => v.key), items: Object.fromEntries(views.map((v) => [v.key, v])), held: live, steps: Object.fromEntries([...ctx.raws].map(([k, x]) => [k, stepView(x)])) };
+};
+// Each part as drawn: its title, under way or folded, its lines (coloured verb, what it was on, how it went), what is open.
+const PARTS = `[...document.querySelectorAll('#items .ch7')].map((el) => { const ti = el.querySelector('.hd7 .ti').cloneNode(true); ti.querySelector('.nw7')?.remove(); return { title: ti.textContent.trim(), live: el.classList.contains('live'), shut: el.classList.contains('shut'), lines: [...el.querySelectorAll('.l7')].map((l) => [l.querySelector('.tg').textContent, l.querySelector('.tx').textContent, l.querySelector('.rs').textContent].join(' | ')), open: el.querySelectorAll('.det7').length }; })`;
+
+// The reply under way in parts (27 Oct 2026, the owner's pick "7 · Smooth" after five rounds, and "keep everything here,
+// not in the bottom chat box"): each part a box with every step on a line, the part under way says what it does now; a
+// line opens in place and a finished part folds, in the page alone (18 Oct 2026, the owner: "when i click on the dropdown
+// or the boxes to expand or collapse, it doesnt work"), and what is new slides in while the rest keeps its elements.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the reply under way in parts, a step opens in place, a finished part folds, and the next state keeps both', async () => {
   const p = await openPage();
   try {
-    const step = (k, words) => ({ k, words });
-    const held = {
-      t: 'live', first: true,
-      run: { label: 'EXPLORING', color: '#5fafff', last: 'Read the server and its tests', rows: [
-        { id: 'r-server', words: 'Read the server', said: true, facts: { steps: 2 }, steps: [step('read', 'server.mjs'), step('read', 'routes.mjs')] },
-        { id: 'r-tests', words: 'Read its tests', said: true, facts: { steps: 1 }, steps: [step('read', 'server.test.mjs')] },
-      ] },
-      now: { label: 'EDITING', color: '#d7af00', words: 'Fixing the rounding', steps: [step('read', 'cart.mjs'), step('edit', 'cart.mjs')], n: 2 },
-    };
-    const turnStart = Date.now();
-    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 3 }, held });
-    const live = () => p.js(`(() => { const rows = [...document.querySelectorAll('#live .trow')]; return rows.map((r) => ({ open: Boolean(r.querySelector('.task .chev.open')), rows: [...r.querySelectorAll('.rowx')].map((x) => x.querySelector('.w').textContent), steps: r.querySelectorAll('.step').length })); })()`);
-    // At first: the parts done so far closed, the part under way open with its steps.
-    expect(await live()).toEqual([{ open: false, rows: [], steps: 0 }, { open: true, rows: [], steps: 2 }]);
-    // The part under way closes and opens.
-    await p.click('#live .trow .task', 1);
-    expect(await live()).toEqual([{ open: false, rows: [], steps: 0 }, { open: false, rows: [], steps: 0 }]);
-    await p.click('#live .trow .task', 1);
-    expect((await live())[1]).toEqual({ open: true, rows: [], steps: 2 });
-    // The parts done so far open, and a row of them opens its steps.
-    await p.click('#live .trow .task', 0);
-    expect((await live())[0]).toEqual({ open: true, rows: ['Read the server', 'Read its tests'], steps: 0 });
-    await p.click('#live .rowx', 0);
-    expect((await live())[0].steps).toBe(2);
-    // The next state of the same reply keeps what was opened.
-    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 9 }, held: { ...held, now: { ...held.now, steps: [...held.now.steps, step('ran', 'npm test')], n: 3 } } });
-    expect(await live()).toEqual([{ open: true, rows: ['Read the server', 'Read its tests'], steps: 2 }, { open: true, rows: [], steps: 3 }]);
-    await p.click('#live .trow .task', 0);
-    expect((await live())[0]).toEqual({ open: false, rows: [], steps: 0 });
-    // Nothing went to the app: no keys, no actions.
+    const t0 = Date.now() - 60_000, raw = turnRaw(t0);
+    const at = (n, live) => ({ ...base, ...turnState(raw.slice(0, n), true), live: { phase: 'working', turnStart: t0, stepStart: Date.now() - 2000, tokens: 3, ...live } });
+    await p.say(at(7, { running: { label: 'Bash', arg: 'bun test' } }));
+    // the plan named each part; the model's line stays as its first line; the part under way ends with the step under way
+    expect(await p.js(PARTS)).toEqual([
+      { title: '▸ Find the bug', live: false, shut: false, open: 0, lines: ['Said | Looking at the cart first. | ', 'Planning | 2 to-dos · 0 done | ', 'Reading | cart.mjs | ', 'Thought | It floors. | '] },
+      { title: '▸ Fix and test it', live: true, shut: false, open: 0, lines: ['Planning | 2 to-dos · 1 done | ', 'Editing | cart.mjs | +1 −1', 'Testing | bun test | '] },
+    ]);
+    // when each step started from the turn's start and how long it took (the model's line has neither), and the head of
+    // the part under way
+    expect(await p.js(`[...document.querySelectorAll('.ch7')[0].querySelectorAll('.l7')].map((l) => l.querySelector('.at').textContent + ' ' + l.querySelector('.du').textContent)`)).toEqual([' ', '0:02 0.0 s', '0:03 0.0 s', '0:04 2.5 s']);
+    expect(await p.js(`(() => { const h = document.querySelector('.ch7.live .hd7'); return [h.querySelector('.nw7 .vb').textContent, h.querySelector('.nw7 .tg').textContent, h.querySelector('.oc').textContent]; })()`)).toEqual(['Testing', 'bun test', '4 calls · 12 thinking']);
+    // A line opens in place: the file as read; a change with its line numbers and Copy inside its box.
+    await p.click('[data-r7="r1"]');
+    expect(await p.js(`document.querySelector('.ch7 .det7 .out').innerText`)).toBe('export const total = (x) =>\n  Math.floor(x * 100) / 100;');
+    await p.click('[data-r7="e1"]');
+    expect(await p.js(`(() => { const d = document.querySelector('.ch7.live .det7'); return [[...d.querySelectorAll('.diff > div')].map((r) => r.className + ' ' + r.querySelector('.n').textContent), Boolean(d.querySelector('.cpw > .diff + .cp7'))]; })()`)).toEqual([['del 2', 'add 2'], true]);
+    // A finished part folds by its title.
+    await p.click('[data-o7="p:p1"]');
+    expect((await p.js(PARTS))[0]).toMatchObject({ shut: true, open: 1 });
+    await p.js(`document.querySelector('[data-k="e1"]').__kept = 1`);
+    // The next state: the test run done, the next reply thinking. What was open or folded stays; the new line slides in.
+    await p.say(at(8, { thinking: 'Two of them fail on the totals.', thinkStart: Date.now() - 1500 }));
+    const now = await p.js(PARTS);
+    expect(now[0]).toMatchObject({ shut: true, open: 1 });
+    expect(now[1].lines).toEqual(['Planning | 2 to-dos · 1 done | ', 'Editing | cart.mjs | +1 −1', 'Testing | bun test | ✗ 1', 'Thinking | ' + now[1].lines[3].split(' | ')[1] + ' | ']);
+    expect(now[1].lines[3]).toMatch(/^Thinking \| \d+ tokens/);
+    expect(now[1].open).toBe(1);
+    expect(await p.js(`[document.querySelector('[data-k="e1"]').__kept, document.querySelector('[data-k="b1"]').classList.contains('enter7'), document.querySelector('[data-k="e1"]').classList.contains('enter7')]`)).toEqual([1, true, false]);
+    // Unfolded again by its title; nothing went to the app: no keys, no actions.
+    await p.click('[data-o7="p:p1"]');
+    expect((await p.js(PARTS))[0].shut).toBe(false);
+    expect(p.got()).toEqual([]);
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
+// A reply done (27 Oct 2026, the owner's picks): a web search shows its query and its sources ("show lines during web
+// search, sources"), an answer that pastes a whole file folds to its first lines, Copy is only inside a box ("ONLY KEEP
+// IT INSIDE OF THE CODE BOX"), and the end line counts tool calls, not the model's replies.
+test.skipIf(needs('chrome', findChrome))('in a real browser: a web search with its sources, a pasted file folded, Copy inside boxes, and the end line in tool calls', async () => {
+  const p = await openPage();
+  try {
+    const t0 = Date.now() - 60_000;
+    const sources = Array.from({ length: 6 }, (_, i) => ({ title: `Bun 1.3 notes, part ${i + 1}`, url: `https://www.site${i + 1}.example/bun`, age: i ? null : '2 days ago' }));
+    const file = '```html\n' + Array.from({ length: 40 }, (_, i) => `<p>line ${i + 1}</p>`).join('\n') + '\n```';
+    const raw = [
+      { key: 'u2', type: 'user', text: 'what is new in bun 1.3? and make me a page', cards: [] },
+      { key: 'w1', rail: true, type: 'tool', label: 'WebSearch', arg: '"bun 1.3"', view: { kind: 'websearch', count: 6, service: 'Anthropic', query: 'bun 1.3', sources }, at: t0 + 1000, ms: 1200 },
+      { key: 'r1', rail: true, type: 'tool', label: 'Read', arg: 'index.html', view: { kind: 'read', lines: 2, total: 2, content: '<p>a</p>\n<p>b</p>' }, at: t0 + 3000, ms: 4 },
+      { key: 'a2', rail: true, type: 'text', text: `Here it is:\n\n${file}` },
+      { key: 'd2', rail: true, type: 'done', reason: 'done', past: 'Baked', secs: 9, at: t0 + 9000, steps: 1, calls: 2 },
+    ];
+    await p.say({ ...base, ...turnState(raw, false) });
+    expect((await p.js(PARTS))[0].lines).toEqual(['Web search | “bun 1.3” | 6 sources', 'Reading | index.html | ']);
+    // the times from the turn's start, as its end line gives it (as they read while it worked)
+    expect(await p.js(`[...document.querySelectorAll('.l7 .at')].map((e) => e.textContent)`)).toEqual(['0:01', '0:03']);
+    const srcs = () => p.js(`[...document.querySelectorAll('.src7')].map((a) => a.querySelector('.host').textContent + ' ' + a.getAttribute('href'))`);
+    expect(await srcs()).toEqual([1, 2, 3, 4].map((i) => `site${i}.example https://www.site${i}.example/bun`));
+    expect(await p.js(`document.querySelector('.src7 .age').textContent`)).toBe('2 days ago');
+    expect(await p.js(`document.querySelector('.srcmore').textContent`)).toBe('+ 2 more sources');
+    await p.click('.srcmore');
+    expect((await srcs()).length).toBe(6);
+    expect(await p.js(`document.querySelector('.srcmore').textContent`)).toBe('Show fewer');
+    // the pasted file: folded to its first lines, opened by its button; Copy in its code box and nowhere beside the message
+    const reply = () => p.js(`(() => { const r = document.querySelector('.reply7'); return { open: r.classList.contains('open'), button: r.querySelector('.more7').textContent, h: Math.round(r.querySelector('.rb').getBoundingClientRect().height) }; })()`);
+    const shut = await reply();
+    expect(shut).toMatchObject({ open: false, button: 'Show all · 44 lines' });
+    await p.click('[data-fold7]');
+    const open = await reply();
+    expect(open).toMatchObject({ open: true, button: 'Show less' });
+    expect(open.h).toBeGreaterThan(shut.h * 2);
+    expect(await p.js(`[...document.querySelectorAll('.cp7')].map((b) => b.parentElement.firstElementChild.tagName)`)).toEqual(['PRE']);
+    // the end line: the reply's tool calls, not its replies
+    const end = await p.js(`[...document.querySelectorAll('#items .endline')].at(-1).textContent`);
+    expect(end).toContain('2 tool calls');
+    expect(end).not.toContain('step');
     expect(p.got()).toEqual([]);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
 
 // The thinking as it streams (18 Oct 2026, the owner, with three pictures: "fix the thinking too, it moves the whole
-// page"): the last 400 characters of it were 2 lines one moment and 12 the next, so everything around it jumped.
-test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking as it streams keeps one height, shows its newest line, and nothing around it moves', async () => {
+// page"; 27 Oct 2026, "NOW EVERUTHING LOOKS CUT OFF"): what streams grows with its text up to five whole lines, its newest
+// at the bottom, and nothing above it moves.
+test.skipIf(needs('chrome', findChrome))('in a real browser: what streams is five whole lines at most, its newest in, and nothing above it moves', async () => {
   const p = await openPage();
   try {
     const turnStart = Date.now();
     const at = async (thinking) => {
       await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 50, thinking } });
-      return p.js(`(() => { const t = document.querySelector('#live .thinking'); const r = t.getBoundingClientRect(), last = t.firstElementChild.getBoundingClientRect(); const you = [...document.querySelectorAll('.you, .user, [data-key="u1"]')][0]; return { h: Math.round(r.height), bottom: Math.round(r.bottom), live: Math.round(document.getElementById('live').getBoundingClientRect().height), lastIn: last.bottom <= r.bottom + 1, status: Math.round(document.getElementById('status').getBoundingClientRect().top), scroll: document.getElementById('convo').scrollTop, you: you ? Math.round(you.getBoundingClientRect().top) : null }; })()`);
+      return p.js(`(() => { const t = document.querySelector('.ch7.live .tail7'), inner = t.firstElementChild; const r = t.getBoundingClientRect(), last = inner.getBoundingClientRect(), lh = parseFloat(getComputedStyle(t).lineHeight); const you = document.querySelector('.you, .user, [data-key="u1"]'); return { h: Math.round(r.height), lines: r.height / lh, hidden: (last.height - r.height) / lh, lastIn: last.bottom <= r.bottom + 1, head: Math.round(document.querySelector('.ch7.live .hd7').getBoundingClientRect().top), status: document.getElementById('status').hidden, you: you ? Math.round(you.getBoundingClientRect().top) : null }; })()`);
     };
     const short = await at('The user wants the totals.');
     const long = await at(Array.from({ length: 30 }, (_, i) => `Line ${i + 1} of the thinking, about the totals and the rounding in checkout.`).join('\n'));
     const longer = await at(Array.from({ length: 60 }, (_, i) => `Step ${i + 1}: and more.`).join('\n'));
+    expect(short.lines).toBeCloseTo(1, 1);
     for (const r of [long, longer]) {
-      expect(r.h).toBe(short.h);
-      expect(r.live).toBe(short.live);
-      expect(r.status).toBe(short.status);
+      expect(r.lines).toBeCloseTo(5, 1);
+      expect(Math.abs(r.hidden - Math.round(r.hidden))).toBeLessThan(0.05); // the lines cut off above are whole lines
+      expect(r.h).toBe(long.h);
+      expect(r.head).toBe(short.head);
       expect(r.you).toBe(short.you);
       expect(r.lastIn).toBe(true);
+      expect(r.status).toBe(true); // no status line under the conversation while it works with nothing waiting
     }
-    expect(await p.js(`document.querySelector('#live .thinking').textContent.includes('Step 60: and more.')`)).toBe(true);
+    expect(await p.js(`document.querySelector('.ch7.live .tail7').textContent.includes('Step 60: and more.')`)).toBe(true);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
 
-// The thinking in a box (18 Oct 2026, the owner: "put thinking in a box, i can expand and collapse too?"): a header as a
-// task row's; open at first with the newest lines, a click closes it to one row with the newest line, and that holds for
-// the next reply too. Nothing goes to the app.
-test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking, then the answer as it comes, is a box that opens and closes, one row closed whatever its length, kept for the next reply', async () => {
+// The thinking, then the answer as it comes (18 Oct 2026, the owner: "put thinking in a box, i can expand and collapse
+// too?"; 27 Oct 2026, the timeline): the line under way says Thinking with its time bar, a press hides what streams and
+// that holds for the next reply; the answer as it comes takes the same place, the line then says Writing.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking, then the answer as it comes, under the line under way, hidden by a press and kept so for the next reply', async () => {
   const p = await openPage();
   try {
-    const box = () => p.js(`(() => { const b = document.querySelector('#live .trow.think'); if (!b) return null; return { tag: b.querySelector('.tag').textContent, words: b.querySelector('.w').textContent, open: b.querySelector('.chev').classList.contains('open'), body: Boolean(b.querySelector('.thinking')), h: Math.round(b.getBoundingClientRect().height) }; })()`);
+    const box = () => p.js(`(() => { const part = document.querySelector('.ch7.live'); if (!part) return null; const l = part.querySelector('[data-tail7]'), t = part.querySelector('.tail7'); return { tag: l.querySelector('.tg').textContent, bar: Boolean(l.querySelector('.bar7')), said: l.querySelector('.bv')?.textContent ?? null, tail: t ? t.textContent : null, mono: Boolean(t?.classList.contains('w')), h: Math.round(part.getBoundingClientRect().height) }; })()`);
     const lines = (n) => Array.from({ length: n }, (_, i) => `Line ${i + 1} of the thinking.`).join('\n');
     let turnStart = Date.now();
-    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 50, thinking: lines(3) } });
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 50, thinking: lines(3), thinkTokens: 20, thinkStart: Date.now() - 4000 } });
     const open = await box();
-    expect(open).toMatchObject({ tag: 'THINKING', open: true, body: true });
-    await p.click('#live .trow.think .task', 0);
+    expect(open).toMatchObject({ tag: 'Thinking', bar: true, said: expect.stringMatching(/^20 tokens · \d+\/s$/), mono: false });
+    expect(open.tail).toContain('Line 3 of the thinking.');
+    await p.click('[data-tail7]');
     const shut = await box();
-    expect(shut).toMatchObject({ open: false, body: false, words: 'Line 3 of the thinking.' });
+    expect(shut).toMatchObject({ tag: 'Thinking', bar: true, tail: null });
     expect(shut.h).toBeLessThan(open.h);
-    // Closed, it stays one row as the thinking grows, its newest line in the header.
+    // Hidden, the part stays one height as the thinking grows.
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 90, thinking: lines(40) } });
-    expect(await box()).toMatchObject({ open: false, words: 'Line 40 of the thinking.', h: shut.h });
-    // The next reply starts closed too.
+    expect(await box()).toMatchObject({ tail: null, h: shut.h });
+    // The next reply starts hidden too; a press shows it again.
     turnStart += 60_000;
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 5, thinking: 'A new thought.' } });
-    expect(await box()).toMatchObject({ open: false, words: 'A new thought.' });
-    await p.click('#live .trow.think .task', 0);
-    expect(await box()).toMatchObject({ open: true, body: true, h: open.h });
-    // The answer as it comes takes its place, in the same box ("thinking isnt in a box … like, what the agent is doing":
-    // a reply streaming its CSS line by line ran down the page): one height however long it gets, its newest line in.
-    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 9, thinking: 'A new thought.', text: 'Here it is.' } });
-    expect(await box()).toMatchObject({ tag: 'ANSWERING', open: true, body: true, h: open.h });
+    expect(await box()).toMatchObject({ tag: 'Thinking', tail: null });
+    await p.click('[data-tail7]');
+    expect((await box()).tail).toContain('A new thought.');
+    // The answer as it comes, the thought still there until the reply ends: Writing, its words counted, in the same place.
+    await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 9, thinking: 'A new thought.', text: 'Here it is.', textStart: Date.now() } });
+    expect(await box()).toMatchObject({ tag: 'Writing', bar: true, said: '3 words', mono: true, tail: 'Here it is.' });
     const css = Array.from({ length: 60 }, (_, i) => `.part-${i + 1} { padding: ${i}px; }`).join('\n');
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 900, text: css } });
-    expect(await box()).toMatchObject({ tag: 'ANSWERING', h: open.h });
-    expect(await p.js(`(() => { const t = document.querySelector('#live .said'), last = t.firstElementChild.getBoundingClientRect(); return t.textContent.includes('.part-60 { padding: 59px; }') && last.bottom <= t.getBoundingClientRect().bottom + 1; })()`)).toBe(true);
-    await p.click('#live .trow.think .task', 0);
-    expect(await box()).toMatchObject({ tag: 'ANSWERING', open: false, words: '.part-60 { padding: 59px; }', h: shut.h });
+    expect(await p.js(`(() => { const t = document.querySelector('.ch7.live .tail7'), last = t.firstElementChild.getBoundingClientRect(); return t.textContent.includes('.part-60 { padding: 59px; }') && last.bottom <= t.getBoundingClientRect().bottom + 1; })()`)).toBe(true);
+    await p.click('[data-tail7]');
+    expect(await box()).toMatchObject({ tag: 'Writing', tail: null });
     expect(p.got()).toEqual([]);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }

@@ -4,6 +4,7 @@
 // (ANSI lines, `ansiRows`), so nothing the terminal shows is missing from the window. No React, no Ink here.
 import { homedir } from 'node:os';
 import { groupFacts, TASKS, gist } from '../app/rail.jsx';
+import { readResults } from '../flows/results.mjs';
 
 const CUBE = [0, 95, 135, 175, 215, 255];
 const hex2 = (n) => n.toString(16).padStart(2, '0');
@@ -48,19 +49,85 @@ function factsOf(f) {
 const rowOf = (r) => ({ id: r.id, words: short(r.text ?? r.guess, 220), said: Boolean(r.text), facts: factsOf(r.facts), steps: flat(r.list).map(stepOf) });
 const taskOf = (task) => ({ label: TASKS[task]?.label ?? 'WORKING', color: hexOf(TASKS[task]?.title ?? 'ansi256(245)') });
 
+// A step whole, as the window's timeline draws it (27 Oct 2026, the owner's pick "7 · Smooth" after five rounds of
+// designs, docs/private/design rounds/agentic-coder-window-steps-v5-2026-10-27.html): what it was, on what, how it went,
+// when it started and how long it took, and what opens under it. Kept short: a change's first 60 lines, a command's
+// first 6 and last 18, 30 lines of a file, a thought whole. The app's own reading for the model (memory, Claude's notes,
+// design cards: type 'machine') is a step too.
+const flatAll = (list) => (list ?? []).flatMap((x) => (x.type === 'looks' ? x.list : [x]));
+const lines = (t, n) => String(t ?? '').split('\n').filter(Boolean).slice(0, n).map((l) => tilde(l).slice(0, 200));
+export function stepView(x) {
+  const s = { key: x.key, at: x.at ?? null };
+  if (x.type === 'thinking') return { ...s, k: 'think', text: tilde(x.text), tokens: x.tokens ?? 0, ms: x.secs >= 0.05 ? Math.round(x.secs * 1000) : null };
+  if (x.type === 'text') return { ...s, k: 'said', text: tilde(x.text) };
+  if (x.type === 'note') return { ...s, k: 'note', text: short(x.text, 600), tone: x.tone ?? 'dim' };
+  if (x.type === 'machine') {
+    const notes = (x.contexts ?? []).flatMap((c) => (c.items ?? []).map((i) => ({ from: i.from, text: short(i.text, 400), tokens: i.tokens ?? 0 })));
+    const ms = (x.contexts ?? []).reduce((n, c) => n + (c.ms ?? 0), 0);
+    return { ...s, k: 'machine', notes, tokens: (x.contexts ?? []).reduce((n, c) => n + (c.tokens ?? 0), 0), ms: ms || null, design: x.design ?? [] };
+  }
+  if (x.type !== 'tool') return { ...s, k: x.type, text: short(x.text ?? x.label ?? '') };
+  const v = x.view ?? {};
+  const d = { ...s, k: v.kind ?? 'tool', label: x.label, arg: tilde(x.arg ?? ''), err: Boolean(x.error), ms: x.ms ?? v.ms ?? null };
+  if (v.kind === 'diff') {
+    let add = 0, del = 0;
+    for (const h of v.hunk ?? []) { if (h.type === '+') add++; else if (h.type === '-') del++; }
+    return { ...d, path: tilde(v.path), created: Boolean(v.created), add, del, hunk: (v.hunk ?? []).slice(0, 60).map((h) => [h.type, h.oldNo ?? null, h.newNo ?? null, String(h.text ?? '').slice(0, 200)]), more: Math.max(0, (v.hunk ?? []).length - 60) };
+  }
+  if (v.kind === 'bash' || v.kind === 'job') {
+    const all = (v.lines ?? []).map((l) => tilde(l).slice(0, 220));
+    const r = readResults(all.join('\n'), v.code ?? 0);
+    return { ...d, code: v.code ?? 0, n: all.length, head: all.slice(0, 6), tail: all.length > 6 ? all.slice(-18) : [], tests: r && (r.passed != null || r.failed != null) ? { passed: r.passed ?? 0, failed: r.failed ?? 0 } : null };
+  }
+  if (v.kind === 'read' || v.kind === 'same') return { ...d, lines: v.lines ?? 0, total: v.total ?? null, outline: Boolean(v.outline), content: lines(v.content, 30) };
+  if (v.kind === 'search' || v.kind === 'list') return { ...d, count: v.count ?? 0, content: lines(v.content, 16) };
+  // a step on the to-do list: the app says "done", the model may say "completed"
+  if (v.kind === 'todos') return { ...d, items: (v.items ?? []).map((t) => ({ text: short(t.text ?? t.content, 200), done: t.status === 'done' || t.status === 'completed', now: t.status === 'in_progress' })) };
+  if (v.kind === 'answer') return { ...d, question: short(v.question ?? x.arg, 400), answer: short(v.text, 200) };
+  if (v.kind === 'error') return { ...d, err: true, message: short(v.message, 400) };
+  if (v.kind === 'websearch') return { ...d, query: tilde(v.query ?? (x.arg && x.arg !== '""' ? String(x.arg).replace(/^"|"$/g, '') : '')), count: v.count ?? 0, service: v.service ?? '', sources: (v.sources ?? []).slice(0, 20).map((r) => ({ title: short(r.title, 160), url: String(r.url ?? ''), age: r.age ?? null })) };
+  if (v.kind === 'fetched') return { ...d, url: v.url ?? x.arg ?? '', status: v.status ?? null };
+  return d;
+}
+const todoNow = (x) => (x?.type === 'tool' && x.view?.kind === 'todos' ? (x.view.items ?? []).find((t) => t.status !== 'done' && t.status !== 'completed')?.text ?? null : null);
+// The parts of a reply (the same pick): each line the model says starts one, and so does a move in its plan, the to-do
+// it works on (its own line names the part then). ctx carries the to-do from one item to the next and every step met.
+export function partsOf(rows, ctx = { plan: null, raws: new Map() }) {
+  const parts = [];
+  for (const r of rows ?? []) {
+    let cur = { key: null, title: short(r.text ?? r.guess ?? '', 300), said: Boolean(r.text), plan: false, keys: [], row: r.id ?? null };
+    parts.push(cur);
+    for (const x of flatAll(r.list)) {
+      const now = todoNow(x);
+      if (now && now !== ctx.plan) {
+        ctx.plan = now;
+        if (cur.keys.length) { cur = { key: null, title: short(now, 300), said: true, plan: true, keys: [], row: null }; parts.push(cur); }
+        // the to-do names the part; the model's own line stays, as the first line of its timeline
+        else Object.assign(cur, { title: short(now, 300), said: true, plan: true, ...(cur.said && !cur.plan ? { line: cur.title } : {}) });
+      }
+      cur.keys.push(x.key);
+      ctx.raws?.set(x.key, x);
+    }
+  }
+  // a line said with no step after it (another line came) is a part of its own, keyed by its row
+  for (const p of parts) { p.key = p.keys.length ? `p:${p.keys[0]}` : `p:r:${p.row}`; delete p.row; }
+  return parts.filter((p) => p.keys.length || (p.said && !p.key.endsWith(':null')));
+}
+
 // A printed item as the window draws it, or null: the window shows the app's own drawing of it instead.
-export function viewItem(it) {
+// ctx (the bridge's, one a redraw): the plan carried across the reply's parts, and every step met.
+export function viewItem(it, ctx) {
   switch (it.type) {
     case 'user': return it.rail ? null : { t: 'user', key: it.key, text: tilde(it.text), cards: (it.cards ?? []).map((c) => tilde(c.text)) };
     case 'text': return { t: 'text', key: it.key, text: tilde(it.text) };
     case 'taskrun': {
       const all = groupFacts(it.run.rows.flatMap((r) => r.list));
       const last = [...it.run.rows].reverse().find((r) => r.text);
-      return { t: 'taskrun', key: it.id, id: it.id, open: Boolean(it.open), first: Boolean(it.first), ...taskOf(it.run.task), last: short(last ? last.text : it.run.rows[0].guess, 220), said: Boolean(last), rows: it.run.rows.map(rowOf), openRows: [...(it.openRows ?? [])], facts: factsOf(all) };
+      return { t: 'taskrun', key: it.id, id: it.id, open: Boolean(it.open), first: Boolean(it.first), ...taskOf(it.run.task), last: short(last ? last.text : it.run.rows[0].guess, 220), said: Boolean(last), rows: it.run.rows.map(rowOf), openRows: [...(it.openRows ?? [])], facts: factsOf(all), ...(ctx ? { parts: partsOf(it.run.rows, ctx) } : {}) };
     }
     case 'taskend': { const f = groupFacts(it.rows.flatMap((r) => r.list)); return { t: 'taskend', key: `end${it.rows[0]?.id}`, facts: factsOf(f) }; }
     // text: why a reply that did not end done stopped ("Interrupted · …", END_WORDS), as the terminal's end line says it.
-    case 'done': return { t: 'done', key: it.key, past: it.past, secs: it.secs, at: it.at, usd: it.usd ?? 0, steps: it.steps ?? 0, reason: it.reason, text: it.text ?? null, left: it.left ?? 0 };
+    case 'done': return { t: 'done', key: it.key, past: it.past, secs: it.secs, at: it.at, usd: it.usd ?? 0, steps: it.steps ?? 0, calls: it.calls ?? null, reason: it.reason, text: it.text ?? null, left: it.left ?? 0 };
     case 'made': return { t: 'made', key: it.key, files: (it.files ?? []).map((f) => ({ name: base(f.path), created: f.created })) };
     case 'note': return it.check ? null : { t: 'note', key: it.key, text: short(it.text, 600), tone: it.tone ?? 'dim' };
     case 'divider': return { t: 'divider', key: it.key, text: short(it.text, 200) };
@@ -71,16 +138,25 @@ export function viewItem(it) {
     default: return null;
   }
 }
-// The turn under way (task-rows.jsx LiveRun's `held`): the task row so far and the row under way.
-export function heldView(held) {
+// The turn under way (task-rows.jsx LiveRun's `held`): the task row so far and the row under way. With ctx (the bridge):
+// its parts too, the part under way last, its line (what the model said before it) as its title.
+export function heldView(held, ctx) {
   if (!held) return null;
   if (held.type !== 'tasklive') return { t: 'heldsteps', steps: flat(Array.isArray(held) ? held : held.list ?? [held]).map(stepOf) };
   const f = held.list.length ? groupFacts(held.list) : null;
   const run = held.run;
+  // the stretch under way: its last part is the one the window draws as under way (a move in the plan may have closed
+  // others in it); with no step done yet it is only its line, which names the part the window starts for it
+  // its line is the words alone (task-rows.jsx: oneLine)
+  const line = typeof held.line === 'string' ? held.line : held.line?.text ?? null;
+  const done = ctx ? partsOf(run?.rows ?? [], ctx) : [];
+  const now = ctx ? partsOf([{ text: line, list: held.list }], ctx) : [];
+  if (now.length) now[now.length - 1].now = true;
+  const parts = ctx ? [...done, ...now] : null;
   return {
-    t: 'live', first: Boolean(held.first),
+    t: 'live', first: Boolean(held.first), ...(parts ? { parts, line: line ? short(line, 300) : null, plan: ctx.plan } : {}),
     run: run ? { ...taskOf(run.task), rows: run.rows.map(rowOf), last: short([...run.rows].reverse().find((r) => r.text)?.text ?? run.rows[0].guess, 220) } : null,
-    now: { ...taskOf(f?.task ?? 'thinking'), words: held.line ? short(held.line.text, 220) : 'Working', steps: flat(held.list).map(stepOf), n: f?.steps ?? 0 },
+    now: { ...taskOf(f?.task ?? 'thinking'), words: line ? short(line, 220) : 'Working', steps: flat(held.list).map(stepOf), n: f?.steps ?? 0 },
   };
 }
 

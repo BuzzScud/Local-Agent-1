@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import net from 'node:net';
 import { VtScreen } from '../src/window/vt.mjs';
-import { viewItem, ansiRows, cellRows, xterm } from '../src/window/view.mjs';
+import { viewItem, heldView, stepView, ansiRows, cellRows, xterm } from '../src/window/view.mjs';
 import { windowWanted, runWindow, dropText, openWindowFree } from '../src/window/server.mjs';
 import { droppedFiles, pathsOnly } from '../src/agent/images.mjs';
 import { makeBridge, usageOf, meterOf, modelNowOf, effortWords } from '../src/window/bridge.mjs';
@@ -93,6 +93,81 @@ test('coding in a terminal starts the window on its own (detached), so that Term
   expect(o).toMatchObject({ cwd: dir, detached: true, env: { X: '1' } });
   expect(o.stdio[0]).toBe('ignore');
   expect(unref).toBe(true);
+});
+
+// The window's timeline (27 Oct 2026, the owner's pick "7 · Smooth"): each step whole with its time (stepView), a reply in
+// parts by the lines it says and by the moves in its plan (partsOf, the model's line kept when its plan names the part),
+// the part under way (heldView), and the bridge sending a step only when it changed.
+const todosAt = (now) => ({ kind: 'todos', items: [{ text: 'Find the bug', status: now === 0 ? 'in_progress' : 'done' }, { text: 'Fix and test it', status: now === 1 ? 'in_progress' : 'pending' }] });
+const TURN = [
+  { key: 'u1', type: 'user', text: 'fix the rounding', cards: [] },
+  { key: 't1', rail: true, type: 'text', text: 'Looking at the cart first.', at: 1000 },
+  { key: 'p1', rail: true, type: 'tool', label: 'TodoWrite', arg: '2 to-dos', view: todosAt(0), at: 1100, ms: 3 },
+  { key: 'r1', rail: true, type: 'tool', label: 'Read', arg: 'cart.mjs', view: { kind: 'read', lines: 3, total: 3, content: 'a\nb\nc' }, at: 1200, ms: 4 },
+  { key: 'k1', rail: true, type: 'thinking', text: 'It floors. It should round.', secs: 2.5, tokens: 12, at: 1300 },
+  { key: 'p2', rail: true, type: 'tool', label: 'TodoWrite', arg: '2 to-dos', view: todosAt(1), at: 1400, ms: 2 },
+  { key: 'e1', rail: true, type: 'tool', label: 'Update', arg: 'cart.mjs', view: { kind: 'diff', path: 'cart.mjs', hunk: [{ type: '-', text: 'Math.floor(x)', oldNo: 2 }, { type: '+', text: 'Math.round(x)', newNo: 2 }] }, at: 1500, ms: 5 },
+  { key: 'b1', rail: true, type: 'tool', label: 'Bash', arg: 'bun test', view: { kind: 'bash', code: 1, lines: ['cart.test.mjs:', '(pass) rounds', '(fail) totals', '', ' 4 pass', ' 1 fail'] }, at: 1600, ms: 900 },
+  { key: 'a1', rail: true, type: 'text', text: 'Fixed the rounding; one test still fails.' },
+  { key: 'd1', rail: true, type: 'done', reason: 'done', past: 'Baked', secs: 12, at: 0, steps: 3, calls: 5 },
+];
+test('the timeline: every step whole with its time, a reply in parts by its lines and its plan, and the part under way', () => {
+  const grouped = { steps: 'grouped', open: new Set() };
+  const ctx = { plan: null, raws: new Map() };
+  const views = printedOf(TURN, false, grouped).printed.map((it) => viewItem(it, ctx)).filter(Boolean);
+  // the plan moved from its first to-do to its second: two parts, each named by its to-do, the model's line kept
+  expect(views.find((v) => v.t === 'taskrun').parts).toEqual([
+    { key: 'p:p1', title: 'Find the bug', said: true, plan: true, keys: ['p1', 'r1', 'k1'], line: 'Looking at the cart first.' },
+    { key: 'p:p2', title: 'Fix and test it', said: true, plan: true, keys: ['p2', 'e1', 'b1'] },
+  ]);
+  expect(views.find((v) => v.t === 'done')).toMatchObject({ steps: 3, calls: 5 });
+  const steps = Object.fromEntries([...ctx.raws].map(([k, x]) => [k, stepView(x)]));
+  expect(Object.keys(steps)).toEqual(['p1', 'r1', 'k1', 'p2', 'e1', 'b1']);
+  // each with when it started and how long it took; the thought's time is its own
+  expect(steps.k1).toEqual({ key: 'k1', at: 1300, k: 'think', text: 'It floors. It should round.', tokens: 12, ms: 2500 });
+  expect(steps.r1).toMatchObject({ k: 'read', at: 1200, ms: 4, lines: 3, total: 3, content: ['a', 'b', 'c'] });
+  expect(steps.p2.items).toEqual([{ text: 'Find the bug', done: true, now: false }, { text: 'Fix and test it', done: false, now: true }]);
+  expect(steps.e1).toMatchObject({ k: 'diff', path: 'cart.mjs', add: 1, del: 1, hunk: [['-', 2, null, 'Math.floor(x)'], ['+', null, 2, 'Math.round(x)']], more: 0 });
+  // a test run says how it went, read from its own output
+  expect(steps.b1).toMatchObject({ k: 'bash', code: 1, n: 6, ms: 900, tests: { passed: 4, failed: 1 } });
+  // a web search keeps its query and sources; one saved before them says its query from the call
+  expect(stepView({ key: 'w1', type: 'tool', label: 'WebSearch', arg: '"bun 1.3"', view: { kind: 'websearch', count: 2, service: 'Anthropic' } })).toMatchObject({ k: 'websearch', query: 'bun 1.3', sources: [] });
+  expect(stepView({ key: 'w2', type: 'tool', label: 'WebSearch', arg: '""', view: { kind: 'websearch', count: 1, query: 'bun', sources: [{ title: 'Bun', url: 'https://bun.sh', age: null }] } })).toMatchObject({ query: 'bun', sources: [{ title: 'Bun', url: 'https://bun.sh', age: null }] });
+  // a line said with no step after it (another line came) is a part of its own
+  const lines = [TURN[0], { key: 's1', rail: true, type: 'text', text: 'First a word.' }, { key: 's2', rail: true, type: 'text', text: 'Now the file.' }, TURN[3], TURN[8]];
+  const c3 = { plan: null, raws: new Map() };
+  const parts = printedOf(lines, false, grouped).printed.map((it) => viewItem(it, c3)).find((v) => v?.t === 'taskrun').parts;
+  expect(parts.map((p) => [p.title, p.keys])).toEqual([['First a word.', []], ['Now the file.', ['r1']]]);
+  // under way: the parts done so far, then the part under way, named by its plan, its line said before it
+  const c2 = { plan: null, raws: new Map() };
+  const w = printedOf(TURN.slice(0, 7), true, grouped);
+  w.printed.forEach((it) => viewItem(it, c2));
+  const live = heldView(w.held, c2);
+  expect(live.parts.map((p) => [p.title, p.keys, Boolean(p.now)])).toEqual([['Find the bug', ['p1', 'r1', 'k1'], false], ['Fix and test it', ['p2', 'e1'], true]]);
+  expect([live.line, live.plan, live.now.words]).toEqual(['Looking at the cart first.', 'Fix and test it', 'Looking at the cart first.']);
+});
+
+test('the bridge sends a step of the timeline once, and again only when it changed', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'window-steps-'));
+  const path = join(dir, 'b.sock');
+  const lines = [];
+  const srv = net.createServer((s) => { let buf = ''; s.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } }); });
+  await new Promise((r) => srv.listen(path, r));
+  const bridge = makeBridge(path, 'k');
+  const app = { items: TURN, live: { phase: 'idle' }, input: { value: '', cursor: 0 }, mode: 'auto', modelName: 'Stand-in', width: 100, columns: 100, rows: 30, stepsView: { steps: 'grouped', open: new Set() } };
+  const next = async (n) => { for (let i = 0; i < 40 && lines.length < n; i++) await Bun.sleep(25); return lines[n - 1]; };
+  bridge.publish(app, {});
+  expect(Object.keys((await next(2)).steps)).toEqual(['p1', 'r1', 'k1', 'p2', 'e1', 'b1']);
+  expect(lines[1].steps.e1).toMatchObject({ k: 'diff', add: 1, del: 1 });
+  bridge.publish({ ...app, input: { value: 'a', cursor: 1 } }, {});
+  expect((await next(3)).steps).toEqual({});
+  // the same step made again with something new in it: that step alone
+  const items = TURN.map((it) => (it.key === 'b1' ? { ...it, view: { ...it.view, code: 0, lines: [' 5 pass', ' 0 fail'] } } : it));
+  bridge.publish({ ...app, items }, {});
+  expect(Object.keys((await next(4)).steps)).toEqual(['b1']);
+  expect(lines[3].steps.b1.tests).toEqual({ passed: 5, failed: 0 });
+  bridge.close();
+  srv.close();
 });
 
 test("the app's side: each redraw as data, only what changed, and the window's clicks back as actions", async () => {

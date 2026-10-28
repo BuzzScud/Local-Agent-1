@@ -125,13 +125,16 @@ export function runPart(self) {
       const secs = (t - first) / 1000;
       return { ...l, ...patch, waiting: false, tokens: (l.tokens ?? 0) + add, lastTokenAt: t, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
     };
+    // Each step keeps when it started and how long it took (27 Oct 2026, the owner's pick "Real time for every step":
+    // only commands kept a time, 1,506 of 3,931 steps); the reply's tool calls are counted for its end line.
+    let toolAt = null, calls = 0;
     const addPre = (patch) => { self.pre.current = { ...(self.pre.current ?? {}), ...patch }; self.setLive((l) => ({ ...l, pre: self.pre.current })); };
     const offs = [
       // A busy service (busy.mjs): the spinner counts down to the next try.
       on('busy', ({ until }) => self.setLive((l) => (l.phase ? { ...l, busyUntil: until } : l))),
       // The conversation moved to another profile's model between steps (app-profiles.mjs onRoute).
       on('profile-route', (ev) => self.onRoute(ev)),
-      on('turn-start', () => { try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend(); self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
+      on('turn-start', () => { calls = 0; try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend(); self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
       on('waiting', ({ room, thinkCap, whole } = {}) => { stepSave(); self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null })); }),
       // A reply that will not run as it was (cut off, repeating itself): its live lines go.
@@ -139,21 +142,25 @@ export function runPart(self) {
       // The app working between replies (notes, a summary): the working line says so.
       on('busy', ({ task }) => self.setLive((l) => ({ ...l, thinking: null, text: null, writing: null, waiting: false, liveTps: null, stepStart: Date.now(), task }))),
       on('reasoning', ({ all }) => self.setLive((l) => stream(l, { thinking: { text: all, startedAt: l.thinking?.startedAt ?? Date.now(), tokens: (l.thinking?.tokens ?? 0) + 1 } }))),
-      on('text', ({ all }) => self.setLive((l) => stream(l, { text: all }))),
+      // textAt: when the answer began to come (the window's line under way times it from there, not from the thinking)
+      on('text', ({ all }) => self.setLive((l) => stream(l, { text: all, textAt: l.text ? l.textAt : Date.now() }))),
       on('tool-writing', ({ name, args, tokens }) => self.setLive((l) => stream(l, { writing: { name, args, tokens } }, Math.max(1, (tokens ?? 0) - (l.writing?.name === name ? l.writing.tokens ?? 0 : 0))))),
       on('assistant', ({ text, reasoning, thinkSecs }) => {
         const add = [];
         if (reasoning?.trim()) {
-          add.push({ type: 'thinking', text: reasoning.trim(), secs: thinkSecs || 0.1, tokens: Math.ceil(reasoning.length / 3.6) });
+          add.push({ type: 'thinking', text: reasoning.trim(), secs: thinkSecs || 0.1, tokens: Math.ceil(reasoning.length / 3.6), at: Date.now() - Math.round((thinkSecs || 0) * 1000) });
           self.fold({ title: `Thinking (${Math.round(thinkSecs)}s)`, text: reasoning.trim() });
         }
-        if (text?.trim()) add.push({ type: 'text', text: text.trim() });
+        if (text?.trim()) add.push({ type: 'text', text: text.trim(), at: Date.now() });
         if (add.length) self.push(...add);
         self.setLive((l) => ({ ...l, thinking: null, text: null, writing: null }));
       }),
-      on('tool-running', ({ label, arg }) => self.setLive((l) => ({ ...l, running: { label, arg }, writing: null }))),
+      on('tool-running', ({ label, arg }) => { toolAt = Date.now(); self.setLive((l) => ({ ...l, running: { label, arg }, writing: null })); }),
       on('tool', (ev) => {
-        self.push({ type: 'tool', label: ev.label, arg: ev.arg, view: ev.view, error: ev.error });
+        const end = Date.now();
+        calls++;
+        self.push({ type: 'tool', label: ev.label, arg: ev.arg, view: ev.view, error: ev.error, at: toolAt ?? end, ms: toolAt ? end - toolAt : null });
+        toolAt = null;
         const v = ev.view ?? {};
         if (v.kind === 'bash' || v.kind === 'job') self.fold({ title: `${v.kind === 'job' && ev.label === 'Jobs' ? 'Jobs' : 'Bash'}(${ev.arg})`, text: v.lines.join('\n') });
         else if (v.content) self.fold({ title: `${ev.label}(${ev.arg})`, text: v.content });
@@ -164,7 +171,7 @@ export function runPart(self) {
         if (design && self.railOn.current) { addPre({ design }); return; }
         // Only the layout check's result counts for the end line's "layout problems left".
         if (check && !check.title) self.lastCheck.current = check;
-        self.push({ type: 'note', text, tone, ...(check ? { check } : {}), ...(small ? { fold: true } : {}) });
+        self.push({ type: 'note', text, tone, at: Date.now(), ...(check ? { check } : {}), ...(small ? { fold: true } : {}) });
       }),
       // What came along with the request (memory, Claude's notes): one line; ctrl+o lists it.
       on('context', (c) => { self.fold({ context: c }); if (self.railOn.current) addPre({ contexts: [...(self.pre.current?.contexts ?? []), c] }); else self.push({ type: 'context', ...c }); }),
@@ -213,7 +220,7 @@ export function runPart(self) {
         const sent = spentNow.cache.sent - (self.turnSpend.current?.cache?.sent ?? 0);
         const cached = usd && sent > 0 ? Math.round((100 * (spentNow.cache.hit - (self.turnSpend.current?.cache?.hit ?? 0))) / sent) : undefined;
         if (reason === 'interrupted') { self.push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd, cached, session }); self.setPlaceholder('Tell Agentic Coder what to do instead'); }
-        else if (reason === 'done') self.push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left, usd, cached, session });
+        else if (reason === 'done') self.push({ type: 'done', reason, past, secs, at, steps, calls, reads, thinkTokens, left, usd, cached, session });
         // Esc in the question box after some answers: they went to the model, which waits for you.
         else if (reason === 'declined' && self.agentRef.current?.happened?.answersSent) self.push({ type: 'done', reason, text: 'Stopped after your answers · it waits for your next message', secs, at, left, usd, cached, session });
         else self.push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd, cached, session });

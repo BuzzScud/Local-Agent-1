@@ -255,7 +255,7 @@ button:focus-visible, .row:focus-visible, .card:focus-visible { outline: 2px sol
 <div id="drops"></div>
 <script>
 const T = new URLSearchParams(location.search).get('t');
-const S = { items: {}, order: [], last: null, screen: null, bot: null, folder: '', side: false, find: false, folderMenu: false, usageCard: false, q: '', toast: null, follow: true, sessions: null, gone: false, tps: [], skew: 0 };
+const S = { items: {}, order: [], steps: {}, last: null, screen: null, bot: null, folder: '', side: false, find: false, folderMenu: false, usageCard: false, q: '', toast: null, follow: true, sessions: null, gone: false, tps: [], skew: 0 };
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const svg = (d, s = 15) => '<svg width="' + s + '" height="' + s + '" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
 const I = {
@@ -274,9 +274,9 @@ function connect() {
   ws = new WebSocket('ws://' + location.host + '/ws?t=' + T);
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
-    if (m.t === 'hello') { S.items = m.state?.items ?? {}; S.order = m.state?.order ?? []; S.last = m.state; S.bot = m.bot; S.folder = m.folder; wantScreen(); render(); fit(); }
-    else if (m.t === 'state') { Object.assign(S.items, m.items); if (m.order) { S.order = m.order; const keep = new Set(m.order); for (const k of Object.keys(S.items)) if (!keep.has(k)) delete S.items[k]; } S.last = m; S.skew = Date.now() - m.now; if (m.live?.tps) S.tps = [...S.tps.slice(-40), m.live.tps]; wantScreen(); render(); }
-    else if (m.t === 'reset') { S.items = {}; S.order = []; S.last = null; wantScreen(); render(); }
+    if (m.t === 'hello') { S.items = m.state?.items ?? {}; S.order = m.state?.order ?? []; S.steps = m.state?.steps ?? {}; S.last = m.state; S.bot = m.bot; S.folder = m.folder; wantScreen(); render(); fit(); }
+    else if (m.t === 'state') { Object.assign(S.items, m.items); if (m.steps) Object.assign(S.steps, m.steps); if (m.order) { S.order = m.order; const keep = new Set(m.order); for (const k of Object.keys(S.items)) if (!keep.has(k)) delete S.items[k]; } S.last = m; S.skew = Date.now() - m.now; if (m.live?.tps) S.tps = [...S.tps.slice(-40), m.live.tps]; wantScreen(); render(); }
+    else if (m.t === 'reset') { S.items = {}; S.order = []; S.steps = {}; S.last = null; wantScreen(); render(); }
     else if (m.t === 'screen') { S.screen = m; if (!S.last) render(); }
     else if (m.t === 'exit') { S.gone = true; render(); }
     else if (m.t === 'error') console.error('bridge:', m.text);
@@ -457,17 +457,14 @@ function modelNow(st) {
 function statusHtml(L) {
   // A question open below: the reply waits for you, so no timer runs over "↓ 0 tokens" as if it were stuck.
   if (L.phase === 'working' && S.last?.perm) return '<span class="ac">Waiting for your answer below</span>';
-  if (L.phase === 'working') {
-    const now = Date.now() - S.skew, secs = L.turnStart ? (now - L.turnStart) / 1000 : 0;
-    const tps = L.tps ? Math.round(L.tps) : null;
-    return '<span class="ac">' + (STILL.matches ? '⠿' : SPIN[Math.floor(now / 120) % 10]) + ' ' + esc(L.verb || 'Working') + '…</span><span>⏱ <span class="v">' + fmtSecs(secs) + '</span></span>' + (tps ? '<span><span class="v">' + tps + '</span> tok/s</span>' + bar10(tps / 80) + spark(S.tps.slice(-30), 200, 18) : '') + '<span>↓ <span class="v">' + (L.tokens || 0) + '</span> tokens</span>'
-      // A message sent while it works waits for its next step, as the terminal's Queued line says (19 Oct 2026, the UI sweep).
-      + (S.last?.queued ? '<span style="color:var(--sand)">⏵ Queued: ' + esc(S.last.queued.slice(0, 60)) + '</span>' : '') + '<span class="r">esc to interrupt</span>';
-  }
+  // While it works the part under way says what it does, for how long and how much (steps-page.js): under the
+  // conversation only what waits for you, a message sent meanwhile (27 Oct 2026, the owner: "keep everything here, not
+  // in the bottom chat box"); with nothing waiting the line is not there at all.
+  if (L.phase === 'working') return S.last?.queued ? '<span style="color:var(--sand)">⏵ Queued: ' + esc(S.last.queued.slice(0, 60)) + '</span><span class="r">esc to interrupt</span>' : '';
   const lastDone = [...S.order].reverse().map((k) => S.items[k]).find((v) => v?.t === 'done');
   const st = S.last, now = modelNow(st);
   return '<span class="dot' + (now.dot ? ' ' + now.dot : '') + '"></span><span>' + esc(now.words) + '</span>'
-    + (lastDone ? '<span>· last answer ⏱ <span class="v">' + fmtSecs(lastDone.secs) + '</span>' + (lastDone.steps ? ' · ' + plural(lastDone.steps, 'step') : '') + (lastDone.usd > 0 ? ' · ' + money(lastDone.usd) : '') + '</span>' : '')
+    + (lastDone ? '<span>· last answer ⏱ <span class="v">' + fmtSecs(lastDone.secs) + '</span>' + (lastDone.calls != null ? ' · ' + plural(lastDone.calls, 'tool call') : lastDone.steps ? ' · ' + plural(lastDone.steps, 'step') : '') + (lastDone.usd > 0 ? ' · ' + money(lastDone.usd) : '') + '</span>' : '')
     + (st.queued ? '<span style="color:var(--sand)">⏵ Queued: ' + esc(st.queued.slice(0, 60)) + (now.wait ? ' · ' + now.wait : '') + '</span>' : '')
     + '<span class="r">' + esc(st.notice || (!st.queued && now.hint) || st.tip || (st.usage ? '' : st.usageText || st.spend) || '') + '</span>';
 }
@@ -718,9 +715,10 @@ function render() {
   const top = document.getElementById('top');
   top.className = home ? 'fill' : '';
   put('top', home ? homeHtml(st) : '<div class="hero">' + bot(st.live?.phase === 'working' ? 'work' : 'ready', 56) + '<div><div class="name">Agentic Coder<small>v0.1</small></div><div class="sub">' + esc(st.modelName) + ' · ' + esc(st.mode === 'bypass' ? 'bypass permissions' : MODES.find(([k]) => k === st.mode)?.[1] ?? st.mode) + '</div><div class="sub">' + esc(st.cwdShort) + '</div></div></div>');
-  itemsInto(home ? [] : all, document.getElementById('items'));
-  put('live', !home && st.live?.phase === 'working' ? liveHtml(st.live, st.held) : '');
-  put('status', statusHtml(st.live || {}));
+  // the conversation with its timeline (steps-page.js, 27 Oct 2026): the parts of each reply, the one under way among them
+  tlDraw(home ? [] : all, home ? null : st, document.getElementById('items'));
+  put('live', '');
+  putStatus(statusHtml(st.live || {}));
   const bottomChanged = put('bottom', st.perm ? permHtml(st.perm) : st.panel ? panelHtml(st.panel.rows) : menuHtml(st.menu) + promptHtml(st));
   if (put('modes', modesHtml(st))) fitModes();
   put('full', st.full ? '<div class="full ansi">' + runsHtml(st.full.rows) + '</div>' : '');
@@ -728,7 +726,9 @@ function render() {
   backButton();
   if (bottomChanged) document.getElementById('menu')?.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
 }
-setInterval(() => { if (S.last?.live?.phase === 'working' && frame === 'main') put('status', statusHtml(S.last.live)); }, 250);
+// the status line, not there at all while it is empty (the part under way says the rest)
+function putStatus(html) { put('status', html); const el = document.getElementById('status'); if (el) el.hidden = !html; }
+setInterval(() => { if (S.last?.live?.phase === 'working' && frame === 'main') putStatus(statusHtml(S.last.live)); }, 250);
 
 // A search box drawn again keeps its caret (15 Oct 2026, the window audit: the box was made anew at each letter with its
 // caret at the start, so "tax" came out "xat" and found nothing). focus: put the caret in it even if it was elsewhere.
@@ -878,4 +878,5 @@ function fit() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { const pro
 addEventListener('resize', () => { fit(); fitBar(); fitModes(); placeCard(); });
 connect();
 </script>
+<!--steps-page-->
 </body></html>

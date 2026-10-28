@@ -9,7 +9,12 @@ import { existsSync, mkdirSync, rmSync, chmodSync, openSync, closeSync } from 'n
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
-import UI from './ui.html' with { type: 'text' };
+import UI_PAGE from './ui.html' with { type: 'text' };
+import STEPS_JS from './steps-page.js' with { type: 'text' };
+import STEPS_CSS from './steps-page.css' with { type: 'text' };
+
+// The page with its timeline (steps-page.js and .css, 27 Oct 2026) put in where it says, so each file stays small.
+const UI = UI_PAGE.replace('<!--steps-page-->', () => `<style>\n${STEPS_CSS}</style>\n<script>\n${STEPS_JS}</script>`);
 import { VtScreen } from './vt.mjs';
 import { cellRows, xterm } from './view.mjs';
 import { selfCommand } from '../app/sessions.mjs';
@@ -69,7 +74,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
   try { rmSync(sockPath, { force: true }); } catch {}
 
   // What the app said last, whole, for a window that opens or reloads now.
-  const st = { items: {}, order: [], last: null };
+  const st = { items: {}, order: [], steps: {}, last: null };
   const clients = new Set();
   const sendAll = (m) => { const s = JSON.stringify(m); for (const ws of clients) ws.send(s); };
 
@@ -83,7 +88,9 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
     if (m.t === 'state') {
       Object.assign(st.items, m.items);
       if (m.order) { st.order = m.order; const keep = new Set(m.order); for (const k of Object.keys(st.items)) if (!keep.has(k)) delete st.items[k]; }
-      const { items, order, ...rest } = m;
+      // the timeline's steps (bridge.mjs stepsOf): kept for a page that opens later, the newest 4,000
+      if (m.steps) { Object.assign(st.steps, m.steps); const ks = Object.keys(st.steps); if (ks.length > 4000) for (const k of ks.slice(0, ks.length - 4000)) delete st.steps[k]; }
+      const { items, order, steps, ...rest } = m;
       st.last = rest;
     }
     sendAll(m);
@@ -100,7 +107,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
           if (s.data.app) { if (s === appSock) onLine(l); continue; }
           let m; try { m = JSON.parse(l); } catch { m = null; }
           if (m?.t !== 'hi' || m.key !== appKey) { s.end(); return; }
-          s.data.app = true; appSock = s; st.items = {}; st.order = []; st.last = null; sendAll({ t: 'reset' });
+          s.data.app = true; appSock = s; st.items = {}; st.order = []; st.steps = {}; st.last = null; sendAll({ t: 'reset' });
         }
       },
       close(s) { if (s === appSock) appSock = null; },
@@ -153,7 +160,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
     websocket: {
       open(ws) {
         clients.add(ws);
-        ws.send(JSON.stringify({ t: 'hello', state: st.last ? { ...st.last, items: st.items, order: st.order } : null, folder: tilde(folder), cols: vt.cols, rows: vt.rows, bot: BOT }));
+        ws.send(JSON.stringify({ t: 'hello', state: st.last ? { ...st.last, items: st.items, order: st.order, steps: st.steps } : null, folder: tilde(folder), cols: vt.cols, rows: vt.rows, bot: BOT }));
       },
       message(ws, raw) {
         let m; try { m = JSON.parse(String(raw)); } catch { return; }
