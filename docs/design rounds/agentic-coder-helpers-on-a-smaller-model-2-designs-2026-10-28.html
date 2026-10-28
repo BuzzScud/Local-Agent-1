@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helpers on a smaller model</title>
+<script>document.documentElement.classList.add('js')</script>
+<style>
+:root{--bg:#f6f6f4;--card:#fff;--ink:#1d1d1f;--muted:#6b6b70;--line:#e3e3df;--term:#111318;--tink:#d8dbe2;--tdim:#7d8494;--accent:#5fafff;--dim:#5f87d7;--deep:#5f5f87;--bright:#5fd7ff;--ok:#5fafff;--warn:#ffaf5f;--edits:#af87ff;--tries:#e8706c}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1c1c1f;--ink:#ececee;--muted:#9a9aa2;--line:#2c2c31}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1500px;margin:0 auto;padding:16px 22px}
+header h1{font-size:21px;margin:0}header p{margin:2px 0 10px;color:var(--muted);font-size:13px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:13px;color:var(--muted)}
+button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:5px 12px;cursor:pointer}
+button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.d h2{font-size:15px;margin:0 0 2px}.d p.lead{margin:0 0 8px;color:var(--muted);font-size:13px}
+.term{background:var(--term);color:var(--tink);border-radius:10px;padding:12px 14px;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;height:560px;display:flex;flex-direction:column;overflow:hidden}
+.term .scroll{flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.l{white-space:pre-wrap;word-break:break-word}
+.you{color:#fff}.you::before{content:"> ";color:var(--accent)}
+.row{color:var(--tink)}.tag{font-weight:700}.t-ex{color:var(--bright)}.t-ed{color:var(--edits)}.t-ag{color:var(--accent)}
+.sub{color:var(--tdim);padding-left:2ch}.sub .k{color:var(--accent)}.sub .m{color:var(--bright)}
+.ans{color:#fff;margin-top:4px}.note{color:var(--tdim)}
+.spin{color:var(--accent)}
+.box{border:1px solid var(--deep);border-radius:6px;padding:6px 9px;margin:6px 0}
+.box .h{color:var(--tdim)}.box .cell{display:grid;grid-template-columns:1.2ch 8ch 12ch 1fr 7ch;gap:1ch;align-items:center}
+.meter{height:7px;background:#2a2f3a;border-radius:3px;overflow:hidden}.meter i{display:block;height:100%;background:var(--dim)}
+.mem{display:flex;height:7px;border-radius:3px;overflow:hidden;background:#2a2f3a;margin-top:4px}.mem i{display:block;height:100%}
+.prompt{border:1px solid var(--deep);border-radius:6px;padding:5px 9px;margin-top:6px;color:var(--tdim)}
+.foot{color:var(--tdim);margin-top:3px;display:flex;justify-content:space-between;gap:1ch}.foot b{color:var(--accent);font-weight:400}
+.how{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:14px;font-size:13.5px}
+.how ol{margin:4px 0 0;padding-left:20px}.how code{font:12.5px ui-monospace,Menlo,monospace}
+html:not(.js) .term .scroll{justify-content:flex-start}
+@media (max-width:900px){.grid{grid-template-columns:1fr}.term{height:auto;min-height:420px}.box .cell{grid-template-columns:1.2ch 7ch 10ch 1fr}.box .cell .x{display:none}}
+</style></head><body><div class="wrap">
+<header><h1>Helpers on a smaller model: 2 designs</h1>
+<p>28 Oct 2026 · Bonsai 2 9B hands a search to a Bonsai 2 4B helper, and the memory note goes to Bonsai 2 2B · a sample project and the app's own colours; a mock of the window, played step by step</p></header>
+<div class="bar"><button id="play" class="on">▶ Play</button><button id="again">↺ Again</button><span>Speed</span><button data-speed="1" class="on">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button><span id="clock">0 s</span></div>
+<div class="grid">
+<section class="d"><h2>1 · One live line</h2><p class="lead">The helper is one line under the step that started it, its model and steps ticking; its report folds in under it when it ends.</p>
+<div class="term"><div class="scroll" id="t1"></div><div class="prompt">&nbsp;</div><div class="foot"><span><b>●</b> bonsai-2:9b · helpers bonsai-2:4b</span><span>⏵⏵ accept edits</span></div></div></section>
+<section class="d"><h2>2 · Helper panel</h2><p class="lead">The same conversation; a small box over the prompt lists each helper while it runs: model, step, speed, time, and the memory the models take.</p>
+<div class="term"><div class="scroll" id="t2"></div><div id="panel"></div><div class="prompt">&nbsp;</div><div class="foot"><span><b>●</b> bonsai-2:9b · helpers bonsai-2:4b</span><span>⏵⏵ accept edits</span></div></div></section>
+</div>
+<div class="how"><b>How you would turn it on</b> (either design)<ol>
+<li><code>/subagents</code> opens /profiles on its AIs: <i>Helpers it starts</i> → Bonsai 4B, <i>Side jobs</i> → Bonsai 2B (any size works for either).</li>
+<li>From the next message Bonsai 9B has the Agent tool, and a line in its instructions on when to hand reading and searching over.</li>
+<li>Nothing else changes: the helper only reads (kind explore) unless the 9B asks for a general one, and its changes ask as your mode says.</li></ol></div>
+</div>
+<script>
+// One script for both designs: each event is [seconds, kind, data].
+const T = [
+  [0, 'you', 'where are the totals computed, and why is the discount applied twice?'],
+  [2, 'row', ['t-ex', 'EXPLORING', 'Handing the search to a helper on Bonsai 4B']],
+  [3, 'helper', { name: 'Explore', task: 'find where totals and the discount are computed', model: 'bonsai-2:4b' }],
+  [5, 'step', 'List(src)'], [8, 'step', 'Search(discount)'], [11, 'step', 'Read(src/cart.mjs)'], [15, 'step', 'Read(src/totals.mjs)'], [19, 'step', 'Search(applyDiscount)'],
+  [23, 'side', 'memory note'],
+  [26, 'report', 'totals: src/totals.mjs:12 sum(); discount: applyDiscount() is called in src/cart.mjs:41 and again inside sum() at src/totals.mjs:18'],
+  [27, 'sideDone', ''],
+  [28, 'row', ['t-ex', 'EXPLORING', 'Reading the two places it found']],
+  [31, 'row', ['t-ed', 'EDITING', 'Removing the second call in sum()']],
+  [36, 'answer', 'The discount was applied twice: once in cart.mjs:41 and again inside sum() at totals.mjs:18. I removed the call in sum(); the cart tests pass.'],
+];
+const END = 40;
+let t = 0, speed = 1, playing = true, timer = null, idx = 0;
+const st = { helper: null, steps: [], report: null, side: null };
+const el = (id) => document.getElementById(id);
+const line = (cls, html) => `<div class="l ${cls}">${html}</div>`;
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const spinner = () => '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[Math.floor(t * 4) % 10];
+let lines = [];
+function draw() {
+  const h = st.helper;
+  const helperSecs = h ? Math.round(((st.report ? h.end : t) - h.start)) : 0;
+  // Design 1: the helper's line in the conversation
+  const one = lines.map((x) => {
+    if (x === 'HELPER') {
+      if (!h) return '';
+      const last = st.steps.at(-1);
+      const head = `<span class="k">⎿</span> ${h.name}(${esc(h.task)}) · on <span class="m">${h.model}</span> · ${st.steps.length} step${st.steps.length === 1 ? '' : 's'}`;
+      if (!st.report) return line('sub', `${head}${last ? ` · ⏺ ${esc(last)}` : ''} · ${helperSecs} s <span class="spin">${spinner()}</span>`);
+      return line('sub', `${head} · ${helperSecs} s · back to bonsai-2:9b`) + line('sub', `  Report: ${esc(st.report)}`);
+    }
+    return x;
+  }).join('');
+  el('t1').innerHTML = one;
+  // Design 2: the same conversation, the helper's live part in the panel
+  el('t2').innerHTML = lines.map((x) => (x === 'HELPER' ? (h ? line('sub', `<span class="k">⎿</span> ${h.name} on <span class="m">${h.model}</span>${st.report ? ` · ${st.steps.length} steps · ${helperSecs} s` : ' · working'}`) + (st.report ? line('sub', `  Report: ${esc(st.report)}`) : '') : '') : x)).join('');
+  const running = h && !st.report;
+  const rows = [];
+  if (h) rows.push(`<div class="cell"><span>${running ? `<span class="spin">●</span>` : '✓'}</span><span>${h.name}</span><span class="m" style="color:var(--bright)">${h.model}</span><span>${running ? `step ${st.steps.length} · ${esc(st.steps.at(-1) ?? 'starting')}` : `done · ${st.steps.length} steps`}</span><span class="x">${helperSecs} s</span></div>`);
+  if (st.side) rows.push(`<div class="cell"><span>${st.side.done ? '✓' : '<span class="spin">●</span>'}</span><span>Side job</span><span style="color:var(--bright)">bonsai-2:2b</span><span>${esc(st.side.what)}${st.side.done ? ' · saved' : ' · writing'}</span><span class="x">${Math.round((st.side.done ? st.side.end : t) - st.side.start)} s</span></div>`);
+  const loaded = 4.1 + (h ? 2.1 : 0) + (st.side ? 1.2 : 0);
+  el('panel').innerHTML = rows.length ? `<div class="box"><div class="h">Helpers · ${rows.length} · the 9B waits for the report, side jobs run beside it</div>${rows.join('')}<div class="h" style="margin-top:4px">Memory ${loaded.toFixed(1)} of 16 GB · 9B 4.1${h ? ' · 4B 2.1' : ''}${st.side ? ' · 2B 1.2' : ''}</div><div class="mem"><i style="width:${(4.1 / 16) * 100}%;background:var(--accent)"></i>${h ? `<i style="width:${(2.1 / 16) * 100}%;background:var(--bright)"></i>` : ''}${st.side ? `<i style="width:${(1.2 / 16) * 100}%;background:var(--dim)"></i>` : ''}</div></div>` : '';
+  el('clock').textContent = `${Math.round(t)} s`;
+}
+function apply([s, kind, d]) {
+  if (kind === 'you') lines.push(line('you', esc(d)));
+  if (kind === 'row') lines.push(line('row', `▸ <span class="tag ${d[0]}">${d[1]}</span>  ${esc(d[2])}`));
+  if (kind === 'helper') { st.helper = { ...d, start: s }; lines.push('HELPER'); }
+  if (kind === 'step') st.steps.push(d);
+  if (kind === 'report') { st.report = d; st.helper.end = s; }
+  if (kind === 'side') st.side = { what: d, start: s };
+  if (kind === 'sideDone') { st.side.done = true; st.side.end = s; }
+  if (kind === 'answer') { lines.push(line('ans', `● ${esc(d)}`)); lines.push(line('note', '  2 helpers this message · Explore on bonsai-2:4b 23 s · memory note on bonsai-2:2b 4 s')); }
+}
+function reset() { t = 0; idx = 0; lines = []; Object.assign(st, { helper: null, steps: [], report: null, side: null }); draw(); }
+function tick() {
+  if (!playing) return;
+  t += 0.25 * speed;
+  while (idx < T.length && T[idx][0] <= t) apply(T[idx++]);
+  draw();
+  if (t >= END) { playing = false; el('play').classList.remove('on'); el('play').textContent = '▶ Play'; }
+}
+el('play').onclick = () => { if (t >= END) reset(); playing = !playing; el('play').classList.toggle('on', playing); el('play').textContent = playing ? '❚❚ Pause' : '▶ Play'; };
+el('again').onclick = () => { reset(); playing = true; el('play').classList.add('on'); el('play').textContent = '❚❚ Pause'; };
+for (const b of document.querySelectorAll('[data-speed]')) b.onclick = () => { speed = Number(b.dataset.speed); for (const x of document.querySelectorAll('[data-speed]')) x.classList.toggle('on', x === b); };
+el('play').textContent = '❚❚ Pause';
+reset();
+timer = setInterval(tick, 250);
+</script>
+<noscript><div class="wrap"><p>This page plays the two designs with JavaScript; turn it on to watch them.</p></div></noscript>
+</body></html>
