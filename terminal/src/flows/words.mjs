@@ -12,6 +12,11 @@ export const PLAIN = /^\W*(?:please\s+)?(?:run|start|check|execute)?\s*(?:the\s+
 
 // "exit" or "quit" typed as a plain message leaves, like /exit (the app checks
 // this before anything is sent).
+// The user's own words of a request: what a dropped or @-named file or folder brought in (app/attach-read.mjs,
+// app-common.mjs: <file path=…>…</file>, <folder path=…>…</folder>, and the line in brackets after one) left out.
+// A request is sorted on these (28 Oct 2026: a dropped folder's file list, with exploit, xss and secrets in its
+// names, sorted "analyze the folder deeply" as a Security bug, and the fix path's tries ran for 30 minutes).
+export const ownWords = (text) => String(text ?? '').replace(/\n*<(file|folder) path="[^"]*"[^>]*>[\s\S]*?<\/\1>(?:\n\([^\n]*\))?/g, '').trim();
 export const isQuit = (text) => /^(exit|quit)[.!]?$/i.test(String(text).trim());
 
 // Thanks, praise, and an offer of work with nothing to do yet, the ways they

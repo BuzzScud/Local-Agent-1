@@ -12,6 +12,28 @@ import { COOL_MS } from './profile-spill.mjs';
 import { CALL_STOPS, CALL_UNREADABLE, STEP_DOWN_CAP, STUCK_WORD, auto, beforeCall, isLooping, kTok, leakedThinking, replyRoom, tokensOf, toolCallInText } from './agent-said.mjs';
 
 export class ModelPart {
+  // The next message's start, read while the user reads the answer (28 Oct 2026). An Ollama service drops an
+  // answer's thinking once a message comes after it (its qwen3.5 renderer, as Qwen's own template does), so the
+  // next message read the whole answer again, its steps and their output: 132 s for 18,659 tokens of Bonsai 2 9B
+  // on this Mac. Right after an answer that thought, the conversation goes once as the next message will send it,
+  // with a stand-in message and one token to write, so the service has read it by then. The next message stops
+  // it if it is still going (what it read stays read). AGENTIC_WARM_NEXT=off turns it off (the tests).
+  warmNext() {
+    if (!endpointOf(this.url)?.ollama || this.isHelper || !this.lastAsk || String(process.env.AGENTIC_WARM_NEXT ?? 'on').toLowerCase() === 'off') return false;
+    const at = this.messages.findLastIndex((m) => m.role === 'user');
+    if (!this.messages.slice(at + 1).some((m) => m.role === 'assistant' && m.reasoning_content)) return false;
+    this.warmCtl?.abort();
+    const ctl = new AbortController();
+    this.warmCtl = ctl;
+    const ask = this.lastAsk;
+    const messages = [...this.withTurnNotes(this.messages), { role: 'user', content: '…' }];
+    this.warming = (async () => {
+      try { for await (const ev of streamChat({ url: this.url, conversation: this.conversation, messages, tools: ask.tools, toolChoice: 'auto', thinking: ask.thinking, effort: ask.effort, model: this.model, sampling: ask.sampling, maxTokens: 1, signal: ctl.signal })) if (ev.type === 'done') break; } catch {}
+      if (this.warmCtl === ctl) this.warmCtl = null;
+    })();
+    return true;
+  }
+
   // Past half this request's time for thinking (THINK_BUDGET_SECS): true, and the first time a
   // note says so. Never with thinking off, a budget of 0, or AGENTIC_THINK=old.
   // Not while steps are failing in a row (4 Oct 2026, the owner's pick: it stepped down right after a

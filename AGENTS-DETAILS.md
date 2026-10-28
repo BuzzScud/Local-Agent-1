@@ -1847,6 +1847,29 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Tests**: `terminal/test/remote.test.mjs` (the tools on a text-only request; a greeting with no thinking and the next
   message's tools and system prompt).
 
+## Bonsai: sorted on your words, no tries, the cache kept (28 Oct 2026)
+
+- **What and why.** The owner: "how does agentic coder / bonsia handle cache? are we fast as we can be?". Measured from
+  Ollama's own log of their session (it runs llama.cpp's server inside: one slot, a prompt cache in memory that
+  brings a conversation back after a side job, and context checkpoints, as Qwen3.5 is hybrid): a step reads only what is
+  new, but 47.9 of 65.7 minutes went to the focused paths' tests, drafts and 8 tries (none passed; Ollama runs them one
+  after another), "analyze the folder deeply" was sorted a Security bug because the dropped folder's file list was
+  sorted as the request, the conversation was read from scratch after the tries (41 s, 92 s), and the first step of
+  the next message read the whole last answer again (18,659 tokens, 132 s): the app took the request's notes off it,
+  and Ollama's qwen3.5 renderer drops an answer's thinking once a message comes after it (3,407 → 1,132 tokens in a
+  stand-in conversation, the cache matching the first 871). Their picks: the first three fixes below, not a thinking cap.
+- **What changed.** `ownWords` (flows/words.mjs) leaves what a dropped or @-named file or folder brought in out of the
+  word rules (`routeByRules`), the model's sort (`route`), the bug kinds (`sortBug`) and the skills' words (`pickSkill`).
+  `OWN_REMOTES` gives Bonsai `focused: false` (remoteModel carries it), so agent-work.mjs goes straight to step by step.
+  `bakeTurnNotes` runs for any model on a service, not only on the remote set. `warmNext` (agent-model.mjs): after an
+  answer that thought, on an Ollama service, the conversation goes once as the next message will send it (a stand-in
+  message, one token, the last step's tools, thinking and effort), so the service reads it while the owner reads; the
+  next message aborts it (what was read stays read); `AGENTIC_WARM_NEXT=off` turns it off (test-env.mjs does).
+- **Measured**: the replay of the two requests (a copy of the folder, their settings at 64k, a 90 s pause between) and
+  the page `docs/tests/bonsai-before-after-2026-10-28.html`, built from `models/remote/results/bonsai-before-after-2026-10-28/`.
+- **Tests**: `terminal/test/bonsai-cache.test.mjs` (the sorting, the own entry, no tries on a stand-in Ollama that
+  thinks, the notes baked, the read-ahead's messages and settings, the next message stopping it, none without thinking).
+
 ## The hub's Bonsai tab: everything about Bonsai, live (27 Oct 2026)
 
 - **What and why.** The owner: "can you create an entire ui, inside of the web page, to manage bonsai and everything

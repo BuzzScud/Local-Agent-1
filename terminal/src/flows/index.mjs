@@ -12,7 +12,7 @@ import { fixFlow } from './fix.mjs';
 import { changeFlow } from './change.mjs';
 import { planFiles, multiFlow, MAX_FILES } from './multi.mjs';
 import { projectFiles } from './localize.mjs';
-import { isMoreTalk, isCommand, isPageRequest, wantsDesktop } from './words.mjs';
+import { isMoreTalk, isCommand, isPageRequest, ownWords, wantsDesktop } from './words.mjs';
 
 const ID = '[`\'"]?([A-Za-z_$][\\w$]*)[`\'"]?';
 // A whole request that is one file operation: "delete trades.json",
@@ -38,7 +38,7 @@ export function isSmallTalk(text) {
 // code named is no change for the test-first path, and a plain command with no
 // rule of its own goes step by step instead of to the model for sorting.
 export function routeByRules(text) {
-  const whole = text.trim();
+  const whole = ownWords(text);
   if (KEEPS_ALL.test(whole)) {
     // Only the code is kept ("don't touch the code") and the rest asks for work on a text file by name
     // (a README, a .md): the code is protected, that file is not, so the work stands.
@@ -151,7 +151,7 @@ function byWords(t) {
 export async function route(ctx, text) {
   const byRules = routeByRules(text);
   if (byRules) return byRules;
-  return modelSort(ctx, text);
+  return modelSort(ctx, ownWords(text) || text);
 }
 
 // What the model is told each kind means: the paths at the top of this file.

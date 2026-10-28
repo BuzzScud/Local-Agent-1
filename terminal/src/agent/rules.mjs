@@ -2,6 +2,7 @@
 // its "Every time" steps go into the system prompt, and a bug's kind (sorted
 // by the kind's Words) adds that kind's steps to the request.
 import { readFileSync } from 'node:fs';
+import { ownWords } from '../flows/words.mjs';
 
 async function load() {
   try {
@@ -53,7 +54,7 @@ const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // A clarifying question joined to the request ('(This answers the question "What
 // is wrong? …" about the request: …)') is not the user's words, so it is left out.
 export function sortBug(text, kinds = RULES.kinds) {
-  const t = text.replace(/the question "[^"]*"/g, '').toLowerCase().replace(/[‘’]/g, "'");
+  const t = ownWords(text).replace(/the question "[^"]*"/g, '').toLowerCase().replace(/[‘’]/g, "'");
   let best = null;
   for (const k of kinds) {
     let score = 0;
