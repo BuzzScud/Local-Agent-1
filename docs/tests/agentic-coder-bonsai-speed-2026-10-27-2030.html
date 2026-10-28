@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai speed test · bonsai-2:9b on this Mac’s Ollama</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.panel[hidden]{display:none}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--mute)}
+.chip.ok{color:var(--up)}.chip.no{color:var(--down)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small{display:block;color:var(--faint);font-weight:400;font-size:11.5px}
+td.num,th.num{text-align:right}
+td.what{white-space:normal;color:var(--mute);font-size:13.5px;min-width:260px}
+.ok{color:var(--up)}.no{color:var(--down)}.dim{color:var(--faint)}.small{font-size:13px;margin:0}
+ol.list{margin:0;padding-left:22px;columns:2 360px;column-gap:32px}ol.list li{margin:0 0 6px;break-inside:avoid}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 7px}ul.how code{overflow-wrap:anywhere}
+code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+@media (max-height:820px){body{padding:10px 14px;gap:8px}.panel{padding:12px 16px;gap:9px}.verdict{font-size:15px}.card .v{font-size:20px}th,td{padding:5px 10px}ul.how li{margin:0 0 4px}}
+@media (max-width:760px),(max-height:560px){body{overflow:auto;height:auto}.panel{overflow:visible}.table-wrap{overflow-x:auto}td.what{min-width:220px}}
+</style>
+</head>
+<body>
+<header><h1>Bonsai speed test · bonsai-2:9b on this Mac’s Ollama</h1><span class="date">Oct 27 20:30 · 24a6902+</span></header>
+<div class="tabs" role="tablist"><button type="button" role="tab" aria-selected="true" data-tab="result">1 · Result</button><button type="button" role="tab" aria-selected="false" data-tab="checks">2 · The checks</button><button type="button" role="tab" aria-selected="false" data-tab="how">3 · How it was measured</button></div>
+<main class="panel" id="p-result"><p class="verdict">Yes: all 3 checks passed. It answers, reads the app’s instructions and tools from the start in under 30 s, and a later step reuses what it read.</p><div class="chips"><span class="chip ok">✓ pass: all 3 checks</span><span class="chip">Oct 27 20:30 · 24a6902+</span></div><div class="cards"><div class="card"><div class="k">Checks passed · higher is better</div><div class="v">3 of 3</div><div class="s">no run before this one</div></div><div class="card"><div class="k">Reads a prompt · higher is faster</div><div class="v">210 tokens/s</div><div class="s">on 27 Oct 2026, through a logging relay: ~210 tokens/s</div></div><div class="card"><div class="k">Writes · higher is faster</div><div class="v">32.4 tokens/s</div><div class="s">on 27 Oct 2026, through a logging relay: ~28 tokens/s</div></div><div class="card"><div class="k">A fresh prompt (4,253 tokens) · lower is faster</div><div class="v">20 s</div><div class="s">on 27 Oct 2026: 20–24 s for 4.5–5k tokens</div></div><div class="card"><div class="k">A later step, reading · lower is faster</div><div class="v">0.2 s</div><div class="s">on 27 Oct 2026: 0.2–1 s</div></div></div><ol class="list"><li><span class="ok">✓</span> Both requests answered with words <span class="dim">· 24 s</span></li><li><span class="ok">✓</span> The app’s instructions and tools read from the start in under 30 s <span class="dim">· 20 s</span></li><li><span class="ok">✓</span> A later step reads what is new in under 3 s <span class="dim">· 0.2 s</span></li></ol><p class="dim small">Tab 2 has what each check showed.</p></main>
+<main class="panel" id="p-checks" hidden><div class="table-wrap"><table><thead><tr><th>#</th><th>Check</th><th>Result</th><th class="num">Seconds<small>lower is faster</small></th><th>What it showed</th></tr></thead><tbody><tr><td class="dim">1</td><td><b>Both requests answered with words</b></td><td class="ok">✓ passed</td><td class="num">24 s</td><td class="what">16 tokens written first</td></tr><tr><td class="dim">2</td><td><b>The app’s instructions and tools read from the start in under 30 s</b></td><td class="ok">✓ passed</td><td class="num">20 s</td><td class="what">4,253 tokens at 210 a second</td></tr><tr><td class="dim">3</td><td><b>A later step reads what is new in under 3 s</b></td><td class="ok">✓ passed</td><td class="num">0.2 s</td><td class="what">a prompt of 4,283 tokens in 0.2 s: only what is new read (Ollama counts the kept part too)</td></tr></tbody></table></div></main>
+<main class="panel" id="p-how" hidden><ul class="how"><li>Two requests to <code>http://localhost:11434</code>’s <code>/api/chat</code>, not streamed, the way a window’s first two steps go: the app’s own instructions (<code>systemPrompt</code>) and its tools (<code>toolSchemas('app')</code>), with a first line of their own (the time) so nothing an earlier request read is reused, and a short question; then the same with the answer and one more question.</li><li>Asked at the context the model is loaded at (65,536; another size would load it again), thinking off, at most 160 tokens written: it measures reading and writing, not how long it chooses to think.</li><li>The figures are Ollama’s own: prompt_eval_count and prompt_eval_duration (reading), eval_count and eval_duration (writing), load_duration. Reads a prompt = the fresh prompt’s tokens over its reading time; Writes = the first answer’s tokens over its writing time.</li><li>The rules, written before the first run: both requests answered with words; the fresh prompt read in under 30 s (the relay measured 20–24 s on 27 Oct 2026); the later step read in under 3 s (what was read kept: read again it would take about as long as the fresh one).</li><li>The hub’s Bonsai tab runs the same test (its Test speed button, <code>terminal/src/app/bonsai-speed.mjs</code>), kept in <code>~/.agentic-coder/bonsai/speed.json</code>. Loading took 2.8 s; the whole run 24 s. Code: 24a6902+.</li><li>Raw results, on this Mac: <code>models/evals/results/bonsai-speed-2026-10-27-2030</code></li></ul></main>
+<script>
+const tabs = [...document.querySelectorAll('[data-tab]')];
+const show = (id) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === id))); document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.id !== 'p-' + id; }); try { history.replaceState(null, '', '#' + id); } catch {} };
+tabs.forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
+addEventListener('keydown', (e) => { if (e.metaKey || e.ctrlKey || e.altKey) return; const n = Number(e.key); if (n >= 1 && n <= tabs.length) show(tabs[n - 1].dataset.tab); });
+const fromHash = () => { if (tabs.some((b) => '#' + b.dataset.tab === location.hash)) show(location.hash.slice(1)); };
+addEventListener('hashchange', fromHash);
+fromHash();
+</script>
+</body>
+</html>
