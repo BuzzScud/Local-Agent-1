@@ -170,7 +170,7 @@ export class ModelPart {
     let reason = 'done';
     try {
       await this.followProfile({ type: 'chat' });
-      await this.fitContext(signal);
+      await this.fitContext(signal, { at: this.roomAt });
       // Room to think first (at your effort level; none on an Ollama service), then a short answer, then stop.
       const turn = await this.generate(signal, { textOnly: true, maxTokens: 900, noThink: Boolean(this.model?.remote?.ollama) });
       if (turn.aborted) {
@@ -210,7 +210,7 @@ export class ModelPart {
     // Auto on a service: SERVICE_REPLY, the same way (its thinking and its file both fit).
     const own = this.turn?.roomUp || this.model?.replyTokens || (this.model?.remote?.ollama ? SERVICE_REPLY : 0);
     const thinks = thinking && (this.model?.thinkingLevels?.length ?? 2) > 1;
-    const maxTokens = cap ?? (own ? Math.max(2048, Math.min(own, Math.floor(this.ctx * this.trimAt) - this.estNow())) : replyRoom(thinks, this.model?.thinkingBudget));
+    const maxTokens = cap ?? (own ? Math.max(2048, Math.min(own, Math.floor(this.ctx * this.roomAt) - this.estNow())) : replyRoom(thinks, this.model?.thinkingBudget));
     this.lastRoom = maxTokens;
     // fitContext keeps the answer's 2,048 and this much thinking free: in a tight
     // memory the thinking shrinks (thinkRoom), not the answer.
