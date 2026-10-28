@@ -124,7 +124,11 @@ export class AutoSave {
     const ac = new AbortController();
     this.abort = ac;
     const a = this.agent;
-    this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots?.side, use: a.sideUse?.(), cwd: a.cwd, home: a.memory.home, lessons: a.lessons, messages: a.messages, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
+    // The helpers panel (helpers-panel.mjs): the memory note as a side job, on the model it goes to.
+    const use = a.sideUse?.();
+    const side = { id: 'memory-note', kind: 'Side job', what: 'memory note', model: use?.model ?? a.modelName?.() ?? '', started: Date.now() };
+    a.emit?.('side-job', side);
+    this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots?.side, use, cwd: a.cwd, home: a.memory.home, lessons: a.lessons, messages: a.messages, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
       .then((out) => {
         if (out?.skipped && !this.noted.length) this.say('Not saved · /update memory saves what matters at any time');
         else this.sayNoted(out ?? { added: [], replaced: [], retired: [] });
@@ -139,6 +143,7 @@ export class AutoSave {
         return null;
       })
       .finally(() => {
+        a.emit?.('side-job', { ...side, done: true, secs: (Date.now() - side.started) / 1000 });
         this.running = null;
         if (this.abort === ac) this.abort = null;
         if (this.again) { this.again = false; this.schedule(0); } else this.fold().catch(() => {});

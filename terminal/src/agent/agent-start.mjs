@@ -30,6 +30,12 @@ export class StartPart {
       this.refreshNotes();
       this.emit('note', { text: was === this.rulesSetUsed ? 'Updated prompt files loaded (AGENTS.md, TOOLS.md, SKILLS.md).' : this.setNote(), tone: 'dim' });
     }
+    // Helpers on another model (agent.mjs helpersElsewhere): the Agent tool and its line come with a conversation's
+    // first message, the prompt built again once.
+    if (!this.isHelper && Boolean(this.helperLineUsed) !== this.helpersElsewhere()) {
+      this.refreshNotes();
+      if (this.helperLineUsed) this.emit('note', { text: `Helpers on ${this.helpersAway.model}: the Agent tool hands reading and searching to it, and its report comes back (/profiles, Helpers it starts).`, tone: 'dim' });
+    }
   }
 
   // Gives back the message and its pictures as they go to the model.

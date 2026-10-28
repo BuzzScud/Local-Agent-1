@@ -4,6 +4,7 @@ import { remoteLabel } from '../../../models/index.mjs';
 import { kindWord } from './remote-form.mjs';
 import { showLimit } from './limits.mjs';
 import { openTune, saveTuneNotes, startTuneTest } from './tune-cmd.mjs';
+import { useHelperModel } from './subagents-cmd.mjs';
 
 export const MODEL_COMMANDS = ['start', 'stop', 'autostart', 'model', 'tune', 'profiles', 'subagents', 'usage', 'stats', 'doctor'];
 
@@ -41,6 +42,8 @@ export function slashModel(self) {
       }
       // /subagents is a row group of /profiles now (8 Oct 2026, the owner's pick): typed, it opens there.
       case 'subagents': {
+        // /subagents <model> (subagents-cmd.mjs): the helpers on that model; alone, /profiles on its AIs group.
+        if (arg.trim()) { await useHelperModel(self, arg.trim()); break; }
         self.openProfilesPanel({ group: 'ai' });
         break;
       }

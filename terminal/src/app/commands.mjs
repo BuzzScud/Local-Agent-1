@@ -31,7 +31,7 @@ export const COMMANDS = [
   // The model is off when a window opens (the user's pick, 30 Sep 2026): /start loads it, /stop gives its memory back.
   { name: 'start', desc: "Load the model (ctrl+t too): it takes the Mac's memory until /stop or you quit" },
   { name: 'stop', desc: 'Unload the model and give its memory back to the Mac (ctrl+t too); /start loads it again' },
-  { name: 'subagents', desc: 'The helper models, one per job (pictures, side jobs, code search, a second opinion, UI design): opens /profiles on its AIs group' },
+  { name: 'subagents', desc: 'The helper models, one per job (pictures, side jobs, code search, a second opinion, UI design): opens /profiles on its AIs group; /subagents <model> runs the helpers the Agent tool starts on that model', arg: '[model]' },
   // On the Claude API only (8 Oct 2026): what is left of the month's spend cap, today, and the limits each minute.
   { name: 'usage', desc: 'What the Claude API has left: this month against your limit, today’s dollars, and the limits each minute (l sets your limit, s the Console’s figure, k an Admin key)' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },

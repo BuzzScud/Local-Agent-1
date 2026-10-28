@@ -147,6 +147,16 @@ export function writeProfiles(data) {
 }
 export const profilesSaved = () => existsSync(PROFILES_FILE());
 
+// /subagents <model> (28 Oct 2026, the owner's pick "/subagents shortcut + profiles"): the helpers it starts on that
+// model, on the given server: its profile there is used, or one is made ("Helpers · <model>"), and the Helpers it
+// starts row points at it. Answers { name, made, data }.
+export function helpersTo(data, model, server) {
+  const found = Object.entries(data.profiles ?? {}).find(([, p]) => p.model === model && sameServer(p.server, server));
+  const name = found?.[0] ?? `Helpers · ${model}`;
+  const profiles = found ? data.profiles : { ...data.profiles, [name]: { server, model, backup: null, spillAfter: 0 } };
+  return { name, made: !found, data: { profiles, uses: { ...data.uses, 'ai:helpers': name } } };
+}
+
 // ---- /remote and the conversation's profile ------------------------------------------------------
 
 // /remote's Connect, and a window's start on the remote (9 Oct 2026, the owner's pick: "Connect makes the

@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { SESSION_MARK } from '../agent/prompt.mjs';
 import { terminalApp } from '../tools/screen.mjs';
-import { battleHold, runningServer, ModelServer, freeWithHandBack, stopServer, chooseContext, availableBytes, scanServers, contextCheck, hasDraft, searchBytes, LINGER_SECS, warmUp, stopIdleServers, remoteLabel, thinkingLevel, serverBinOf, modelPath, onDiskBytes, engineOf, visionPath, needBytes, DEFAULT_REMOTE, keyStore, remoteRisk, HOME } from '../../../models/index.mjs';
+import { battleHold, runningServer, ModelServer, freeWithHandBack, stopServer, chooseContext, availableBytes, scanServers, contextCheck, hasDraft, searchBytes, LINGER_SECS, warmUp, stopIdleServers, remoteLabel, thinkingLevel, serverBinOf, modelPath, onDiskBytes, engineOf, visionPath, needBytes, DEFAULT_REMOTE, keyStore, remoteRisk, HOME, endpointOf, ollamaLoaded } from '../../../models/index.mjs';
+import { shownHelpers, withHelper } from './helpers-panel.mjs';
 import { windowSpend } from '../agent/spend.mjs';
 import { updateWindow } from './copies.mjs';
 import { kindWord } from './remote-form.mjs';
@@ -116,6 +117,25 @@ export function runPart(self) {
       self.saveNow();
     };
     const on = (name, fn) => { self.agent.on(name, fn); return () => self.agent.off(name, fn); };
+    // The helpers panel (helpers-panel.mjs): a helper's and a side job's rows, and on an Ollama service the memory its
+    // loaded models take (every 3 s); a tick each second while a row shows, so its seconds move and a finished row goes.
+    let helpersNow = [];
+    let helpersTimer = null;
+    let loadedAt = 0;
+    const helpersTick = async () => {
+      helpersTimer = null;
+      helpersNow = shownHelpers(helpersNow);
+      const ep = endpointOf(self.agent.url);
+      let loaded = null;
+      if (helpersNow.length && ep?.ollama && Date.now() - loadedAt > 3000) { loadedAt = Date.now(); loaded = await ollamaLoaded({ url: self.agent.url, key: ep.key }).catch(() => null); }
+      self.setLive((l) => ({ ...l, helpers: helpersNow, ...(loaded ? { helpersLoaded: loaded } : {}) }));
+      if (helpersNow.length) { helpersTimer = setTimeout(helpersTick, 1000); helpersTimer.unref?.(); }
+    };
+    const helperEvent = (ev) => {
+      helpersNow = withHelper(helpersNow, ev);
+      self.setLive((l) => ({ ...l, helpers: helpersNow }));
+      if (!helpersTimer) helpersTick();
+    };
     // add: the tokens this event brought (one a streamed piece; a tool call's whole size when it comes in
     // one piece, as an Ollama service sends it: 4 Oct 2026, "↓ 4.1k tokens this session" for 52.7k written).
     const stream = (l, patch, add = 1) => {
@@ -130,6 +150,8 @@ export function runPart(self) {
     let toolAt = null, calls = 0;
     const addPre = (patch) => { self.pre.current = { ...(self.pre.current ?? {}), ...patch }; self.setLive((l) => ({ ...l, pre: self.pre.current })); };
     const offs = [
+      on('helper', helperEvent),
+      on('side-job', helperEvent),
       // A busy service (busy.mjs): the spinner counts down to the next try.
       on('busy', ({ until }) => self.setLive((l) => (l.phase ? { ...l, busyUntil: until } : l))),
       // The conversation moved to another profile's model between steps (app-profiles.mjs onRoute).
@@ -237,7 +259,7 @@ export function runPart(self) {
         else if (q) setTimeout(() => self.sendPrompt(q), 50);
       }),
     ];
-    return () => offs.forEach((f) => f());
+    return () => { offs.forEach((f) => f()); clearTimeout(helpersTimer); };
   };
   const arenaTick = () => {
     if (self.opts.url) return undefined;

@@ -11,6 +11,7 @@ import { C, fmtSecs } from '../ui/theme.mjs';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { AgentsView, AgentsLine } from './agents-view.jsx';
 import { LoopsView, LoopsLine } from './loops-view.jsx';
+import { HelpersPanel } from './helpers-panel.jsx';
 import { foldSteps, groupWork } from './rail.jsx';
 import { taskRows, RowView } from './task-rows.jsx';
 import { HomePage, lookOf } from './home-looks.jsx';
@@ -260,6 +261,7 @@ export function Screen({ app }) {
         <Box flexDirection="column">
           {app.agentsLine ? <AgentsLine segs={app.agentsLine} /> : null}
           {app.loopsLine ? <LoopsLine segs={app.loopsLine} /> : null}
+          {app.live?.helpers?.length ? <HelpersPanel helpers={app.live.helpers} loaded={app.live.helpersLoaded} width={width} /> : null}
           {app.trayLayout ? <AttachTray items={app.tray} layout={app.trayLayout} width={width} mouse={app.mouse} /> : null}
           {app.botAllowed && !app.hold && !bot.hidden && app.rows >= KEEP_FROM ? <Box height={KEEP_ROWS} /> : null}
           <Box ref={boxRef} flexDirection="column"><PromptBox app={app} /></Box>
