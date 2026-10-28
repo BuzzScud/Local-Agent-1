@@ -1922,10 +1922,45 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   by 9B on its own; every reply's own Ollama figures, `/api/ps` every 2 s, eight checks. Left to itself (28 Oct, 4B and
   2B) 9B was offered the Agent tool and searched itself; `--ask` ends the question with "Hand the searching to a helper
   with the Agent tool." so the helper is measured. Its home is a throwaway one (checked before anything is written).
+- **Better helpers on the smaller model** (28 Oct 2026, the owner: "what can we fix to make the sub agents better?";
+  their picks: all four, build, measure, show). From the check's runs: 9B read the report's files again itself (8
+  replies, ~70 s of 218), never handed a search over unasked, a 2B report named a function that is nowhere and a line
+  past a file's end, the helper read 9B's whole instructions, waited 15 s to load, and re-read its conversation once
+  mid-run (21.7 s). Now, for a helper on a smaller model of the conversation's own service (runHelper `small`):
+  - **Proof and a check** (`terminal/src/agent/helper-proof.mjs`): `checkReport` reads every file:line a report cites
+    (and the names it gives: backticks, calls, camelCase / CONSTANT_CASE words) from the files; a cite a few lines off
+    shows the line the name is really on (its definition first) and what it was cited as. A report naming a file, a
+    line or a name the project does not have is sent back once (`recheckNote`); the lines, and anything still not
+    confirmed, go under the report (`proofBlock`). Any helper on a model of its own that only reads gets it.
+  - **Handed first** (agent.mjs `handFirst`, called in work() before the reading ahead, the app steering only): a
+    question about the code (not a request for work) is searched by an explore helper before the first step, as an
+    Agent call in the conversation; the reading ahead of named files is skipped then. `HELPER_LINE` says to search with
+    the Agent tool first. It said to trust the lines it brings, and the proof block "no need to read them again": in
+    three runs 9B took 2B's wrong answer to the hard part every time (2 of 3 right before), so neither says so now.
+  - **Lighter and steadier**: `smallHelperPrompt` (agent-said.mjs `SMALL_HELPER`: where it works, three tool lines, the
+    helper part, and for an explore helper "cover every part, copy each line you found") in place of the conversation's
+    instructions (2B's first prompt 6.5k → 2.6k tokens). A helper that only reads (no Edit, no Write) is no longer sent
+    back for saying it is done with no file changed (agent-answer.mjs `onlyReads`): on Ollama's Qwen3.5 template a
+    send-back drops the earlier thinking, so the helper read its whole conversation again (14.5 and 21.7 s). Thinking
+    stays as the conversation has it: tried off, 2B's reports answered one part of two and 9B searched the rest.
+  - **Loaded ahead, the main model first** (agent-start.mjs `warmHelper`, `loadMainFirst`): when the Agent tool comes
+    with a conversation's first message, the conversation's model is loaded, then the helpers' at 32k for 30 min, not
+    awaited; `handFirst` waits for the main one. In the other order Ollama predicted 9B at 6.4 GB with 5.1 free and let
+    2B go. `AGENTIC_WARM_HELPER=off` (off in test-env.mjs).
+  - The check's runner also keeps what 9B did after the report (`afterHelper`), re-reads (`rereads`: a prompt shorter
+    than the one before on the same model) and the helper's own notes.
+  - **Measured** (`docs/tests/agentic-coder-subagents-before-after-2026-10-28.html`, 13 runs of the check on 2B; raw in
+    `models/evals/results/subagents-ab-2026-10-28/`, its builder beside them): the question goes to the helper unasked
+    (before: never), the helper waits 1.1 s to load (8.3), no re-read inside it, both models stay loaded when the Mac
+    has the memory; but 9B checks the report itself (13 replies after it), so a request with helpers took 281 s against
+    159 before and about 155 for 9B alone, and both answers were right in 50% (33% before). On this Mac a 2B helper does
+    not make 9B faster on a question; it keeps 9B's conversation smaller only when 9B trusts it, and then 9B copied 2B's
+    mistakes.
 - **Tests**: `terminal/test/helpers-panel.test.mjs` (the rows, helpersTo, /subagents, the Agent tool and its line once a
   conversation and never with subagents off, a helper's events on a stand-in model, a helper on the same service
-  naming its model while the conversation's stays), `models/test/bonsai-helpers.test.mjs` (the check's place in the
-  Arena, its page, --rebuild).
+  naming its model while the conversation's stays, the small helper's instructions, thinking and check, a question
+  handed first, the model loaded ahead), `terminal/test/helper-proof.test.mjs` (cites, names, lines, what is missing),
+  `models/test/bonsai-helpers.test.mjs` (the check's place in the Arena, its page, --rebuild).
 
 ## The hub's Bonsai tab: everything about Bonsai, live (27 Oct 2026)
 

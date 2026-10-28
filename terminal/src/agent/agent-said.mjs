@@ -581,6 +581,20 @@ export function helperPrompt(system, kind, own = null) {
   const base = `${system}\n\n# You are a helper\nThe main agent handed you one task. You see only this task, not its conversation, and you cannot ask the user anything. Work it out with your tools, then end with a short report for the main agent: ${looks ? 'what you found, with file:line or the page it came from. You only read: do not change anything; say what should change instead.' : 'what you changed (files and lines) and what you checked, or what stopped you.'}`;
   return own ? `${base}\n\n# Your job: ${own.kind}\nThe user wrote these instructions for you (${own.name}.md):\n${own.body}` : base;
 }
+// A helper on a smaller model of the conversation's service (/subagents <model>; 28 Oct 2026, the owner's pick "a
+// lighter helper"): instead of the conversation's whole instructions (its rules, skills, habits), only where it works
+// and how to look, then the helper part; an explore helper covers every part and copies each line it found, which the
+// app checks.
+export const SMALL_HELPER = `You are a helper of Agentic Coder, a coding assistant. You work inside one project folder: use paths relative to it, and "." for the folder itself. You see the files only through your tools.
+
+Tool use
+- Search for a name before you Read: then Read only the files the search points to, and in a long file pass find with the name to get the lines around it.
+- Use List to see a folder; try a shorter search when one finds nothing.
+- Call one tool at a time and wait for its result.`;
+export function smallHelperPrompt(kind) {
+  const base = helperPrompt(SMALL_HELPER, kind);
+  return kind === 'explore' ? `${base} Cover every part of the task. For each thing you found, give file:line and copy that line from the Read result. Name only files, lines and functions a tool showed you.` : base;
+}
 
 // The tools one of your helper agents is given: look = an explore helper's; all = a general
 // helper's (null: no filter); a list = those of the app's tools, in any case (others are left out).

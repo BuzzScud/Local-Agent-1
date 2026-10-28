@@ -124,6 +124,7 @@ test('helpers on another model of the conversation’s own Ollama service name i
   // conversation went on on 2B. No model runs here: the helper's send is stood in for.
   const { setEndpoint, dropEndpoint, endpointOf } = await import('../../models/index.mjs');
   const cwd = mkdtempSync(join(tmpdir(), 'agentic-helpers-'));
+  writeFileSync(join(cwd, 'a.mjs'), 'export const parse = (s) => JSON.parse(s);\n'); // what its report cites
   const url = 'http://127.0.0.1:9';
   const other = 'http://127.0.0.2:9';
   setEndpoint(url, { remote: true, kind: 'openai', ollama: true, model: 'bonsai-2:9b' });
@@ -159,4 +160,125 @@ test('helpers on another model of the conversation’s own Ollama service name i
     dropEndpoint(url);
     dropEndpoint(other);
   }
+});
+
+test('a helper on the smaller model: short instructions, thinking as the conversation, its report checked and sent back once', async () => {
+  // 28 Oct 2026, the owner's picks after the Bonsai helpers check. No model runs: the helper's send is stood in for.
+  const { setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
+  const { SMALL_HELPER } = await import('../src/agent/agent-said.mjs');
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-helpers-'));
+  writeFileSync(join(cwd, 'panel.mjs'), '// The panel.\nexport const KEEP_DONE_MS = 6000;\n');
+  const url = 'http://127.0.0.1:9';
+  setEndpoint(url, { remote: true, kind: 'openai', ollama: true, model: 'bonsai-2:9b' });
+  const model = { ...MODELS[DEFAULT_MODEL], remote: { model: 'bonsai-2:9b' } };
+  const send = Agent.prototype.send;
+  const seen = [];
+  const reports = ['It is `saveRow` in panel.mjs:9.', 'KEEP_DONE_MS, panel.mjs:2: 6 seconds.'];
+  Agent.prototype.send = async function (prompt, ...a) {
+    if (!this.isHelper) return send.call(this, prompt, ...a);
+    seen.push({ prompt, system: this.messages[0].content, thinking: this.thinking });
+    this.emit('assistant', { final: true, text: reports[seen.length - 1] });
+    return 'done';
+  };
+  try {
+    const a = new Agent({ url, model, cwd, system: systemPrompt({ cwd, git: 'none' }), memory: false, flows: false, way: 'app', instructions: 'local', thinking: true });
+    a.router = { active: () => true, helper: () => ({ url, model: 'bonsai-2:2b' }) };
+    const r = await a.runHelper('h1', { prompt: 'How long does a done row stay?', kind: 'explore' }, { label: 'Agent', arg: 'rows' });
+    expect(seen[0].system.startsWith(SMALL_HELPER)).toBe(true);
+    expect(seen[0].system).toContain('copy that line from the Read result');
+    expect(seen[0].system).not.toContain('Agentic Coder, a coding assistant in the user');
+    expect(seen[0].thinking).toBe(true); // without it 2B's reports covered one part of two (28 Oct 2026)
+    expect(seen[1].prompt).toContain('`saveRow` is not in the project');
+    expect(seen[1].prompt).toContain('panel.mjs:9 is past the end');
+    expect(seen).toHaveLength(2);
+    expect(r.text).toContain('KEEP_DONE_MS, panel.mjs:2: 6 seconds.');
+    expect(r.text).toContain('  panel.mjs:2  export const KEEP_DONE_MS = 6000;');
+    expect(r.text).not.toContain('Not confirmed');
+  } finally {
+    Agent.prototype.send = send;
+    dropEndpoint(url);
+  }
+});
+
+test('a question with helpers on the smaller model is searched by a helper first; a request for work is not', async () => {
+  const { setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-helpers-'));
+  const url = 'http://127.0.0.1:9';
+  setEndpoint(url, { remote: true, kind: 'openai', ollama: true, model: 'bonsai-2:9b' });
+  const model = { ...MODELS[DEFAULT_MODEL], remote: { model: 'bonsai-2:9b' } };
+  const run = Agent.prototype.runHelper;
+  const asked = [];
+  Agent.prototype.runHelper = async function (id, args) { asked.push(args); return { text: `The explore helper's report (1 step, 2 s, on bonsai-2:2b):\nparse is in a.mjs:1.` }; };
+  try {
+    const a = new Agent({ url, model, cwd, system: systemPrompt({ cwd, git: 'none' }), memory: false, flows: false, way: 'app', instructions: 'local' });
+    expect(await a.handFirst('where is parse defined?', 'question')).toBe(false); // no router: as before
+    a.router = { active: () => true, helper: () => ({ url, model: 'bonsai-2:2b' }) };
+    expect(await a.handFirst('fix the bug in cart.mjs', 'fix')).toBe(false);
+    const before = a.messages.length;
+    expect(await a.handFirst('where is parse defined?', 'question')).toBe(true);
+    expect(asked[0]).toMatchObject({ kind: 'explore' });
+    expect(asked[0].prompt).toContain('The user asked: "where is parse defined?"');
+    expect(asked[0].prompt).toContain('for every part of the question');
+    const [call, result] = a.messages.slice(before);
+    expect(call.tool_calls[0].function.name).toBe('Agent');
+    expect(result).toMatchObject({ role: 'tool', tool_call_id: call.tool_calls[0].id });
+    expect(result.content).toContain('parse is in a.mjs:1.');
+  } finally {
+    Agent.prototype.runHelper = run;
+    dropEndpoint(url);
+  }
+});
+
+test('the helpers’ model is loaded ahead at the size its calls name, after the conversation’s own', async () => {
+  const { setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
+  const got = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { got.push({ path: new URL(req.url).pathname, body: await req.json() }); return Response.json({ done: true }); } });
+  const url = `http://127.0.0.1:${server.port}`;
+  setEndpoint(url, { remote: true, kind: 'openai', ollama: true, model: 'bonsai-2:9b' });
+  const was = process.env.AGENTIC_WARM_HELPER;
+  try {
+    const cwd = mkdtempSync(join(tmpdir(), 'agentic-helpers-'));
+    const a = new Agent({ url, model: { ...MODELS[DEFAULT_MODEL], remote: { model: 'bonsai-2:9b' } }, cwd, system: systemPrompt({ cwd, git: 'none' }), memory: false, flows: false, way: 'app', instructions: 'local' });
+    a.router = { active: () => true, helper: () => ({ url, model: 'bonsai-2:2b' }) };
+    a.warmHelper(); // off in the tests (test-env.mjs)
+    await Bun.sleep(100);
+    expect(got).toHaveLength(0);
+    process.env.AGENTIC_WARM_HELPER = 'on';
+    a.warmHelper();
+    for (let i = 0; i < 50 && got.length < 2; i++) await Bun.sleep(20);
+    // The conversation's own model first, at its own size, then the helpers' (both fit only in that order).
+    expect(got.map((g) => g.body.model)).toEqual(['bonsai-2:9b', 'bonsai-2:2b']);
+    expect(got[1]).toMatchObject({ path: '/api/generate', body: { model: 'bonsai-2:2b', options: { num_ctx: 32_768 }, keep_alive: '30m' } });
+  } finally {
+    if (was === undefined) delete process.env.AGENTIC_WARM_HELPER; else process.env.AGENTIC_WARM_HELPER = was;
+    dropEndpoint(url);
+    server.stop(true);
+  }
+});
+
+test('a helper that only reads is not sent back for saying it is done with no file changed', async () => {
+  // 28 Oct 2026: the send-back cost a 2B helper a whole re-read of its conversation (14.5 s), and it can change nothing.
+  const { asksForWork, claimsDone } = await import('../src/agent/agent-said.mjs');
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-helpers-'));
+  writeFileSync(join(cwd, 'a.mjs'), 'export const parse = (s) => JSON.parse(s);\n');
+  const task = 'Find where parse is defined; then write a short report with file:line.'; // "write": it reads as work
+  const done = 'Done: parse is defined in a.mjs at line 1.';
+  expect(asksForWork(task)).toBe(true);
+  expect(claimsDone(done)).toBe(true);
+  const fake = await startFakeServer([
+    { tool: { name: 'Agent', args: { description: 'find parse', prompt: task, kind: 'explore' } } },
+    { tool: { name: 'Read', args: { path: 'a.mjs' } } },
+    { text: done },
+    { text: 'It is in a.mjs, line 1.' },
+  ]);
+  try {
+    // The check that sends "done" with nothing changed back (said-done), switched on: the helper takes its parent's.
+    const a = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'none' }), memory: false, flows: false, way: 'model', thinking: false, verify: false, hooks: ['said-done'], mode: 'edits', confirmPlan: false, checkIns: false });
+    const ended = [];
+    a.on('helper', (e) => { if (e.done) ended.push(e); });
+    await a.send('where is parse defined? use a helper');
+    expect(ended).toHaveLength(1);
+    expect(ended[0]).toMatchObject({ reason: 'done', steps: 1 });
+    expect(a.messages.filter((m) => m.role === 'assistant' && m.content).at(-1).content).toBe('It is in a.mjs, line 1.');
+  } finally { await fake.close(); }
 });

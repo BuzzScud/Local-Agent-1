@@ -178,9 +178,12 @@ export class AnswerPart {
     // under the answer says so. So is an answer that is the change written
     // out as code (Qwen3.6 on hard task 30, the model deciding): nothing
     // was changed, and the user cannot apply it from there.
+    // Not for a helper that only reads (an explore helper: no Edit, no Write): its "done" never changes a file, and
+    // the send-back cost a 2B helper a whole re-read of its conversation (28 Oct 2026, the Bonsai helpers check).
     const t = this.turn;
     const codeInstead = writesCodeInstead(text);
-    if (!t.changed && !t.question && !t.carried && !t.wroteByCommand && !t.skillSaved && this.hook('said-done') && asksForWork(t.request) && (claimsDone(text) || codeInstead)) {
+    const onlyReads = this.isHelper && this.toolFilter && !this.toolFilter.has('Edit') && !this.toolFilter.has('Write');
+    if (!onlyReads && !t.changed && !t.question && !t.carried && !t.wroteByCommand && !t.skillSaved && this.hook('said-done') && asksForWork(t.request) && (claimsDone(text) || codeInstead)) {
       if (!st.doneUnchanged) {
         st.doneUnchanged = true;
         this.emit('note', { text: codeInstead ? 'It wrote the change in its answer, but no file changed; asked it to make the change.' : 'It says the work is done, but no file changed; asked it to look again.', tone: 'warn' });

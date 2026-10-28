@@ -161,7 +161,10 @@ export class WorkPart {
     // The model that decides looks for itself (Map, CodeSearch, List, Search, Read).
     if (!decides) {
       this.prefetchMap();
-      if (kind === 'question' || (!kind && EXPLAIN.test(text))) await this.prefetch(text);
+      // With helpers on a smaller model, a question is searched by one first (agent.mjs handFirst): no reading ahead here.
+      const handed = follow ? false : await this.handFirst(text, kind, signal);
+      if (handed === 'interrupted') return stopNow('interrupted');
+      if (handed) { /* its report is in the conversation */ } else if (kind === 'question' || (!kind && EXPLAIN.test(text))) await this.prefetch(text);
       else if (!follow && kind !== 'rename') await this.prefetchRanked(text, signal);
       // What the other helpers bring (helpers.mjs): the failing tests and the
       // changes, the closest parts of long files by meaning, where names are used.
