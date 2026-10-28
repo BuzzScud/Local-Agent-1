@@ -206,7 +206,7 @@ test('the / menu under the live start page: the 18 of this Mac (with /jumptomac,
     // /mcp and /jobs (3 Oct 2026), /status (18 Oct 2026, under /help), /bot and /steps (9 Oct 2026) are listed
     // there too; either way the page stays live. (/calc had /status's row from 8 Oct until it went with the
     // calculator link on 18 Oct 2026.)
-    expect(rowsOf(r.snapshots.menu)).toHaveLength(rows === 43 ? 18 : 24);
+    expect(rowsOf(r.snapshots.menu)).toHaveLength(rows === 43 ? 18 : 25); // 173 × 55 (the owner's window) shows /skills too (28 Oct 2026)
     const names = rowsOf(r.snapshots.menu);
     if (rows === 55) expect(names.slice(0, 2)).toEqual(['/help', '/status']); else expect(names).not.toContain('/status');
     expect(names).not.toContain('/calc');

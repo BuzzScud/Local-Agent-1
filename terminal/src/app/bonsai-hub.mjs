@@ -72,7 +72,7 @@ function readsOf(own) {
   const tools = toolSchemas('app').map((t) => ({ name: t.function.name, tokens: tok(JSON.stringify(t)), what: String(t.function.description ?? '').split(/[.:]/)[0].slice(0, 60), can: TOOLS_SWITCHABLE.includes(t.function.name), on: !off.has(t.function.name) }));
   let instr = 0;
   try { instr = tok(systemPrompt({ cwd: HOME, git: 'none', set })); } catch {}
-  const skills = (s) => { try { return (readSkills(undefined, s) ?? []).filter((k) => !k.off).map((k) => k.name); } catch { return []; } };
+  const skills = (s) => { try { return (readSkills(undefined, s) ?? []).filter((k) => !k.off && !k.hidden).map((k) => k.name); } catch { return []; } };
   return { set: set === 'local' ? 'small models (on this Mac)' : 'big models (another machine)', instrTok: instr, tools, off: [...off], skills: skills(set), otherSkills: skills(set === 'local' ? 'remote' : 'local'), notes: Boolean(own?.notes) };
 }
 

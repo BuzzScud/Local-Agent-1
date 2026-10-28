@@ -180,7 +180,7 @@ export class AnswerPart {
     // was changed, and the user cannot apply it from there.
     const t = this.turn;
     const codeInstead = writesCodeInstead(text);
-    if (!t.changed && !t.question && !t.carried && !t.wroteByCommand && this.hook('said-done') && asksForWork(t.request) && (claimsDone(text) || codeInstead)) {
+    if (!t.changed && !t.question && !t.carried && !t.wroteByCommand && !t.skillSaved && this.hook('said-done') && asksForWork(t.request) && (claimsDone(text) || codeInstead)) {
       if (!st.doneUnchanged) {
         st.doneUnchanged = true;
         this.emit('note', { text: codeInstead ? 'It wrote the change in its answer, but no file changed; asked it to make the change.' : 'It says the work is done, but no file changed; asked it to look again.', tone: 'warn' });

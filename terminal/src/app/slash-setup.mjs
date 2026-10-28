@@ -15,8 +15,9 @@ import { notesCount, notesDir } from '../agent/claude-notes.mjs';
 import { packState } from '../agent/claude-pack.mjs';
 import { saveSettings } from './store.mjs';
 import { INIT_PROMPT, short } from './app-common.mjs';
+import { skillsCommand } from './skills-cmd.mjs';
 
-export const SETUP_COMMANDS = ['effort', 'think', 'mode', 'memory', 'rules', 'helpers', 'hooks', 'init'];
+export const SETUP_COMMANDS = ['effort', 'think', 'mode', 'memory', 'rules', 'skills', 'helpers', 'hooks', 'init'];
 
 export function slashSetup(self) {
   return async (cmd, arg, busy, line) => {
@@ -120,6 +121,8 @@ export function slashSetup(self) {
         self.push({ type: 'rules', always: list.always.map(plain), other: list.other.map(plain), off: list.off.map(plain), tokens: list.tokens, max: ALWAYS_MAX, where: tilde(dirs.you) });
         break;
       }
+      // /skills (skills-cmd.mjs): yours and SKILLS.md's; save, show, remove, open.
+      case 'skills': skillsCommand(self, arg, busy); break;
       case 'helpers': {
         // The context helpers, numbered, on or off; "/helpers off 3" switches one.
         const [what = '', ...rest] = arg.trim().split(/\s+/);

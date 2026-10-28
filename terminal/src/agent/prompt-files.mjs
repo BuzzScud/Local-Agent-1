@@ -7,6 +7,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOME } from '../../../models/index.mjs';
+import { savedSkillFiles, skillsDir } from './skill-store.mjs';
 
 export const PROMPT_FILES = Object.freeze({ tools: 'TOOLS.md', skills: 'SKILLS.md' });
 
@@ -168,7 +169,7 @@ export const toolUseFor = (set = 'local', dir = rulesDir(), { mcp = false, web =
   return [lines, pages, more, brief].filter(Boolean).join('\n');
 };
 
-const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'skill';
+export const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'skill';
 
 // A skill's fence is what the loop enforces. The steps stay in the prompt; a
 // sentence there is all a small model has, and on a 9B model that sentence loses.
@@ -200,7 +201,74 @@ export function parseSkills(text) {
   }
   return skills;
 }
-export const readSkills = (dir = rulesDir(), set = 'local') => parseSkills(readPromptFile('skills', dir, set).text);
+
+// ---- saved skills (skill-store.mjs) ------------------------------------------------------------
+
+// A saved skill's file as SKILLS.md writes a skill, from what a Write to SKILLS/<name> sent: its
+// "## Name" (a "# Name" title is one too, and so is a front matter's name, description and words, as
+// Claude's and Hermes' SKILL.md files have them); with none, the name is the path's.
+const nameOfSlug = (slug) => slug.replace(/-+/g, ' ').replace(/^./, (c) => c.toUpperCase());
+export function savedSkillText(slug, content) {
+  let t = String(content ?? '').replace(/\r\n/g, '\n').trim();
+  let name = '';
+  const more = [];
+  const front = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(t);
+  if (front) {
+    const key = (k) => new RegExp(`^${k}:[ \\t]*(.+)$`, 'mi').exec(front[1])?.[1].trim().replace(/^["']|["']$/g, '') ?? '';
+    name = key('name');
+    const words = key('words') || key('triggers');
+    const about = key('description');
+    t = t.slice(front[0].length).trim();
+    if (words && !/^- words:/im.test(t)) more.push(`- Words: ${words}`);
+    if (about && !/^- about:/im.test(t)) more.push(`- About: ${about}`);
+  }
+  const title = /^#{1,2} +(.+)(?:\n|$)/.exec(t);
+  if (title) { name = title[1].trim(); t = t.slice(title[0].length).trim(); }
+  if (!name || /^[a-z0-9-]+$/.test(name)) name = nameOfSlug(slugOf(name || slug));
+  return `${[`## ${name}`, ...more, t].filter(Boolean).join('\n')}\n`;
+}
+
+// Your saved skills, each opened by its file's name (SKILLS/<name>); a file with no steps is left out.
+export function savedSkills(dir = skillsDir()) {
+  return savedSkillFiles(dir).flatMap(({ slug, file, text }) => {
+    const s = parseSkills(/^## /m.test(text) ? text : savedSkillText(slug, text))[0];
+    return s?.body ? [{ ...s, slug, from: 'saved', file }] : [];
+  });
+}
+
+// The app's own skill, for saving one: brought by its words, never listed (so a prompt with no skills
+// stays as it was), and never a fence: it writes.
+export const SAVE_SKILL = Object.freeze({
+  name: 'Save a skill',
+  slug: 'save-a-skill',
+  words: ['as a skill', 'save a skill', 'save the skill', 'save that skill', 'save this skill', 'make a skill', 'write a skill', 'create a skill', 'update the skill', 'change the skill', 'edit the skill', 'saved skill', 'saved skills', 'a skill for', 'skill for next time', 'remember how to do'],
+  about: 'keep steps that worked for a kind of task as a skill, for next time, in every project',
+  fence: [],
+  fenceBad: [],
+  from: 'built-in',
+  hidden: true,
+  body: `Only when the user asks to keep steps for Agentic Coder as a skill, or to change one they saved. A skill in their project's own code is ordinary work: leave these steps.
+1. Pick a short name for the kind of task, and the words or phrases a request for it would use.
+2. Write SKILLS/<name> (Rules/SKILLS/<name> when the project has a SKILLS folder of its own). It is kept outside the project, for every project. Its content:
+## <Name>
+- Words: <phrases a request for it uses, split by commas>
+- About: <one line on what it is for>
+then the steps, numbered, one line each, as they worked in this conversation (the real commands, files and checks).
+3. To change a saved skill, Read SKILLS/<name>, then Edit it. One from SKILLS.md cannot be changed: save yours under another name.
+4. Answer with its name, its Words, and that it now comes with any request that uses them.`,
+});
+
+// Every skill: SKILLS.md's, then your saved ones (one with a name SKILLS.md has is left out), then the
+// app's own. saved: the folder of yours (skill-store.mjs), null for none.
+export function readSkills(dir = rulesDir(), set = 'local', { saved = skillsDir() } = {}) {
+  const shipped = parseSkills(readPromptFile('skills', dir, set).text);
+  const taken = new Set(shipped.map((s) => s.slug));
+  const mine = saved ? savedSkills(saved).filter((s) => !taken.has(s.slug)) : [];
+  return [...shipped, ...mine, ...(taken.has(SAVE_SKILL.slug) ? [] : [SAVE_SKILL])];
+}
+const listed = (skills) => skills.filter((s) => !s.hidden);
+// Where a skill comes from, in the words the screen and the model see.
+export const skillWhere = (s) => (s?.from === 'saved' ? 'your saved skills' : s?.from === 'built-in' ? 'Agentic Coder' : 'SKILLS.md');
 
 // What stops a save (errors) and what is only worth saying (warnings).
 export function skillProblems(skills) {
@@ -235,7 +303,7 @@ export function pickSkill(text, skills = readSkills()) {
 }
 
 // A skill's steps as they go with a request.
-export const skillNote = (s) => `Skill "${s.name}" from SKILLS.md: this request uses its words, so follow its steps:\n${s.body}`;
+export const skillNote = (s) => `Skill "${s.name}" from ${skillWhere(s)}: this request uses its words, so follow its steps:\n${s.body}`;
 
 // The path that opens a skill. SKILLS/<name> when the project has no folder of
 // that name; Rules/SKILLS/<name> when it does, so the read cannot land in the
@@ -246,7 +314,8 @@ export function skillPath(cwd) {
 }
 
 // The list in the instructions: every skill by the path that opens it.
-export function skillsList(skills, { path = 'SKILLS' } = {}) {
+export function skillsList(all, { path = 'SKILLS' } = {}) {
+  const skills = listed(all);
   if (!skills.length) return '';
   return `Skills
 Steps for some kinds of task (SKILLS.md). When one fits and its steps did not come with the request, Read it first:
@@ -265,13 +334,28 @@ export function readSkillPath(cwd, p, skills) {
   const askedRules = /^(?:\.\/)?Rules\/SKILLS(?:\/|$)/.test(raw);
   if (path === 'Rules/SKILLS' && !askedRules) return null;
   const all = skills ?? readSkills();
-  if (!all.length) return { error: 'There are no skills (SKILLS.md has none).' };
+  if (!listed(all).length && !(m[1] && all.length)) return { error: 'There are no skills (SKILLS.md has none).' };
   const shown = path;
   if (!m[1]) return { text: skillsList(all, { path: shown }) };
   const want = slugOf(m[1]);
   const s = all.find((x) => x.slug === want);
-  if (!s) return { error: `No skill ${shown}/${m[1]}. The skills: ${all.map((x) => `${shown}/${x.slug}`).join(', ')}.` };
-  return { text: `${shown}/${s.slug} (${s.name}):\n${s.body}` };
+  if (!s) return { error: `No skill ${shown}/${m[1]}. The skills: ${listed(all).map((x) => `${shown}/${x.slug}`).join(', ') || 'none yet'}.` };
+  return { text: skillText(s, shown), skill: s };
+}
+
+// One skill as Read gives it; a saved one says where it is kept and that Edit changes it.
+const tilde = (f) => (process.env.HOME && f?.startsWith(`${process.env.HOME}/`) ? `~${f.slice(process.env.HOME.length)}` : f);
+const skillText = (s, shown) => `${shown}/${s.slug} (${s.name}):\n${s.body}${s.from === 'saved' ? `\n(One of your saved skills, kept in ${tilde(s.file)} for every project: Edit ${shown}/${s.slug} changes it.)` : ''}`;
+
+// A Write or Edit of "SKILLS/<name>" (tools.mjs, skill-write.mjs): { slug, name } of the skill it means,
+// { list: true } for "SKILLS" itself, null when the path is not a skill's (as readSkillPath reads it).
+export function skillTarget(cwd, p) {
+  const raw = String(p ?? '').trim();
+  const m = /^(?:\.\/)?(?:Rules\/)?SKILLS(?:\/(.+?)(?:\.md)?)?\/?$/.exec(raw);
+  if (!m) return null;
+  if (skillPath(cwd) === 'Rules/SKILLS' && !/^(?:\.\/)?Rules\/SKILLS(?:\/|$)/.test(raw)) return null;
+  if (!m[1] || m[1].includes('/')) return { list: true, path: skillPath(cwd) };
+  return { slug: slugOf(m[1]), name: m[1], path: skillPath(cwd) };
 }
 
 // A path near the ones the instructions give, which models reach for: "SKILLS.md" or
@@ -284,12 +368,12 @@ export function readNearPath(cwd, p, { skills, guides = [] } = {}) {
   const m = /^(RULES\/|Rules\/)?(\.)?SKILLS(\.md)?(?:\/([^/]+?)(?:\.md)?)?\/?$/.exec(raw);
   if (m && (m[1] === 'RULES/' || m[2] || m[3])) {
     const all = skills ?? readSkills();
-    if (!all.length) return null;
+    if (!listed(all).length) return null;
     const path = skillPath(cwd);
     if (!m[4]) return { text: `${p} is not a file here; the skills open by their own paths.\n${skillsList(all, { path })}` };
     const s = all.find((x) => x.slug === slugOf(m[4]));
-    if (!s) return { error: `No skill ${m[4]}. The skills: ${all.map((x) => `${path}/${x.slug}`).join(', ')}.` };
-    return { text: `${path}/${s.slug} (${s.name}):\n${s.body}` };
+    if (!s) return { error: `No skill ${m[4]}. The skills: ${listed(all).map((x) => `${path}/${x.slug}`).join(', ')}.` };
+    return { text: skillText(s, path), skill: s };
   }
   if (/^(?:RULES|Rules)\.md$/.test(raw) && guides.length) return { text: `${p} is not a file here; the guides open by their own paths.\n${guidesList(guides, { path: guidePath(cwd) })}` };
   // A guide by its name alone ("DESIGN.md" for RULES/DESIGN.md; 27 Oct 2026: Bonsai 2 9B, three times in one run).

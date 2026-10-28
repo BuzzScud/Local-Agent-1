@@ -6,7 +6,8 @@ import { ASK_NOTE, wantsQuestions } from './questions.mjs';
 import { isHomeFolder } from './prompt.mjs';
 import { kindText } from './rules.mjs';
 import { LOOK_NOTE, LOOK_NOTE_DATA } from './look.mjs';
-import { skillNote } from './prompt-files.mjs';
+import { skillNote, skillWhere } from './prompt-files.mjs';
+import { noteSkillUse } from './skill-store.mjs';
 import { mathNotes } from './expertise.mjs';
 import { briefNote, designNotes, designSettings, isDesignRequest, mixTurn, pickCards } from './design.mjs';
 import { systemNotes } from './design-system.mjs';
@@ -70,7 +71,8 @@ export class NotesPart {
       this.turn.fence = new Set(skill.fence ?? []);
       this.ctxUsed += tokensOf(this.turn.skill.notes);
       const fence = skill.fence?.length ? `; fence: ${skill.fence.join(', ')}` : '';
-      this.emit('note', { text: `Skill: ${skill.name} (SKILLS.md; its words here: ${skill.matched.join(', ')}${fence}; ≈${tokensOf(this.turn.skill.notes).toLocaleString('en-US')} tokens).`, tone: 'dim', skill: skill.name });
+      noteSkillUse(skill.slug);
+      this.emit('note', { text: `Skill: ${skill.name} (${skillWhere(skill)}; its words here: ${skill.matched.join(', ')}${fence}; ≈${tokensOf(this.turn.skill.notes).toLocaleString('en-US')} tokens).`, tone: 'dim', skill: skill.name });
     }
     // A check the fix path made and what the browser found (flows/pagecheck.mjs).
     if (this.carried && request?.role === 'user' && typeof request.content === 'string') {
