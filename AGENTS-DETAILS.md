@@ -253,6 +253,21 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   folder of its own, so the shipped files never decide what it sees (`terminal/test/prompt-files.test.mjs`).
   The Arena's Skills check measures a skill on the real model.
 
+- **Saved skills** (28 Oct 2026, the owner's ask: "add a persistent skills storage system"): skills kept in the app's
+  home, one file each, `~/.agentic-coder/skills/<name>.md` (`terminal/src/agent/skill-store.mjs`; AGENTIC_HOME's in a
+  test), in SKILLS.md's shape. They outlast an update (the build copy and the repo are replaced, the home is not) and
+  come with every project and both sets: `readSkills` gives SKILLS.md's, then the saved ones (a name SKILLS.md has
+  wins), then the app's own **Save a skill** (`SAVE_SKILL`: `hidden`, so it is never listed and a prompt with no
+  skills is as it was; brought only by phrases such as "as a skill", "save a skill", never "skill" alone). The model
+  saves one with Write `SKILLS/<name>` and changes it with Edit (`skill-write.mjs prepareSkill`: a `# Name` title or
+  a SKILL.md front matter is read as the `## Name`; one section with steps or it is refused; SKILLS.md's and Save a
+  skill stay read-only). The step asks every time but in Bypass (`once`), and is not a change to the project: no
+  put-back, no test run, no "nothing changed" (agent-step.mjs `turn.skillSaved`). A Read of a saved one says where it
+  is kept and counts it as read for an Edit (`readAbs`). Each use (brought or read) is counted in `.uses.json`.
+  `/skills` (`terminal/src/app/skills-cmd.mjs`, in the / menu where there is room, after /status): the list with
+  uses; `save [name]` sends the conversation's steps to be saved (`saveSkillPrompt`, which brings Save a skill);
+  `show`, `remove` (into `.removed/`, dated: nothing is deleted), `open`. `terminal/test/skills.test.mjs`.
+
 - **The remote set** (`terminal/rules/remote/`, 2 Oct 2026, the owner's ask: "make a separate one for remote
   models to follow, since they have more capabilities"): HARNESS.md, its own TOOLS.md and SKILLS.md, and fourteen guides
   the model opens with Read at `RULES/<NAME>.md` (prompt-files.mjs `readGuides`, `readGuidePath`; prompt.mjs

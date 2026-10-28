@@ -14,6 +14,8 @@ import { keysReady, loginAnswer, sshLogin, usesSsh } from '../tools/ssh.mjs';
 import { listFiles, searchFiles } from '../tools/fs.mjs';
 import { hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
+import { prepareSkill, savedSkillLine } from './skill-write.mjs';
+import { noteSkillUse, writeSkillFile } from './skill-store.mjs';
 import { designGuide } from './design-system.mjs';
 import { saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint, nodeHint } from './scripts.mjs';
 import { permissionsTable, runsGitPush, runsTests, splitCommand } from './permissions.mjs';
@@ -31,11 +33,13 @@ export { desktopDefault, plainFetch, plainRead, wallOf } from './tools-web.mjs';
 export function prepare(name, args, env) {
   if (name === 'Edit' || name === 'Write') {
     for (const k of ['old_text', 'new_text', 'content']) if (args[k] !== undefined) args[k] = stripLineNumbers(args[k]).text;
+    // SKILLS/<name>: a skill saved in the app's home for every project (skill-write.mjs); SKILLS.md's stay read-only.
+    const skill = prepareSkill(name, args, env);
+    if (skill) return skill;
     const p = resolvePath(env.cwd, args.path);
     // outsideOk: the agent's one opening outside the fence, a file asked for on the Desktop (desktopOpen).
     if (!p.inside && !env.outsideOk?.(name, p.abs)) return { error: `${args.path} is outside the project folder, which is not allowed.` };
     if (p.shelf) return { error: `${p.rel} is in ${p.shelf.what}, which are read-only here. Read them; never change them.` };
-    if (readSkillPath(env.cwd, args.path, [])) return { error: `${args.path} is one of the user's skills (SKILLS.md), which are read-only here. Read them; never change them.` };
     if (readGuidePath(env.cwd, args.path, readGuides(env.rulesSet, { agents: env.agents, mcp: env.mcp }))) return { error: `${args.path} is one of the user's guides (terminal/rules/remote), which are read-only here. Read them; never change them.` };
     if (NOTES_PATH.test(String(args.path ?? '').trim()) && !existsSync(resolvePath(env.cwd, String(args.path).trim().replace(/^\.\//, '').split('/')[0]).abs)) return { error: `${args.path} is one of Claude's notes, which are read-only here. Read them; never change them.` };
     let exists = existsSync(p.abs);
@@ -188,6 +192,7 @@ export async function execute(name, args, prepared, env) {
       const near = readNearPath(env.cwd, args.path, { skills, guides });
       if (near && !existsSync(resolvePath(env.cwd, args.path).abs)) {
         if (near.error) return { text: near.error, error: true, view: { kind: 'error', message: 'No such skill' } };
+        if (near.skill) noteSkillUse(near.skill.slug);
         return { text: near.text, view: { kind: 'read', lines: near.text.split('\n').length, total: near.text.split('\n').length, content: near.text } };
       }
       // "DESIGN.md" with none in the folder: the design guide a page request brings and the design reviewer scores on
@@ -214,7 +219,9 @@ export async function execute(name, args, prepared, env) {
       }
       const skill = readSkillPath(env.cwd, args.path, skills);
       if (skill?.error) return { text: skill.error, error: true, view: { kind: 'error', message: 'No such skill' } };
-      if (skill) return { text: skill.text, view: { kind: 'read', lines: skill.text.split('\n').length, total: skill.text.split('\n').length, content: skill.text } };
+      if (skill?.skill) noteSkillUse(skill.skill.slug);
+      // A saved skill's file is what an Edit of it then changes (agent-step.mjs keeps it as read).
+      if (skill) return { text: skill.text, ...(skill.skill?.file ? { readAbs: skill.skill.file } : {}), view: { kind: 'read', lines: skill.text.split('\n').length, total: skill.text.split('\n').length, content: skill.text } };
       let p = resolvePath(env.cwd, args.path);
       let note = '';
       if (!existsSync(p.abs)) {
@@ -352,6 +359,10 @@ export async function execute(name, args, prepared, env) {
     }
     case 'Edit':
     case 'Write': {
+      if (prepared.skill) {
+        writeSkillFile(prepared.skill.slug, prepared.after, dirname(prepared.abs));
+        return { text: savedSkillLine(prepared, env.home ?? homedir()), view: { kind: 'diff', path: prepared.rel, created: prepared.created, hunk: prepared.hunk, additions: prepared.additions, removals: prepared.removals, lines: prepared.after.split('\n').length } };
+      }
       mkdirSync(dirname(prepared.abs), { recursive: true });
       writeFileSync(prepared.abs, prepared.after);
       const verb = prepared.created ? 'Created' : 'Updated';

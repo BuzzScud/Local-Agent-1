@@ -154,7 +154,10 @@ test('Read SKILLS/<name> opens one skill and SKILLS the list; they are read-only
   const r = await execute('Read', { path: 'SKILLS/explain-a-file' }, {}, { cwd: proj });
   expect(r.error).toBeUndefined();
   expect(r.text).toContain('1. Read it whole first.');
-  expect(prepare('Write', { path: 'SKILLS/new', content: 'x' }, { cwd: proj }).error).toContain('read-only');
+  expect(prepare('Write', { path: 'SKILLS/write-a-test', content: '1. x' }, { cwd: proj }).error).toContain('read-only'); // SKILLS.md's
+  expect(prepare('Edit', { path: 'SKILLS/explain-a-file', old_text: 'a', new_text: 'b' }, { cwd: proj }).error).toContain('read-only');
+  expect(prepare('Write', { path: 'SKILLS', content: 'x' }, { cwd: proj }).error).toContain('the list of skills');
+  expect(prepare('Write', { path: 'SKILLS/new', content: 'x' }, { cwd: proj }).skill.slug).toBe('new'); // a new one is saved (skills.test.mjs)
   expect(prepare('Write', { path: 'SKILLS.md', content: '# mine\n' }, { cwd: proj }).error).toBeUndefined();
   // paths near those, with no such file here: SKILLS.md or RULES/SKILLS.md the list, .SKILLS/<name> or
   // RULES/SKILLS/<name> that skill, RULES.md the guides (when there are any); not "File not found"

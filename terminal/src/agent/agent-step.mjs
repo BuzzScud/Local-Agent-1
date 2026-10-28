@@ -531,6 +531,8 @@ export class StepPart {
     const inside = at ? at.inside || away : true;
     const rules = this.savedRules();
     let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel, self: this.selfOn() });
+    // A saved skill (skill-write.mjs) comes with requests in every project: it asks each time, but in Bypass.
+    if (prepared.skill && d.decision !== 'deny' && this.mode !== 'bypass') d = { decision: 'ask', once: true };
     // Your PreToolUse hook's answer (runTool): allow skips the question, ask asks; a hard stop still holds.
     if (call.pre?.allow && d.decision !== 'deny') d = { decision: 'allow' };
     else if (call.pre?.ask && d.decision !== 'deny') d = { ...d, decision: 'ask' };
@@ -668,11 +670,13 @@ export class StepPart {
     }
     // What this step did, for which facts the turn really used (usedFacts).
     if (this.happened && this.happened.did.length < 60) this.happened.did.push(`${call.name} ${args.path ?? args.command ?? args.pattern ?? ''}`.slice(0, 300));
-    if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
+    if (!out.error && call.name === 'Read') this.readFiles.add(out.readAbs ?? resolvePath(this.cwd, args.path).abs);
     // This message's searches, newest first: a Read of a long file shows what they found in it.
     if (this.turn && !out.error && call.name === 'Search' && args.pattern) this.turn.searches = [args.pattern, ...(this.turn.searches ?? []).filter((p) => p !== args.pattern)].slice(0, 3);
     if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.readFiles.add(prepared.abs, prepared.after);
-    if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) {
+    // A saved skill is the work done, but no change to the project: none of its checks (skill-write.mjs).
+    if (this.turn && !out.error && prepared.skill) this.turn.skillSaved = prepared.skill.slug;
+    if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write') && !prepared.skill) {
       this.keepOriginal(prepared);
       this.turn.changed = true;
       this.turn.testedAfterChange = false;
@@ -695,7 +699,7 @@ export class StepPart {
       const piece = hunk.length > 6000 ? `${hunk.slice(0, 6000)}\n${CUT_MARK}` : hunk;
       if (this.turn.diffs.length < 16000) this.turn.diffs += `${prepared.rel}:\n${piece}\n`;
     }
-    if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
+    if (this.turn && !out.error && call.name === 'Write' && prepared.created && !prepared.skill && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
     // The design studio's build (studio.mjs): a page written from the studio's
     // pieces, or one built before, gets the CSS for its Tailwind classes built
     // into it, so it opens with a double-click and no internet.

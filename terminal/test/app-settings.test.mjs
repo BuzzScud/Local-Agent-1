@@ -54,7 +54,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   // /status (18 Oct 2026) after them: where it shows, it is the row under /help (/calc's, which went with the
   // calculator link that day). /bot, then /steps (9 Oct 2026).
   // /tune (27 Oct 2026) after /jumptomac, on an Ollama service only (tune.test.mjs).
-  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'bot', 'steps']);
+  // /skills (28 Oct 2026) after /status.
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'skills', 'bot', 'steps']);
   expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'test', 'settings', 'exit']);
   expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('mcp');
   expect(matchCommands('/', { room: 21 }).map((c) => c.name)).toContain('mcp'); // a fourth free row is /mcp's
@@ -62,7 +63,7 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect(matchCommands('/mc').map((c) => c.name)).toEqual(['mcp']);
   expect(menu).not.toContain('jumptomac');
   const tall = matchCommands('/', { room: 49, side: true }).map((c) => c.name);
-  expect(tall).toEqual(['help', 'status', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'jobs', 'steps', 'bot', 'test', 'settings', 'exit']);
+  expect(tall).toEqual(['help', 'status', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'skills', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'jobs', 'steps', 'bot', 'test', 'settings', 'exit']);
   expect(COMMANDS.some((c) => c.name === 'calc')).toBe(false); // taken out with the calculator link (18 Oct 2026)
   expect(matchCommands('/', { room: 21 }).map((c) => c.name)).not.toContain('status'); // the fifth free row is /status's
   expect(matchCommands('/', { room: 22 }).map((c) => c.name)).toContain('status');
