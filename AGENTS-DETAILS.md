@@ -1909,8 +1909,23 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   its AIs group): on a model on a service, the model checked against the Ollama service's list, then profiles.mjs
   `helpersTo` uses or makes "Helpers · <model>" on Main's server and points `ai:helpers` at it; the conversation looks
   again at its next message. Side jobs stay a /profiles row.
+- **A helper on the same service names its model on each call** (runHelper `awayHere`; found by the check below):
+  moved by its profile, a helper connected its model at the conversation's own address, and the app keeps one
+  endpoint, so one model, per address (`setEndpoint`). After a 2B helper, 9B's answer and its next message came from
+  2B; and that connection asked Ollama for its own context (64k), which on a Mac with 2.2 GB free let 9B go. Now when
+  the helpers' profile is on the conversation's own Ollama address, the helper goes as a helper file's Model line does
+  (`ownUse`: the model, 32k, kept 30 min; no router). A profile on another server still moves it there. The panel
+  names `ownUse`'s model first (it had named the conversation's).
+- **The Bonsai helpers check** (`models/evals/tools/bonsai-helpers.mjs`, the Arena's `bonsai-helpers`; page by
+  `bonsai-helpers-page.mjs`): one question about a copy of `terminal/src/app` (outside any repo), asked with helpers
+  on `--helper` (4B by default; profiles as /subagents writes them, the window's router lent the connection) and then
+  by 9B on its own; every reply's own Ollama figures, `/api/ps` every 2 s, eight checks. Left to itself (28 Oct, 4B and
+  2B) 9B was offered the Agent tool and searched itself; `--ask` ends the question with "Hand the searching to a helper
+  with the Agent tool." so the helper is measured. Its home is a throwaway one (checked before anything is written).
 - **Tests**: `terminal/test/helpers-panel.test.mjs` (the rows, helpersTo, /subagents, the Agent tool and its line once a
-  conversation and never with subagents off, a helper's events on a stand-in model).
+  conversation and never with subagents off, a helper's events on a stand-in model, a helper on the same service
+  naming its model while the conversation's stays), `models/test/bonsai-helpers.test.mjs` (the check's place in the
+  Arena, its page, --rebuild).
 
 ## The hub's Bonsai tab: everything about Bonsai, live (27 Oct 2026)
 

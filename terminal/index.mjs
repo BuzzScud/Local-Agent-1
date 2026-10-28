@@ -54,6 +54,10 @@ export { weightsCore } from './src/app/weights-core.mjs';
 export { readLimits, modelWithLimits, testSettings, testLimits, testDefaults, TEST_CTX, panelData, ownOf, cleanNotes } from './src/app/limits.mjs';
 // speedTest: the hub's Bonsai tab and the Arena's Bonsai speed test (models/evals/tools/bonsai-speed.mjs) measure the same way.
 export { speedTest, readSpeeds } from './src/app/bonsai-speed.mjs';
+// The window's profile router and the profiles /subagents writes: the Arena's Bonsai helpers check (models/evals/tools/bonsai-helpers.mjs)
+// sends the helpers to a smaller model the way a window does.
+export { ProfileRouter } from './src/app/profile-router.mjs';
+export { readProfiles, writeProfiles, helpersTo, serverOf } from './src/app/profiles.mjs';
 // pickCards, designNotes and scoreCard: which cards go along with a request, for the UI component battle's card pick (models/evals/bench/design/components.mjs).
 export { designDir, readCards, isDesignRequest, pickCards, designNotes, scoreCard } from './src/agent/design.mjs';
 // The design studio's pieces and its build, for the studio check and the UI component battle's studio part.
