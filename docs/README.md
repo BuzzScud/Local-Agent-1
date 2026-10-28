@@ -8,7 +8,8 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 736 KB | 2026-10-28 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 738 KB | 2026-10-28 |
+| [tests/agentic-coder-subagents-before-after-2026-10-28.html](tests/agentic-coder-subagents-before-after-2026-10-28.html) | page | Sub-agents before and after · Bonsai 9B with 2B helpers | 19 KB | 2026-10-28 |
 | [tests/agentic-coder-bonsai-helpers-2026-10-28-1256.html](tests/agentic-coder-bonsai-helpers-2026-10-28-1256.html) | page | Bonsai helpers check · bonsai-2:9b with bonsai-2:2b · asked to use it | 15 KB | 2026-10-28 |
 | [tests/agentic-coder-bonsai-helpers-2026-10-28-1248.html](tests/agentic-coder-bonsai-helpers-2026-10-28-1248.html) | page | Bonsai helpers check · bonsai-2:9b with bonsai-2:2b · asked to use it | 14 KB | 2026-10-28 |
 | [tests/agentic-coder-bonsai-helpers-2026-10-28-1244.html](tests/agentic-coder-bonsai-helpers-2026-10-28-1244.html) | page | Bonsai helpers check · bonsai-2:9b with bonsai-2:2b | 14 KB | 2026-10-28 |
