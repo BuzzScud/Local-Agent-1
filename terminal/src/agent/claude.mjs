@@ -248,7 +248,11 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
           tool.set(ev.index, tool.size + parts.flat().filter((b) => b.type === 'tool_use').length);
           yield { type: 'tool', index: tool.get(ev.index), id: ev.content_block.id, name: ev.content_block.name, args: '' };
         } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'server_tool_use') {
-          server.set(ev.content_block.id, { name: ev.content_block.name, json: '', index: ev.index });
+          // Its input may come whole with the block (27 Oct 2026: every saved search's query was empty: the app waited for
+          // pieces of it that never came); pieces that do come after a whole input are not added to it.
+          const inp = ev.content_block.input;
+          const whole = Boolean(inp && Object.keys(inp).length);
+          server.set(ev.content_block.id, { name: ev.content_block.name, json: whole ? JSON.stringify(inp) : '', whole, index: ev.index });
         } else if (ev.type === 'content_block_start' && /^web_(search|fetch)_tool_result$/.test(ev.content_block?.type ?? '')) {
           // A web search or page done on Anthropic's side: shown as a finished step.
           const b = ev.content_block;
@@ -257,7 +261,8 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
           try { input = JSON.parse(call?.json || '{}'); } catch {}
           const err = b.content?.type?.endsWith('_error') ? b.content.error_code ?? 'error' : null;
           yield b.type === 'web_search_tool_result'
-            ? { type: 'server', id: b.tool_use_id, name: 'WebSearch', args: { query: input.query ?? '' }, view: err ? { kind: 'error', message: `the search did not work (${err})` } : { kind: 'websearch', count: Array.isArray(b.content) ? b.content.length : 0, service: 'Anthropic' }, error: Boolean(err) }
+            // its query and sources kept (27 Oct 2026, the owner's pick "Web search keeps sources": 11 of 11 kept neither)
+            ? { type: 'server', id: b.tool_use_id, name: 'WebSearch', args: { query: input.query ?? '' }, view: err ? { kind: 'error', message: `the search did not work (${err})` } : { kind: 'websearch', count: Array.isArray(b.content) ? b.content.length : 0, service: 'Anthropic', query: input.query ?? '', sources: (Array.isArray(b.content) ? b.content : []).map((r) => ({ title: r.title ?? '', url: r.url ?? '', age: r.page_age ?? null })) }, error: Boolean(err) }
             : { type: 'server', id: b.tool_use_id, name: 'WebFetch', args: { url: input.url ?? b.content?.url ?? '' }, view: err ? { kind: 'error', message: `the page could not be read (${err})` } : { kind: 'fetched', url: b.content?.url ?? input.url ?? '', status: 200 }, error: Boolean(err) };
         } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'mcp_tool_use') {
           // A tool of an MCP server called through Anthropic's connector: its input comes as it streams.
@@ -281,7 +286,7 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
           yield { type: 'server', id: b.tool_use_id, name: 'ToolSearch', shown: { label: 'Tool search', arg: String(input.query ?? input.pattern ?? '') }, view: err ? { kind: 'error', message: `the tool search did not work (${err})` } : { kind: 'toolsearch', tools: found }, error: Boolean(err) };
         } else if (ev.type === 'content_block_delta' && ev.delta?.type === 'input_json_delta' && [...server.values()].some((c) => c.index === ev.index)) {
           const c = [...server.values()].find((x) => x.index === ev.index);
-          c.json += ev.delta.partial_json ?? '';
+          if (!c.whole) c.json += ev.delta.partial_json ?? '';
         } else if (ev.type === 'content_block_delta') {
           const d = ev.delta;
           if (d.type === 'text_delta' && d.text) { wrote = true; yield { type: 'text', text: d.text }; }

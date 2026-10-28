@@ -49,9 +49,13 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
     const id = `msg_${++n}`;
     const blocks = [];
     if (reply.thinking) blocks.push({ type: 'thinking', thinking: reply.thinking, signature: `sig-${n}` });
+    // search.whole: its input comes whole with the block and no pieces after it, as the real API sends a search (27 Oct 2026)
+    const whole = new Set();
     if (reply.search) {
-      blocks.push({ type: 'server_tool_use', id: `srvtoolu_s${n}`, name: 'web_search', input: { query: reply.search.query } });
-      blocks.push({ type: 'web_search_tool_result', tool_use_id: `srvtoolu_s${n}`, content: reply.search.results.map((r) => ({ type: 'web_search_result', url: r.url, title: r.title, encrypted_content: `enc-${r.url}`, page_age: null })) });
+      const use = { type: 'server_tool_use', id: `srvtoolu_s${n}`, name: 'web_search', input: { query: reply.search.query } };
+      if (reply.search.whole) whole.add(use);
+      blocks.push(use);
+      blocks.push({ type: 'web_search_tool_result', tool_use_id: `srvtoolu_s${n}`, content: reply.search.results.map((r) => ({ type: 'web_search_result', url: r.url, title: r.title, encrypted_content: `enc-${r.url}`, page_age: r.age ?? null })) });
     }
     if (reply.fetch) {
       blocks.push({ type: 'server_tool_use', id: `srvtoolu_f${n}`, name: 'web_fetch', input: { url: reply.fetch.url } });
@@ -87,6 +91,8 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
         for (const part of b.text.match(/.{1,8}/gs) ?? []) send('content_block_delta', { index: i, delta: { type: 'text_delta', text: part } });
       } else if (b.type.endsWith('_tool_result')) {
         send('content_block_start', { index: i, content_block: b });
+      } else if (whole.has(b)) {
+        send('content_block_start', { index: i, content_block: { type: b.type, id: b.id, name: b.name, input: b.input } });
       } else {
         send('content_block_start', { index: i, content_block: { type: b.type, id: b.id, name: b.name, ...(b.server_name ? { server_name: b.server_name } : {}), input: {} } });
         const args = JSON.stringify(b.input);

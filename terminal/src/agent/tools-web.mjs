@@ -44,9 +44,9 @@ export async function webSearch(args, env) {
     return { text: `The search did not work: ${e.message}.`, error: true, view: { kind: 'error', message: e.message } };
   }
   const service = PROVIDER_NAMES[w.search] ?? w.search;
-  if (!found.length) return { text: `No results for "${args.query}" (${service}). Try other words.`, view: { kind: 'websearch', count: 0, service } };
+  if (!found.length) return { text: `No results for "${args.query}" (${service}). Try other words.`, view: { kind: 'websearch', count: 0, service, query: args.query, sources: [] } };
   const body = found.map((r, i) => `${i + 1}. ${r.title || '(no title)'}\n   ${r.url}${r.age ? ` · ${r.age}` : ''}${r.snippet ? `\n   ${r.snippet}` : ''}`).join('\n');
-  return { text: `${found.length} results for "${args.query}" (${service}). ${UNTRUSTED} WebFetch a result to read it.\n\n${body}`, view: { kind: 'websearch', count: found.length, service, content: body } };
+  return { text: `${found.length} results for "${args.query}" (${service}). ${UNTRUSTED} WebFetch a result to read it.\n\n${body}`, view: { kind: 'websearch', count: found.length, service, content: body, query: args.query, sources: found.map((r) => ({ title: r.title ?? '', url: r.url, age: r.age ?? null })) } };
 }
 
 // Where a new file goes when the request does not say (4 Oct 2026, the owner's rule: "default to always

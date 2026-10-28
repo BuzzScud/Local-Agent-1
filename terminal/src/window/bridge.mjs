@@ -15,7 +15,7 @@ import { gib } from '../../../models/index.mjs';
 import { AgentsView } from '../app/agents-view.jsx';
 import { LoopsView } from '../app/loops-view.jsx';
 import { knownOf } from '../app/start.jsx';
-import { viewItem, heldView, ansiRows } from './view.mjs';
+import { viewItem, heldView, ansiRows, stepView } from './view.mjs';
 
 const SEND_MS = 33; // at most 30 states a second; a burst of redraws is sent as the last of them
 
@@ -24,6 +24,9 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
   if (!path) return null;
   let sock = null, open = false, timer = null, last = null, self = null, inbox = '';
   const sentItems = new Map(); // key → the JSON last sent for it
+  // Each step of the timeline (view.mjs stepView), sent when it changed: an item the app did not replace is the same
+  // object, so it is not made into JSON again at every redraw.
+  const sentSteps = new Map(), stepJson = new WeakMap();
   const ansiCache = new Map();
   let sentOrder = '';
   const pendingWrites = [];
@@ -73,11 +76,12 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
     const working = app.live?.phase === 'working';
     const view = app.stepsView;
     const { printed, held } = printedOf(app.items ?? [], working, view);
+    const pc = { plan: null, raws: new Map() }; // the reply's parts: the plan carried along, every step met
     const width = Math.max(60, app.width ?? 100);
     const ctx = { model: app.modelName, cwd: app.cwdShort, loaded: app.loaded ?? '', start: app.start };
     const order = [], changed = {};
     for (const it of printed) {
-      let v = viewItem(it);
+      let v = viewItem(it, pc);
       if (v?.t === 'skip') continue;
       // no view of its own: the app's drawing of it, as it would print
       if (!v) v = { t: 'ansi', key: it.key ?? it.id, rows: ansiOf(`${it.key ?? it.id}\0${it.type}\0${it.open ?? ''}`, React.createElement(ItemFrame, { it, width, ...ctx }), width) };
@@ -119,8 +123,12 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
     return {
       t: 'state', now: Date.now(),
       order: order.join('\n') === sentOrder ? undefined : order, items: changed,
-      held: working ? heldView(held) : null,
-      live: { phase: live.phase ?? 'idle', verb: live.verb ?? null, turnStart: live.turnStart ?? null, stepStart: live.stepStart ?? null, tokens: live.tokens ?? 0, tps: live.liveTps ?? null, thinking: live.thinking ? String(live.thinking.text ?? live.thinking).slice(-1200) : null, text: live.text ? String(live.text).slice(-6000) : null, writing: live.writing ? { path: live.writing.path ?? live.writing.rel ?? null } : null, running: live.running ? { label: live.running.label ?? null, arg: String(live.running.arg ?? '').slice(0, 300) } : null, waiting: Boolean(live.waiting) },
+      held: working ? heldView(held, pc) : null,
+      steps: stepsOf(pc.raws),
+      live: { phase: live.phase ?? 'idle', verb: live.verb ?? null, turnStart: live.turnStart ?? null, stepStart: live.stepStart ?? null, tokens: live.tokens ?? 0, tps: live.liveTps ?? null, thinking: live.thinking ? String(live.thinking.text ?? live.thinking).slice(-1200) : null, text: live.text ? String(live.text).slice(-6000) : null, writing: live.writing ? { path: live.writing.path ?? live.writing.rel ?? null, name: live.writing.name ?? null } : null, running: live.running ? { label: live.running.label ?? null, arg: String(live.running.arg ?? '').slice(0, 300) } : null, waiting: Boolean(live.waiting),
+        // for the timeline's line under way (7 · Smooth): the thought's tokens (its pieces, or its length where it came in a
+        // few, as the saved thought counts them) and start, the answer's start, what the app does between replies
+        thinkTokens: live.thinking ? Math.max(live.thinking.tokens ?? 0, Math.ceil(String(live.thinking.text ?? '').length / 3.6)) : null, thinkStart: live.thinking?.startedAt ?? null, textStart: live.text ? live.textAt ?? null : null, task: live.task ? String(live.task).slice(0, 200) : null },
       input: { value: app.input?.value ?? '', cursor: app.input?.cursor ?? 0 }, placeholder: app.placeholder ?? '', inputMode: app.inputMode ?? 'prompt', argHint: app.argHint ?? null,
       menu: app.menu ? { kind: app.menu.kind, index: app.menu.index ?? 0, items: (app.menu.items ?? []).slice(0, 60).map((x) => ({ label: x.label, desc: x.desc ?? '' })) } : null,
       perm, panel, full,
@@ -133,6 +141,15 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
   }
 
   // Each redraw: the newest state, sent once the burst settles (SEND_MS), never more often.
+  function stepsOf(raws) {
+    const out = {};
+    for (const [k, x] of raws) {
+      let j = stepJson.get(x);
+      if (!j) { j = JSON.stringify(stepView(x)); stepJson.set(x, j); }
+      if (sentSteps.get(k) !== j) { sentSteps.set(k, j); out[k] = JSON.parse(j); }
+    }
+    return out;
+  }
   function publish(app, own) {
     self = own;
     last = app;

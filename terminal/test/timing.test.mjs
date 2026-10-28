@@ -12,7 +12,8 @@ const { Agent } = await import('../src/agent/agent.mjs');
 const { runHeadless } = await import('../src/headless.mjs');
 const { complete, timers } = await import('../src/flows/llm.mjs');
 const { fakeOllama } = await import('./fake-ollama.mjs');
-const { MODELS, DEFAULT_MODEL, setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
+const { MODELS, DEFAULT_MODEL, GENERIC_REMOTE, setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
+const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
 
 const local = MODELS[DEFAULT_MODEL];
 let dir;
@@ -78,6 +79,24 @@ test('on a service: each reply with its reading and writing, each tool, and a re
     expect(timing[0].think).toBeGreaterThan(300);
     expect(timing[0].read).toBeUndefined(); // no numbers came for it
   } finally { dropEndpoint?.(over.url); await over.close(); }
+});
+
+// Every thought of Claude's was saved as 0.001 s (27 Oct 2026, "Real time for every step"): its thinking comes whole, in a
+// piece or two just before its answer, and was timed from that first piece. It thought while nothing came: from the request.
+test('a thought that comes whole (Claude) is timed from the request', async () => {
+  const fake = await startFakeAnthropic([{ thinking: 'The note has one typo.', text: 'It says wrold.', delayMs: 600 }]);
+  setEndpoint(fake.url, { remote: true, kind: 'claude', key: fake.key, model: 'claude-opus-5-5', label: 'claude' });
+  try {
+    const a = new Agent({ url: fake.url, model: { ...GENERIC_REMOTE, remote: { kind: 'claude' } }, cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], thinking: true, ctx: 32768 });
+    const said = [], timing = [];
+    a.on('assistant', (e) => said.push(e));
+    a.on('timing', (e) => timing.push(e));
+    await a.send('what does notes.txt say?');
+    const thought = said.find((e) => e.reasoning);
+    expect(thought.thinkSecs).toBeGreaterThanOrEqual(0.55);
+    expect(thought.thinkSecs).toBeLessThan(5);
+    expect(timing.find((e) => e.kind === 'reply').thinkSecs).toBeGreaterThanOrEqual(0.5);
+  } finally { dropEndpoint(fake.url); await fake.close(); }
 });
 
 test('a side call says what it was for and what it spent', async () => {

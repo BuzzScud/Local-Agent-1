@@ -1880,6 +1880,52 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the routes, /bonsai in the menu) and `models/test/bonsai-speed.test.mjs` (the Arena's runner on a stand-in: kept, read
   again, no service).
 
+## The window's timeline: "7 · Smooth" (27 Oct 2026)
+
+- **What and why.** The owner: "help me improve the ui / tools and thinking interface, on the agentic coder?". Their
+  picks: the window only (not the terminal), see what it is doing now, a better thinking view and clearer tool results;
+  five rounds of designs drawn by the app's own code on two real turns (private: `docs/private/design rounds/
+  agentic-coder-window-steps-*-2026-10-27.html`), then "7 · Smooth", "keep everything here, not in the bottom chat box",
+  and four fixes: web search keeps sources, a real time for every step, long turns split by plan, "tool calls" not
+  "steps". Measured before: the row under way said "Working" most of the time, a Claude turn put 71 steps in one task
+  row, 11 of 11 saved web searches had no query and no sources, only commands kept a time.
+- **The page** (`terminal/src/window/steps-page.js` and `.css`, put into `ui.html` at `<!--steps-page-->` by
+  server.mjs, so each file stays small; `tlDraw` takes `itemsInto`'s place in render): each part of a reply is a box,
+  its title the model's line or, after a move in its plan, the to-do it moved to (▸; the model's line stays as its
+  first line), over a timeline of every step: the time from the turn's start, the verb coloured by family (tools blue,
+  thinking violet, writing sand, the app grey, a failure red), what it was on, how it went (+a −r, ✓ n, ✗ n, exit n,
+  N sources) and how long it took; a press opens it in place (the change with its line numbers, the command and its
+  output with failing lines red, the thought as written, the to-dos, what the app gave the model). The part under way
+  is one header row (what it does now and for how long, tool calls, thinking tokens, the turn's time) with its plan
+  under it; its last line is the step under way, with a time bar while it thinks or writes (log scale, notches at 10 s,
+  30 s, 1 min, 5 min) and what streams under it: five whole lines at most, its newest at the bottom (a clipped box's
+  height is a whole number of lines). A press on that line hides or shows it (`think-open`, kept). A web search shows
+  its sources, four and "+ N more". Copy sits inside a code block, an output, a change or an opened thought, never
+  beside a message. An answer with a code block of 25 lines or more folds to its first lines. The end line counts tool
+  calls. Every part, line and message keeps its element (only changed HTML is written, `write` by a hash), so a
+  selection survives; what is new slides in, and a jump of more than six new blocks draws without slides. Presses act
+  on pointerdown (the part under way is drawn again five times a second). The status line under the conversation is
+  hidden while it works unless a message waits (`putStatus`).
+- **The data** (`view.mjs`): `stepView` (a step whole, every kind, the app's own `machine` reading too) and `partsOf`
+  (a reply's rows split by the lines it says and by the to-do in progress; `ctx` carries the plan along and collects
+  every step met); `viewItem(it, ctx)` gives a taskrun its `parts`, `heldView(held, ctx)` the parts under way (the last
+  `now`), the line said and the plan. The bridge sends `steps` beside the items, each only when it changed (a step the
+  app did not replace is the same object: its JSON is kept in a WeakMap); server.mjs keeps the newest 4,000 for a page
+  that opens later. The live state adds the thought's tokens (its pieces, or its length / 3.6) and start, the answer's
+  start (`textAt` in app-run.mjs: the answer wins over the thought still held until the reply ends) and the app's task.
+- **The data fixes.** A step keeps `at` and `ms` (app-run.mjs: a tool from 'tool-running' to 'tool'; a thought, a line
+  said, a note); the end item carries `calls`. Claude's thinking comes whole in a piece or two just before its answer,
+  and was timed from that piece (0.001 s): a thought in two pieces or fewer is timed from the request (agent-model.mjs
+  `thinkTime`). A search on Anthropic's side keeps its query and sources (claude.mjs: a server tool's input taken whole
+  at its block's start, pieces after it not added; the `web_search_tool_result`'s title, url and page_age), and so does
+  the app's own WebSearch (tools-web.mjs).
+- **Tests**: `window.test.mjs` (the steps, the parts by line and by plan, a line with no step, the part under way, the
+  bridge sending a step once and again only when changed), `window-page.test.mjs` (in Chrome: the parts under way, a
+  step opened in place, a part folded, the next state keeping both and sliding in the new line; web search sources, a
+  pasted file folded, Copy inside boxes, the end line; five whole lines; the press held while it streams; Thinking then
+  Writing hidden by a press and kept so), `web.test.mjs` (the query and sources, the input whole or in pieces:
+  fake-anthropic's `search.whole`), `timing.test.mjs` (a thought that comes whole timed from the request).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

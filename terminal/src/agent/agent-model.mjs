@@ -198,6 +198,11 @@ export class ModelPart {
     const t0 = Date.now();
     let firstToken = null;
     let thinkEnd = null;
+    // How long it thought (27 Oct 2026, "Real time for every step": every thought of Claude's was saved as 0.001 s). A model
+    // that streams its thinking is timed from its first piece; one whose thinking comes whole, in a piece or two just
+    // before its answer (Claude), thought while nothing came, so from the request.
+    let reasonPieces = 0;
+    const thinkTime = () => (turn.reasoning ? ((thinkEnd ?? Date.now()) - (reasonPieces <= 2 ? t0 : (firstToken ?? t0))) / 1000 : 0);
     let measured = null; // the server's own speed for this request (llama.cpp, Ollama); none from the Claude API or OpenRouter
     let written = 0; // the tokens the service says it wrote, for timing one that sends no speed
     let served = null; // what the service says it spent on this reply (agent/timing.mjs)
@@ -210,7 +215,7 @@ export class ModelPart {
     this.timedLast = this.messages.at(-1);
     const clock = (cut = null) => this.emit('timing', replyTiming({ start: t0, firstToken, timings: served, fresh, cut,
       out: served?.predicted_n || written || tokensOf(turn.reasoning + turn.text + turn.calls.filter(Boolean).map((c) => c.args).join('')),
-      think: turn.reasoning ? tokensOf(turn.reasoning) : 0, thinkSecs: turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0 }));
+      think: turn.reasoning ? tokensOf(turn.reasoning) : 0, thinkSecs: thinkTime() }));
     const local = new AbortController();
     const onAbort = () => local.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
@@ -238,6 +243,7 @@ export class ModelPart {
         if (ev.type !== 'done' && ev.type !== 'spill' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
           turn.reasoning += ev.text;
+          reasonPieces++;
           this.emit('reasoning', { text: ev.text, all: turn.reasoning });
           if (isLooping(turn.reasoning)) { turn.looping = true; local.abort(); break; }
           if (serviceCap && turn.reasoning.length > serviceCap * 3 && tokensOf(turn.reasoning) > serviceCap) { turn.overThought = true; local.abort(); break; }
@@ -284,7 +290,7 @@ export class ModelPart {
       if (turn.looping || turn.overThought) { /* aborted on purpose */ }
       else if (signal?.aborted) {
         turn.secs = (Date.now() - t0) / 1000;
-        turn.thinkSecs = turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0;
+        turn.thinkSecs = thinkTime();
         return { ...turn, aborted: true };
       }
       // The connection broke (not an answer from the server: one that says no carries its status,
@@ -338,7 +344,7 @@ export class ModelPart {
     this.stats.outTokens += turn.tokens;
     this.stats.requests++;
     turn.secs = (Date.now() - t0) / 1000;
-    turn.thinkSecs = turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0;
+    turn.thinkSecs = thinkTime();
     clock(turn.looping ? 'repeating itself' : null);
     // The footer's gauges on a remote (app/remote-footer.mjs): the time to this request's first
     // token, and its speed, timed here when the service sends none; the last 8 speeds of the
