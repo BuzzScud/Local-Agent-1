@@ -21,7 +21,8 @@ import { complete } from '../flows/llm.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { helpersOn } from './helpers.mjs';
 import { useOf } from './helper-models.mjs';
-import { CHECK_INS, FULL, HELPER_STEPS, MAX_STEPS, OWN_HELPER_CTX, RESULT_MAX, TRIM_AT, budgetFromEnv, helperPrompt, helperToolFilter, newConversation, tokensOf } from './agent-said.mjs';
+import { CHECK_INS, FULL, HELPER_STEPS, MAX_STEPS, OWN_HELPER_CTX, RESULT_MAX, TRIM_AT, aboutTheCode, asksForWork, budgetFromEnv, helperPrompt, helperToolFilter, newConversation, smallHelperPrompt, tokensOf } from './agent-said.mjs';
+import { checkReport, proofBlock, recheckNote } from './helper-proof.mjs';
 export { MAX_CALLS, MCP_BACKS, THINK_BUDGET_SECS, STEP_DOWN_CAP, RESULT_MAX, filesNamed, isLooping, AUTO, asksTheUser, announcesNextStep, claimsAlreadyThere, asksForWork, aboutTheCode, fullPathsIn, filesInAnswer, CHECK_IT, looksGood, wantsCheck, missingParts, claimsAllGood, claimsFound, severalAsks, wantsDesktop, claimsDone, keyLines, namesAFix, KEEP_FROM, keptPart, keptWriteNote, CALL_MARK, beforeCall, leakedThinking, leakedCall, toolCallInText, bareCallInText, safeArgs, READ_TIP, CHECK_INS, helperPrompt, helperToolFilter, requestReminder, planReminder } from './agent-said.mjs';
 import { McpPart } from './agent-mcp.mjs';
 import { MemoryPart } from './agent-memory.mjs';
@@ -577,6 +578,24 @@ export class Agent extends EventEmitter {
     await Promise.race([this.userHooks.run('SessionEnd', { reason }), new Promise((r) => setTimeout(r, ms).unref?.())]);
   }
 
+  // A question about the code, with the helpers on a smaller model of this service (/subagents <model>): the app hands
+  // the search to an explore helper before the first step, as if the model had called the Agent tool, and the model
+  // answers from its report (28 Oct 2026, the owner's pick: Bonsai 9B, offered the Agent tool, searched by itself in
+  // both runs). A request for work is left to the model. 'interrupted', true when it handed it, else false.
+  async handFirst(text, kind, signal) {
+    if (this.isHelper || !this.helpersElsewhere() || asksForWork(text) || !(kind === 'question' || aboutTheCode(text))) return false;
+    const call = this.router?.helper?.('helpers', { url: this.url, model: this.modelName() });
+    if (!call?.model || !endpointOf(this.url)?.ollama || endpointOf(call.url) !== endpointOf(this.url)) return false;
+    await this.loadMainFirst(); // before the helper's model, so both fit (agent-start.mjs)
+    if (signal?.aborted) return 'interrupted';
+    const id = `agent_first_${Date.now()}`;
+    const args = { description: 'search first', kind: 'explore', prompt: `The user asked: "${text}"\nFind in the project what answering this needs, for every part of the question. Report each part with file:line and that line copied from the file; say which part you could not find. Do not answer beyond what you found.` };
+    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'Agent', arguments: JSON.stringify(args) } }] });
+    const r = await this.runHelper(id, args, { label: 'Explore', arg: 'the search, handed to a helper first', given: true }, signal);
+    this.messages.push({ role: 'tool', tool_call_id: id, content: r.text });
+    return r.stop === 'interrupted' ? 'interrupted' : true;
+  }
+
   // A helper (Agent): a second agent with a fresh conversation, the same model, folder, mode,
   // permissions and web, on the side slot when the server has one (the conversation's place
   // on the main slot stays), and no Agent of its own. Its steps show on one line as it goes;
@@ -598,11 +617,16 @@ export class Agent extends EventEmitter {
     const away = !own && this.helpersElsewhere() ? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null;
     const awayHere = away?.model && endpointOf(this.url)?.ollama && endpointOf(away.url) === endpointOf(this.url) ? away.model : null;
     const ownUse = (otherModel || awayHere) && endpointOf(this.url)?.ollama ? { model: otherModel ?? awayHere, numCtx: OWN_HELPER_CTX, keepAlive: '30m' } : undefined;
+    // On the smaller model (28 Oct 2026, the owner's picks after the Bonsai helpers check): the short instructions
+    // (smallHelperPrompt). It thinks as the conversation does: tried without, 2B's reports answered one part of two
+    // and 9B searched the rest itself (10 replies); with, they covered both. Its report is checked against the files
+    // below (helper-proof.mjs).
+    const small = Boolean(awayHere);
     const t0 = Date.now();
     const slot = this.slots ? { main: this.slots.side ?? this.slots.main } : undefined;
     const helper = new Agent({
       // On a model of its own it has that model's room (OWN_HELPER_CTX), so it summarizes in time.
-      url: this.url, model: this.model, cwd: this.cwd, system: helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
+      url: this.url, model: this.model, cwd: this.cwd, system: small ? smallHelperPrompt(kind) : helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
       mode: this.mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash, home: this.home,
       way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, mcp: this.mcp, permissions: this.permissions, waitForServer: this.waitForServer, instructions: this.rulesSet(),
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
@@ -628,6 +652,18 @@ export class Agent extends EventEmitter {
     say('');
     let reason;
     try { reason = await helper.send(args.prompt, { signal }); } catch (e) { reason = 'error'; report ||= `It stopped: ${e.message}`; }
+    // A report from a helper on a model of its own that only read: the lines it cites, read from the files, go under
+    // it, so the conversation need not read them again; what the files do not have sends it back once to look again.
+    let checked = null;
+    if (ownUse && (own ? own.tools === 'look' : kind === 'explore') && report.trim() && !signal?.aborted) {
+      checked = checkReport(report, this.cwd);
+      if (checked.problems.length && (reason === 'done' || reason === 'answered')) {
+        steps.push(`✗ checked: ${checked.problems.join('; ').slice(0, 120)}`);
+        say('its report checked against the files');
+        try { reason = await helper.send(recheckNote(checked.problems), { signal }); } catch (e) { reason = 'error'; }
+        if (!signal?.aborted) checked = checkReport(report, this.cwd);
+      }
+    }
     const secs = (Date.now() - t0) / 1000;
     panel({ done: true, secs, reason });
     this.stats.requests += helper.stats.requests;
@@ -638,7 +674,8 @@ export class Agent extends EventEmitter {
       for (const f of edited) this.happened?.files.add(f);
     }
     const done = reason === 'done' || reason === 'answered';
-    const body = report.trim() || '(it ended without a report)';
+    const proof = checked ? proofBlock(checked) : '';
+    const body = `${report.trim() || '(it ended without a report)'}${proof ? `\n\n${proof}` : ''}`;
     const view = { kind: 'agent', steps: steps.length, secs, reason, content: `${steps.join('\n')}${steps.length ? '\n\n' : ''}${body}` };
     if (signal?.aborted) { this.emit('tool', { id, name: 'Agent', ...shown, view: { ...view, reason: 'interrupted' }, error: true }); return { text: 'Interrupted.', stop: 'interrupted' }; }
     // You said no to one of its changes (with nothing more to say): the turn ends there, as it does for the conversation's own.

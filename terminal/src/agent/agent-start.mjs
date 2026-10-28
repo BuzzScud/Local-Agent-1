@@ -6,7 +6,8 @@ import { readInstructions, replaceInstructionBlock, withModelNotes } from './ins
 import { describePictures, describedNote } from './helper-models.mjs';
 import { runFlows } from '../flows/index.mjs';
 import { tallies } from '../flows/llm.mjs';
-import { tokensOf } from './agent-said.mjs';
+import { OWN_HELPER_CTX, tokensOf } from './agent-said.mjs';
+import { endpointOf, preloadOllama } from '../../../models/index.mjs';
 
 export class StartPart {
   loadChanges() {
@@ -35,7 +36,26 @@ export class StartPart {
     if (!this.isHelper && Boolean(this.helperLineUsed) !== this.helpersElsewhere()) {
       this.refreshNotes();
       if (this.helperLineUsed) this.emit('note', { text: `Helpers on ${this.helpersAway.model}: the Agent tool hands reading and searching to it, and its report comes back (/profiles, Helpers it starts).`, tone: 'dim' });
+      if (this.helperLineUsed) this.warmHelper();
     }
+  }
+
+  // The conversation's own model on its Ollama service, loaded first: it is about to be asked anyway, and loaded after
+  // the helpers' smaller one it was predicted to need more room than was left, so Ollama let the helper's go (28 Oct
+  // 2026, 14:01: 9B predicted at 6.4 GB with 5.1 free, after 2B). One load at a time; a refusal changes nothing.
+  loadMainFirst() {
+    const ep = endpointOf(this.url);
+    if (!ep?.ollama) return Promise.resolve();
+    return (this.mainLoading ??= preloadOllama({ url: this.url, key: ep.key, model: ep.model, numCtx: ep.numCtx ?? null, keepAlive: ep.keepAlive }).catch(() => {}).finally(() => { this.mainLoading = null; }));
+  }
+  // The helpers' smaller model on this conversation's own Ollama service, loaded while the conversation reads its
+  // first message, at the size its calls name (runHelper: OWN_HELPER_CTX, kept 30 min), so the first helper does not
+  // wait for it (28 Oct 2026: 2B's first reply waited 15 s to load). After the conversation's own; not awaited.
+  warmHelper() {
+    const call = this.router?.helper?.('helpers', { url: this.url, model: this.modelName() });
+    const ep = endpointOf(this.url);
+    if (!call?.model || !ep?.ollama || endpointOf(call.url) !== ep || process.env.AGENTIC_WARM_HELPER === 'off') return;
+    this.loadMainFirst().then(() => preloadOllama({ url: this.url, key: ep.key, model: call.model, numCtx: OWN_HELPER_CTX, keepAlive: '30m' })).catch(() => {});
   }
 
   // Gives back the message and its pictures as they go to the model.

@@ -269,7 +269,7 @@ export const promptSetOf = (system) => (typeof system === 'string' && system.inc
 // set 'remote': the remote set's instructions (remotePrompt); AGENTIC_PROMPT=old keeps the old local one.
 // helperLine: the Agent tool is offered because the helpers run on another model (agent.mjs helpersElsewhere): one
 // line on when to hand work to it, on either set.
-export const HELPER_LINE = '- To read or search many files, hand it to the Agent tool (kind explore): a helper on a smaller model reads and reports back with file:line, so your own memory stays free for the work. Give it the whole task and what to report.';
+export const HELPER_LINE = '- Search across files with the Agent tool (kind explore) before reading them yourself: a helper on a smaller model searches and reports back with file:line and the lines themselves, so your own memory stays free for the work. Give it the whole question and what to report.';
 export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = process.env.AGENTIC_EXAMPLE === '1', math = '', instructions, toolUse, skills, set = 'local', agents = false, helperLine = false, mcp = false, web = false, here = false }) {
   const today = localDay(date);
   const now = promptVersion() !== 'old';
