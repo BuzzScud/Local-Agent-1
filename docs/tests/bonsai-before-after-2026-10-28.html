@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai: speed before and after</title>
+<script>document.documentElement.classList.add('js')</script>
+<style>
+:root{--bg:#fbfbfa;--card:#fff;--ink:#1d1d1f;--muted:#6b6b70;--line:#e6e6e3;--before:#2f6fdb;--after:#e0701a;--good:#1f8a4c;--bad:#c2410c;--wait:#8a6d00;--waitbg:#fff4cc;--best:#eaf6ee;--tries:#d9534f;--read:#4f8fe8;--write:#9aa4b2;--side:#c7b07a;--other:#d6d3cc}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1c1c1f;--ink:#ececee;--muted:#9a9aa2;--line:#2c2c31;--before:#6ea2ff;--after:#ff9a4d;--good:#4cc285;--bad:#ff8a5c;--wait:#ffd866;--waitbg:#3a3214;--best:#16301f;--tries:#e8706c;--read:#6ea2ff;--write:#5d6573;--side:#a8925c;--other:#3a3a40}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1400px;margin:0 auto;padding:18px 24px 20px}
+header h1{font-size:21px;margin:0}header p{margin:2px 0 12px;color:var(--muted);font-size:13px}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}nav button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:5px 12px;cursor:pointer}
+nav button[aria-selected=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+html.js .tab{display:none}html.js .tab.on{display:block}.tab{margin-bottom:18px}
+html:not(.js) nav{display:none}html:not(.js) .tab h2.only{display:block}
+h2.only{display:none;font-size:16px;margin:18px 0 8px}
+.verdict{font-size:16px;margin:0 0 14px;max-width:1100px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.lab{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}.lab span{font-size:11px}
+.nums{display:flex;align-items:baseline;gap:8px;margin-top:4px;font-variant-numeric:tabular-nums}.nums .b{color:var(--before);font-size:26px;font-weight:650}.nums .a{color:var(--after);font-size:26px;font-weight:650}.nums small{font-size:12px;font-weight:500;margin-left:2px}.arrow{color:var(--muted)}
+.cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px}thead th{font-size:12px;color:var(--muted);font-weight:600}
+tbody th{font-weight:600;width:42%}tbody th small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+td.best{background:var(--best);font-weight:650}tr:last-child th,tr:last-child td{border-bottom:0}
+.colb{color:var(--before)}.cola{color:var(--after)}.good{color:var(--good);font-weight:650}.bad{color:var(--bad);font-weight:650}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;font-weight:600}.tag.wait{background:var(--waitbg);color:var(--wait)}.tag.done{background:var(--best);color:var(--good)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}.box h3{margin:0 0 6px;font-size:15px}.box p{margin:4px 0}.box ul{margin:4px 0;padding-left:18px}
+.req{margin-bottom:16px}.req h3{font-size:14px;margin:0 0 6px}.req h3 small{color:var(--muted);font-weight:400}
+.bar-row{display:grid;grid-template-columns:56px 1fr 70px;align-items:center;gap:8px;margin:4px 0}.who{font-size:12px;font-weight:600}.who.b{color:var(--before)}.who.a{color:var(--after)}
+.bar{display:flex;height:20px;border-radius:5px;overflow:hidden}.bar.empty{background:none;height:auto}.seg{display:block;height:100%}.seg.tries{background:var(--tries)}.seg.read{background:var(--read)}.seg.write{background:var(--write)}.seg.side{background:var(--side)}.seg.other{background:var(--other)}
+.t{font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:4px 0 12px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.small{font-size:12px;color:var(--muted)}code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+@media (max-width:820px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.cols{grid-template-columns:1fr}.wrap{padding:14px 14px}.nums .b,.nums .a{font-size:21px}tbody th{width:auto}}
+</style></head><body><div class="wrap">
+<header><h1>Bonsai: speed before and after</h1><p>28 Oct 2026 · Bonsai 2 9B on this Mac's Ollama · before: your Claude-Red-main session (27–28 Oct), from Ollama's own log · after: the same two requests on the pushed code (main d39bc88) · measured 28 Oct 10:43</p></header>
+<nav role="tablist"><button role="tab" data-tab="t1" aria-selected="true">1 · At a glance</button><button role="tab" data-tab="t2" aria-selected="false">2 · Where the time went</button><button role="tab" data-tab="t3" aria-selected="false">3 · The cache</button><button role="tab" data-tab="t4" aria-selected="false">4 · What changed</button><button role="tab" data-tab="t5" aria-selected="false">5 · Notes</button></nav>
+
+<section class="tab on" id="t1"><h2 class="only">1 · At a glance</h2>
+<p class="verdict"><b>After: request 1 took 13.0 min instead of 31.6 (1.8 min in a first replay), request 2 15.1 instead of 31.7, with no failed tries, and your next message's first read took 5.2 s instead of 132.3.</b> Request 2 is not like for like: this time it asked a question about the PDF's layout instead of making it.</p>
+<div class="cards">
+<div class="card"><div class="lab">Failed tries, both requests<span>min · lower = faster</span></div><div class="nums"><span class="b">47.9<small>min</small></span><span class="arrow">→</span><span class="a">0.0<small>min</small></span></div></div>
+<div class="card"><div class="lab">Request 1 · analyze the folder<span>min · lower = faster</span></div><div class="nums"><span class="b">31.6<small>min</small></span><span class="arrow">→</span><span class="a">13.0<small>min</small></span></div></div>
+<div class="card"><div class="lab">Request 2 · build skills + a pdf<span>min · lower = faster</span></div><div class="nums"><span class="b">31.7<small>min</small></span><span class="arrow">→</span><span class="a">15.1<small>min</small></span></div></div>
+<div class="card"><div class="lab">Next message: its first read<span>s · lower = faster</span></div><div class="nums"><span class="b">132.3<small>s</small></span><span class="arrow">→</span><span class="a">5.2<small>s</small></span></div></div>
+</div>
+<div class="cols"><table><thead><tr><th>Measure</th><th class="colb">Before</th><th class="cola">After</th><th>Change</th></tr></thead><tbody>
+<tr><th>Failed tries<small>request 1: none of 8 tries passed; request 2: none of 8 tries passed · min</small></th><td class="">47.9 min</td><td class="best">0 min</td><td><span class="good">−100%</span></td></tr>
+<tr><th>Request 1 · analyze the folder<small>before 8 steps after the tries; after 19 steps (a first replay: 1.8 min, 5 steps) · min</small></th><td class="">31.6 min</td><td class="best">13 min</td><td><span class="good">−59%</span></td></tr>
+<tr><th>Request 2 · build skills + a pdf<small>before 12 steps after the tries; after 17 steps, ended on a question · min</small></th><td class="">31.7 min</td><td class="best">15.1 min</td><td><span class="good">−52%</span></td></tr>
+<tr><th>Read again from scratch after the tries<small>the conversation, both requests · s</small></th><td class="">132.7 s</td><td class="best">0 s</td><td><span class="good">−100%</span></td></tr>
+<tr><th>The next message's first read<small>before: 18,659 of 32,630 tokens again · s</small></th><td class="">132.3 s</td><td class="best">5.2 s</td><td><span class="good">−96%</span></td></tr>
+</tbody></table>
+<div class="box"><h3>How request 1 was sorted</h3>
+<p><span class="colb"><b>Before:</b></span> “Security bug (fix path)”. The folder you dropped in was read as part of your words; its file names say <i>exploit</i>, <i>xss</i>, <i>attacks</i> and <i>secrets</i>.</p>
+<p><span class="cola"><b>After:</b></span> “task · step by step”, on your words alone.</p>
+<p><b>Request 2:</b> this morning it ended with a page; in the replay it asked a question about the PDF's layout instead of making it, so its time is not the same work.</p>
+<p class="small">Writing speed did not change: Bonsai writes 27–30 tokens a second on this Mac, before and after. Thinking length was not touched (not picked).</p></div></div>
+</section>
+
+<section class="tab" id="t2"><h2 class="only">2 · Where the time went</h2>
+<div class="legend"><span><i class="seg tries" style="background:var(--tries)"></i>Failed tries</span><span><i class="seg read" style="background:var(--read)"></i>Reading</span><span><i class="seg write" style="background:var(--write)"></i>Writing (thinking + answer)</span><span><i class="seg side" style="background:var(--side)"></i>Side jobs</span><span><i class="seg other" style="background:var(--other)"></i>Tools and the app</span><span>· one bar per request, minutes · shorter = faster</span></div>
+<div class="cols"><div>
+<div class="req"><h3>Request 1 · “analyze he folder deeply” <small>with the folder dropped in</small></h3><div class="bar-row"><span class="who b">Before</span><div class="bar"><i class="seg tries" style="width:93.13699710754668%" title="Failed tries: 29.5 min"></i><i class="seg read" style="width:5.437812253484092%" title="Reading: 1.7 min"></i><i class="seg write" style="width:1.1569813305285301%" title="Writing (thinking + answer): 0.4 min"></i><i class="seg other" style="width:4.484098253547832e-15%" title="Tools and the app: 0.0 min"></i></div><span class="t">31.6 min</span></div><div class="bar-row"><span class="who a">After</span><div class="bar"><i class="seg read" style="width:31.327899027083884%" title="Reading: 9.9 min"></i><i class="seg write" style="width:9.508282934525376%" title="Writing (thinking + answer): 3.0 min"></i><i class="seg other" style="width:0.16828819353142196%" title="Tools and the app: 0.1 min"></i></div><span class="t">13.0 min</span></div></div>
+<div class="req"><h3>Request 2 · “can you buid skills … make a pdf” <small>the next morning, same conversation</small></h3><div class="bar-row"><span class="who b">Before</span><div class="bar"><i class="seg tries" style="width:57.90165658690507%" title="Failed tries: 18.4 min"></i><i class="seg read" style="width:12.327110176176703%" title="Reading: 3.9 min"></i><i class="seg write" style="width:25.54299237444123%" title="Writing (thinking + answer): 8.1 min"></i><i class="seg side" style="width:2.5663949513541944%" title="Side jobs: 0.8 min"></i><i class="seg other" style="width:1.6618459111227994%" title="Tools and the app: 0.5 min"></i></div><span class="t">31.7 min</span></div><div class="bar-row"><span class="who a">After</span><div class="bar"><i class="seg read" style="width:11.906389692348146%" title="Reading: 3.8 min"></i><i class="seg write" style="width:35.6876150407573%" title="Writing (thinking + answer): 11.3 min"></i><i class="seg other" style="width:0.1525111753878505%" title="Tools and the app: 0.0 min"></i></div><span class="t">15.1 min</span></div></div>
+</div><table><thead><tr><th>Seconds · lower = faster</th><th class="colb">1 before</th><th class="cola">1 after</th><th class="colb">2 before</th><th class="cola">2 after</th></tr></thead><tbody>
+<tr><th>Failed tries<small>tests, drafts, 8 tries · 33,418 + 27,858 tokens written, then thrown away</small></th><td>1771</td><td>0</td><td>1101</td><td>0</td></tr>
+<tr><th>Reading<small>after the tries; new files read count here too</small></th><td>103</td><td>596</td><td>234</td><td>226</td></tr>
+<tr><th>Writing<small>thinking and answers</small></th><td>22</td><td>181</td><td>486</td><td>679</td></tr>
+<tr><th>Side jobs<small>memory note, design review (none in the replay: no memory there)</small></th><td>0</td><td>0</td><td>49</td><td>0</td></tr>
+<tr><th>Steps<small>before: after the tries</small></th><td>8</td><td>19</td><td>12</td><td>17</td></tr>
+</tbody></table></div>
+<p class="small">Before: every second here is from Ollama's own log of the requests (prompt read time and write time per request), and the tries' times from the saved conversation. After: the same, from the replay.</p>
+</section>
+
+<section class="tab" id="t3"><h2 class="only">3 · The cache</h2><div class="cols"><div>
+<div class="box"><h3>What it does well (unchanged)</h3><ul>
+<li>Inside one request, each step reads only what is new: typically a few hundred tokens, 309 at the median, about 1.5 s.</li>
+<li>A side job in between (a memory note, the design review) does not lose it: Ollama parks the conversation in memory and brings it back (28,901 of 30,139 tokens reused right after one).</li>
+<li>Side jobs ask for the same model and size, so Bonsai is never reloaded for them.</li></ul></div>
+<div class="box"><h3>Where it broke</h3><ul>
+<li><b>After the failed tries</b> the conversation was read from scratch: 8,535 tokens (40.9 s) and 14,483 tokens (91.8 s). The tries use prompts of their own.</li>
+<li><b>Still slow, after too:</b> near 45k of the 64k, the app dropped an older copy of a file it had read, and Bonsai read all 40,145 tokens again (262.5 s). Not changed here.</li>
+<li><b>At your next message</b> the whole last answer was read again: 18,659 of 32,630 tokens, 132.3 s. Two causes at the same spot: the app took its notes off the old request, and Ollama drops an answer's thinking once a new message comes after it.</li></ul></div>
+</div><div>
+<div class="box"><h3>The thinking drop, tried on Bonsai</h3>
+<p>A short conversation with thinking in a tool step was 3,407 tokens. With one new message after it, Ollama sent 1,132: the thinking was gone, and the cache matched only the first 871. The app cannot change that; it can read ahead.</p></div>
+<div class="box"><h3>What the new code does</h3><ul>
+<li>No tries on Bonsai, so no switch of prompts mid-request.</li>
+<li>A finished request keeps its notes written in.</li>
+<li>Right after an answer that thought, it reads the conversation the way your next message will send it, while you read. Your next message stops that read if it is still going and carries on from where it got to. If you reply faster than the read, you wait no longer than before.</li></ul>
+<p class="cola"><b>In the replay:</b> the read-ahead read 1,466 tokens in 15.7 s during the 90 s pause; request 2's first step then read 534 tokens in 5.2 s.</p></div>
+</div></div></section>
+
+<section class="tab" id="t4"><h2 class="only">4 · What changed</h2>
+<table><thead><tr><th>Change</th><th class="colb">Before</th><th class="cola">After</th><th>Where</th></tr></thead><tbody>
+<tr><th>Sort on your words only<small>your pick</small></th><td>A dropped folder's or file's text counted as your words</td><td>Left out of the word rules, the model's sort, bug kinds and skill words</td><td><code>flows/words.mjs ownWords</code></td></tr>
+<tr><th>No 8-try path on Bonsai<small>your pick</small></th><td>Tests, drafts and 8 tries, one after another (Ollama takes one at a time)</td><td>Straight to step by step</td><td><code>runtime/remote.mjs OWN_REMOTES focused</code></td></tr>
+<tr><th>Leave old messages alone<small>your pick</small></th><td>Notes came off a finished request; Ollama dropped its thinking</td><td>Notes stay written in; the next message is read ahead</td><td><code>agent-work.mjs · agent-model.mjs warmNext</code></td></tr>
+<tr><th>The wrong memory<small>your pick</small></th><td>“The user said no to saving these; never offer them again”</td><td>Taken out (Bring back in the hub's Memory, Taken out)</td><td><code>~/.agentic/memory</code></td></tr>
+</tbody></table>
+<p class="small">Switch off the read-ahead with <code>AGENTIC_WARM_NEXT=off</code>. Not changed: writing speed, thinking length, the Claude API path (its cache was 94% when measured on 13 Oct). Tests: the new <code>bonsai-cache.test.mjs</code> (5) and the full suite. Nothing is committed or pushed.</p>
+</section>
+
+<section class="tab" id="t5"><h2 class="only">5 · Notes</h2><div class="cols"><div class="box"><h3>How it was measured</h3><ul>
+<li>Before: Ollama's own log of every request since 27 Oct (130 requests: prompt size, tokens reused, tokens read and their time, tokens written and their time), matched to the saved conversation by time; the tries' times from the conversation itself.</li>
+<li>Request 1's 8-hour pause overnight (the window waited for your answer to a check-in) is left out of its time.</li>
+<li>After: the same two requests, word for word, on a copy of the folder, with your saved Bonsai settings at 64k as that session ran, a 90 s pause between them as if you were reading, and no memory saves (a throwaway home). Its numbers come from the same Ollama log.</li></ul></div>
+<div class="box"><h3>What this does not show</h3><ul>
+<li>Two replays: request 1 took 1.8 and 13.0 min; Bonsai's answers and their lengths vary from run to run. The page's After is the second replay, on the pushed code (main d39bc88).</li>
+<li>Request 2 in the replay asked a question about the PDF's layout instead of making it; this morning's ended with a page.</li>
+<li>Whether the answers are as good: the tries never passed, so nothing was lost there, but the replay's answers are not graded.</li>
+<li>The app's check-in question and your own reading time are not in either time.</li></ul>
+<p class="small">Raw numbers: <code>models/remote/results/bonsai-before-after-2026-10-28/</code> (not in git) · builder: <code>build.mjs</code> there.</p></div></div></section>
+</div>
+<script>
+const tabs=[...document.querySelectorAll('nav button')];
+function show(id){for(const b of tabs)b.setAttribute('aria-selected',b.dataset.tab===id);for(const s of document.querySelectorAll('.tab'))s.classList.toggle('on',s.id===id);history.replaceState(null,'','#'+id)}
+tabs.forEach(b=>b.onclick=()=>show(b.dataset.tab));
+addEventListener('keydown',e=>{if(e.target.closest('input,textarea'))return;const i=tabs.findIndex(b=>b.getAttribute('aria-selected')==='true');if(/^[1-5]$/.test(e.key))show('t'+e.key);else if(e.key==='ArrowRight')show(tabs[(i+1)%tabs.length].dataset.tab);else if(e.key==='ArrowLeft')show(tabs[(i+tabs.length-1)%tabs.length].dataset.tab)});
+if(/^#t[1-5]$/.test(location.hash))show(location.hash.slice(1));
+</script></body></html>
