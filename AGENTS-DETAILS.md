@@ -1832,6 +1832,54 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Tests**: `terminal/test/remote.test.mjs` (the tools on a text-only request; a greeting with no thinking and the next
   message's tools and system prompt).
 
+## The hub's Bonsai tab: everything about Bonsai, live (27 Oct 2026)
+
+- **What and why.** The owner: "can you create an entire ui, inside of the web page, to manage bonsai and everything
+  related to it?". Their picks: a tab in the hub, Bonsai only, full control, and everything ("test arenas, weights,
+  neurons, memory, tools, skills"); of four designs in two rounds (private: `docs/private/design rounds/
+  agentic-coder-bonsai-tab-2-designs*-2026-10-27.html`), "3 · Map". Then, while it was being built: "allow me to have
+  it open, have agentic coder open and working, and the bonsai page updating live".
+- **The page** (`terminal/src/app/bonsai.html`, routes in `bonsai-hub.mjs`, `/bonsai` in the hub, the `/bonsai` command,
+  `coding hub bonsai`): a chain of six parts (This Mac → Ollama → Bonsai → What it reads → Who uses it → How it does,
+  keys 1–6), each opening its controls under it. This Mac: memory and what each context size saves, Keep loaded. Ollama:
+  running or not and who started it, Stop · Start · Start at login, and its settings (flash attention, the memory's
+  format, the default context) with Restart with these (asked in the page first). Bonsai: its build from its own file,
+  its own settings, Thinking and instructions (the Remote tab's routes), and a layer's real weights drawn from the file.
+  What it reads: the instructions it gets, each tool with its size and a switch, the skills and the memory, with buttons
+  to their tabs (`open-tab` to hub.html). Who uses it: each AI's profile (the Profiles tab's routes) and its recent
+  conversations. How it does: what it is doing now and its last requests, the speed test, the Tune check and the Bonsai
+  check, the test record. It reads `/bonsai/live.json` every second and the whole page every 15 s.
+- **Live** (`terminal/src/agent/activity.mjs`, client.mjs's Ollama branch): every request to an Ollama service, from any
+  window, `coding -p` or side job, writes `<home>/activity/now/<pid>-<n>.json` while it runs (reading → thinking →
+  writing, the tokens so far; at most every 700 ms and at each change of phase) and a line in
+  `activity/requests.jsonl` when it ends (who asked: the conversation's words or the side job's name, `what` from
+  flows/llm.mjs; Ollama's own read, written and loading figures; how it ended). A file whose process is gone is cleared
+  when read. Best effort: nothing here can slow or fail a request. A window shows its requests there only once it runs
+  this code (pushed, then /update).
+- **Tools it goes without** (`remote.tuned[<model>].toolsOff`, `TOOLS_SWITCHABLE` and `cleanToolsOff` in limits.mjs):
+  kept beside its own instructions (`readLimits` → `modelWithLimits` → the model's `toolsOff` → `agent.tools()`), for that
+  model alone (`notesOf`), never Read, Edit, Write, Bash, Search or List. The window follows a change within 2 s
+  (`followOwn`, one line).
+- **Ollama, controlled** (`ollama-control.mjs`): status from the process on the port (lsof, then ps for its
+  environment); Stop ends that process (launchd's when it is our LaunchAgent, `com.agentic-coder.ollama`); Start runs
+  `ollama serve` in a session of its own with the settings as its environment, its output in `<home>/logs/ollama.log`;
+  Start at login writes that LaunchAgent. The settings last used are kept as settings.json `ollamaServer`. Every action
+  is refused in a test run unless the test names a stand-in (`AGENTIC_OLLAMA_CONTROL=test`), and with
+  `AGENTIC_OLLAMA_CONTROL=off`. Another site's page cannot press anything (the request's origin must be the hub's).
+- **The model file** (`bonsai-gguf.mjs`): found through Ollama's manifest (`OLLAMA_MODELS`, else `~/.ollama/models`),
+  only its header read (the tokenizer's lists counted, not read), and a patch of one part's weights decoded on demand:
+  Q2_0 (ggml type 42), blocks of 64 weights, a 2-byte fp16 scale then 16 bytes of 2-bit codes (0, 1, 2), low bits first.
+  Which code is −1 and which +1 is not checked against Ollama's own code; the page shows the codes.
+- **The speed test** (`bonsai-speed.mjs`; the page's button, and the Arena's **Bonsai speed test**,
+  `models/evals/tools/bonsai-speed.mjs`, `/test bonsai-speed`, with a results page): two requests not streamed, the app's
+  own instructions and tools with a first line of their own (so nothing is reused), then a later step, at the context it
+  is loaded at, thinking off. The rule, written before the first run: both answered, the fresh prompt read in under
+  30 s, the later step in under 3 s. Each page run is kept in `<home>/bonsai/speed.json` and recorded.
+- **Tests**: `terminal/test/bonsai.test.mjs` (the activity files and lines, the client recording its requests, a made-up
+  model file read and decoded, tools off for one model, the controls refused in a test, the speed test on a stand-in,
+  the routes, /bonsai in the menu) and `models/test/bonsai-speed.test.mjs` (the Arena's runner on a stand-in: kept, read
+  again, no service).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

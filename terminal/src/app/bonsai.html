@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai</title>
+<style>
+/* The hub's Bonsai tab (bonsai-hub.mjs), the owner's pick "3 · Map": what Bonsai is made of as a chain of six parts,
+   left to right (this Mac's memory → Ollama → the model → what it reads → who uses it → how it does), each one opening
+   its controls in the inspector under it. It asks for what changes every second, so it follows a window at work.
+   The hub's tokens, with the chart slots of the validated palette (slot 1 blue = the hub's accent, slot 2 orange). */
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc; --line2: #d4d2ca;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f;
+  --accent: #2a78d6; --tint: rgba(42,120,214,.08); --tint2: rgba(42,120,214,.16);
+  --s1: #2a78d6; --s1b: #86b6ef; --s2: #eb6834; --s3: #1baf7a; --mid: #c9c7bd;
+  --up: #1d7a46; --down: #b3261e; --warn: #8a5a00; --warnbg: rgba(237,161,0,.14); --downbg: rgba(179,38,30,.08);
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.05);
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --line2: #45453f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.13); --tint2: rgba(57,135,229,.24); --s1: #3987e5; --s1b: #1c5cab; --s2: #d95926; --s3: #199e70; --mid: #4a4a45; --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; --warnbg: rgba(240,198,116,.12); --downbg: rgba(255,138,128,.1); --shadow: none; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --line2: #45453f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.13); --tint2: rgba(57,135,229,.24); --s1: #3987e5; --s1b: #1c5cab; --s2: #d95926; --s3: #199e70; --mid: #4a4a45; --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; --warnbg: rgba(240,198,116,.12); --downbg: rgba(255,138,128,.1); --shadow: none; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 var(--sans); display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+button, textarea, select { font: inherit; color: inherit; }
+button:focus-visible, textarea:focus-visible, select:focus-visible, .st:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 18px; }
+.title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: none; }
+.title h2 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -.015em; }
+.pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; background: var(--panel); color: var(--ink2); white-space: nowrap; }
+.pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ink3); }
+.pill.ok::before { background: var(--up); }
+.pill.wn { background: var(--warnbg); color: var(--warn); } .pill.wn::before { background: var(--warn); }
+.pill.no { background: var(--downbg); color: var(--down); } .pill.no::before { background: var(--down); }
+.pill.live { background: var(--tint2); color: var(--accent); } .pill.live::before { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .pill.live::before { animation: none; } }
+.acts { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line2); background: var(--surface); border-radius: 9px; padding: 6px 13px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--ink3); }
+.btn:disabled { color: var(--ink3); background: var(--panel); cursor: default; }
+.btn.main { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 550; }
+.btn.danger { color: var(--down); }
+.btn.s { padding: 3px 10px; font-size: 12px; }
+.lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink3); font-weight: 600; }
+.q { color: var(--ink3); }
+.seg { display: inline-flex; background: var(--panel); border-radius: 9px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: none; border-radius: 7px; padding: 3px 9px; font-size: 12.5px; color: var(--ink2); cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--line2); }
+.seg button.moved[aria-pressed="true"] { box-shadow: 0 0 0 1.5px var(--accent); }
+.tog { width: 34px; height: 20px; border-radius: 999px; background: var(--line2); position: relative; border: 0; cursor: pointer; flex: none; padding: 0; }
+.tog::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.tog[aria-pressed="true"] { background: var(--accent); }
+.tog[aria-pressed="true"]::after { transform: translateX(14px); }
+.tog:disabled { opacity: .45; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .tog::after { transition: none; } }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink2); }
+.legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--c); margin-right: 6px; vertical-align: -1px; }
+.tip { position: fixed; z-index: 40; pointer-events: none; background: var(--ink); color: var(--page); font-size: 12px; padding: 5px 9px; border-radius: 7px; white-space: nowrap; display: none; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--ink3); font-weight: 500; font-size: 11.5px; padding: 0 10px 6px 0; border-bottom: 1px solid var(--line); }
+td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; white-space: nowrap; }
+.empty { color: var(--ink3); font-size: 13px; }
+/* the chain */
+.chain { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); flex: none; }
+.st { position: relative; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 14px; padding: 13px 14px 14px; margin-right: 22px; cursor: pointer; display: flex; flex-direction: column; gap: 9px; min-width: 0; height: 244px; box-shadow: var(--shadow); }
+.st:last-child { margin-right: 0; }
+.st:not(:last-child)::after { content: ''; position: absolute; right: -19px; top: 50%; width: 14px; height: 1px; background: var(--line2); }
+.st:not(:last-child)::before { content: ''; position: absolute; right: -19px; top: calc(50% - 3px); border-left: 5px solid var(--line2); border-top: 3.5px solid transparent; border-bottom: 3.5px solid transparent; }
+.st:hover { border-color: var(--ink3); }
+.st[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--tint2); }
+.st .h { display: flex; align-items: baseline; gap: 8px; }
+.st .h b { font-size: 14.5px; }
+.st .h .q { font-size: 12px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st .big { font-size: 24px; font-weight: 650; letter-spacing: -.02em; line-height: 1; }
+.st .big small { font-size: 12px; color: var(--ink3); font-weight: 450; letter-spacing: 0; }
+.st .foot { margin-top: auto; font-size: 12px; color: var(--ink2); display: grid; gap: 2px; }
+.vbar { flex: 1; min-height: 0; display: flex; flex-direction: column-reverse; gap: 2px; border-radius: 6px; overflow: hidden; background: var(--panel); }
+.vbar i { display: block; width: 100%; min-height: 2px; }
+.mem { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; flex: 1; min-height: 0; }
+.mem .legend { flex-direction: column; align-content: flex-start; gap: 3px; }
+.lyr { flex: 1; min-height: 0; display: grid; grid-template-rows: repeat(var(--n, 32), minmax(0, 1fr)); gap: 1.5px; }
+.lyr i { display: block; border-radius: 2px; background: var(--mid); opacity: .75; }
+.lyr i.f { background: var(--s1); opacity: 1; }
+.cfg { display: grid; gap: 6px; font-size: 12.5px; }
+.cfg div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding-bottom: 5px; }
+.cfg div:last-child { border-bottom: 0; }
+.cfg span:last-child { font-weight: 600; white-space: nowrap; }
+.jobs { display: grid; gap: 4px; font-size: 12.5px; }
+.jobs div { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.jobs i { width: 8px; height: 8px; border-radius: 50%; background: var(--mid); flex: none; }
+.jobs i.b { background: var(--s1); }
+.jobs span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now { display: grid; gap: 4px; font-size: 12.5px; }
+.now .ph { font-weight: 650; font-size: 15px; }
+.now .ph.reading { color: var(--s1); } .now .ph.thinking { color: var(--warn); } .now .ph.writing { color: var(--s3); }
+canvas.w { width: 100%; height: 100%; image-rendering: pixelated; border-radius: 6px; display: block; }
+/* the inspector */
+.insp { flex: 1; min-height: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 16px; padding: 14px 18px 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; box-shadow: var(--shadow); }
+.insp .ih { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.insp .ih h3 { margin: 0; font-size: 17px; }
+.say { font-size: 12.5px; margin-left: auto; }
+.say.ok { color: var(--up); } .say.no { color: var(--down); }
+.confirm { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 10px; background: var(--warnbg); color: var(--warn); font-size: 13px; }
+.igrid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.igrid > div { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 9px; overflow: auto; scrollbar-width: thin; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 14px; font-size: 13px; align-items: center; margin: 0; }
+.kv dt { color: var(--ink3); } .kv dd { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.kv dd small { color: var(--ink3); }
+.notes { width: 100%; min-height: 64px; resize: vertical; border: 1px solid var(--line2); background: var(--page); border-radius: 9px; padding: 7px 10px; font-size: 13px; }
+.notes.moved { border-color: var(--accent); }
+.feed { display: grid; grid-template-columns: 62px minmax(0, 1fr) 46px; gap: 3px 8px; align-items: center; font-size: 12px; }
+.feed .fb { display: flex; gap: 2px; height: 9px; min-width: 0; }
+.feed .fb i { display: block; height: 100%; min-width: 1px; }
+.feed .fb i:first-child { border-radius: 3px 0 0 3px; } .feed .fb i:last-child { border-radius: 0 3px 3px 0; }
+.layers { display: grid; grid-template-columns: repeat(var(--n, 32), minmax(0, 1fr)); gap: 2px; }
+.layers button { height: 24px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink3); font-size: 9.5px; cursor: pointer; padding: 0; }
+.layers button.f { background: var(--tint); color: var(--accent); }
+.layers button[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 1px; }
+select.sel { border: 1px solid var(--line2); background: var(--surface); border-radius: 8px; padding: 2px 6px; font-size: 12.5px; max-width: 150px; }
+.off { color: var(--ink3); text-decoration: line-through; }
+@media (max-width: 1250px) { .chain { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px; } .st { height: 210px; } .st:nth-child(3n)::before, .st:nth-child(3n)::after { display: none; } .igrid { grid-template-columns: 1fr 1fr; } body { overflow: auto; } main { min-height: 100%; } .insp { min-height: 520px; } }
+@media (max-width: 700px) { main { padding: 12px max(16px, env(safe-area-inset-left, 0px)) 16px max(16px, env(safe-area-inset-right, 0px)); } .chain { grid-template-columns: 1fr 1fr; } .st { margin-right: 10px; height: 200px; } .st::before, .st::after { display: none; } .igrid { grid-template-columns: 1fr; } .acts { margin-left: 0; } }
+</style>
+</head>
+<body>
+<main id="app"><p class="empty">Reading Bonsai…</p></main>
+<div class="tip" id="tip"></div>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const r1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
+  const gb = (x) => (x == null ? '—' : `${r1(x)} GB`);
+  const k = (n) => (n >= 1024 ? `${Math.round(n / 1024)}k` : String(n));
+  const ago = (t) => { const s = Math.max(0, (Date.now() - (typeof t === 'number' ? t : Date.parse(t))) / 1000); return s < 60 ? `${Math.round(s)} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t).toLocaleDateString(); };
+  const S = { d: null, live: null, tune: null, pick: 'model', layer: 3, weights: null, draft: null, said: null, confirm: null, busy: null };
+  try { const p = localStorage.getItem('bonsai-pick'); if (p) S.pick = p; } catch {}
+  const post = async (path, body = {}) => { const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); return r.json().catch(() => ({ error: `answered ${r.status}` })); };
+  const say = (ok, text) => { S.said = { ok, text, at: Date.now() }; drawInsp(); };
+
+  // ---- reading ----
+  async function load() {
+    try { S.d = await (await fetch('/bonsai.json', { cache: 'no-store' })).json(); S.live = S.d.live; } catch (e) { $('#app').innerHTML = `<p class="empty">The hub did not answer: ${esc(e.message)}</p>`; return; }
+    if (S.d.service && !S.tune) loadTune();
+    draw();
+  }
+  async function loadTune() {
+    try {
+      await fetch(`/remote.json?service=${encodeURIComponent(S.d.service.id)}`, { cache: 'no-store' });
+      const m = await (await fetch(`/remote/model.json?service=${encodeURIComponent(S.d.service.id)}&id=${encodeURIComponent(S.d.model)}`, { cache: 'no-store' })).json();
+      S.tune = m.tune ?? null; S.draft = null;
+      if (S.pick === 'model') drawInsp();
+    } catch {}
+  }
+  async function loadWeights() {
+    try { S.weights = await (await fetch(`/bonsai/weights.json?layer=${S.layer}`, { cache: 'no-store' })).json(); } catch { S.weights = { why: 'not read' }; }
+    if (S.pick === 'model') drawInsp();
+  }
+  let ticking = false;
+  async function tick() {
+    if (ticking || document.hidden) return; ticking = true;
+    try { S.live = await (await fetch('/bonsai/live.json', { cache: 'no-store' })).json(); drawLive(); } catch {} finally { ticking = false; }
+  }
+
+  // ---- the header and the chain ----
+  const nowOf = () => S.live?.now ?? [];
+  const PHASE = { reading: 'Reading', thinking: 'Thinking', writing: 'Writing' };
+  function pills() {
+    const d = S.d, o = d.ollama, l = S.live?.loaded;
+    const n = nowOf();
+    const work = n.length ? `<span class="pill live">${esc(PHASE[n[0].phase] ?? 'Working')} · ${Math.round((Date.now() - n[0].started) / 1000)} s${n.length > 1 ? ` · ${n.length} requests` : ''}</span>` : '';
+    return `${work}<span class="pill ${l ? 'ok' : ''}">${l ? `Loaded · ${r1(l.gb)} GB · ${k(l.ctx ?? 0)}` : 'Not in memory'}</span><span class="pill ${o.running ? 'ok' : 'no'}">Ollama ${o.running ? `${esc(o.version)} running` : 'stopped'}</span>${o.login ? '<span class="pill ok">Starts at login</span>' : '<span class="pill wn">Not started at login</span>'}`;
+  }
+  function head() {
+    const l = S.live?.loaded, o = S.d.ollama;
+    return `<div class="title"><h2>Bonsai 2 9B</h2><div class="pills" id="pills">${pills()}</div>
+      <div class="acts"><button class="btn" type="button" data-do="${l ? 'unload' : 'load'}" ${o.running ? '' : 'disabled'}>${l ? 'Unload' : 'Load'}</button><button class="btn" type="button" data-do="restart" ${o.running ? '' : 'disabled'}>Restart Ollama</button><button class="btn main" type="button" data-do="tunetest" ${S.d.service?.inUse ? '' : 'disabled title="The Arena tests the model of the service /remote is on"'}>Test on 3 tasks</button></div></div>`;
+  }
+  const facts = () => S.d.facts ?? { layers: 32, full: [], params: 0, width: 0, ffn: 0 };
+  function stations() {
+    const d = S.d, l = S.live?.loaded, f = facts(), rd = d.reads;
+    const ram = d.mac.ramGB, free = S.live?.mac?.freePct ?? d.mac.freePct;
+    const bon = l ? l.gb : 0, weights = d.file?.gb ?? 0, room = l ? Math.max(0, l.gb - weights) : 0;
+    const freeGb = free != null ? (ram * free) / 100 : null, other = freeGb != null ? Math.max(0, ram - freeGb - bon) : null;
+    const onTools = rd.tools.filter((t) => t.on), toolTok = onTools.reduce((n, t) => n + t.tokens, 0), readTok = rd.instrTok + toolTok;
+    const sp = d.speed[0], R = sp?.readTokS ?? 210;
+    const n = nowOf()[0], last = (S.live?.recent ?? [])[0];
+    const bonsaiJobs = d.uses.rows.filter((u) => u.bonsai);
+    return [
+      ['mac', 'This Mac', `${esc(d.mac.chip.replace('Apple ', ''))} · ${ram} GB`, `<div class="big">${l ? r1(bon) : '0'} <small>GB for Bonsai</small></div>
+        <div class="mem"><div class="vbar">${[[weights * (l ? 1 : 0), 'var(--s1)', `Bonsai's weights: ${gb(weights)}`], [room, 'var(--s1b)', `The rest Ollama holds for it (its context room and picture part): ${gb(room)}`], [other ?? 0, 'var(--mid)', `Other apps: ${gb(other)}`], [freeGb ?? 0, 'transparent', `Free: ${gb(freeGb)} (macOS says ${free}%)`]].map(([v, c, t]) => `<i style="flex:${Math.max(0, v)};background:${c}" data-tip="${esc(t)}"></i>`).join('')}</div>
+        <div class="legend"><span style="--c:var(--s1)">weights ${l ? r1(weights) : 0}</span><span style="--c:var(--s1b)">the rest ${r1(room)}</span><span style="--c:var(--mid)">other apps ${other == null ? '?' : r1(other)}</span><span style="--c:var(--line2)">free ${freeGb == null ? '?' : r1(freeGb)}</span></div></div>`],
+      ['server', 'Ollama', esc(d.ollama.version ?? 'stopped'), `<div class="big" style="color:${d.ollama.running ? 'var(--up)' : 'var(--down)'}">${d.ollama.running ? 'Running' : 'Stopped'}</div>
+        <div class="cfg"><div><span class="q">Flash attention</span><span>${d.ollama.settings.flash ? 'on' : 'off'}</span></div><div><span class="q">Context memory</span><span>${esc(d.ollama.settings.kv)}</span></div><div><span class="q">Default context</span><span>${d.ollama.settings.ctx ? k(d.ollama.settings.ctx) : 'its own'}</span></div><div><span class="q">At login</span><span style="color:${d.ollama.login ? 'var(--up)' : 'var(--warn)'}">${d.ollama.login ? 'on' : 'off'}</span></div></div>
+        <div class="foot"><span>${d.ollama.pid ? `pid ${d.ollama.pid} · ${esc(d.ollama.by ?? '')}` : 'not running'}</span></div>`],
+      ['model', 'Bonsai', `${f.params ? `${r1(f.params / 1e9)}B` : ''} · Q2_0`, `<div style="display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;flex:1;min-height:0">
+        <div class="lyr" style="--n:${f.layers || 32}">${Array.from({ length: f.layers || 32 }, (_, i) => `<i class="${f.full.includes(i) ? 'f' : ''}" data-tip="Layer ${i}: ${f.full.includes(i) ? 'full attention' : 'linear attention'}"></i>`).join('')}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:0"><canvas class="w" id="mapw" style="height:76px" data-tip="Real weights of layer ${S.layer}: each one of three values"></canvas>
+        <div class="foot"><span><b>${f.layers}</b> layers · <b>${f.full.length}</b> full attention</span><span><b>${(f.ffn || 0).toLocaleString()}</b> neurons a layer</span><span>${d.own?.notes ? 'its own instructions · ' : ''}${d.own?.rows?.steps ?? ''} steps · ${k(d.ctxOwn || 0)}</span></div></div></div>`],
+      ['reads', 'What it reads', `~${readTok.toLocaleString()} tokens`, `<div class="big">${Math.round(readTok / R)} s <small>to read it fresh</small></div>
+        <div class="mem"><div class="vbar">${[[rd.instrTok, 'var(--s1)', `Instructions: ~${rd.instrTok.toLocaleString()} tokens`], ...onTools.map((t) => [t.tokens, 'var(--s2)', `${t.name}: ${t.tokens} tokens`])].map(([v, c, t]) => `<i style="flex:${v};background:${c}" data-tip="${esc(t)}"></i>`).join('')}</div>
+        <div class="legend"><span style="--c:var(--s1)">instructions ${rd.instrTok.toLocaleString()}</span><span style="--c:var(--s2)">${onTools.length} tools ${toolTok.toLocaleString()}</span><span style="--c:var(--line2)">${rd.off.length ? `${rd.off.length} off` : 'all tools on'}</span><span style="--c:var(--line2)">skills: ${rd.skills.length || 'none'}</span></div></div>`],
+      ['uses', 'Who uses it', `${bonsaiJobs.length} of ${d.uses.rows.length} jobs`, `<div class="jobs">${d.uses.rows.slice(0, 8).map((u) => `<div><i class="${u.bonsai ? 'b' : ''}"></i><span>${esc(u.label)}</span><span class="q" style="margin-left:auto;font-size:11.5px">${u.bonsai ? 'Bonsai' : esc(u.profile)}</span></div>`).join('')}</div>
+        <div class="foot"><span>${d.convs.length ? `${d.convs.length} conversation${d.convs.length === 1 ? '' : 's'} · last ${esc(ago(d.convs[0].at))}` : 'no conversation yet'}</span></div>`],
+      ['how', 'How it does', n ? 'now' : 'last', n ? `<div class="now"><span class="ph ${n.phase}">${esc(PHASE[n.phase] ?? n.phase)} · ${Math.round((Date.now() - n.started) / 1000)} s</span><span class="q">${esc(n.who === 'conversation' ? `“${n.ask || 'your conversation'}”` : n.who)}</span><span>${n.thinkTok ? `~${n.thinkTok} thinking` : ''}${n.thinkTok && n.textTok ? ' · ' : ''}${n.textTok ? `~${n.textTok} written` : ''}</span></div>${feed(5)}`
+        : `<div class="big">${sp ? `${sp.readTokS} <small>read</small> · ${sp.writeTokS} <small>write tok/s</small>` : last ? `${r1(last.secs)} s <small>last request</small>` : '— <small>no request yet</small>'}</div>${feed(6)}`],
+    ];
+  }
+  function feed(n) {
+    const rs = (S.live?.recent ?? []).slice(0, n);
+    if (!rs.length) return '<div class="empty" style="font-size:12px">Its requests show here as a window works.</div>';
+    const max = Math.max(...rs.map((r) => (r.readMs ?? 0) + (r.writeMs ?? 0) + (r.loadMs ?? 0)), 1);
+    return `<div class="feed">${rs.map((r) => { const rd = r.readMs ?? 0, wr = r.writeMs ?? 0, ld = r.loadMs ?? 0; return `<span class="q">${esc(new Date(r.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</span><div class="fb" data-tip="${esc(`${r.who === 'conversation' ? 'your conversation' : r.who}: read ${(r.readTok ?? 0).toLocaleString()} tokens in ${r1(rd / 1000)} s, wrote ${r.wroteTok ?? 0} in ${r1(wr / 1000)} s${ld > 50 ? `, loading ${r1(ld / 1000)} s` : ''}${r.end === 'error' ? ' · failed' : ''}`)}">${ld > 50 ? `<i style="flex:${ld};background:var(--mid)"></i>` : ''}<i style="flex:${Math.max(1, rd)};background:var(--s1)"></i><i style="flex:${Math.max(1, wr)};background:var(--s3)"></i><i style="flex:${Math.max(0, max - rd - wr - ld)};background:transparent"></i></div><span class="q" style="text-align:right">${r1(r.secs ?? (rd + wr) / 1000)} s</span>`; }).join('')}</div>`;
+  }
+  function drawChain() {
+    const el = $('#chain'); if (!el) return;
+    el.innerHTML = stations().map(([id, name, meta, body]) => `<div class="st" role="button" tabindex="0" data-st="${id}" aria-pressed="${id === S.pick}"><span class="h"><b>${esc(name)}</b><span class="q">${meta}</span></span>${body}</div>`).join('');
+    paintMini();
+  }
+  function paintMini() {
+    const c = $('#mapw'); const w = S.weights?.patch;
+    if (!c) return;
+    if (!w) { if (!S.weights) loadWeights(); return; }
+    paint(c, w.rows.slice(0, 24), 120);
+  }
+  function paint(canvas, rows, cols) {
+    canvas.width = cols; canvas.height = rows.length;
+    const cs = getComputedStyle(document.documentElement);
+    const col = [cs.getPropertyValue('--s1').trim(), cs.getPropertyValue('--mid').trim(), cs.getPropertyValue('--s2').trim()];
+    const ctx = canvas.getContext('2d');
+    rows.forEach((r, y) => { for (let x = 0; x < cols; x++) { ctx.fillStyle = col[+r[x]] ?? '#888'; ctx.fillRect(x, y, 1, 1); } });
+  }
+
+  // ---- the inspector ----
+  const kv = (rows) => `<dl class="kv">${rows.map(([a, b, c]) => `<dt>${esc(a)}</dt><dd>${b}${c ? `<small>${esc(c)}</small>` : ''}</dd>`).join('')}</dl>`;
+  const segs = (key, opts, on, moved) => `<span class="seg">${opts.map(([v, label]) => `<button type="button" data-seg="${esc(key)}" data-v="${esc(String(v))}" aria-pressed="${String(v) === String(on)}" class="${moved && String(v) === String(on) ? 'moved' : ''}">${esc(label)}</button>`).join('')}</span>`;
+  const tog = (key, on, dis) => `<button class="tog" type="button" data-tog="${esc(key)}" aria-pressed="${Boolean(on)}" ${dis ? 'disabled' : ''}></button>`;
+  const server = { draft: null };
+  const INSPECT = {
+    mac: () => {
+      const d = S.d, l = S.live?.loaded, weights = d.file?.gb ?? 0;
+      const free = S.live?.mac?.freePct ?? d.mac.freePct;
+      const keepRow = S.tune?.rows.find((r) => r.id === 'keepLoaded');
+      return ['This Mac’s memory', 'What Bonsai takes, and what each change would give back', `
+        <div>${kv([['Bonsai', l ? `<b>${gb(l.gb)}</b>` : 'not in memory', l ? `${l.gpuPct}% on the GPU` : ''], ['Its weights', gb(weights), 'its model file, fixed'], ['The rest', l ? gb(Math.max(0, l.gb - weights)) : '—', l ? `its context room at ${k(l.ctx ?? 0)} and its picture part` : ''], ['This Mac', `${esc(d.mac.chip)}, ${d.mac.ramGB} GB`, free != null ? `${free}% free now` : '']])}
+          <div style="display:flex;gap:8px"><button class="btn s" type="button" data-do="${l ? 'unload' : 'load'}">${l ? 'Unload now' : 'Load it now'}</button></div></div>
+        <div><span class="lbl">What each change gives back</span><table><tr><th>Change</th><th class="n">Saves</th></tr>
+          <tr><td>Context 64k → 32k<br><span class="q" style="font-size:12px">measured 27 Oct; it filled 32k on the notes page</span></td><td class="n">~0.9 GB</td></tr>
+          <tr><td>Context memory q8_0 → q4_0<br><span class="q" style="font-size:12px">an estimate; a little less exact on long conversations</span></td><td class="n">~0.4 GB</td></tr>
+          <tr><td>Unload when idle<br><span class="q" style="font-size:12px">the next message loads it (~1 s) and reads its prompt again</span></td><td class="n">all of it</td></tr></table></div>
+        <div><span class="lbl">Keep it loaded</span>${keepRow ? segs('keepLoaded', keepRow.steps.map((s) => [s.v, s.show]), draftOf().values.keepLoaded, draftOf().values.keepLoaded !== keepRow.value) : '<span class="q">reading its settings…</span>'}
+          <span class="q" style="font-size:12.5px">${keepRow ? esc(keepRow.steps.find((s) => s.v === draftOf().values.keepLoaded)?.note ?? '') : ''}</span>
+          <div style="display:flex;gap:8px">${saveBtn()}</div></div>`];
+    },
+    server: () => {
+      const o = S.d.ollama;
+      const sv = server.draft ?? (server.draft = { ...(o.running ? o.settings : o.kept), ctx: (o.running ? o.settings.ctx : o.kept.ctx) || 0 });
+      const moved = o.running && (sv.flash !== o.settings.flash || sv.kv !== o.settings.kv || (sv.ctx || 0) !== (o.settings.ctx || 0));
+      return ['Ollama, the server', 'Restarting takes a few seconds; a reply under way stops', `
+        <div>${kv([['State', o.running ? '<b style="color:var(--up)">● running</b>' : '<b style="color:var(--down)">● stopped</b>', o.pid ? `pid ${o.pid}` : ''], ['Version', esc(o.version ?? '—')], ['Address', esc(o.address)], ['Started', esc(o.by ?? '—'), o.by === 'by hand' ? 'a restart of this Mac stops it' : ''], ['Program', `<span style="font:12px var(--mono)">${esc((o.bin ?? 'not found').replace(/^\/Users\/[^/]+/, '~'))}</span>`]])}
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${o.running ? '<button class="btn s danger" type="button" data-do="stop">Stop</button>' : '<button class="btn s main" type="button" data-do="start">Start</button>'}</div></div>
+        <div>${kv([['Start at login', tog('login', o.login), o.login ? 'on' : 'off'], ['Flash attention', tog('flash', sv.flash), 'faster reading'], ['Context memory', segs('kv', o.kvTypes.map((t) => [t, t]), sv.kv, sv.kv !== o.settings.kv), sv.kv === 'q4_0' ? 'about half the room' : ''], ['Default context', segs('ctx', [[0, 'its own'], ...o.ctxSteps.map((c) => [c, k(c)])], sv.ctx || 0, (sv.ctx || 0) !== (o.settings.ctx || 0)), '']])}
+          <div style="display:flex;gap:8px"><button class="btn s ${moved ? 'main' : ''}" type="button" data-do="restart" ${o.running ? '' : 'disabled'}>Restart with these</button>${moved ? '<button class="btn s" type="button" data-do="server-undo">Undo</button>' : ''}</div></div>
+        <div><span class="lbl">Its log</span><pre style="margin:0;font:11.5px/1.5 var(--mono);color:var(--ink2);background:var(--panel);border-radius:9px;padding:9px 11px;white-space:pre-wrap;overflow:auto;max-height:100%">${o.logTail.length ? esc(o.logTail.join('\n')) : 'No log yet: Ollama started from here (or at login) writes one.'}</pre></div>`];
+    },
+    model: () => {
+      const t = S.tune, dr = t && draftOf();
+      if (!t) return ['Bonsai, the model', 'Its settings and what it is made of', `<div class="empty">${S.d.service ? 'Reading its settings…' : 'Bonsai is not set up as a service here: /remote, This Mac’s Ollama.'}</div><div></div><div></div>`];
+      const row = (id) => t.rows.find((r) => r.id === id);
+      const line = (id, pick) => { const r = row(id); if (!r) return null; const v = dr.values[id]; const steps = pick ? r.steps.filter((s) => pick.includes(String(s.v))) : r.steps; return [r.label, segs(id, steps.map((s) => [s.v, s.show]), v, v !== r.value), r.steps.find((s) => s.v === v)?.note?.split(' · ')[0] ?? '']; };
+      const lv = t.levels.length > 1 ? ['Thinking', segs('level', t.levels.map((l) => [l.id, l.label]), dr.level, dr.level !== t.level), ''] : ['Thinking', esc(t.levels[0]?.label ?? 'None'), 'it cannot think first'];
+      const f = facts(), w = S.weights;
+      return ['Bonsai, the model', 'Its settings, kept for it alone, and what it is made of', `
+        <div><span class="lbl">How it writes</span>${kv([lv, line('preset'), line('temperature'), line('presence'), line('topK'), line('topP'), line('thinkTime')].filter(Boolean))}</div>
+        <div><span class="lbl">Limits and its own instructions</span>${kv([line('steps'), line('context'), line('replyTokens', ['0', '8192', '16384', '32768']), line('look')].filter(Boolean))}
+          <textarea class="notes ${dr.notes.trim() !== t.notes ? 'moved' : ''}" id="notes" maxlength="${t.notesMax}" placeholder="Its own instructions: none yet. For example: Read a file once, then edit it.">${esc(dr.notes)}</textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${saveBtn()}${t.suggested ? '<button class="btn s" type="button" data-do="suggest">Fill in the suggested</button>' : ''}${moves() ? '<button class="btn s" type="button" data-do="undo">Undo</button>' : ''}</div></div>
+        <div style="min-height:0"><span class="lbl">Layer ${S.layer} · ${f.full.includes(S.layer) ? 'full attention' : 'linear attention'} · pick one</span>
+          <div class="layers" style="--n:${f.layers || 32}">${Array.from({ length: f.layers || 32 }, (_, i) => `<button type="button" data-layer="${i}" class="${f.full.includes(i) ? 'f' : ''}" aria-pressed="${i === S.layer}" data-tip="Layer ${i}">${i}</button>`).join('')}</div>
+          ${w?.patch ? `<div style="flex:1;min-height:90px"><canvas class="w" id="inw" data-tip="${esc(w.part)}: ${w.patch.rows.length} neurons × their first ${w.patch.rows[0].length} weights"></canvas></div><div class="legend"><span style="--c:var(--s1)">code 0</span><span style="--c:var(--mid)">code 1</span><span style="--c:var(--s2)">code 2</span><span style="--c:var(--line2)">scale ${w.patch.scales[0]?.toFixed(4) ?? '?'}</span></div>
+          <span class="q" style="font-size:12px">${esc(w.part)} · ${w.parts.length} parts: ${w.parts.filter((p) => p.kind === 'Q2_0').length} of three values (Q2_0), ${w.parts.filter((p) => p.kind !== 'Q2_0').length} plain numbers · width ${(f.width || 0).toLocaleString()}, ${(f.ffn || 0).toLocaleString()} neurons, ${f.heads} heads of ${f.headSize}</span>` : `<div class="empty">${esc(w?.why ?? (w ? 'No weights to show' : 'Reading its weights…'))}</div>`}</div>`];
+    },
+    reads: () => {
+      const rd = S.d.reads, R = S.d.speed[0]?.readTokS ?? 210;
+      return ['What it reads, with every fresh prompt', `Each part costs reading time: ${R} tokens a second here`, `
+        <div><span class="lbl">Its tools · switch off what it does not need</span><table><tr><th>Tool</th><th class="n">Tokens</th><th class="n">Reading</th><th class="n">On</th></tr>${rd.tools.map((t) => `<tr><td><b class="${t.on ? '' : 'off'}">${esc(t.name)}</b> <span class="q">${esc(t.what)}</span></td><td class="n">${t.tokens}</td><td class="n">${r1(t.tokens / R)} s</td><td class="n">${tog(`tool:${t.name}`, t.on, !t.can)}</td></tr>`).join('')}</table>
+          <span class="q" style="font-size:12px">Read, List, Search, Edit, Write and Bash always stay. A change reaches its next conversation’s first step.</span></div>
+        <div><span class="lbl">Instructions and skills</span>${kv([['Instruction set', esc(rd.set), `~${rd.instrTok.toLocaleString()} tokens`], ['Its own instructions', rd.notes ? 'yes' : 'none', 'in Bonsai, the model'], ['Skills', rd.skills.length ? esc(rd.skills.join(', ')) : 'none in its set', rd.otherSkills.length ? `${rd.otherSkills.join(', ')} in the other set` : '']])}
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn s" type="button" data-tab="instructions">Open Instructions</button><button class="btn s" type="button" data-st-go="model">Its own instructions</button></div></div>
+        <div><span class="lbl">Its memory</span><p style="margin:0">${esc(S.d.memory ?? 'Memory: not read')}</p><span class="q" style="font-size:12.5px">Read with each request; saved after each answer by the Side jobs model (Who uses it).</span><div><button class="btn s" type="button" data-tab="memory">Open the Memory tab</button></div></div>`];
+    },
+    uses: () => {
+      const u = S.d.uses;
+      return ['Who uses Bonsai', 'Move a job on or off it; every window follows from its next request', `
+        <div style="grid-column:span 2"><table><tr><th>Job</th><th>What it does</th><th>Profile</th><th class="n">Model</th></tr>${u.rows.map((r) => `<tr><td><b>${esc(r.label)}</b></td><td class="q">${esc(r.what)}</td><td><select class="sel" data-use="${esc(r.key)}">${u.profiles.map((p) => `<option value="${esc(p.name)}" ${p.name === r.profile ? 'selected' : ''}>${esc(p.name)}${p.bonsai ? ' · Bonsai' : ''}</option>`).join('')}</select></td><td class="n ${r.bonsai ? '' : 'q'}">${r.bonsai ? '<b>Bonsai</b>' : esc(r.model ?? '')}</td></tr>`).join('')}</table></div>
+        <div><span class="lbl">Its conversations</span>${S.d.convs.length ? `<table><tr><th>When</th><th>Started with</th><th class="n">Messages</th></tr>${S.d.convs.map((c) => `<tr><td class="q">${esc(ago(c.at))}</td><td>${esc(c.title)}</td><td class="n">${c.messages}</td></tr>`).join('')}</table>` : '<p class="empty">None yet.</p>'}<span class="q" style="font-size:12px">/resume in a window opens one.</span></div>`];
+    },
+    how: () => {
+      const sp = S.d.speed[0], tests = S.d.tests, busy = S.live?.speedJob;
+      return ['How it does', 'Live while a window works with it; its tests from the test record', `
+        <div><span class="lbl">Its requests, newest first</span>${feed(12)}<div class="legend"><span style="--c:var(--s1)">reading</span><span style="--c:var(--s3)">writing</span><span style="--c:var(--mid)">loading</span></div></div>
+        <div><span class="lbl">Speed test</span>${sp ? kv([['Reads', `<b>${sp.readTokS}</b> tokens a second`], ['Writes', `<b>${sp.writeTokS}</b> tokens a second`], ['A fresh prompt', `${sp.freshSecs} s`, `${sp.freshTok.toLocaleString()} tokens`], ['A later step', `${sp.laterSecs} s`, 'what it read is kept'], ['When', esc(ago(sp.at))]]) : '<p class="empty" style="margin:0">Not run yet.</p>'}
+          <div><button class="btn s ${sp ? '' : 'main'}" type="button" data-do="speed" ${busy || !S.d.ollama.running ? 'disabled' : ''}>${busy ? `Running… ${Math.round((Date.now() - busy.since) / 1000)} s` : 'Run the speed test'}</button></div><span class="q" style="font-size:12px">About 30 s; it shares Bonsai with a window at work.</span></div>
+        <div><span class="lbl">Its tests</span>${tests.length ? `<table><tr><th>Test</th><th class="n">Score</th><th class="n">When</th></tr>${tests.slice(0, 6).map((t) => `<tr><td>${esc(t.name.replace(/\s*\(one-off[^)]*\)/, ''))}</td><td class="n"><b>${t.total ? `${t.passed}/${t.total}` : esc(t.result ?? '')}</b></td><td class="n q">${esc(ago(t.at))}</td></tr>`).join('')}</table>` : '<p class="empty" style="margin:0">None yet.</p>'}
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn s" type="button" data-do="tunetest" ${S.d.service?.inUse ? '' : 'disabled'}>Tune check (3 tasks)</button><button class="btn s" type="button" data-do="check">Bonsai check</button><button class="btn s" type="button" data-tab="arena">Open the Arena</button></div></div>`];
+    },
+  };
+  const TITLES = { mac: 'This Mac', server: 'Ollama', model: 'Bonsai', reads: 'What it reads', uses: 'Who uses it', how: 'How it does' };
+  // The settings draft: the Remote tab's rows for Bonsai, moved here and not saved yet.
+  function draftOf() {
+    const t = S.tune;
+    if (!S.draft) S.draft = { values: Object.fromEntries(t.rows.map((r) => [r.id, r.value])), level: t.level, notes: t.notes };
+    return S.draft;
+  }
+  const moves = () => { const t = S.tune; if (!t || !S.draft) return 0; return t.rows.filter((r) => r.id !== 'preset' && S.draft.values[r.id] !== r.value).length + (S.draft.level !== t.level) + (S.draft.notes.trim() !== t.notes); };
+  const saveBtn = () => { const n = moves(); return `<button class="btn s ${n ? 'main' : ''}" type="button" data-do="save" ${n ? '' : 'disabled'}>Save${n ? ` (${n})` : ''}</button>`; };
+  function drawInsp() {
+    const el = $('#insp'); if (!el || !S.d) return;
+    const typing = document.activeElement?.id === 'notes' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
+    const [title, sub, body] = INSPECT[S.pick]();
+    const s = S.said && Date.now() - S.said.at < 20000 ? `<span class="say ${S.said.ok ? 'ok' : 'no'}">${esc(S.said.text)}</span>` : '';
+    el.innerHTML = `<div class="ih"><h3>${esc(title)}</h3><span class="q">${esc(sub)}</span>${s}</div>${S.confirm ? `<div class="confirm"><span>${esc(S.confirm.text)}</span><button class="btn s" type="button" data-confirm="yes">${esc(S.confirm.yes)}</button><button class="btn s" type="button" data-confirm="no">Cancel</button></div>` : ''}<div class="igrid">${body}</div>`;
+    const c = $('#inw'); if (c && S.weights?.patch) paint(c, S.weights.patch.rows, S.weights.patch.rows[0].length);
+    const n = typing && $('#notes'); if (n) { n.focus(); n.setSelectionRange(...typing); }
+  }
+  function draw() {
+    if (!S.d) return;
+    $('#app').innerHTML = `${head()}<div class="chain" id="chain"></div><section class="insp" id="insp" aria-live="polite"></section>`;
+    drawChain(); drawInsp();
+  }
+  // What changes by the second: the pills, the chain (not while a control in it has focus), the live parts of the inspector.
+  function drawLive() {
+    if (!S.d) return;
+    const p = $('#pills'); if (p) p.innerHTML = pills();
+    drawChain();
+    if (S.pick === 'how' && !document.activeElement?.closest('#insp')) drawInsp();
+  }
+
+  // ---- doing ----
+  const answer = (j) => { if (j.error) say(false, j.error); else say(true, j.said ?? 'Done'); };
+  async function act(what, extra) {
+    if (what === 'restart' || what === 'stop') {
+      const busy = nowOf().length;
+      if (!S.confirm) {
+        const label = what === 'stop' ? 'Stop' : 'Restart';
+        S.confirm = { what, yes: `${label} Ollama`, text: busy ? `Bonsai is answering now: ${what === 'stop' ? 'stopping' : 'restarting'} Ollama ends that reply.` : `${label} Ollama? Every window waits for it${what === 'stop' ? ' until it starts again' : ' a few seconds'}.` };
+        drawInsp(); return;
+      }
+    }
+    S.confirm = null;
+    S.busy = what; say(true, { restart: 'Restarting Ollama…', stop: 'Stopping Ollama…', start: 'Starting Ollama…', load: 'Loading Bonsai…', unload: 'Unloading…', save: 'Saving…', speed: 'Starting the speed test…', tunetest: 'Starting the test…', check: 'Putting the check in the Arena’s line…', login: 'Changing the login item…' }[what] ?? 'Working…');
+    let j = {};
+    try {
+      if (what === 'restart') j = await post('/bonsai/restart', { settings: server.draft ?? S.d.ollama.settings });
+      else if (what === 'stop' || what === 'load' || what === 'unload' || what === 'speed' || what === 'check') j = await post(`/bonsai/${what}`);
+      else if (what === 'start') j = await post('/bonsai/start', { settings: server.draft ?? S.d.ollama.kept });
+      else if (what === 'login') j = await post('/bonsai/login', { on: extra, settings: server.draft ?? S.d.ollama.settings });
+      else if (what === 'save') {
+        const dr = draftOf();
+        j = await post('/remote/tune', { service: S.d.service.id, id: S.d.model, values: dr.values, level: dr.level, notes: dr.notes });
+        if (!j.error) { S.tune = j.tune; S.draft = null; j.said = `Saved: ${j.said}. In use from its next step.`; }
+      } else if (what === 'tunetest') { j = await post('/remote/tune-test', { service: S.d.service.id, id: S.d.model }); if (!j.error) j.said = `Testing on ${j.tests} short Arena tasks; the score goes in the test record`; }
+      else if (what === 'speed') {}
+    } catch (e) { j = { error: e.message }; }
+    S.busy = null; answer(j);
+    if (['restart', 'stop', 'start', 'login'].includes(what)) server.draft = null;
+    await load();
+  }
+  document.addEventListener('click', async (e) => {
+    const st = e.target.closest('[data-st]'); if (st && !e.target.closest('button,select,textarea')) { S.pick = st.dataset.st; try { localStorage.setItem('bonsai-pick', S.pick); } catch {} S.confirm = null; draw(); return; }
+    const go = e.target.closest('[data-st-go]'); if (go) { S.pick = go.dataset.stGo; draw(); return; }
+    const c = e.target.closest('[data-confirm]'); if (c) { if (c.dataset.confirm === 'yes') act(S.confirm.what); else { S.confirm = null; drawInsp(); } return; }
+    const d = e.target.closest('[data-do]'); if (d && !d.disabled) {
+      const w = d.dataset.do;
+      if (w === 'undo') { S.draft = null; drawInsp(); return; }
+      if (w === 'server-undo') { server.draft = null; drawInsp(); return; }
+      if (w === 'suggest') { const dr = draftOf(); for (const [id, v] of Object.entries(S.tune.suggested?.limits ?? {})) if (id in dr.values) dr.values[id] = v; drawInsp(); return; }
+      act(w); return;
+    }
+    const ly = e.target.closest('[data-layer]'); if (ly) { S.layer = +ly.dataset.layer; S.weights = null; drawInsp(); loadWeights(); return; }
+    const sg = e.target.closest('[data-seg]'); if (sg) {
+      const key = sg.dataset.seg, raw = sg.dataset.v, num = Number(raw), v = raw !== '' && !Number.isNaN(num) && /^-?[\d.]+$/.test(raw) ? num : raw;
+      if (S.pick === 'server') { server.draft[key] = key === 'ctx' ? Number(v) : v; drawInsp(); return; }
+      const dr = draftOf();
+      if (key === 'level') dr.level = raw;
+      else { dr.values[key] = v; if (key === 'preset') Object.assign(dr.values, S.tune.presets[v] ?? {}); else if (['temperature', 'presence', 'topP', 'topK', 'repeatPenalty'].includes(key)) { const id = Object.keys(S.tune.presets).find((p) => ['temperature', 'presence', 'topP', 'topK', 'repeatPenalty'].every((r) => dr.values[r] === S.tune.presets[p][r])); dr.values.preset = id ?? 'custom'; } }
+      drawInsp(); return;
+    }
+    const tg = e.target.closest('[data-tog]'); if (tg && !tg.disabled) {
+      const key = tg.dataset.tog;
+      if (key === 'login') { act('login', tg.getAttribute('aria-pressed') !== 'true'); return; }
+      if (key === 'flash') { server.draft.flash = !server.draft.flash; drawInsp(); return; }
+      if (key.startsWith('tool:')) {
+        const name = key.slice(5);
+        const off = new Set(S.d.reads.off); off.has(name) ? off.delete(name) : off.add(name);
+        answer(await post('/bonsai/tools', { off: [...off] })); await load(); return;
+      }
+    }
+    const tab = e.target.closest('[data-tab]'); if (tab) { if (window.parent !== window) window.parent.postMessage({ agentic: 'open-tab', tab: tab.dataset.tab }, '*'); else location.href = `/${tab.dataset.tab}`; }
+  });
+  document.addEventListener('change', async (e) => {
+    const u = e.target.closest('select[data-use]'); if (!u) return;
+    const j = await post('/profiles/use', { key: u.dataset.use, profile: u.value });
+    answer(j.error ? j : { said: `${u.dataset.use.replace('ai:', '')} now uses ${u.value}; every window from its next request` });
+    await load();
+  });
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'notes' || !S.tune) return;
+    draftOf().notes = e.target.value;
+    e.target.classList.toggle('moved', e.target.value.trim() !== S.tune.notes);
+    const b = document.querySelector('[data-do="save"]'); if (b) { const n = moves(); b.disabled = !n; b.textContent = n ? `Save (${n})` : 'Save'; b.classList.toggle('main', Boolean(n)); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('textarea, select, input')) return;
+    if (e.key === 'Escape' && S.confirm) { S.confirm = null; drawInsp(); }
+    const st = e.target.closest?.('[data-st]'); if (st && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); S.pick = st.dataset.st; draw(); return; }
+    if (/^[1-6]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) { S.pick = Object.keys(TITLES)[+e.key - 1]; draw(); }
+  });
+  const tip = $('#tip');
+  document.addEventListener('mousemove', (e) => {
+    const t = e.target.closest('[data-tip]');
+    if (!t) { tip.style.display = 'none'; return; }
+    tip.textContent = t.dataset.tip; tip.style.display = 'block';
+    tip.style.left = `${Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8)}px`; tip.style.top = `${e.clientY + 16}px`;
+  });
+  // Live: every second while the page is in sight; the whole page every 15 s, or after an action.
+  setInterval(tick, 1000);
+  setInterval(() => { if (!document.hidden && !document.activeElement?.closest('#insp')) load(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+  load();
+})();
+</script>
+</body>
+</html>

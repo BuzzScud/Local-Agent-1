@@ -79,6 +79,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="structure" aria-haspopup="menu" aria-expanded="false" title="Structure and Flow: click again for the menu">Structure<i class="caret" aria-hidden="true"></i></button>
   <button data-tab="arena">Arena</button>
   <button data-tab="remote">Remote</button>
+  <button data-tab="bonsai">Bonsai</button>
   <button data-tab="profiles">Profiles</button>
   <button data-tab="memory">Memory</button>
   <button data-tab="instructions">Instructions</button>
@@ -131,6 +132,8 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (e.data?.agentic === 'open-builder') openBuilder({ test: typeof e.data.test === 'string' ? e.data.test : null });
     // The Remote tab's Tune, once its test is in the Arena's line: Watch in the Arena.
     if (e.data?.agentic === 'open-arena') open('arena');
+    // The Bonsai tab's buttons that go to another tab (Memory, Instructions, the Arena).
+    if (e.data?.agentic === 'open-tab' && ['memory', 'instructions', 'arena', 'remote', 'profiles'].includes(e.data.tab)) open(e.data.tab);
     // From the builder in the window: a test saved (the Arena reads its tests again), or esc.
     if (e.source === bframe.contentWindow && e.data?.agentic === 'tests-changed') arenaSay({ agentic: 'arena-refresh' });
     if (e.source === bframe.contentWindow && e.data?.agentic === 'builder-close') closeBuilder();
@@ -225,6 +228,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     // The Arena runs on its own address (its runner's): /arena starts it when it is not up and sends the frame there.
     if (tab === 'arena') { const a = runAsk ? runAsk.toString() : ''; runAsk = null; return show(`/arena${a ? `?${a}` : ''}`, 'run a test on one model, or battle two'); }
     if (tab === 'remote' && !page) return show('/remote', 'the models on the services you connect to with /remote');
+    if (tab === 'bonsai' && !page) return show('/bonsai', 'Bonsai 2 9B on this Mac: what it is made of, live');
     if (tab === 'profiles' && !page) return show('/profiles', 'which server and model each AI, task type and skill uses');
     if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
     if (tab === 'docs' && !page) return showList();
@@ -255,7 +259,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   const q = new URL(location.href); const tab = ALIAS[q.searchParams.get('tab')] ?? (q.searchParams.get('tab') || 'weights'); const page = q.searchParams.get('page');
   const view = q.searchParams.get('view');
   // Flow, in the Structure tab, opens before the DOCS folder is read, like the tabs built into the app.
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || (t === 'structure' && view === 'flow') || t === 'arena' || t === 'remote' || t === 'profiles' || t === 'memory' || t === 'instructions';
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || (t === 'structure' && view === 'flow') || t === 'arena' || t === 'remote' || t === 'bonsai' || t === 'profiles' || t === 'memory' || t === 'instructions';
   if (builtIn(tab) && !page) { open(tab, null, view); if (builderAsk) openBuilder(builderAsk); builderAsk = null; } else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();

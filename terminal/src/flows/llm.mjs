@@ -105,7 +105,7 @@ async function ask({ url, model, slot, system, user, temperature, maxTokens, sch
   let thought = 0;
   const full = model.thinkingBudget ?? 2048;
   const budget = think ? Math.min(full, thinkCap ?? full) : 0;
-  for await (const ev of streamChat({ url, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], thinking: think, effort, model, sampling, maxTokens: maxTokens + budget, thinkCap: think && budget < full ? budget : undefined, slot, signal, extra, use })) {
+  for await (const ev of streamChat({ url, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], thinking: think, effort, model, sampling, maxTokens: maxTokens + budget, thinkCap: think && budget < full ? budget : undefined, slot, signal, extra, use, what })) {
     if (ev.type === 'text') { text += ev.text; tokens++; onToken?.(tokens + thought); }
     if (ev.type === 'reasoning') { thought++; onToken?.(tokens + thought); }
     if ((ev.type === 'text' || ev.type === 'reasoning') && firstToken === null) firstToken = Date.now();

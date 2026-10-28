@@ -17,6 +17,7 @@ import { splitThink } from './think-tags.mjs';
 import { withBusyRetry, retryAfterHeader, isBusy } from './busy.mjs';
 import { noteServed, noteSpill } from './profile-meters.mjs';
 import { recordSpend } from './spend.mjs';
+import { recorded } from './activity.mjs';
 import { qwenRawFits, renderQwen35, callOpening } from './qwen-raw.mjs';
 
 // What only llama.cpp's server reads: the slot, its prompt cache, the
@@ -170,11 +171,17 @@ async function* streamOne(args) {
   }
 }
 
-async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false, use, conversation }) {
+async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false, use, conversation, what }) {
   const ep = endpointFor(url, use);
   // The Claude API speaks its own Messages API (claude.mjs).
   if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel }); return; }
-  if (ep?.ollama) { yield* streamOllama({ url, ep, messages: ownStartOn(ep) ? ownStart(messages, conversation) : messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }); return; }
+  // On an Ollama service each request is recorded as it goes, for the hub's Bonsai tab (agent/activity.mjs):
+  // your conversation's steps carry it (`conversation`), a side job its name (`what`, flows/llm.mjs).
+  if (ep?.ollama) {
+    const stream = streamOllama({ url, ep, messages: ownStartOn(ep) ? ownStart(messages, conversation) : messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra });
+    yield* recorded(stream, { model: ep.model, url, who: conversation ? 'conversation' : what, messages, tools: tools?.length ?? 0, think: Boolean(thinking) });
+    return;
+  }
   let body = {
     model: 'coding',
     // Pictures beside the text go in as the server takes them (images.mjs).

@@ -27,8 +27,8 @@ export function saveTuneNotes(self, text) {
   const own = { ...(prev ?? {}) };
   if (notes) own.notes = notes; else delete own.notes;
   self.setOwn(name, Object.keys(own).length ? own : null);
-  const { notes: _n, notesOf: _o, ...rest } = self.limitsRef.current;
-  self.limitsRef.current = notes ? { ...rest, notes, notesOf: name } : rest;
+  const { notes: _n, ...rest } = self.limitsRef.current;
+  self.limitsRef.current = notes || rest.toolsOff ? { ...rest, ...(notes ? { notes } : {}), notesOf: name } : rest;
   self.agent.model = modelWithLimits(self.model, self.limitsRef.current);
   const cut = String(text ?? '').trim().length > NOTES_MAX ? ` (cut to ${NOTES_MAX} characters)` : '';
   self.push({ type: 'note', text: notes ? `Saved ${name}’s own instructions${cut}: from its next message, the last part of its working instructions. /tune shows them; /tune notes off takes them out.` : `${name}’s own instructions taken out, from its next message.`, tone: 'dim' });

@@ -87,7 +87,7 @@ export function panelsEffort(self, own) {
     const moved = OWN_ROWS.filter((r) => pk.values[r] !== pk.saved[r]);
     const limits = reset ? {} : { ...(prev?.limits ?? {}), ...Object.fromEntries(moved.map((r) => [r, pk.values[r]])) };
     const level = reset ? null : levels.length > 1 && lv && pk.level !== pk.savedLevel ? lv.id : prev?.level ?? null;
-    const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(prev?.notes ? { notes: prev.notes } : {}) };
+    const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(prev?.notes ? { notes: prev.notes } : {}), ...(prev?.toolsOff?.length ? { toolsOff: prev.toolsOff } : {}) };
     if (Object.keys(own).length || prev) self.setOwn(id, Object.keys(own).length ? own : null);
     const ctx = reset ? 0 : pk.values.context ?? 0;
     if (ctx !== self.serviceCtx(id)) self.setServiceCtx(id, ctx);
@@ -129,7 +129,7 @@ export function panelsEffort(self, own) {
       const limits = reset ? {} : { ...(prevOwn?.limits ?? {}), ...Object.fromEntries(ownMoved.map((id) => [id, next[id]])) };
       const level = reset ? null : effortChanged && self.model.thinkingLevels.length > 1 ? lv.id : prevOwn?.level ?? null;
       // Its own instructions (/tune notes) stay: Reset all is the rows and Effort, not them.
-      const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(prevOwn?.notes ? { notes: prevOwn.notes } : {}) };
+      const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}), ...(prevOwn?.notes ? { notes: prevOwn.notes } : {}), ...(prevOwn?.toolsOff?.length ? { toolsOff: prevOwn.toolsOff } : {}) };
       if (Object.keys(own).length || prevOwn) self.setOwn(self.model.remote.model, Object.keys(own).length ? own : null);
       if (reset && prevOwn && !changes.length) self.push({ type: 'note', text: `${self.model.remote.model} follows the shared settings again.`, tone: 'dim' });
     }

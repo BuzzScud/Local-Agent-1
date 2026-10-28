@@ -54,7 +54,7 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   // /status (18 Oct 2026) after them: where it shows, it is the row under /help (/calc's, which went with the
   // calculator link that day). /bot, then /steps (9 Oct 2026).
   // /tune (27 Oct 2026) after /jumptomac, on an Ollama service only (tune.test.mjs).
-  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'tune', 'loop', 'mcp', 'jobs', 'status', 'bot', 'steps']);
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'bot', 'steps']);
   expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'test', 'settings', 'exit']);
   expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('mcp');
   expect(matchCommands('/', { room: 21 }).map((c) => c.name)).toContain('mcp'); // a fourth free row is /mcp's
@@ -179,7 +179,7 @@ test('coding hub [tab]: --help lists it once instead of six words; each tab open
   expect(await hubLine(['memory'], env)).toBe('memory');
   const bad = spawnSync('bun', [CLI, 'hub', 'notes'], { encoding: 'utf8', env: { ...process.env, ...env } });
   expect(bad.status).toBe(1);
-  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, profiles, memory, instructions, help.');
+  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, bonsai, profiles, memory, instructions, help.');
   // The Calculator tab went with the calculator link (18 Oct 2026).
   expect(spawnSync('bun', [CLI, 'hub', 'calc'], { encoding: 'utf8', env: { ...process.env, ...env } }).stderr).toContain('coding hub: no tab called calc.');
   const noModel = spawnSync('bun', [CLI, 'hub'], { encoding: 'utf8', env: { ...process.env, ...env } }); // weights is the default, and this home has no model file

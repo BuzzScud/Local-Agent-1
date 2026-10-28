@@ -1,14 +1,20 @@
-// The slash commands of the tests and pages: /arena, /test, /tests, /instructions, /docs (app-slash.mjs sends each its own).
+// The slash commands of the tests and pages: /arena, /test, /tests, /instructions, /docs, /bonsai (app-slash.mjs sends each its own).
 // Moved word for word out of runSlashFn's switch: the same cases, in the same order.
 import { existsSync } from 'node:fs';
 import { findRunTest, RUN_TESTS, MODELS, readRecord, modelPath, DEFAULT_MODEL } from '../../../models/index.mjs';
 import { listDocs } from './weights.mjs';
 
-export const TOOLS_COMMANDS = ['arena', 'battle', 'test', 'tests', 'instructions', 'weights', 'docs'];
+export const TOOLS_COMMANDS = ['arena', 'battle', 'test', 'tests', 'instructions', 'weights', 'docs', 'bonsai'];
 
 export function slashTools(self) {
   return async (cmd, arg, busy, line) => {
     switch (cmd) {
+      // /bonsai (27 Oct 2026): the hub on its Bonsai tab, which follows this window's requests as they run.
+      case 'bonsai': {
+        const hub = self.openHub('bonsai'); if (!hub) break;
+        self.push({ type: 'note', text: `Bonsai opened in the browser at ${hub.url} · its server, memory, settings, weights and tests, and what it is doing as this window works`, tone: 'dim' });
+        break;
+      }
       case 'arena':
       case 'battle': { // /battle: its name before 30 Sep 2026, still typed
         // The hub on its Arena tab: a test on one model, or a battle of two. The Arena runs on its own

@@ -21,6 +21,7 @@
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
 //   /profiles, /profiles.json, /profiles/…   the Profiles tab: the profiles of /profiles, read from and saved to
 //                     the same file (profiles-hub.mjs)
+//   /bonsai, /bonsai.json, /bonsai/…   the Bonsai tab: Bonsai 2 9B on this Mac's Ollama, live (bonsai-hub.mjs)
 //   /remote, /remote.json, /remote/…   the Remote tab: the models on the services saved with /remote, a card each,
 //                     one model in full, and Try it · Load · Unload (remote-hub.mjs)
 //   /favicon.ico      the tab icon every page asks for: the Visor bot (favicon.mjs)
@@ -36,11 +37,13 @@ import memoryHtml from './memory.html' with { type: 'text' };
 import instructionsHtml from './instructions.html' with { type: 'text' };
 import builderHtml from './builder.html' with { type: 'text' };
 import remoteHtml from './remote.html' with { type: 'text' };
+import bonsaiHtml from './bonsai.html' with { type: 'text' };
 import profilesHtml from './profiles.html' with { type: 'text' };
 import { builderRoute } from './builder-hub.mjs';
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { remoteHub } from './remote-hub.mjs';
+import { bonsaiHub } from './bonsai-hub.mjs';
 import { profilesHub } from './profiles-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
 import { flowRoute } from './flow-hub.mjs';
@@ -112,6 +115,7 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
   const model = MODELS[DEFAULT_MODEL];
   const noStore = { 'cache-control': 'no-store' };
   const remote = remoteHub({ cwd });
+  const bonsai = bonsaiHub({ cwd });
   const profiles = profilesHub({ cwd });
   // The models as the Weights tab shows them, read each time: the tags are the Harness
   // tab's (the model /model saved last is the one in use), and a file can arrive or go.
@@ -190,6 +194,8 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
       if (url.pathname === '/profiles') return page(profilesHtml);
       if (url.pathname === '/profiles.json' || url.pathname.startsWith('/profiles/')) { const r = await profiles.route(req, url); if (r) return r; }
       if (url.pathname === '/remote') return page(remoteHtml);
+      if (url.pathname === '/bonsai') return page(bonsaiHtml);
+      if (url.pathname === '/bonsai.json' || url.pathname.startsWith('/bonsai/')) { const r = await bonsai.route(req, url); if (r) return r; }
       if (url.pathname.startsWith('/remote')) { const r = await remote.route(req, url); if (r) return r; }
       if (url.pathname === '/instructions') return page(instructionsHtml);
       if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome, { onDesign });

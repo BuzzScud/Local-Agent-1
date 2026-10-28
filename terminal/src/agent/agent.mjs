@@ -173,6 +173,8 @@ export class Agent extends EventEmitter {
       ...(here.home ? ['Map'] : []),
       ...(here.code ? [] : ['Rename', 'TestFirst']),
       ...(this.memory ? [] : ['Remember']),
+      // The ones switched off for this model (its own settings: the hub's Bonsai tab).
+      ...(this.model?.toolsOff ?? []),
     ]);
     const can = (t) => !off.has(t.function.name);
     const own = (this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all).filter(can);

@@ -318,6 +318,10 @@ export const ownOf = (settings, name) => (name ? settings?.remote?.tuned?.[name]
 export const NOTES_MAX = 1000;
 // A model's own instructions, as kept: trimmed, at most NOTES_MAX characters, '' for none.
 export const cleanNotes = (v) => (typeof v === 'string' ? v.trim().slice(0, NOTES_MAX) : '');
+// The tools a model may go without (27 Oct 2026, the hub's Bonsai tab: each tool's description is read with every
+// fresh prompt, Ask alone 561 tokens). Reading, searching, changing files and commands always stay.
+export const TOOLS_SWITCHABLE = ['TodoWrite', 'Ask', 'Jobs', 'WebFetch', 'WebSearch', 'Screen', 'Map', 'CodeSearch', 'Rename', 'TestFirst', 'Remember'];
+export const cleanToolsOff = (v) => (Array.isArray(v) ? [...new Set(v.filter((t) => TOOLS_SWITCHABLE.includes(t)))] : []);
 
 // The values in use: the defaults, with what settings.json holds on top, and a
 // remote model's own rows on top of that (own: false leaves them out: what it
@@ -339,6 +343,9 @@ export function readLimits(settings, model, { own = true } = {}) {
   // notesOf: whose they are, so another model given these values (a profile's, a switch) never gets them.
   const notes = cleanNotes(kept?.notes);
   if (notes) { out.notes = notes; out.notesOf = model.remote.model; }
+  // Its tools switched off (the hub's Bonsai tab), the same way: for it alone.
+  const toolsOff = cleanToolsOff(kept?.toolsOff);
+  if (toolsOff.length) { out.toolsOff = toolsOff; out.notesOf = model.remote.model; }
   return out;
 }
 
@@ -454,8 +461,11 @@ export function modelWithLimits(model, values) {
   if (typeof values?.repeatPenalty === 'number') s.repeat_penalty = values.repeatPenalty;
   if (Object.keys(s).length) out = { ...out, sampling: { ...out.sampling, ...s }, thinkingSampling: { ...out.thinkingSampling, ...s } };
   if (values?.replyTokens) out = { ...out, replyTokens: values.replyTokens };
-  const notes = !values?.notesOf || values.notesOf === model?.remote?.model ? cleanNotes(values?.notes) : '';
+  const mine = !values?.notesOf || values.notesOf === model?.remote?.model;
+  const notes = mine ? cleanNotes(values?.notes) : '';
   if (notes || out.ownNotes) out = { ...out, ownNotes: notes || undefined };
+  const toolsOff = mine ? cleanToolsOff(values?.toolsOff) : [];
+  if (toolsOff.length || out.toolsOff) out = { ...out, toolsOff: toolsOff.length ? toolsOff : undefined };
   return out;
 }
 
