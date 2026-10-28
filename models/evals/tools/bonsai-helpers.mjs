@@ -93,6 +93,10 @@ globalThis.fetch = async (input, init = {}) => {
 const { recordTest, codeLabel, connectRemote, thinkingLevel, HOME } = await import('../../index.mjs');
 if (realpathSync(HOME) !== realpathSync(home)) { console.error(`the app's home is ${HOME}, not the throwaway one: stopped before anything was written`); process.exit(2); }
 const { readLimits, modelWithLimits, Agent, systemPrompt, ProfileRouter, readProfiles, writeProfiles, helpersTo, serverOf } = await import('../../../terminal/index.mjs');
+// What a helper says on its own (its notes: a send-back, a trim), which the conversation never hears.
+const helperNotes = [];
+const emit = Agent.prototype.emit;
+Agent.prototype.emit = function (ev, e, ...more) { if (this.isHelper && ev === 'note') helperNotes.push({ arm: armNow, text: String(e?.text ?? '').slice(0, 300) }); return emit.call(this, ev, e, ...more); };
 
 const stop = new AbortController();
 for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => stop.abort());
@@ -137,6 +141,8 @@ async function arm(id, helpers) {
   } catch (e) { error = e.message; }
   await new Promise((r) => setTimeout(r, 1500)); // the last reply's counts
   const answer = String(agent?.messages?.filter((m) => m.role === 'assistant' && m.content).at(-1)?.content ?? '');
+  // The conversation as the main model had it (each message cut to 6,000 characters), to see what it was given.
+  try { writeFileSync(join(out, `messages-${id}.json`), JSON.stringify((agent?.messages ?? []).map((m) => ({ role: m.role, content: String(m.content ?? '').slice(0, 6000), calls: (m.tool_calls ?? []).map((c) => `${c.function?.name}(${String(c.function?.arguments ?? '').slice(0, 300)})`) })), null, 2)); } catch {}
   const mine = calls.filter((c) => c.arm === id);
   const of = (m) => mine.filter((c) => c.model === m);
   const sum = (xs, k) => xs.reduce((n, c) => n + (c[k] ?? 0), 0);
@@ -154,6 +160,11 @@ async function arm(id, helpers) {
     bothHeld: held.some((p) => p.models.some((m) => m.name === MAIN) && p.models.some((m) => m.name === HELPER)),
     right: { secs: right.secs(answer), saves: right.saves(answer) },
     lastModel: mine.at(-1)?.model ?? null, // the reply that gave the answer
+    // After the helper's last reply: the main model's own replies (it read again what the report said, or answered).
+    afterHelper: (() => { const last = mine.findLastIndex((c) => c.model === HELPER); const xs = last < 0 ? [] : mine.slice(last + 1).filter((c) => c.model === MAIN); return { calls: xs.length, secs: Math.round(xs.reduce((n, c) => n + ((c.end ?? c.at) - c.at), 0) / 100) / 10 }; })(),
+    // A reply whose prompt was shorter than the one before it on the same model: what it held changed, so it read it again.
+    rereads: [MAIN, HELPER].flatMap((m) => of(m).filter((c, i, xs) => i > 0 && c.promptTok != null && c.promptTok < (xs[i - 1].promptTok ?? 0)).map((c) => ({ model: m, tokens: c.promptTok, secs: Math.round(c.readMs / 100) / 10 }))),
+    helperNotes: helperNotes.filter((n) => n.arm === id).map((n) => n.text),
   };
   console.log(`  ${id}: ${Math.round(r.secs)} s, ${reason ?? error}; ${MAIN} read ${r.main.readTok.toLocaleString('en-US')} tokens over ${r.main.calls} replies (peak ${r.main.peakTok.toLocaleString('en-US')}), ${HELPER} ${r.helper.calls} replies`);
   return r;
