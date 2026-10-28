@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai helpers check · bonsai-2:9b with bonsai-2:2b · asked to use it</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.panel[hidden]{display:none}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--mute)}
+.chip.ok{color:var(--up)}.chip.no{color:var(--down)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small{display:block;color:var(--faint);font-weight:400;font-size:11.5px}
+td.num,th.num{text-align:right}
+td.what{white-space:normal;color:var(--mute);font-size:13.5px;min-width:260px}
+.ok{color:var(--up)}.no{color:var(--down)}.dim{color:var(--faint)}.small{font-size:13px;margin:0}
+ol.list{margin:0;padding-left:22px;columns:2 360px;column-gap:32px}ol.list li{margin:0 0 6px;break-inside:avoid}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 7px}ul.how code{overflow-wrap:anywhere}
+code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+@media (max-height:820px){body{padding:10px 14px;gap:8px}.panel{padding:12px 16px;gap:9px}.verdict{font-size:15px}.card .v{font-size:20px}th,td{padding:5px 10px}ul.how li{margin:0 0 4px}}
+@media (max-width:760px),(max-height:560px){body{overflow:auto;height:auto}.panel{overflow:visible}.table-wrap{overflow-x:auto}td.what{min-width:220px}}
+</style>
+</head>
+<body>
+<header><h1>Bonsai helpers check · bonsai-2:9b with bonsai-2:2b · asked to use it</h1><span class="date">Oct 28 12:48 · fa96fa6+</span></header>
+<div class="tabs" role="tablist"><button type="button" role="tab" aria-selected="true" data-tab="result">1 · Result</button><button type="button" role="tab" aria-selected="false" data-tab="checks">2 · The checks</button><button type="button" role="tab" aria-selected="false" data-tab="side">3 · Side by side</button><button type="button" role="tab" aria-selected="false" data-tab="how">4 · How it was measured</button></div>
+<main class="panel" id="p-result"><p class="verdict">Not a fair run: after the helper, the conversation went on on bonsai-2:2b (a bug, fixed after this run), so bonsai-2:9b's answer and the whole “on its own” half came from bonsai-2:2b. The helper itself ran: 27 steps, 145 s.</p><div class="chips"><span class="chip no">✗ pass: all 8 checks</span><span class="chip">Oct 28 12:48 · fa96fa6+</span></div><div class="cards"><div class="card"><div class="k">Checks passed · higher is better</div><div class="v">3 of 8</div><div class="s">no run before this one</div></div><div class="card"><div class="k">The whole request · lower is faster</div><div class="v">192 s</div><div class="s">on its own: 54 s (3.59×)</div></div><div class="card"><div class="k">bonsai-2:9b&#39;s conversation at its largest · lower leaves more room</div><div class="v">5,799 tokens</div><div class="s">on its own: 0 tokens</div></div><div class="card"><div class="k">Helpers on bonsai-2:2b · what ran</div><div class="v">1 · 27 steps</div><div class="s">Explore 145 s</div></div><div class="card"><div class="k">Memory Ollama held at most · of 16 GB</div><div class="v">3.1 GB</div><div class="s">never both at once; on its own 1.8 GB</div></div></div><ol class="list"><li><span class="ok">✓</span> With helpers on bonsai-2:2b, bonsai-2:9b is offered the Agent tool <span class="dim">· —</span></li><li><span class="ok">✓</span> bonsai-2:9b hands the searching to a helper <span class="dim">· 145 s</span></li><li><span class="ok">✓</span> The helper runs on bonsai-2:2b <span class="dim">· 151 s</span></li><li><span class="no">✗</span> bonsai-2:9b stays loaded while the helper works <span class="dim">· —</span></li><li><span class="no">✗</span> With helpers, both answers are right <span class="dim">· 192 s</span></li><li><span class="no">✗</span> On its own, bonsai-2:9b gets both right (the baseline) <span class="dim">· 54 s</span></li><li><span class="no">✗</span> With helpers, bonsai-2:9b&#39;s own conversation peaks smaller <span class="dim">· —</span></li><li><span class="no">✗</span> With helpers, the request takes at most 1.5× the time <span class="dim">· 192 s</span></li></ol><p class="dim small">Tab 2 has what each check showed.</p></main>
+<main class="panel" id="p-checks" hidden><div class="table-wrap"><table><thead><tr><th>#</th><th>Check</th><th>Result</th><th class="num">Seconds<small>lower is faster</small></th><th>What it showed</th></tr></thead><tbody><tr><td class="dim">1</td><td><b>With helpers on bonsai-2:2b, bonsai-2:9b is offered the Agent tool</b></td><td class="ok">✓ passed</td><td class="num">—</td><td class="what">its first request listed Agent among 10 tools</td></tr><tr><td class="dim">2</td><td><b>bonsai-2:9b hands the searching to a helper</b></td><td class="ok">✓ passed</td><td class="num">145 s</td><td class="what">Explore: 27 steps, 145 s, done</td></tr><tr><td class="dim">3</td><td><b>The helper runs on bonsai-2:2b</b></td><td class="ok">✓ passed</td><td class="num">151 s</td><td class="what">26 replies from bonsai-2:2b: read 407,085 tokens in 90.5 s, wrote 4,853 in 60.7 s, loading 1.7 s</td></tr><tr><td class="dim">4</td><td><b>bonsai-2:9b stays loaded while the helper works</b></td><td class="no">✗ failed</td><td class="num">—</td><td class="what">never both at once; bonsai-2:9b was let go at some point; at most 3.1 GB held</td></tr><tr><td class="dim">5</td><td><b>With helpers, both answers are right</b></td><td class="no">✗ failed</td><td class="num">192 s</td><td class="what">✓ the 6 seconds in helpers-panel; ✗ the function /subagents saves with</td></tr><tr><td class="dim">6</td><td><b>On its own, bonsai-2:9b gets both right (the baseline)</b></td><td class="no">✗ failed</td><td class="num">54 s</td><td class="what">✗ the 6 seconds; ✗ the function</td></tr><tr><td class="dim">7</td><td><b>With helpers, bonsai-2:9b&#39;s own conversation peaks smaller</b></td><td class="no">✗ failed</td><td class="num">—</td><td class="what">5,799 tokens with helpers, 0 on its own (the largest prompt bonsai-2:9b was sent)</td></tr><tr><td class="dim">8</td><td><b>With helpers, the request takes at most 1.5× the time</b></td><td class="no">✗ failed</td><td class="num">192 s</td><td class="what">192 s with helpers, 54 s on its own (3.59×)</td></tr></tbody></table></div></main>
+<main class="panel" id="p-side" hidden><div class="table-wrap"><table><thead><tr><th>Measure</th><th class="num">With helpers on bonsai-2:2b</th><th class="num">bonsai-2:9b on its own</th></tr></thead><tbody>
+<tr><td><b>The whole request</b><small class="dim"> · lower is faster</small></td><td class="num">192 s</td><td class="num"><b>54 s</b></td></tr>
+<tr><td><b>bonsai-2:9b&#39;s conversation at its largest</b><small class="dim"> · lower leaves more room</small></td><td class="num">5,799 tokens</td><td class="num"><b>0 tokens</b></td></tr>
+<tr><td><b>bonsai-2:9b replies</b><small class="dim"> · count</small></td><td class="num">1</td><td class="num">0</td></tr>
+<tr><td><b>bonsai-2:9b reading</b><small class="dim"> · lower is faster</small></td><td class="num">29 s</td><td class="num"><b>0.0 s</b></td></tr>
+<tr><td><b>bonsai-2:9b writing (and thinking)</b><small class="dim"> · lower is faster</small></td><td class="num">6.2 s</td><td class="num"><b>0.0 s</b></td></tr>
+<tr><td><b>bonsai-2:9b tokens written</b><small class="dim"> · count</small></td><td class="num">174</td><td class="num">0</td></tr>
+<tr><td><b>bonsai-2:2b replies (the helper)</b><small class="dim"> · count</small></td><td class="num">26</td><td class="num">12</td></tr>
+<tr><td><b>bonsai-2:2b reading</b><small class="dim"> · time</small></td><td class="num">91 s</td><td class="num">31 s</td></tr>
+<tr><td><b>bonsai-2:2b writing (and thinking)</b><small class="dim"> · time</small></td><td class="num">61 s</td><td class="num">20 s</td></tr>
+<tr><td><b>Loading a model</b><small class="dim"> · lower is faster</small></td><td class="num">1.7 s</td><td class="num"><b>0.0 s</b></td></tr>
+<tr><td><b>Memory Ollama held at most</b><small class="dim"> · GB of 16</small></td><td class="num">3.1 GB</td><td class="num">1.8 GB</td></tr>
+<tr><td><b>The answers</b><small class="dim"> · both right is the bar</small></td><td class="num">✓ 6 s · ✗ the function</td><td class="num">✗ 6 s · ✗ the function</td></tr>
+<tr><td><b>How it ended</b><small class="dim"> · </small></td><td class="num">done</td><td class="num">done</td></tr>
+</tbody></table></div>
+<div class="cards"><div class="card"><div class="k">bonsai-2:9b's answer · with helpers</div><p class="small">**1. The helper row stays on screen for 6000 seconds** (line 37 in `helpers-panel.mjs`, value in KEEP_DONE_MS).
+
+**2. The function that saves the helper model is `saveProfileWithModel`**, found at line 131 in `app-panels.mjs`.</p></div><div class="card"><div class="k">bonsai-2:9b's answer · on its own</div><p class="small">1. **6 seconds** (KEEP_DONE_MS = 6000 ms)
+
+2. **writeProfiles** - This function in `app-profiles.mjs` saves the helper model to the profiles.</p></div></div></main>
+<main class="panel" id="p-how" hidden><ul class="how"><li>One question, asked twice in a fresh conversation each time, about a copy of this commit's <code>terminal/src/app</code> folder (outside any repo): “Look through this folder and answer two things, each with file:line: (1) how many seconds a finished helper&#39;s row stays on screen in the helpers panel, and (2) which function saves the helper model that /subagents picks into the profiles. Two short lines.” The answers are in the code: <code>KEEP_DONE_MS</code> = 6000 in <code>helpers-panel.mjs</code>, and <code>useHelperModel</code> in <code>subagents-cmd.mjs</code> (with <code>helpersTo</code>); an answer counts when it names them. With helpers the question ended with one more sentence: “Hand the searching to a helper with the Agent tool.”</li><li>First with helpers: a throwaway home whose <code>profiles.json</code> sends the helpers it starts to <code>bonsai-2:2b</code> on the same service, as <code>/subagents bonsai-2:2b</code> writes it, and the window's profile router (<code>ProfileRouter</code>, lent the conversation's connection). Then on its own: no profiles, so the Agent tool is not offered and bonsai-2:9b reads and searches itself.</li><li>bonsai-2:9b on <code>http://localhost:11434</code> at 32,768 tokens of context, thinking as the model has it (on), Accept edits, the app's sorting on, the memory and the read-ahead off. Each way stops at 15 minutes.</li><li>Every reply’s figures are Ollama’s own, read from the reply itself: prompt_eval_count (the conversation’s size as sent: its largest is the peak), prompt_eval_duration (reading), eval_count and eval_duration (writing, thinking included), load_duration. Which model held memory: <code>/api/ps</code> every 2 s.</li><li>The rules, written before the first run: with helpers, the Agent tool offered and used, the helper on the smaller model with the main one kept loaded, both answers right; on its own, both right too (the baseline); with helpers the main conversation peaks smaller and the request takes at most 1.5× the time. One run of each: the times say what happened this once, not an average.</li><li>The whole run took 246 s. Code: fa96fa6+.</li><li>Raw results, on this Mac: <code>models/evals/results/bonsai-helpers-2026-10-28-1248</code></li></ul></main>
+<script>
+const tabs = [...document.querySelectorAll('[data-tab]')];
+const show = (id) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === id))); document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.id !== 'p-' + id; }); try { history.replaceState(null, '', '#' + id); } catch {} };
+tabs.forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
+addEventListener('keydown', (e) => { if (e.metaKey || e.ctrlKey || e.altKey) return; const n = Number(e.key); if (n >= 1 && n <= tabs.length) show(tabs[n - 1].dataset.tab); });
+const fromHash = () => { if (tabs.some((b) => '#' + b.dataset.tab === location.hash)) show(location.hash.slice(1)); };
+addEventListener('hashchange', fromHash);
+fromHash();
+</script>
+</body>
+</html>
