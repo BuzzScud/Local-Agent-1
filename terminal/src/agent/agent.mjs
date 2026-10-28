@@ -591,7 +591,13 @@ export class Agent extends EventEmitter {
     // The main model by its own name is the main model (another size would load it again).
     const bare = (m) => String(m ?? '').toLowerCase().replace(/:latest$/, '');
     const otherModel = own && ![bare('main'), bare(endpointOf(this.url)?.model)].includes(bare(own.model)) ? own.model : null;
-    const ownUse = otherModel && endpointOf(this.url)?.ollama ? { model: otherModel, numCtx: OWN_HELPER_CTX, keepAlive: '30m' } : undefined;
+    // Helpers sent to another model of the conversation's own Ollama service (/subagents <model>) go the same way: each
+    // call names that model. Moved there by its profile, the helper connected that model at the same address, which
+    // names one model, so the conversation went on on the helper's, and the service, asked for its own context, let the
+    // main model go (28 Oct 2026, the Bonsai helpers check: 9B's answer and its next message came from 2B).
+    const away = !own && this.helpersElsewhere() ? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null;
+    const awayHere = away?.model && endpointOf(this.url)?.ollama && endpointOf(away.url) === endpointOf(this.url) ? away.model : null;
+    const ownUse = (otherModel || awayHere) && endpointOf(this.url)?.ollama ? { model: otherModel ?? awayHere, numCtx: OWN_HELPER_CTX, keepAlive: '30m' } : undefined;
     const t0 = Date.now();
     const slot = this.slots ? { main: this.slots.side ?? this.slots.main } : undefined;
     const helper = new Agent({
@@ -613,7 +619,7 @@ export class Agent extends EventEmitter {
     const steps = [];
     let report = '';
     // The helpers panel (app/helpers-panel.mjs, 28 Oct 2026): which model it runs on, its steps and its last one, as it goes.
-    const panel = (more = {}) => this.emit('helper', { id, kind: own ? own.kind : kind === 'general' ? 'Agent' : 'Explore', model: helper.modelName() ?? ownUse?.model ?? this.helpersAway?.model ?? this.modelName(), steps: steps.length, last: steps.at(-1)?.slice(2) ?? '', started: t0, ...more });
+    const panel = (more = {}) => this.emit('helper', { id, kind: own ? own.kind : kind === 'general' ? 'Agent' : 'Explore', model: ownUse?.model ?? helper.modelName() ?? this.helpersAway?.model ?? this.modelName(), steps: steps.length, last: steps.at(-1)?.slice(2) ?? '', started: t0, ...more });
     const say = (last) => { panel(); this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` }); };
     // Its changes count as this message's, so "done" after them is not "nothing changed".
     const edited = new Set();
