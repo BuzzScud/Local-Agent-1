@@ -194,7 +194,19 @@ export class Agent extends EventEmitter {
   // The Agent tool (a helper, tools.mjs AGENT_TOOL_DEF): when the model decides, on the Claude
   // API, and on the remote set once you have a helper agent file (prompt-files.mjs ownDir);
   // never inside a helper; "subagents": false in settings.json leaves it out.
-  agentsOn() { return !this.isHelper && this.subagents !== false && (this.way === 'model' || endpointOf(this.url)?.kind === 'claude' || this.helperAgents().length > 0); }
+  agentsOn() { return !this.isHelper && this.subagents !== false && (this.way === 'model' || endpointOf(this.url)?.kind === 'claude' || this.helperAgents().length > 0 || this.helpersElsewhere()); }
+  // Helpers on another model (28 Oct 2026, the owner: "so bonsai 9b can use bonsai 2b or 4b as sub agents"): when your
+  // profiles send the helpers it starts (/profiles, Helpers it starts) to a model other than the conversation's, any
+  // model is offered the Agent tool, the ones the app steers (the local set, App) too, and a helper runs there
+  // (followProfile, ai 'helpers'). Looked at once a conversation, so the tools and the prompt stay as they are.
+  helpersElsewhere() {
+    if (this.isHelper || this.subagents === false || !this.router?.active?.()) return false;
+    if (this.helpersAway?.conv === this.conversation) return this.helpersAway.on;
+    let call = null;
+    try { call = this.router.helper('helpers', { url: this.url, model: this.modelName() }) ?? null; } catch {}
+    this.helpersAway = { conv: this.conversation, on: Boolean(call), model: call?.model ?? null };
+    return this.helpersAway.on;
+  }
   // Your helper agents (prompt-files.mjs readHelperAgents): read from their folder each time, so a
   // new file is offered at the next step. None inside a helper, none on the local set.
   helperAgents() { return this.isHelper ? [] : readHelperAgents(this.rulesSetUsed ?? this.rulesSet()); }
@@ -306,7 +318,8 @@ export class Agent extends EventEmitter {
     this.notesRoomUsed = this.notesRoomNow;
     this.promptStampUsed = this.promptStamp();
     this.rulesSetUsed = this.rulesSet();
-    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()), web: Boolean(this.webTools()?.fetch), here: Boolean(this.model?.remote?.here) }));
+    this.helperLineUsed = this.helpersElsewhere();
+    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), helperLine: this.helperLineUsed, mcp: (this.mcpInPrompt = this.mcpPrompt()), web: Boolean(this.webTools()?.fetch), here: Boolean(this.model?.remote?.here) }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
   }
   // The prompt files as they are now: the rules files (AGENTS.md or CLAUDE.md, whole, without
@@ -599,7 +612,9 @@ export class Agent extends EventEmitter {
     if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn), moved: () => {}, whenMoved: async () => {} };
     const steps = [];
     let report = '';
-    const say = (last) => this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` });
+    // The helpers panel (app/helpers-panel.mjs, 28 Oct 2026): which model it runs on, its steps and its last one, as it goes.
+    const panel = (more = {}) => this.emit('helper', { id, kind: own ? own.kind : kind === 'general' ? 'Agent' : 'Explore', model: helper.modelName() ?? ownUse?.model ?? this.helpersAway?.model ?? this.modelName(), steps: steps.length, last: steps.at(-1)?.slice(2) ?? '', started: t0, ...more });
+    const say = (last) => { panel(); this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` }); };
     // Its changes count as this message's, so "done" after them is not "nothing changed".
     const edited = new Set();
     helper.on('tool', (ev) => { if (!ev.error && ['Update', 'Write', 'Create'].includes(ev.label) && ev.arg) edited.add(String(ev.arg)); steps.push(`${ev.error ? '✗' : '⏺'} ${ev.label}(${String(ev.arg ?? '').slice(0, 80)})`); say(`${ev.label}(${String(ev.arg ?? '').slice(0, 50)})`); });
@@ -608,6 +623,7 @@ export class Agent extends EventEmitter {
     let reason;
     try { reason = await helper.send(args.prompt, { signal }); } catch (e) { reason = 'error'; report ||= `It stopped: ${e.message}`; }
     const secs = (Date.now() - t0) / 1000;
+    panel({ done: true, secs, reason });
     this.stats.requests += helper.stats.requests;
     if (edited.size && this.turn) {
       this.turn.changed = true;

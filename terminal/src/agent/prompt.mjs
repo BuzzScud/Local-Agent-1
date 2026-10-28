@@ -267,11 +267,14 @@ export const promptSetOf = (system) => (typeof system === 'string' && system.inc
 // toolUse and skills: terminal/rules/TOOLS.md and SKILLS.md as they are now
 // (prompt-files.mjs); the old prompt keeps the Tool use lines it had and no skills.
 // set 'remote': the remote set's instructions (remotePrompt); AGENTIC_PROMPT=old keeps the old local one.
-export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = process.env.AGENTIC_EXAMPLE === '1', math = '', instructions, toolUse, skills, set = 'local', agents = false, mcp = false, web = false, here = false }) {
+// helperLine: the Agent tool is offered because the helpers run on another model (agent.mjs helpersElsewhere): one
+// line on when to hand work to it, on either set.
+export const HELPER_LINE = '- To read or search many files, hand it to the Agent tool (kind explore): a helper on a smaller model reads and reports back with file:line, so your own memory stays free for the work. Give it the whole task and what to report.';
+export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = process.env.AGENTIC_EXAMPLE === '1', math = '', instructions, toolUse, skills, set = 'local', agents = false, helperLine = false, mcp = false, web = false, here = false }) {
   const today = localDay(date);
   const now = promptVersion() !== 'old';
-  if (set === 'remote' && now) return remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse, skills, agents, mcp, web, here });
-  const tooling = toolUse ?? (now ? toolUseFor('local', undefined, { mcp }) : TOOL_USE_OLD);
+  if (set === 'remote' && now) return remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse: helperLine ? `${toolUse ?? toolUseFor('remote', undefined, { mcp, web })}\n${HELPER_LINE}` : toolUse, skills, agents, mcp, web, here });
+  const tooling = `${toolUse ?? (now ? toolUseFor('local', undefined, { mcp }) : TOOL_USE_OLD)}${helperLine ? `\n${HELPER_LINE}` : ''}`;
   const list = now ? skillsList(skills ?? readSkills(), { path: skillPath(cwd) }) : '';
   return `You are Agentic Coder, a coding assistant in the user's terminal on their Mac. You work inside one project folder and use tools to read, search, change and test code. You can see the files only through your tools.
 

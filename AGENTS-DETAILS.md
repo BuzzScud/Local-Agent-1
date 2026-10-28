@@ -1885,6 +1885,33 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the notes baked, the read-ahead's messages and settings, the next message stopping it, none without thinking; the
   request's 95% line and the between tidy, a reply's room late in a request, the read-ahead reading the tidied one).
 
+## Helpers on a smaller model, and the helpers panel (28 Oct 2026)
+
+- **What and why.** The owner: "add a way to use sub agents? so bonsai 9b can use bonsai 2b or 4b as sub agents?", then
+  "make a tool / skill to use sub agents anyway … ensure the ui updates, show me a live design". Bonsai 9B (the local
+  set, App) was never offered the Agent tool: `agentsOn` wanted the model to decide, the Claude API, or a helper file
+  (remote set only). Their picks: real sub-agents, the 2B and 4B both usable for helpers or side jobs, the live design's
+  "2 · Helper panel" (`docs/design rounds/agentic-coder-helpers-on-a-smaller-model-2-designs-2026-10-28.html`), a
+  `/subagents <model>` shortcut beside /profiles, build, test, push. Ollama's library has bonsai-2:2b (911 MB), :4b
+  (1.6 GB), :9b (3.2 GB) and :27b (8.3 GB; it does not fit beside the others on a 16 GB Mac).
+- **The Agent tool for any model whose helpers run elsewhere** (agent.mjs `helpersElsewhere`, in `agentsOn`): the
+  window's profile router is active and `router.helper('helpers', …)` names a model other than the conversation's.
+  Looked at once a conversation (`helpersAway`, keyed by `conversation`), so the tools and the prompt stay put;
+  agent-start.mjs rebuilds the prompt once when it flips, with a note "Helpers on <model>: …". On either set the Tool
+  use lines then end with `HELPER_LINE` (prompt.mjs `helperLine`). The helper itself already followed the profile
+  (followProfile, ai `helpers`). `coding -p` has no router, so nothing changes there.
+- **The helpers panel** (`terminal/src/app/helpers-panel.mjs` rows, `helpers-panel.jsx` view, over the prompt under
+  the loops line in screen.jsx): runHelper emits `helper` ({ id, kind, model, steps, last, started, done, secs,
+  reason }) at its start, each step and its end; AutoSave emits `side-job` for the memory note on the model it goes to.
+  app-run.mjs keeps the rows (`withHelper`), ticks each second while one shows (a finished row stays `KEEP_DONE_MS`, 6 s)
+  and on an Ollama service reads `/api/ps` every 3 s (models `ollamaLoaded`) for the memory line. App.jsx is untouched.
+- **/subagents <model>** (`terminal/src/app/subagents-cmd.mjs`; /subagents is typed only, alone it opens /profiles on
+  its AIs group): on a model on a service, the model checked against the Ollama service's list, then profiles.mjs
+  `helpersTo` uses or makes "Helpers · <model>" on Main's server and points `ai:helpers` at it; the conversation looks
+  again at its next message. Side jobs stay a /profiles row.
+- **Tests**: `terminal/test/helpers-panel.test.mjs` (the rows, helpersTo, /subagents, the Agent tool and its line once a
+  conversation and never with subagents off, a helper's events on a stand-in model).
+
 ## The hub's Bonsai tab: everything about Bonsai, live (27 Oct 2026)
 
 - **What and why.** The owner: "can you create an entire ui, inside of the web page, to manage bonsai and everything
