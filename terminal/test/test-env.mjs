@@ -49,6 +49,9 @@ process.env.AGENTIC_TRYOUT ??= 'off';
 // The second look at an answer (src/agent/second-look.mjs, 4 Oct 2026): one more call after real work,
 // which the tests that count a stand-in's replies would count. Its own test turns it on.
 process.env.AGENTIC_SECOND_LOOK ??= 'off';
+// The next message read ahead (src/agent/agent-model.mjs warmNext, 28 Oct 2026): one more request after an
+// answer on an Ollama service, which the tests that count a stand-in's replies would count. Its own test turns it on.
+process.env.AGENTIC_WARM_NEXT ??= 'off';
 process.env.AGENTIC_UNLOAD ??= 'off';
 // A page asked for "on my desktop" (src/app/App.jsx openPage): no test opens a
 // browser, or offers to copy a page to the real Desktop.

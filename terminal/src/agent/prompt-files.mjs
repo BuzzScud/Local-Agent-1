@@ -7,6 +7,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOME } from '../../../models/index.mjs';
+import { ownWords } from '../flows/words.mjs';
 import { savedSkillFiles, skillsDir } from './skill-store.mjs';
 
 export const PROMPT_FILES = Object.freeze({ tools: 'TOOLS.md', skills: 'SKILLS.md' });
@@ -292,7 +293,7 @@ const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // bug kinds are sorted (rules.mjs sortBug); null when none. A clarifying
 // question joined to the request is not the user's words, so it is left out.
 export function pickSkill(text, skills = readSkills()) {
-  const t = String(text ?? '').replace(/the question "[^"]*"/g, '').toLowerCase().replace(/[‘’]/g, "'");
+  const t = ownWords(text).replace(/the question "[^"]*"/g, '').toLowerCase().replace(/[‘’]/g, "'");
   let best = null;
   for (const s of skills) {
     const matched = s.words.filter((w) => new RegExp(`(^|[^a-z0-9])${escape(w)}(?=$|[^a-z0-9])`).test(t));

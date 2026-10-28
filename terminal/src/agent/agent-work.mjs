@@ -19,6 +19,7 @@ import { CALL_MARK, EXPLAIN, LOOK_TOOLS, MAX_CALLS, MCP_BACKS, READ_TIP, SAME_ST
 
 export class WorkPart {
   async work(text, { signal, images, wake = false } = {}) {
+    this.warmCtl?.abort(); // the last answer's warm-up (agent-model.mjs warmNext): this message takes over
     this.loadChanges();
     this.busy = true;
     const started = Date.now();
@@ -94,9 +95,10 @@ export class WorkPart {
     let skill = null;
     if (!follow) { try { skill = pickSkill(text, readSkills(undefined, this.rulesSetUsed ?? this.rulesSet())); } catch {} }
     // First the focused paths (rename / fix / change); the loop handles the rest.
-    // (The model that decides calls them itself: Rename and TestFirst.)
+    // (The model that decides calls them itself: Rename and TestFirst.) A model that takes none (models/runtime/
+    // remote.mjs OWN_REMOTES focused: false, Bonsai 2 9B) goes straight to step by step.
     this.carried = null;
-    if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length && !skill) {
+    if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length && !skill && this.model?.focused !== false) {
       const ended = await this.focusedPaths(text, started, signal);
       if (ended) return ended;
     }
@@ -487,9 +489,11 @@ export class WorkPart {
     // The prompt cache of a model on another machine: the notes that went with this request stay
     // in it, written in, so the next message starts from the same text the service has cached. Left
     // to come and go, they changed the request and the service read everything after it again.
-    if (this.remoteSet()) this.bakeTurnNotes();
+    // A model on a service with the local set (Bonsai 2 9B) has that cache too (28 Oct 2026).
+    if (this.remoteSet() || this.model?.remote) this.bakeTurnNotes();
     await this.stillBroken(reason);
     await this.deliverDesktop(reason);
+    if (reason !== 'interrupted') this.warmNext();
     this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, steps: t.steps ?? 0, reads: (t.readsRun ?? 0) + (t.given ?? 0), readFirst: t.ranked?.files?.length ?? 0, thinkTokens: t.thinkTokens ?? 0, tokens: t.tokens ?? 0, stuckAsks: t.stuckAsks ?? 0, made: this.madeSummary() });
     return reason;
   }
