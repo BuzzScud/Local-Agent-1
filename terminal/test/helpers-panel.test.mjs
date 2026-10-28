@@ -118,3 +118,45 @@ test('a helper says how it goes: its model, each step, and how it ended', async 
     expect(typeof seen[0].model).toBe('string');
   } finally { await fake.close(); }
 });
+
+test('helpers on another model of the conversation’s own Ollama service name it on each call; the conversation’s model stays', async () => {
+  // 28 Oct 2026, the Bonsai helpers check: moved there by its profile, a helper connected 2B at 9B's address, and the
+  // conversation went on on 2B. No model runs here: the helper's send is stood in for.
+  const { setEndpoint, dropEndpoint, endpointOf } = await import('../../models/index.mjs');
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-helpers-'));
+  const url = 'http://127.0.0.1:9';
+  const other = 'http://127.0.0.2:9';
+  setEndpoint(url, { remote: true, kind: 'openai', ollama: true, model: 'bonsai-2:9b' });
+  setEndpoint(other, { remote: true, kind: 'openai', ollama: true, model: 'qwen3.6' });
+  const model = { ...MODELS[DEFAULT_MODEL], remote: { model: 'bonsai-2:9b' } };
+  const send = Agent.prototype.send;
+  const helpers = [];
+  Agent.prototype.send = async function (...a) {
+    if (!this.isHelper) return send.apply(this, a);
+    helpers.push({ ownUse: this.ownUse, router: this.router });
+    this.emit('assistant', { final: true, text: 'It is in a.mjs:1.' });
+    return 'done';
+  };
+  try {
+    let to = { url, model: 'bonsai-2:2b' };
+    const a = new Agent({ url, model, cwd, system: systemPrompt({ cwd, git: 'none' }), memory: false, flows: false, way: 'app', instructions: 'local' });
+    a.router = { active: () => true, helper: () => to };
+    const seen = [];
+    a.on('helper', (e) => seen.push(e));
+    const r = await a.runHelper('h1', { prompt: 'Find parse; report file:line.', kind: 'explore' }, { label: 'Agent', arg: 'find parse' });
+    expect(helpers[0].ownUse).toMatchObject({ model: 'bonsai-2:2b', numCtx: 32_768 });
+    expect(helpers[0].router).toBeNull(); // never moved by a profile: no second connection at this address
+    expect(endpointOf(url).model).toBe('bonsai-2:9b');
+    expect(seen.at(-1)).toMatchObject({ model: 'bonsai-2:2b', done: true });
+    expect(r.text).toContain('on bonsai-2:2b');
+    to = { url: other, model: 'qwen3.6' }; // another server: its profile moves it there, as before
+    a.helpersAway = null;
+    await a.runHelper('h2', { prompt: 'Find parse.', kind: 'explore' }, { label: 'Agent', arg: 'find parse' });
+    expect(helpers[1].ownUse).toBeUndefined();
+    expect(helpers[1].router).toBe(a.router);
+  } finally {
+    Agent.prototype.send = send;
+    dropEndpoint(url);
+    dropEndpoint(other);
+  }
+});
