@@ -47,26 +47,28 @@ export function readSettingsFile() {
     return d && typeof d === 'object' && !Array.isArray(d) ? { data: d, broken: null } : { data: {}, broken: 'it is not a JSON object' };
   } catch (e) { return { data: {}, broken: e.message }; }
 }
-// An unreadable settings.json is copied aside once a version (backups/settings: one copy each, not one a save, which
-// would push your good copies out). true when this version is new. tell: said when a save is refused for a new one.
-let refusedCopy = null;
-let refusedOf = null;
-let tell = null;
-export const onSettingsRefused = (fn) => { tell = fn; };
-function keepBroken() {
+// A file of yours that cannot be read (settings.json, trust.json) is copied aside once a version (backups/<kind>: one
+// copy each, not one a save, which would push your good copies out). true when this version is new.
+const brokenSeen = new Map(); // file → its size and time when it was copied
+const brokenCopies = new Map(); // file → the copy
+export function keepBroken(file = SETTINGS, kind = 'settings') {
   let mark = null;
-  try { const st = statSync(SETTINGS); mark = `${st.size}:${st.mtimeMs}`; } catch { return false; }
-  if (mark === refusedOf) return false;
-  refusedOf = mark;
-  refusedCopy = keepCopy(SETTINGS, 'settings');
+  try { const st = statSync(file); mark = `${st.size}:${st.mtimeMs}`; } catch { return false; }
+  if (brokenSeen.get(file) === mark) return false;
+  brokenSeen.set(file, mark);
+  brokenCopies.set(file, keepCopy(file, kind));
   return true;
 }
+// tell: said when a save is refused for a version of settings.json the window has not said yet.
+let tell = null;
+export const onSettingsRefused = (fn) => { tell = fn; };
 // What to tell you when settings.json cannot be read (the window says it as it opens; its copy is kept then), else null.
 export function settingsProblem() {
   const { broken } = readSettingsFile();
   if (!broken) return null;
   keepBroken();
-  return `${SETTINGS.replace(homedir(), '~')} cannot be read (${broken}), so this window uses the defaults and saves nothing to it: fix or delete it, then start again.${refusedCopy ? ` A copy is kept in ${refusedCopy.replace(homedir(), '~')}.` : ''}`;
+  const copy = brokenCopies.get(SETTINGS);
+  return `${SETTINGS.replace(homedir(), '~')} cannot be read (${broken}), so this window uses the defaults and saves nothing to it: fix or delete it, then start again.${copy ? ` A copy is kept in ${copy.replace(homedir(), '~')}.` : ''}`;
 }
 
 export function loadSettings(cwd) {
@@ -148,7 +150,7 @@ export function writeWhole(file, text) {
 const LOCK_WAIT_MS = 1000;
 const LOCK_STALE_MS = 5000;
 const pause = new Int32Array(new SharedArrayBuffer(4));
-function withLock(file, fn) {
+export function withLock(file, fn) {
   const lock = `${file}.lock`;
   const until = Date.now() + LOCK_WAIT_MS;
   let held = false;
