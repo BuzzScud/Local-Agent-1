@@ -64,11 +64,12 @@ export function messageQueue() {
   };
 }
 
-// A saved conversation that can be opened again: its messages a list that starts with the instructions. Why not, or null.
+// A saved conversation that can be opened again: its messages a list, each with a role (the first is taken as the
+// instructions, as before). Why not, or null.
 export function sessionProblem(s) {
   if (!s || typeof s !== 'object') return 'its file holds no conversation';
   if (!Array.isArray(s.messages) || !s.messages.length) return 'its file holds no messages';
-  if (s.messages[0]?.role !== 'system' || s.messages.some((m) => !m || typeof m !== 'object' || typeof m.role !== 'string')) return 'its messages are not in the shape a conversation is saved in';
+  if (s.messages.some((m) => !m || typeof m !== 'object' || typeof m.role !== 'string')) return 'its messages are not in the shape a conversation is saved in';
   return null;
 }
 
