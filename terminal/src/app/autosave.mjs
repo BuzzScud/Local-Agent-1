@@ -38,6 +38,10 @@ export function saveModeOf(settings = {}) {
 const savingOn = () => process.env.AGENTIC_MEMORY_SAVE !== 'off';
 const JOBS = () => join(process.env.AGENTIC_HOME ?? HOME, 'memory-jobs');
 const WAIT_MS = 10_000; // a pause this long after a task starts a save
+// A job file that does not parse may still be being written (it is written with writeFileSync, not in one step): it is
+// left alone, and removed only once it is older than this (the audit of 18 Nov 2026: one being written was deleted).
+const HALF_WRITTEN_MS = 60_000;
+const dropIfOld = (file) => { try { if (Date.now() - statSync(file).mtimeMs > HALF_WRITTEN_MS) rmSync(file, { force: true }); } catch { /* gone already */ } };
 
 // The conversation as the save reads it: what was said, without tool output.
 const slim = (messages) => messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim()).slice(-40).map((m) => ({ role: m.role, content: m.content.slice(0, 1200) }));
@@ -292,7 +296,7 @@ export function waitingFor(cwd) {
     for (const f of readdirSync(JOBS()).filter((x) => x.endsWith('.wait')).sort()) {
       const file = join(JOBS(), f);
       let job;
-      try { job = JSON.parse(readFileSync(file, 'utf8')); } catch { rmSync(file, { force: true }); continue; }
+      try { job = JSON.parse(readFileSync(file, 'utf8')); } catch { dropIfOld(file); continue; }
       if (Date.now() - Date.parse(job.at) > PENDING_DAYS * 86_400_000) { rmSync(file, { force: true }); continue; }
       if (job.cwd === cwd) out.push({ file, job });
     }
@@ -304,6 +308,11 @@ export function waitingFor(cwd) {
 // 2 Oct 2026 says only `true`, and then gets the one saved in settings.json, as before).
 export function jobRemote(job) {
   return job.remote && typeof job.remote === 'object' ? job.remote : loadSettings(job.cwd).remote ?? {};
+}
+
+// A model server on this Mac that answers its health check (3 s at most).
+async function answers(port) {
+  try { return (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(3000) })).ok; } catch { return false; }
 }
 
 // `coding memory-save <job>`: the save handed over by a window that closed.
@@ -323,14 +332,22 @@ export async function runJob(file) {
   } else if (!job.given) try {
     // Only a model still loaded is used: if it has gone meanwhile, the save waits for the next
     // /start here (a .wait file, as when the window closed with the model off). Nothing loads for it.
-    if (!runningServer(model)) {
+    // The ctx given never decides (start() joins a running copy of the same file at whatever size it runs), but start()
+    // loads a copy of its own when the one found cannot be joined: it did not answer, it is a `coding serve` over https,
+    // it lacks a vision add-on the model wants, or it ended a moment ago. So it is joined only when it can be, and a
+    // copy start() loaded all the same is stopped at once (the audit of 18 Nov 2026: a second copy, or one after the
+    // window's had gone, could load for a save).
+    const waitForStart = () => {
       writeFileSync(file.replace(/\.json$/, '.wait'), JSON.stringify({ at: new Date().toISOString(), cwd: job.cwd, home: job.home ?? null, model: job.model, review: job.review, ask: job.ask, lessons: job.lessons, messages: job.messages }));
       rmSync(file, { force: true });
       return null;
-    }
+    };
+    const running = runningServer(model);
+    if (!running || running.serve?.https || (model.visionOn && !running.vision) || !(await answers(running.port))) return waitForStart();
     // The model this window left loaded: using it keeps it from being stopped.
     const s = new ModelServer(model);
     const st = await s.start({ ctx: job.ctx ?? 16384, lingerSecs: LINGER_SECS });
+    if (!st.shared) { await s.stop().catch(() => {}); return waitForStart(); }
     server = s;
     url = s.url;
     if (st.slots < 2) job.slot = null;
@@ -376,7 +393,7 @@ export function pendingFor(cwd) {
     for (const f of readdirSync(JOBS()).filter((x) => x.endsWith('.pending')).sort()) {
       const file = join(JOBS(), f);
       let p;
-      try { p = JSON.parse(readFileSync(file, 'utf8')); } catch { rmSync(file, { force: true }); continue; }
+      try { p = JSON.parse(readFileSync(file, 'utf8')); } catch { dropIfOld(file); continue; }
       if (Date.now() - Date.parse(p.at) > PENDING_DAYS * 86_400_000) { rmSync(file, { force: true }); continue; }
       if (p.cwd === cwd && (p.adds?.length || p.drops?.length)) out.push({ ...p, adds: p.adds ?? [], drops: p.drops ?? [], file });
     }
@@ -391,11 +408,13 @@ export function sinceLastTime(cwd) {
     for (const f of readdirSync(JOBS())) {
       const p = join(JOBS(), f);
       if (f.endsWith('.done')) {
-        const d = JSON.parse(readFileSync(p, 'utf8'));
+        // one that cannot be read (still being written, or broken) is passed over, not the end of the others
+        let d;
+        try { d = JSON.parse(readFileSync(p, 'utf8')); } catch { dropIfOld(p); continue; }
         if (d.cwd !== cwd) continue;
         if (d.line) lines.push(d.line.replace(/^Memory:/, 'Memory, saved when you last quit:'));
         rmSync(p, { force: true });
-      } else if (f.endsWith('.json') && Date.now() - statSync(p).mtimeMs > 24 * 3600_000) rmSync(p, { force: true }); // a save that never ran
+      } else if (f.endsWith('.json')) { try { if (Date.now() - statSync(p).mtimeMs > 24 * 3600_000) rmSync(p, { force: true }); } catch { /* gone */ } } // a save that never ran
     }
   } catch { /* nothing handed over yet */ }
   return lines;
