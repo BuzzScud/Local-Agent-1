@@ -40,7 +40,7 @@ export class MemoryPart {
     const t0 = Date.now();
     // Matched on what the request is about, not on how it asks to be answered (claude-notes.mjs topicOf).
     const topic = topicOf(text);
-    const r = await recall(this.cwd, topic, { embedder: this.memory.embedder ?? null, home: this.memory.home, signal, retriever: this.search.retriever, reranker: this.reranker });
+    const r = await recall(this.cwd, topic, { embedder: this.memory.embedder ?? null, home: this.memory.home, signal, retriever: this.search.retriever, reranker: this.reranker, sent: this.notesSent() });
     if (r.note && !this.memory.told) { this.memory.told = true; this.emit('note', { text: r.note, tone: 'dim' }); }
     const request = this.messages[at];
     let added = 0;

@@ -83,14 +83,18 @@ function byWords(text, facts) {
 // near: how many of the next closest facts to also give back (with their closeness), for the Instructions page; the agent leaves it at 0.
 // retriever, reranker: /effort's Search rows (search.mjs): which facts come;
 // how many is still the cut-off's.
-export async function recall(cwd, text, { embedder = null, home = homedir(), top = TOP, signal, today, mark = true, near = 0, retriever = 'meaning', reranker = null } = {}) {
+// sent: what of the memory this model may be given ('all', 'project', 'none': opening.mjs memorySent). A model on a
+// service that is not the owner's own machine gets no facts about the user with a request either (18 Nov 2026, the
+// audit: only the opening read held to "Memory sent", and each request still carried the facts about you it matched).
+export async function recall(cwd, text, { embedder = null, home = homedir(), top = TOP, signal, today, mark = true, near = 0, retriever = 'meaning', reranker = null, sent = 'all' } = {}) {
   const t0 = Date.now();
   const dirs = memoryDirs(cwd, home);
   const root = dirs.project ? dirname(dirname(dirs.project)) : null;
+  if (sent === 'none') return { facts: [], skipped: [], how: 'none', ms: 0 };
   // What is always read is in the instructions already; a fact about a file
   // that is gone is left where it is (tidy retires it).
   const names = root ? fileNames(root) : null;
-  const facts = [...readFacts(dirs.you), ...readFacts(dirs.project)].filter((f) => !f.always && !namesMissingFile(f, root, names));
+  const facts = [...(sent === 'project' ? [] : readFacts(dirs.you)), ...readFacts(dirs.project)].filter((f) => !f.always && !namesMissingFile(f, root, names));
   if (!facts.length || !String(text).trim()) {
     if (mark && String(text).trim()) countDay(dirs, { requests: 1 }, today);
     return { facts: [], skipped: [], how: 'none', ms: Date.now() - t0 };

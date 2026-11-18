@@ -253,3 +253,17 @@ test('facts about you stay however long unused; non-English facts are their own;
   const u = undoSave(memoryDirs(cwd, home));
   expect(u.of).toBe(out.added[0] && readLog(out.added[0].dir).find((l) => l.id === out.added[0].id)?.batch);
 });
+
+test('a request\'s facts follow Memory sent: none about you to a service that is not your own machine', async () => {
+  const { recall } = await import('../src/agent/recall.mjs');
+  const { home, repo, you, project } = place();
+  mkdirSync(you, { recursive: true });
+  applyChanges(you, { add: [{ kind: 'you', text: 'Show results pages with the verdict first, then the numbers of the run.' }] }, { today: '2026-11-18' });
+  applyChanges(project, { add: [{ kind: 'project', text: 'The results pages of the shop are built by build-results.mjs from the run.' }] }, { today: '2026-11-18' });
+  const ask = 'make the results pages of the run with the verdict first';
+  const all = await recall(join(repo, 'src'), ask, { home, mark: false, top: 5 });
+  expect(all.facts.some((f) => f.dir === you)).toBe(true);
+  const proj = await recall(join(repo, 'src'), ask, { home, mark: false, top: 5, sent: 'project' });
+  expect(proj.facts.some((f) => f.dir === you)).toBe(false);
+  expect((await recall(join(repo, 'src'), ask, { home, mark: false, sent: 'none' })).facts).toEqual([]);
+});
