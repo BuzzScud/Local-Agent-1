@@ -57,8 +57,9 @@ export function keysPart(self) {
     addHistory(self.cwd, value);
     self.historyRef.current.push(value);
     self.setTip(null);
-    // A model loading on the service: the message waits for it (preloadRemote sends it).
-    if (self.agent.busy || self.S.current.starting || self.S.current.remoteState === 'loading') { self.queuedRef.current = value; self.setQueued(value); if (self.agent.busy && steerable(value)) self.agent.heard?.(); return; }
+    // A model loading on the service: the message waits for it (preloadRemote sends it). So does one typed while a ! line
+    // runs (app-run.mjs runShellFn sends it when the line ends). Each waits in line, in order (App.jsx queuedRef).
+    if (self.agent.busy || self.S.current.starting || self.S.current.remoteState === 'loading' || self.S.current.live?.shell) { self.queuedRef.current = value; self.setQueued(value); if (self.agent.busy && steerable(value)) self.agent.heard?.(); return; }
     self.sendPrompt(value);
   };
 
@@ -92,6 +93,7 @@ export function keysPart(self) {
   };
 
   const onPaste = (text) => {
+    if (self.quittingRef.current) return; // leaving: nothing typed goes anywhere
     self.setPopup(null); // a paste closes the /help box, like any key
     self.setHandedBack(false); // and takes the mouse back from Terminal (handBack)
     // /loop's board has the window: a paste goes to it (a screenshot dropped at step 1 is attached), not the hidden prompt.
@@ -156,7 +158,7 @@ export function keysPart(self) {
   // conversation opens as /resume would; an action does what its row says.
   const doHomeItem = (it) => {
     self.setHomeFocus(null);
-    if (it.kind === 'conv') { self.holdRef.current = false; self.resumeSession(it.id); return; }
+    if (it.kind === 'conv') { if (!self.canStartTurn()) return; self.holdRef.current = false; self.resumeSession(it.id); return; }
     if (it.id === 'new') { self.flash('Type what you want in the box below, then press enter', 2500); return; }
     if (it.id === 'start') { self.toggleFnRef.current('home'); return; }
     if (it.id === 'mode') { self.setMode(nextMode(self.S.current.mode)); return; }
@@ -328,6 +330,8 @@ export function keysPart(self) {
   };
   const { permKeys, btwKeys, serviceKeys, modelKeys, formKeys, limitsKeys, choiceKeys, rewindKeys } = pickerKeysPart(self);
   const onKey = (ch, key) => {
+    // Leaving (quit, /update's restart): no key does anything more, so a second ctrl+c or ctrl+d never quits twice.
+    if (self.quittingRef.current) return;
     const cur = self.S.current;
     // A window too small to show the screen takes no keys (enter could answer
     // a question you cannot see), except ctrl+c.
@@ -408,20 +412,22 @@ export function keysPart(self) {
       else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
       return;
     }
-    // ctrl+o's list of task rows: ↑↓ one, enter opens or closes it, esc goes back
+    // ctrl+o's list of task rows: ↑↓ one (round from the last to the first, as every list here), enter opens or closes it, esc goes back
     if (cur.picker?.kind === 'groups') {
       const pk = cur.picker;
-      if (key.upArrow) self.setPicker({ ...pk, index: Math.max(0, pk.index - 1) });
-      else if (key.downArrow) self.setPicker({ ...pk, index: Math.min(pk.items.length - 1, pk.index + 1) });
+      const n = pk.items.length;
+      if (key.upArrow) self.setPicker({ ...pk, index: (pk.index + n - 1) % n });
+      else if (key.downArrow) self.setPicker({ ...pk, index: (pk.index + 1) % n });
       else if (key.return) { self.setPicker(null); self.toggleGroup(pk.items[pk.index].key); }
       else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
       return;
     }
-    // Resume picker
+    // Resume picker: ↑↓ round from the last to the first, as the / menu and /settings
     if (cur.picker) {
       const pk = cur.picker;
-      if (key.upArrow) self.setPicker({ ...pk, index: Math.max(0, pk.index - 1) });
-      else if (key.downArrow) self.setPicker({ ...pk, index: Math.min(pk.items.length - 1, pk.index + 1) });
+      const n = pk.items.length;
+      if (key.upArrow) self.setPicker({ ...pk, index: (pk.index + n - 1) % n });
+      else if (key.downArrow) self.setPicker({ ...pk, index: (pk.index + 1) % n });
       else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
       else if (key.return) { const id = pk.items[pk.index].key; self.setPicker(null); self.resumeSession(id); }
       return;

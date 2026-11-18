@@ -68,17 +68,22 @@ export function appBridge(self) {
         ...(!self.opts.url && !self.remoteRef.current.on && self.serverRef.current?.port ? ['--start'] : []),
         RESTARTED_PROMPT,
       ];
-      // The tool's answer lands in the conversation first (agent-step), then the window leaves.
+      // The tool's answer lands in the conversation first (agent-step), then the window leaves: once (a quit or another
+      // restart meanwhile wins), and whatever fails on the way the window still goes (a rejection here was unhandled,
+      // and an unhandled rejection ends a Bun program before its server is let go).
       setTimeout(async () => {
-        self.abortRef.current?.abort();
-        if (!s.title) s.title = reason || 'Agentic Coder working on itself';
-        self.saveNow();
-        self.onRestart?.(args);
-        self.setLeaving(true);
-        const srv = self.serverRef.current;
-        self.serverRef.current = null;
-        await srv?.stop({ keep: true });
-        self.exit();
+        if (self.quittingRef?.current) return;
+        if (self.quittingRef) self.quittingRef.current = true;
+        try {
+          self.abortRef.current?.abort();
+          if (!s.title) s.title = reason || 'Agentic Coder working on itself';
+          try { self.saveNow(); } catch {}
+          self.onRestart?.(args);
+          self.setLeaving(true);
+          const srv = self.serverRef.current;
+          self.serverRef.current = null;
+          await srv?.stop({ keep: true }).catch(() => {});
+        } finally { self.exit(); }
       }, 400);
       return { ok: true };
     },

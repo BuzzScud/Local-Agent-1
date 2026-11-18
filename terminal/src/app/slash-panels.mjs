@@ -39,6 +39,8 @@ export function slashPanels(self) {
         self.openRewind();
         break;
       case 'resume': {
+        // Not while anything runs (app-run.mjs canStartTurn): the conversation would be swapped under it.
+        if (!self.canStartTurn()) break;
         const list = listSessions(self.cwd);
         if (!list.length) { self.push({ type: 'note', text: 'No earlier conversations in this folder.', tone: 'dim' }); break; }
         // /resume <n>: the conversation the start page numbers n (start.jsx, the same repeats left out).

@@ -49,7 +49,7 @@ import { modelPart } from './app-model.mjs';
 import { remotePart } from './app-remote.mjs';
 import { panelsPart } from './app-panels.mjs';
 import { profilesPart } from './app-profiles.mjs';
-import { runPart } from './app-run.mjs';
+import { runPart, messageQueue } from './app-run.mjs';
 import { slashPart } from './app-slash.mjs';
 import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
@@ -96,7 +96,8 @@ export function App({ opts, win, onRestart }) {
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
     pendingContext: () => pendingContext, pendingSaveRef: () => pendingSaveRef, pickHere: () => pickHere,
     pickLevel: () => pickLevel, pickLevels: () => pickLevels, pre: () => pre, preloadRemote: () => preloadRemote,
-    psConn: () => psConn, psRef: () => psRef, push: () => push, queuedRef: () => queuedRef, quit: () => quit,
+    psConn: () => psConn, psRef: () => psRef, push: () => push, queuedRef: () => queuedRef, quit: () => quit, quittingRef: () => quittingRef,
+    busyNote: () => busyNote, canStartTurn: () => canStartTurn,
     railOn: () => railOn, ramGb: () => ramGb, recentRef: () => recentRef, redrawMac: () => redrawMac,
     redrawPs: () => redrawPs, refreshCatalog: () => refreshCatalog, relimit: () => relimit,
     remoteAtStart: () => remoteAtStart, remoteFnRef: () => remoteFnRef, remoteRef: () => remoteRef,
@@ -254,7 +255,12 @@ export function App({ opts, win, onRestart }) {
   const [startTook, setStartTook] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState(null);
-  const [queued, setQueued] = useState(null);
+  // The messages typed while it works, in order (app-run.mjs messageQueue): queuedRef.current is the next to go, and
+  // setQueued draws the Queued lines from the list as it is now, whatever it is given (its callers hand it the one
+  // message, or null after taking one).
+  const [queuedRef] = useState(messageQueue);
+  const [queued, setQueuedList] = useState([]);
+  const setQueued = useCallback(() => setQueuedList([...queuedRef.list]), [queuedRef]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [popup, setPopup] = useState(null); // a box in the middle of the window (/help); any key closes it
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
@@ -392,7 +398,6 @@ export function App({ opts, win, onRestart }) {
   const rewindArmed = useRef(0);
   const sessionRef = useRef({ id: newSessionId(), title: null, items: [] });
   const filesRef = useRef(null);
-  const queuedRef = useRef(null);
   const answerRef = useRef(null); // resolves Agentic Coder's question with what you type next
 
   // /rewind (rewind.mjs): copies of the folder around each message and
@@ -446,10 +451,11 @@ export function App({ opts, win, onRestart }) {
       // A message typed while it works goes to it with its next step, as in Claude Code (the owner's pick,
       // 10 Oct 2026), not after the whole reply; a wait it chose ends early for it (agent.mjs heard).
       steering: () => {
-        const q = queuedRef.current;
-        if (!steerable(q)) return [];
-        queuedRef.current = null; setQueued(null);
-        return [q];
+        // every message in line that may go now, in order, up to the first that waits for the reply's end
+        const out = [];
+        while (steerable(queuedRef.current)) { out.push(queuedRef.current); queuedRef.current = null; }
+        if (out.length) setQueued(null);
+        return out;
       },
       waiting: () => steerable(queuedRef.current),
       url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
@@ -668,7 +674,9 @@ export function App({ opts, win, onRestart }) {
 
   // Keep a copy of what was shown, for /resume.
   useEffect(() => { sessionRef.current.items = items.filter((it) => it.type !== 'welcome'); }, [items]);
-  const { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeSession, resumeAtStart, jobWake, cleanUpAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey } = runPart(self);
+  // Leaving (quit, /update's restart): once, and no keys meanwhile (app-run.mjs quitFn, app-keys.mjs onKey).
+  const quittingRef = useRef(false);
+  const { busyNoteFn: busyNote, canStartTurnFn: canStartTurn, sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeSession, resumeAtStart, jobWake, cleanUpAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey } = runPart(self);
   const sendPrompt = useCallback(sendPromptFn, [agent, cwd, push]);
 
   hookNoteRef.current = (text, tone) => push({ type: 'note', text, tone: tone ?? 'dim' });

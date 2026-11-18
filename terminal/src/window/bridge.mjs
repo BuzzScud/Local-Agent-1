@@ -57,7 +57,8 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
     if (m.do === 'toggle' && m.id) self.toggleGroup?.(m.id);
     else if (m.do === 'mode' && m.mode) { if (self.applyChoice) self.applyChoice('mode', m.mode); else self.setMode?.(m.mode); }
     else if (m.do === 'resume' && m.id) {
-      if (self.agent?.busy) { self.flash?.('Wait for Agentic Coder to finish, or press esc first'); return; }
+      // the app's one gate (app-run.mjs canStartTurn: a reply, a ! command, /agents), which says why itself
+      if (self.canStartTurn ? !self.canStartTurn() : self.agent?.busy) { if (!self.canStartTurn) self.flash?.('Wait for Agentic Coder to finish, or press esc first'); return; }
       if (self.holdRef) self.holdRef.current = false;
       self.resumeSession?.(m.id);
     }
@@ -135,7 +136,7 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
       mode: app.mode, modelName: app.modelName, modelOff: Boolean(app.modelOff), starting: Boolean(app.starting), cwd: app.cwd, cwdShort: app.cwdShort,
       model: modelNowOf(app.modelState),
       hold: Boolean(app.hold), start: app.hold ? { model: app.start?.model, effort: effortWords(knownOf(app.start).effort), cwd: app.start?.cwd, git: app.start?.git ?? null, recent: (app.start?.recent ?? []).slice(0, 12).map((r) => ({ id: r.id, title: String(r.title ?? '').replace(/\s+/g, ' ').slice(0, 140), updated: r.updated ?? null, turns: r.turns ?? 0 })) } : null,
-      queued: app.queued ?? null, notice: app.notice ?? null, tip: app.tip ?? null, usageText, usage, meter, files: [...files.values()].reverse(), todos, spend: app.spend ?? '', loopsBadge: app.loopsBadge ?? null,
+      queued: app.queued?.length ? app.queued.join(' · ') : null, notice: app.notice ?? null, tip: app.tip ?? null, usageText, usage, meter, files: [...files.values()].reverse(), todos, spend: app.spend ?? '', loopsBadge: app.loopsBadge ?? null,
       stats: { ctxUsed: app.stats?.ctxUsed ?? null, ctx: app.ctx ?? null },
     };
   }

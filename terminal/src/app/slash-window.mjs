@@ -56,7 +56,8 @@ export function slashWindow(self) {
       }
       case 'update':
         // /update memory [what]: save to memory now, like saying "update memory".
-        if (/^memory\b/i.test(arg.trim())) { const what = arg.trim().replace(/^memory\b[\s:]*/i, ''); self.sendPrompt(what ? `update memory: ${what}` : 'update memory'); break; }
+        // Not while anything runs (app-run.mjs canStartTurn): it starts a turn, and took the running one's stop.
+        if (/^memory\b/i.test(arg.trim())) { if (!self.canStartTurn()) break; const what = arg.trim().replace(/^memory\b[\s:]*/i, ''); self.sendPrompt(what ? `update memory: ${what}` : 'update memory'); break; }
         await self.updateNow();
         break;
       case 'status': {

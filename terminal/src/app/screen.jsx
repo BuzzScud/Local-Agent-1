@@ -170,9 +170,10 @@ export function PanelArea({ app }) {
     ) : app.picker ? (
       <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
         <Text bold>{app.picker.title}</Text>
-        {app.picker.items.slice(0, 12).map((p, i) => (
+        {/* 12 rows at most, the picked one always among them (↑ from the first goes round to the last) */}
+        {(() => { const from = Math.max(0, Math.min(app.picker.index - 11, app.picker.items.length - 12)); return app.picker.items.slice(from, from + 12).map((p, j) => { const i = from + j; return (
           <Text key={p.key}><Text color={i === app.picker.index ? C.accent : undefined}>{i === app.picker.index ? '❯' : ' '} {p.label}</Text><Text color={C.dim}>  {p.desc}</Text></Text>
-        ))}
+        ); }); })()}
         <Text color={C.dim}>↑↓ to choose · enter to open · esc to cancel</Text>
       </Box>
     ) : app.perm ? (
@@ -252,7 +253,8 @@ export function Screen({ app }) {
       ) : null}
       <LiveArea app={app} held={folded.held} />
       {app.btwWaiting ? <Box marginBottom={1}><Text color={C.dim}>⏵ Your /btw answer is kept: it shows again once you have answered</Text></Box> : null}
-      {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : app.modelState?.remote && app.modelState.state === 'loading' ? '  · sends once the model has loaded on the service' : app.modelOff ? '  · sends once /start has loaded the model' : ''}</Text></Box> : null}
+      {/* every message typed meanwhile, in the order they go (App.jsx queuedRef); what they wait for on the first */}
+      {app.queued?.length ? <Box marginBottom={1} flexDirection="column">{app.queued.map((q, i) => <Text key={i} color={C.dim}>⏵ Queued: {q.length > 80 ? `${q.slice(0, 79)}…` : q}{i ? '' : app.starting ? '  · sends as soon as the model is ready' : app.modelState?.remote && app.modelState.state === 'loading' ? '  · sends once the model has loaded on the service' : app.modelOff ? '  · sends once /start has loaded the model' : ''}</Text>)}</Box> : null}
       </Box>
       <Box flexGrow={1} />
       {app.popup ? <><Popup app={app} /><Box flexGrow={1} /></> : null}
