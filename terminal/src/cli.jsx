@@ -717,6 +717,9 @@ if (opts.print) {
   // 58-row tree, it broke the full-window switch and a question's prompt in the app tests, so it is
   // off unless AGENTIC_INCREMENTAL=on; the tree moves at 8 frames a second without it.
   const incremental = (process.env.AGENTIC_INCREMENTAL ?? 'off') === 'on';
+  // A promise that failed with nobody waiting for it ends a Bun program, and the window with it, its model left loaded
+  // (the audit of 18 Nov 2026): written to <home>/logs/app-errors.log instead, and the window goes on.
+  process.on('unhandledRejection', (e) => { import('./app/store.mjs').then((st) => st.logAppError('unhandled rejection', e)).catch(() => {}); });
   const instance = render(<App opts={opts} win={win} onRestart={(a) => { restartArgs = a; }} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30, incrementalRendering: incremental });
   const bye = () => { try { instance.unmount(); } catch {} };
   process.on('SIGTERM', bye);
@@ -736,6 +739,8 @@ if (opts.print) {
     process.stdout.write('\x1b[2m  ↻ Restarting on the update…\x1b[0m\n');
     process.exit(RESTART_CODE);
   }
-  process.stdout.write('\x1b[2m  Saved. Continue this conversation with: coding -c\x1b[0m\n');
+  // "Saved." only when the last save worked (store.mjs lastSessionSave); else why it did not.
+  const notSaved = (await import('./app/store.mjs')).lastSessionSave();
+  process.stdout.write(notSaved ? `\x1b[33m  Not saved: ${notSaved}. coding -c opens the conversation as it was last saved.\x1b[0m\n` : '\x1b[2m  Saved. Continue this conversation with: coding -c\x1b[0m\n');
   process.exit(0);
 }

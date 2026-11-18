@@ -189,3 +189,23 @@ test('coding hub [tab]: --help lists it once instead of six words; each tab open
   expect(noModel.status).toBe(1);
   expect(noModel.stderr).toContain('open another tab (coding hub docs)');
 }, T);
+
+// The audit of 18 Nov 2026: a settings.json that did not parse was read as the defaults, and the window's first save (the
+// mode it is in, lastMode) wrote them over it. Now the window says so as it opens, and the file stays as it was.
+test('a settings.json that cannot be read is said as the window opens, and its first save leaves it as it was', async () => {
+  const { readFileSync, writeFileSync, mkdirSync } = await import('node:fs');
+  const { cwd, env } = setup();
+  mkdirSync(env.AGENTIC_HOME, { recursive: true });
+  const file = join(env.AGENTIC_HOME, 'settings.json');
+  const broken = '{ "remotes": { "ollama": { "url": "http://10.0.0.9:11434" } }, "limits": { "steps": 40 },, }\n';
+  writeFileSync(file, broken);
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_LAST_MODE: 'on' }, args: ['--url', fake.url, '--no-flows', '--mode', 'edits'], steps: [
+    { wait: '? for shortcuts' }, { wait: 'cannot be read' }, { sleep: 300 }, { snapshot: 'open' },
+    { key: '\x1b[Z' }, { sleep: 400 }, // shift+tab: the mode changes, a save more
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.open).toMatch(/settings\.json cannot be read/);
+  expect(readFileSync(file, 'utf8')).toBe(broken);
+}, T);

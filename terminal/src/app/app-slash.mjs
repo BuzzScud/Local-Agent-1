@@ -23,10 +23,19 @@ const PARTS = [
 
 export function slashPart(self) {
   const parts = PARTS.map((p) => ({ commands: p.commands, run: p.run(self) }));
+  // A command that fails is said, never left to end the window (an unhandled rejection ends a Bun program, and most
+  // callers do not wait for it: the prompt, the / menu, /settings, the start page, ctrl+p).
   const runSlashFn = async (line) => {
+    try { return await runSlashNow(line); } catch (e) {
+      self.push({ type: 'note', text: `${line.trim().split(/\s+/)[0]} stopped on an error: ${e?.message ?? e}`, tone: 'error' });
+      return undefined;
+    }
+  };
+  const runSlashNow = async (line) => {
     const [cmd, ...rest] = line.slice(1).trim().split(/\s+/);
     const arg = rest.join(' ').trim();
-    const busy = self.agent.busy;
+    // Busy as the one gate says (app-run.mjs busyNote): a reply, a ! line, /compact or /morning, an /agents run.
+    const busy = self.busyNote ? Boolean(self.busyNote()) : self.agent.busy;
     // Each group of commands has its own file (slash-*.mjs); a command none has is a server's prompt, or unknown.
     const part = parts.find((p) => p.commands.includes(cmd));
     if (part) return part.run(cmd, arg, busy, line);

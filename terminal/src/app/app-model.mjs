@@ -321,12 +321,17 @@ export function modelPart(self) {
       timeLoad(next, true);
       const srv = new ModelServer(modelWithLimits(next, self.limitsRef.current));
       self.serverRef.current = srv;
+      // A server that stopped once it was up is started again; one that stopped while it loaded is this start's own
+      // failure (said below): restarting that loaded the model again up to three times, behind a window that said it was off.
+      let up = false;
       srv.on('crash', ({ code, signal }) => {
+        if (!up) return;
         if (srv.restarts >= 3) { self.push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
         self.push({ type: 'note', text: `The model server stopped (code ${code ?? signal}); restarting it.`, tone: 'warn' });
         self.restartRef.current = srv.restart().then(() => { self.push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => self.push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { self.restartRef.current = null; });
       });
       const st = await srv.start({ ctx: c.ctx, lingerSecs: LINGER_SECS, helper: c.helper });
+      up = true;
       timeLoaded(st);
       self.agent.url = srv.url;
       self.agent.canSee = Boolean(srv.vision);
@@ -346,7 +351,12 @@ export function modelPart(self) {
       if (!stillOn()) return;
     } catch (e) {
       if (!stillOn()) return;
-      self.push({ type: 'note', text: done ? `Could not restart ${next.name}: ${e.message}. /effort to try again.` : `Could not switch: ${e.message}. Pick a model in /model to try again.`, tone: 'error' });
+      // The old server is stopped and the new one did not start: nothing is loaded, as after a /start that failed
+      // (app-run.mjs loadModel). Before (the audit of 18 Nov 2026) the footer went on saying the model was on.
+      self.serverRef.current = null; self.wantRef.current = false;
+      self.setStarting(false); self.setModelOff(true);
+      self.push({ type: 'note', text: done ? `Could not restart ${next.name}: ${e.message}. /start tries again, or /effort.` : `Could not switch: ${e.message}. /start loads ${next.name}, or pick a model in /model.`, tone: 'error' });
+      return;
     }
     self.setStarting(false);
   };

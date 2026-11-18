@@ -263,3 +263,46 @@ test('/meters shows the status bar; off by default, like Claude Code', async () 
   expect(r.snapshots.on).toMatch(new RegExp(`${DN}\\s+idle\\s+ctx .* of 32k\\s+effort`));
   expect(r.snapshots.offAgain).not.toMatch(/ctx .* of 32k/);
 }, T);
+
+// The audit of 18 Nov 2026: the @ menu's files were listed once a window, so a file made since was never offered.
+test('the @ menu lists the files again when it opens (not while you type in it), and in the folder the window works in now', async () => {
+  const { promptMenu, FILES_FRESH_MS } = await import('../src/app/app-menu.mjs');
+  const { mkdtempSync: tmp, writeFileSync: write } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const one = tmp(join(tmpdir(), 'at-menu-'));
+  write(join(one, 'first.txt'), '1');
+  const filesRef = { current: null };
+  const menuFor = (value, cwd = one) => promptMenu({ input: { value, cursor: value.length }, holdRef: { current: false }, rows: 40, items: [], measure: { current: {} }, model: {}, remoteRef: { current: {} }, opts: {}, agent: {}, mcpHub: null, mcpLists: { current: {} }, cwd }, { inputMode: 'prompt', claudeModel: null, offerList: () => [], filesRef });
+  const names = (m) => (m?.items ?? []).map((it) => it.value);
+  expect(names(menuFor('see @'))).toEqual(['first.txt']);
+  write(join(one, 'second.txt'), '2');
+  filesRef.current.made -= FILES_FRESH_MS + 1; // the list is old now
+  expect(names(menuFor('see @f'))).toEqual(['first.txt']); // still typing in the same @: not listed again
+  menuFor('see '); // the @ went
+  expect(names(menuFor('see @'))).toEqual(['first.txt', 'second.txt']); // a new @: listed again
+  const other = tmp(join(tmpdir(), 'at-menu-other-'));
+  write(join(other, 'elsewhere.md'), '3');
+  expect(names(menuFor('see @', other))).toEqual(['elsewhere.md']); // "Work in …?" moved the window
+});
+
+// The UI audit of 18 Nov 2026: the / menu, /settings and the choice menus go round from the last row to the first; /resume
+// and ctrl+o's list stopped at the ends. One way for every list now: round (/model's list still stops, on purpose: app-hub).
+test('/resume\'s list goes round: ↑ from the first is the last, ↓ from the last is the first', async () => {
+  const { cwd, env } = setup();
+  const dir = join(env.AGENTIC_HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100));
+  mkdirSync(dir, { recursive: true });
+  for (const [id, title, updated] of [['a', 'the newer one', '2026-11-18T10:00:00.000Z'], ['b', 'the older one', '2026-11-17T10:00:00.000Z']]) {
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify({ title, messages: [{ role: 'system', content: 'x' }, { role: 'user', content: title }], items: [], cwd, id, updated }));
+  }
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' },
+    { type: '/resume' }, { key: 'enter' }, { wait: 'Resume a conversation' }, { sleep: 200 },
+    { key: 'up' }, { wait: '❯ the older one' }, { snapshot: 'up' },
+    { key: 'down' }, { wait: '❯ the newer one' }, { snapshot: 'down' },
+    { key: 'esc' }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.up).toContain('❯ the older one');
+  expect(r.snapshots.down).toContain('❯ the newer one');
+}, T);

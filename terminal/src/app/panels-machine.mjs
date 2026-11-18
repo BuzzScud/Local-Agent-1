@@ -1,7 +1,7 @@
 // The window's panels, the machine: memory, the service's models, saving the session (app-panels.mjs puts the parts together).
 // Moved from app-panels.mjs word for word; a name from another part is read through own.
 import { preloadOllama, endpointOf, macMemory, ollamaPs, OPEN_KEEP, OPEN_KEEP_MS } from '../../../models/index.mjs';
-import { saveSession } from './store.mjs';
+import { saveSession, lastSessionSave, noteSessionSave } from './store.mjs';
 
 export function panelsMachine(self, own) {
   const readMacMemory = () => {
@@ -57,7 +57,12 @@ export function panelsMachine(self, own) {
     const drawn = new Set(s.items.map((it) => it.key));
     s.pending = (s.pending ?? []).filter((p) => !drawn.has(p.it.key) && Date.now() - p.at < 5000);
     const items = [...s.items, ...s.pending.map((p) => p.it).filter((it) => it.type !== 'welcome')];
-    try { saveSession(self.cwd, s.id, { title: s.title, messages: self.agent.messages.map(slimImages), items: items.slice(-300), mode: self.agent.mode, lessons: self.agent.lessons, open: s.open ?? [] }); } catch {}
+    try { saveSession(self.cwd, s.id, { title: s.title, messages: self.agent.messages.map(slimImages), items: items.slice(-300), mode: self.agent.mode, lessons: self.agent.lessons, open: s.open ?? [] }); } catch (e) {
+      // Said once a reason (it is tried again at every step), and kept for the line the window ends with (cli.jsx).
+      const why = e?.message ?? String(e);
+      if (lastSessionSave() !== why) self.push({ type: 'note', text: `This conversation could not be saved: ${why}. /resume will not have what came since.`, tone: 'warn' });
+      noteSessionSave(why);
+    }
   };
   return { readMacMemory, readServicePs, saveNowFn };
 }

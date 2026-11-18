@@ -51,9 +51,57 @@ function replayed(items) {
 // How often a conversation is saved while a reply works (agentEvents' stepSave); AGENTIC_STEP_SAVE_MS for the tests.
 const STEP_SAVE_MS = () => Number(process.env.AGENTIC_STEP_SAVE_MS ?? 10_000);
 
+// The messages typed while it works, in order (App.jsx queuedRef; the audit of 18 Nov 2026: it was one slot, and a
+// second message typed during a reply took the first one's place). `current` is the next to go, null when none: a part
+// that takes it (current = null) takes that one only and the next moves up; a message set adds it at the end. `list`
+// is all of them, as the Queued lines show them.
+export function messageQueue() {
+  const list = [];
+  return {
+    list,
+    get current() { return list.length ? list[0] : null; },
+    set current(v) { if (v == null) list.shift(); else list.push(v); },
+  };
+}
+
+// A saved conversation that can be opened again: its messages a list, each with a role (the first is taken as the
+// instructions, as before). Why not, or null.
+export function sessionProblem(s) {
+  if (!s || typeof s !== 'object') return 'its file holds no conversation';
+  if (!Array.isArray(s.messages) || !s.messages.length) return 'its file holds no messages';
+  if (s.messages.some((m) => !m || typeof m !== 'object' || typeof m.role !== 'string')) return 'its messages are not in the shape a conversation is saved in';
+  return null;
+}
+
 export function runPart(self) {
+  // One gate for everything that starts a turn or swaps the conversation (/resume, a ! command, /update memory, the
+  // slash commands that send, a resume clicked in the window): a reply under way (or its question to you), a ! command,
+  // /compact or /morning (the live line), an /agents run. Before (the audit of 18 Nov 2026) /resume swapped the
+  // messages under a running reply and a ! command took the reply's live line. The words to say, or null when free.
+  const busyNoteFn = () => {
+    const a = self.agent;
+    const cur = self.S.current;
+    if (a.busy || a.sending || cur.perm || cur.live?.phase === 'working') return 'Wait for Agentic Coder to finish, or press esc first';
+    if (self.agentsRef.current?.running) return 'An /agents run is going: wait for it, or /agents stop';
+    return null;
+  };
+  const canStartTurnFn = () => {
+    const why = busyNoteFn();
+    if (why) self.flash(why, 2500);
+    return !why;
+  };
+  // A slip in sending (a file that cannot be read, a hook's own error) is said, never left to end the window: an
+  // unhandled rejection ends a Bun program.
+  const sendFailed = (e, ac) => {
+    if (ac?.signal.aborted) return;
+    self.push({ type: 'note', text: `The message could not be sent: ${e?.message ?? e}`, tone: 'error' });
+    if (!self.agent.busy) self.setLive((l) => (l.phase === 'working' && !l.shell ? IDLE : l));
+  };
   // fromServer: the message is a prompt of one of your MCP servers (/server:prompt), its own words.
-  const sendPromptFn = (value, shown = value, { visionAsked = false, mcpRead = null, fromServer = null } = {}) => {
+  const sendPromptFn = (value, shown = value, opts = {}) => {
+    try { sendPromptNow(value, shown, opts); } catch (e) { sendFailed(e); }
+  };
+  const sendPromptNow = (value, shown = value, { visionAsked = false, mcpRead = null, fromServer = null } = {}) => {
     // The model is off: the message waits (the Queued line) and goes once /start has loaded it.
     if (self.modelOffNow()) {
       const had = self.queuedRef.current;
@@ -66,7 +114,8 @@ export function runPart(self) {
     const mentions = self.mcpHub && !mcpRead ? resourceMentions(value, self.mcpHub.offers().resources) : [];
     if (mentions.length) {
       Promise.all(mentions.map((m) => self.mcpHub.readResource(m.server, m.uri).then((r) => ({ ...m, ...resourceParts(m.server, m.uri, r, { max: self.agent.maxResultChars }) }), (e) => ({ ...m, error: e.message }))))
-        .then((parts) => self.sendPrompt(value, shown, { visionAsked, mcpRead: parts, fromServer }));
+        .then((parts) => self.sendPrompt(value, shown, { visionAsked, mcpRead: parts, fromServer }))
+        .catch((e) => sendFailed(e));
       return;
     }
     const dropped = new Map([...self.pastedRef.current.info].filter(([, a]) => a.from).map(([n, a]) => [n, a.from]));
@@ -101,7 +150,7 @@ export function runPart(self) {
     self.abortRef.current = ac;
     self.setPlaceholder(pick(PLACEHOLDERS));
     self.autoRef.current.stepAside(); // on a service the save after the last answer goes on beside this one
-    self.agent.send(content, { signal: ac.signal, shown, images: blind ? undefined : images, fromServer });
+    self.agent.send(content, { signal: ac.signal, shown, images: blind ? undefined : images, fromServer }).catch((e) => sendFailed(e, ac));
   };
 
   // Agent events → screen.
@@ -341,7 +390,11 @@ export function runPart(self) {
     self.timeLoad(self.model, !running);
     const srv = new ModelServer(modelWithLimits(self.model, self.limitsRef.current));
     self.serverRef.current = srv;
+    // A server that stopped once it was up is started again; one that stopped while it loaded is this start's own failure
+    // (said below): restarting that loaded the model again up to three times, behind a window that said it was off.
+    let up = false;
     srv.on('crash', ({ code, signal }) => {
+      if (!up) return;
       if (srv.restarts >= 3) { self.push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
       self.push({ type: 'note', text: `The model server stopped (code ${code ?? signal}); restarting it.`, tone: 'warn' });
       self.restartRef.current = srv.restart().then(() => { self.push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => self.push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { self.restartRef.current = null; });
@@ -349,6 +402,7 @@ export function runPart(self) {
     let st;
     try {
       st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
+      up = true;
       if (!stillOn()) return;
       self.timeLoaded(st);
       const want = !self.opts.ctx && self.limitsRef.current.context;
@@ -492,17 +546,24 @@ export function runPart(self) {
     self.stopFnRef.current();
   };
 
+  // Not while anything runs (canStartTurn), and only a file that holds a conversation (sessionProblem): a file
+  // without its messages left the agent with none, and every message after failed. true when it opened.
   const resumeSession = (id) => {
+    if (!canStartTurnFn()) return false;
     try {
       let s;
+      let elsewhere = false;
       try { s = loadSession(self.cwd, id); } catch (e) {
         // Saved under another folder (the window had moved there): opened from there, and the window works there again.
         s = e.code === 'ENOENT' ? findSession(id) : null;
         if (!s) throw e;
-        if (s.cwd && s.cwd !== self.cwd && existsSync(s.cwd)) {
-          self.agent.moveTo(s.cwd);
-          self.push({ type: 'note', text: `Opened from ${short(s.cwd)}, where it was saved: this window works there again.`, tone: 'dim' });
-        }
+        elsewhere = true;
+      }
+      const why = sessionProblem(s);
+      if (why) throw new Error(why);
+      if (elsewhere && s.cwd && s.cwd !== self.cwd && existsSync(s.cwd)) {
+        self.agent.moveTo(s.cwd);
+        self.push({ type: 'note', text: `Opened from ${short(s.cwd)}, where it was saved: this window works there again.`, tone: 'dim' });
       }
       self.agent.messages = s.messages;
       self.agent.messages[0] = { role: 'system', content: self.agent.messages[0].content };
@@ -512,7 +573,8 @@ export function runPart(self) {
       self.agent.startSession('resume').catch(() => {});
       self.push({ type: 'divider', text: `resumed: ${s.title}` }, ...replayed(s.items ?? []));
       if (s.mode) self.setMode(s.mode);
-    } catch (e) { self.push({ type: 'note', text: `Could not open that conversation: ${e.message}`, tone: 'error' }); }
+      return true;
+    } catch (e) { self.push({ type: 'note', text: `Could not open that conversation: ${e.message}`, tone: 'error' }); return false; }
   };
 
   // Continue or resume a saved session given on the command line.
@@ -534,14 +596,14 @@ export function runPart(self) {
   // a message on its way, the model off or loading, or /agents running, it waits: the news then goes
   // with that message, or after /start.
   const jobWake = () => {
-    if (!self.agent.idle() || self.queuedRef.current || self.modelOffNow() || self.S.current.starting || self.S.current.remoteState === 'loading' || self.agentsRef.current?.running) return;
+    if (!self.agent.idle() || self.queuedRef.current || self.modelOffNow() || self.S.current.starting || self.S.current.remoteState === 'loading' || self.agentsRef.current?.running || self.S.current.live?.shell) return;
     const w = self.agent.jobWake();
     if (!w) return;
     self.push({ type: 'note', text: `↻ ${w.shown}: the model carries on (esc stops it)`, tone: 'dim' });
     const ac = new AbortController();
     self.abortRef.current = ac;
     const plan = self.agent.mode === 'plan' ? '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]' : '';
-    self.agent.send(`${w.text}${plan}`, { signal: ac.signal, shown: w.shown, wake: true });
+    self.agent.send(`${w.text}${plan}`, { signal: ac.signal, shown: w.shown, wake: true }).catch((e) => sendFailed(e, ac));
   };
 
   // /rewind's first copy of this folder, and the clean-up of copies no
@@ -555,36 +617,43 @@ export function runPart(self) {
     try { const dir = join(HOME, 'attachments'); for (const f of readdirSync(dir)) { const p = join(dir, f); if (Date.now() - statSync(p).mtimeMs > 7 * 86_400_000) rmSync(p, { force: true }); } } catch { /* none yet */ }
   };
 
+  // Once: a second quit while the first one works (ctrl+d again, /exit, a second ctrl+c) ran your SessionEnd hooks and
+  // handed the memory's save over twice (the audit of 18 Nov 2026); keys are not read while it leaves (app-keys.mjs).
+  // A step that fails does not keep the others from running, nor the window from closing.
   const quitFn = async () => {
-    self.setLeaving(true);
-    self.loopsRef.current?.close();
-    self.agent.jobs?.stopAll(); // the background commands end with the window
-    self.closeProfiles(); // the router's own connections; this window's meters written
-    await self.agent.endSession('quit').catch(() => {}); // your SessionEnd hooks, 5 s at most
-    self.abortRef.current?.abort();
-    self.btwRef.current?.ac.abort();
-    self.saveNow();
-    // What the memory has not saved yet is handed to a process of its own,
-    // which needs the model a little longer and stops it when it is done.
-    // With the model off, the save waits for the next /start here instead: nothing loads after you quit.
-    const off = !self.opts.url && !self.remoteRef.current.on && !self.serverRef.current?.port;
-    const handed = self.autoRef.current.leave({ stopAfter: true, modelOff: off, given: Boolean(self.opts.url) });
-    // Otherwise the model goes now (the user's pick, 30 Sep 2026: not kept loaded after you
-    // quit), unless another window still uses it; the small search models go with it.
-    const srv = self.serverRef.current;
-    self.serverRef.current = null;
-    if (handed) {
-      await self.agent.embedder?.stop({ keep: true }).catch(() => {});
-      await self.agent.reranker?.stop({ keep: true }).catch(() => {});
-      await srv?.stop({ keep: true });
-    } else {
-      const small = [self.agent.embedder?.server, self.agent.reranker?.server].map((x) => letGo(x).done.catch(() => {}));
-      await Promise.all([letGo(srv).done.catch(() => {}), ...small]);
-    }
-    self.remoteRef.current.conn?.stop();
-    // Your MCP servers stop with the session (a program is ended, a connection closed).
-    await Promise.race([self.mcpHub?.stopAll().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
-    self.exit();
+    if (self.quittingRef.current) return;
+    self.quittingRef.current = true;
+    const quietly = (fn) => { try { return fn(); } catch { return undefined; } };
+    try {
+      self.setLeaving(true);
+      quietly(() => self.loopsRef.current?.close());
+      quietly(() => self.agent.jobs?.stopAll()); // the background commands end with the window
+      quietly(() => self.closeProfiles()); // the router's own connections; this window's meters written
+      await Promise.resolve(quietly(() => self.agent.endSession('quit'))).catch(() => {}); // your SessionEnd hooks, 5 s at most
+      quietly(() => self.abortRef.current?.abort());
+      quietly(() => self.btwRef.current?.ac.abort());
+      quietly(() => self.saveNow());
+      // What the memory has not saved yet is handed to a process of its own,
+      // which needs the model a little longer and stops it when it is done.
+      // With the model off, the save waits for the next /start here instead: nothing loads after you quit.
+      const off = !self.opts.url && !self.remoteRef.current.on && !self.serverRef.current?.port;
+      const handed = quietly(() => self.autoRef.current.leave({ stopAfter: true, modelOff: off, given: Boolean(self.opts.url) }));
+      // Otherwise the model goes now (the user's pick, 30 Sep 2026: not kept loaded after you
+      // quit), unless another window still uses it; the small search models go with it.
+      const srv = self.serverRef.current;
+      self.serverRef.current = null;
+      if (handed) {
+        await self.agent.embedder?.stop({ keep: true }).catch(() => {});
+        await self.agent.reranker?.stop({ keep: true }).catch(() => {});
+        await srv?.stop({ keep: true }).catch(() => {});
+      } else {
+        const small = [self.agent.embedder?.server, self.agent.reranker?.server].map((x) => quietly(() => letGo(x).done.catch(() => {})));
+        await Promise.all([quietly(() => letGo(srv).done.catch(() => {})), ...small]);
+      }
+      quietly(() => self.remoteRef.current.conn?.stop());
+      // Your MCP servers stop with the session (a program is ended, a connection closed).
+      await Promise.race([Promise.resolve(quietly(() => self.mcpHub?.stopAll())).catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
+    } finally { self.exit(); }
   };
 
   // /update: Agentic Coder starts again on the new code (the launcher builds GitHub's main) and
@@ -610,6 +679,9 @@ export function runPart(self) {
       if (!r.ok) { self.push({ type: 'note', text: `Could not bring the update in: ${r.why}. Pull it into the repo yourself, then /update.`, tone: 'warn' }); return; }
     }
     if (!canRestart()) { self.push({ type: 'note', text: `The update is ${u.kind === 'pull' ? 'in the repo now' : 'on main'}. This window was not started by the coding command, so quit and start it again to use it.`, tone: 'warn' }); return; }
+    // Leaving now: once, and no keys meanwhile (as quitFn).
+    if (self.quittingRef.current) return;
+    self.quittingRef.current = true;
     self.push({ type: 'note', text: '↻ Restarting on the update…', tone: 'dim' });
     self.abortRef.current?.abort();
     self.saveNow();
@@ -630,7 +702,7 @@ export function runPart(self) {
     // Kept loaded for the new version, which joins it at its start (--start above).
     const srv = self.serverRef.current;
     self.serverRef.current = null;
-    await srv?.stop({ keep: true });
+    await srv?.stop({ keep: true }).catch(() => {});
     self.exit();
   };
 
@@ -675,14 +747,29 @@ export function runPart(self) {
     }
   };
 
+  // A ! line: not while anything runs (canStartTurn: it took a reply's live line, and its end left the reply without
+  // one), with a stop of its own (esc and ctrl+c stop it, as a reply; before, `!sleep 100` ran its 120 s out). A
+  // message typed meanwhile waits (app-keys.mjs submit: live.shell) and goes when it ends.
   const runShellFn = async (command) => {
     if (!command) return;
-    self.setLive({ phase: 'working', turnStart: Date.now(), verb: 'Running', tokens: 0, running: { label: 'Bash', arg: command } });
-    const r = await runCommand(command, { cwd: self.cwd, maxLines: 200, sandbox: false }); // you typed it: no fence
-    self.setLive(IDLE);
+    if (!canStartTurnFn()) return;
+    const ac = new AbortController();
+    self.abortRef.current = ac;
+    const id = ++self.seq;
+    self.setLive({ phase: 'working', turnStart: Date.now(), verb: 'Running', tokens: 0, running: { label: 'Bash', arg: command }, shell: id });
+    let r;
+    try { r = await runCommand(command, { cwd: self.cwd, maxLines: 200, sandbox: false, signal: ac.signal }); } // you typed it: no fence
+    catch (e) { r = { lines: [`Could not run it: ${e?.message ?? e}`], code: null }; }
+    finally { self.setLive((l) => (l.shell === id ? IDLE : l)); if (self.abortRef.current === ac) self.abortRef.current = null; }
+    const stopped = ac.signal.aborted;
     self.push({ type: 'bash', command, lines: r.lines, code: r.code });
+    if (stopped) self.push({ type: 'note', text: `Stopped: ! ${command}`, tone: 'dim' });
     self.fold({ title: `! ${command}`, text: r.lines.join('\n') });
-    self.pendingContext.current.push(`[The user ran \`${command}\` in the terminal (exit ${r.code}). Output:\n${r.lines.slice(-60).join('\n')}]`);
+    self.pendingContext.current.push(`[The user ran \`${command}\` in the terminal (${stopped ? 'stopped by the user' : `exit ${r.code}`}). Output:\n${r.lines.slice(-60).join('\n')}]`);
+    // What waited for it: the next message typed meanwhile, else a background job's news.
+    const q = self.queuedRef.current;
+    if (q && !self.agent.busy && !self.agent.sending && !self.modelOffNow() && !self.S.current.starting) { self.queuedRef.current = null; self.setQueued(null); setTimeout(() => self.sendPrompt(q), 50); }
+    else setTimeout(() => self.jobWakeRef.current?.(), 50);
   };
 
   const doctorFn = () => {
@@ -847,5 +934,5 @@ export function runPart(self) {
     if (ch && !key.ctrl && !key.meta && !key.return && !key.tab) { self.setAgentsView('chat'); return false; }
     return true;
   };
-  return { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeSession, resumeAtStart, jobWake, cleanUpAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey };
+  return { busyNoteFn, canStartTurnFn, sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeSession, resumeAtStart, jobWake, cleanUpAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey };
 }

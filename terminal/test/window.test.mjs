@@ -375,3 +375,38 @@ test('the window\'s keys are compared in the same time whatever they hold, and i
   writeFileSync(join(app, 'Contents', 'Info.plist'), '<plist><dict><key>AgenticURLFromEnv</key>\n\t<true/></dict></plist>');
   expect(urlFromEnv(exe)).toBe(true);
 });
+
+// The audit of 18 Nov 2026: every redraw (every streamed token) walked the whole conversation for what it prints, and the
+// window's bridge made every item into JSON again at each send. Worked out once a list of items, and once an item.
+test('what is printed is worked out once a list of items; the bridge makes an item into JSON once', async () => {
+  const view = { steps: 'grouped', open: new Set() };
+  const a = printedOf(TURN, false, view);
+  expect(printedOf(TURN, false, view)).toBe(a); // the same list, the same answer: not worked out again
+  expect(printedOf(TURN, true, view)).not.toBe(a);
+  expect(printedOf([...TURN], false, view)).toEqual(a); // a new list (an item came) is worked out again, the same
+  expect(printedOf(TURN, false, { steps: 'grouped', open: new Set() })).toEqual(a);
+  const dir = mkdtempSync(join(tmpdir(), 'window-cache-'));
+  const path = join(dir, 'b.sock');
+  const lines = [];
+  const srv = net.createServer((s) => { let buf = ''; s.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } }); });
+  await new Promise((r) => srv.listen(path, r));
+  const bridge = makeBridge(path, 'k');
+  const items = [{ key: 'u1', type: 'user', text: 'hi', cards: [] }, { key: 'n1', type: 'note', text: 'a note', tone: 'dim' }];
+  const app = { items, live: { phase: 'idle' }, input: { value: '', cursor: 0 }, mode: 'auto', modelName: 'Stand-in', width: 100, columns: 100, rows: 30, stepsView: view };
+  const next = async (n) => { for (let i = 0; i < 40 && lines.length < n; i++) await Bun.sleep(25); return lines[n - 1]; };
+  const made = [];
+  const json = JSON.stringify;
+  JSON.stringify = (v, ...rest) => { if (v && (v.t === 'user' || v.t === 'note')) made.push(v.t); return json(v, ...rest); };
+  try {
+    bridge.publish(app, {});
+    expect(Object.keys((await next(2)).items)).toEqual(['u1', 'n1']);
+    expect(made).toEqual(['user', 'note']);
+    // a token streamed (the same items): nothing made again
+    bridge.publish({ ...app, live: { phase: 'working', turnStart: 1, text: 'Hel' } }, {});
+    expect((await next(3)).items).toEqual({});
+    // an item came: only it
+    bridge.publish({ ...app, items: [...items, { key: 'n2', type: 'note', text: 'another', tone: 'dim' }] }, {});
+    expect(Object.keys((await next(4)).items)).toEqual(['n2']);
+    expect(made).toEqual(['user', 'note', 'note']);
+  } finally { JSON.stringify = json; bridge.close(); srv.close(); }
+});

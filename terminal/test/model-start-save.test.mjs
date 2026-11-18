@@ -71,3 +71,50 @@ test('a save handed over at quit never loads the model itself: if it has gone, t
   expect(out.files).toEqual(['1-1.wait']);
   expect(out.servers).toBe(0); // nothing was started
 });
+
+// The audit of 18 Nov 2026: a copy registered but not answering (or an https `coding serve`, or one ending as it was
+// found) made ModelServer.start load a copy of its own for the save. Only a copy that answers is joined.
+test('a save handed over at quit joins only a copy that answers: one that does not leaves the save waiting, nothing loaded', async () => {
+  const out = run(`
+    const { spawn } = await import('node:child_process');
+    // a registered "server" that is alive but answers nothing on its port
+    const fake = spawn('sleep', ['30'], { stdio: 'ignore' });
+    mkdirSync(join(process.env.AGENTIC_HOME, 'servers'), { recursive: true });
+    writeFileSync(join(process.env.AGENTIC_HOME, 'servers', '17991.json'), JSON.stringify({ pid: fake.pid, owner: process.pid, port: 17991, ctx: 8192, slots: 1, model: model.file, linger: 60 }));
+    mkdirSync(jobsDir(), { recursive: true });
+    const file = join(jobsDir(), '1-1.json');
+    writeFileSync(file, JSON.stringify({ cwd: repo, home: null, url: 'http://127.0.0.1:17991', remote: false, model: model.id, slot: 1, ctx: 32768, stopAfter: false, review: true, ask: false, lessons: agent.lessons, messages: agent.messages }));
+    out.result = await runJob(file);
+    out.files = files();
+    out.servers = scanServers().map((e) => e.port);
+    fake.kill();
+  `);
+  expect(out.result).toBe(null);
+  expect(out.files).toEqual(['1-1.wait']);
+  expect(out.servers).toEqual([17991]); // nothing else was started
+});
+
+// A job file still being written does not parse yet: it is left for its writer, and an old broken one does not stop the
+// others from being read (sinceLastTime ended at the first .done it could not read).
+test('job files that do not parse: a fresh one is left alone, an old one goes, and the others are still read', () => {
+  const out = run(`
+    const { utimesSync } = await import('node:fs');
+    const { sinceLastTime, pendingFor } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src/app/autosave.mjs'))});
+    mkdirSync(jobsDir(), { recursive: true });
+    const at = (name, text, ageMs = 0) => { const f = join(jobsDir(), name); writeFileSync(f, text); if (ageMs) { const t = (Date.now() - ageMs) / 1000; utimesSync(f, t, t); } };
+    at('a.done', '{ "cwd": "' + repo.replace(/\\\\/g, '/') + '", "li'); // being written
+    at('b.done', 'broken', 5 * 60_000); // broken for minutes
+    at('c.done', JSON.stringify({ cwd: repo, line: 'Memory: 2 saved' }));
+    at('d.wait', '{ "at": "', 0);
+    at('e.pending', '{ "at": "', 0);
+    at('f.wait', 'broken', 5 * 60_000);
+    out.lines = sinceLastTime(repo);
+    out.waiting = waitingFor(repo).length;
+    out.pending = pendingFor(repo).length;
+    out.files = files();
+  `);
+  expect(out.lines).toEqual(['Memory, saved when you last quit: 2 saved']);
+  expect(out.files).toEqual(['a.done', 'd.wait', 'e.pending']); // the fresh ones stay for their writers; c was read and let go
+  expect(out.waiting).toBe(0);
+  expect(out.pending).toBe(0);
+});

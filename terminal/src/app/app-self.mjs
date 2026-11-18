@@ -3,16 +3,19 @@
 // App tool runs a slash command as the user would type it, reads or changes a setting, and restarts
 // the app on GitHub's main (main, always, 18 Oct 2026: a change of its own code is in it once pushed).
 // App.jsx hands appBridge(self) to the Agent as agent.app.
-import { readFileSync } from 'node:fs';
 import { thinkingLevel } from '../../../models/index.mjs';
-import { saveSettings, SETTINGS_FILE } from './store.mjs';
+import { saveSettings, readSettingsFile } from './store.mjs';
 import { canRestart, folderArgs, notOnMain } from './update.mjs';
 import { RESTARTED_PROMPT } from '../agent/self.mjs';
 // Keys the model does not set here: the mode has /mode (and the permission checks around it).
 const NOT_SET = new Set(['mode', 'lastMode']);
 
-const get = (obj, path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
-const set = (obj, path, value) => { const ks = path.split('.'); let o = obj; for (const k of ks.slice(0, -1)) { if (o[k] == null || typeof o[k] !== 'object') o[k] = {}; o = o[k]; } o[ks.at(-1)] = value; };
+// A key path's parts: own keys only. __proto__, constructor and prototype would reach the objects every object is built
+// from (a setting('__proto__.x', …) changed Object.prototype, and __proto__.mode got past NOT_SET); null for those.
+const UNSAFE = new Set(['__proto__', 'constructor', 'prototype']);
+const partsOf = (path) => { const ks = String(path).split('.'); return ks.some((k) => UNSAFE.has(k)) ? null : ks; };
+const get = (obj, path) => partsOf(path).reduce((o, k) => (o == null || !Object.hasOwn(o, k) ? undefined : o[k]), obj);
+const set = (obj, path, value) => { const ks = partsOf(path); let o = obj; for (const k of ks.slice(0, -1)) { if (!Object.hasOwn(o, k) || o[k] == null || typeof o[k] !== 'object') o[k] = {}; o = o[k]; } o[ks.at(-1)] = value; };
 
 export function appBridge(self) {
   return {
@@ -25,8 +28,10 @@ export function appBridge(self) {
     },
     // settings.json as it is on disk (the file, not this window's copy): one key, or all of it.
     async setting(key, value) {
-      let file;
-      try { file = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8')); } catch { file = {}; }
+      if (key && !partsOf(key)) return { error: `${key} is not a setting: __proto__, constructor and prototype are not keys of settings.json.` };
+      // A file that cannot be read is never written over (store.mjs saveSettings): said, not read as empty.
+      const { data: file, broken } = readSettingsFile();
+      if (broken) return { error: `settings.json cannot be read (${broken}): it is left as it is, and nothing is saved to it until it is fixed.` };
       if (value === undefined) return { value: key ? get(file, key) : file };
       if (!key) return { error: 'Say which key to set (key), or leave value out to read them all.' };
       if (NOT_SET.has(key.split('.')[0])) return { error: `${key} is not set here: use /mode (action command) to change the mode.` };
@@ -63,17 +68,22 @@ export function appBridge(self) {
         ...(!self.opts.url && !self.remoteRef.current.on && self.serverRef.current?.port ? ['--start'] : []),
         RESTARTED_PROMPT,
       ];
-      // The tool's answer lands in the conversation first (agent-step), then the window leaves.
+      // The tool's answer lands in the conversation first (agent-step), then the window leaves: once (a quit or another
+      // restart meanwhile wins), and whatever fails on the way the window still goes (a rejection here was unhandled,
+      // and an unhandled rejection ends a Bun program before its server is let go).
       setTimeout(async () => {
-        self.abortRef.current?.abort();
-        if (!s.title) s.title = reason || 'Agentic Coder working on itself';
-        self.saveNow();
-        self.onRestart?.(args);
-        self.setLeaving(true);
-        const srv = self.serverRef.current;
-        self.serverRef.current = null;
-        await srv?.stop({ keep: true });
-        self.exit();
+        if (self.quittingRef?.current) return;
+        if (self.quittingRef) self.quittingRef.current = true;
+        try {
+          self.abortRef.current?.abort();
+          if (!s.title) s.title = reason || 'Agentic Coder working on itself';
+          try { self.saveNow(); } catch {}
+          self.onRestart?.(args);
+          self.setLeaving(true);
+          const srv = self.serverRef.current;
+          self.serverRef.current = null;
+          await srv?.stop({ keep: true }).catch(() => {});
+        } finally { self.exit(); }
       }, 400);
       return { ok: true };
     },

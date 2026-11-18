@@ -1,6 +1,6 @@
 // Settings, saved sessions and prompt history, all under ~/.agentic-coder.
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync, statSync, openSync, readSync, fstatSync, closeSync, renameSync, copyFileSync, rmSync, unlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { HOME, DEFAULT_MODEL, sourceOf } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
@@ -35,9 +35,44 @@ function folderSettings(cwd) {
   return out;
 }
 
+// settings.json as it is on disk: { data, broken } (as perm-store.mjs readState): its content, or {} and why it
+// could not be read. No file, or an empty one, is not broken. A file that cannot be read is never written over
+// (saveSettings): a typo in it must not wipe your services, keys and limits with the defaults.
+export function readSettingsFile() {
+  let raw;
+  try { raw = readFileSync(SETTINGS, 'utf8'); } catch (e) { return { data: {}, broken: e.code === 'ENOENT' ? null : e.message }; }
+  if (!raw.trim()) return { data: {}, broken: null };
+  try {
+    const d = JSON.parse(raw);
+    return d && typeof d === 'object' && !Array.isArray(d) ? { data: d, broken: null } : { data: {}, broken: 'it is not a JSON object' };
+  } catch (e) { return { data: {}, broken: e.message }; }
+}
+// A file of yours that cannot be read (settings.json, trust.json) is copied aside once a version (backups/<kind>: one
+// copy each, not one a save, which would push your good copies out). true when this version is new.
+const brokenSeen = new Map(); // file → its size and time when it was copied
+const brokenCopies = new Map(); // file → the copy
+export function keepBroken(file = SETTINGS, kind = 'settings') {
+  let mark = null;
+  try { const st = statSync(file); mark = `${st.size}:${st.mtimeMs}`; } catch { return false; }
+  if (brokenSeen.get(file) === mark) return false;
+  brokenSeen.set(file, mark);
+  brokenCopies.set(file, keepCopy(file, kind));
+  return true;
+}
+// tell: said when a save is refused for a version of settings.json the window has not said yet.
+let tell = null;
+export const onSettingsRefused = (fn) => { tell = fn; };
+// What to tell you when settings.json cannot be read (the window says it as it opens; its copy is kept then), else null.
+export function settingsProblem() {
+  const { broken } = readSettingsFile();
+  if (!broken) return null;
+  keepBroken();
+  const copy = brokenCopies.get(SETTINGS);
+  return `${SETTINGS.replace(homedir(), '~')} cannot be read (${broken}), so this window uses the defaults and saves nothing to it: fix or delete it, then start again.${copy ? ` A copy is kept in ${copy.replace(homedir(), '~')}.` : ''}`;
+}
+
 export function loadSettings(cwd) {
-  let global;
-  try { global = { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { global = { ...DEFAULTS }; }
+  const global = { ...DEFAULTS, ...readSettingsFile().data };
   // The start-up mode saved with /permissions (its folder's, else everywhere's)
   // wins over the older settings files; modeFrom says which it was.
   const saved = cwd ? startModeFor(cwd) : null;
@@ -61,13 +96,21 @@ export function firstMode(asked, settings = {}) {
 // a short lock and written whole through a file beside it, so two windows saving together never lose one's change
 // and a window reading it never sees half of it (12 Oct 2026, the owner's ask: "i keep having to add the other
 // service address and the claude api in"). When your services change, the file before is kept (`keepCopy`).
+// A file that cannot be read (readSettingsFile) is left as it is: a copy is kept aside and nothing is written; the
+// change holds for this window only (the answer is what it would have saved), and the window says so (settingsProblem
+// as it opens, `tell` when a save is refused for a version it has not said).
 export function saveSettings(patch) {
   mkdirSync(HOME, { recursive: true });
   return withLock(SETTINGS, () => {
+    const file = readSettingsFile();
     const now = loadSettings();
     const next = { ...now, ...(typeof patch === 'function' ? patch(now) : patch) };
     delete next.fromFolder;
     delete next.modeFrom;
+    if (file.broken) {
+      if (keepBroken()) { try { tell?.(settingsProblem()); } catch {} }
+      return next;
+    }
     if (existsSync(SETTINGS) && servicesOf(now) !== servicesOf(next)) keepCopy(SETTINGS, 'settings');
     writeWhole(SETTINGS, `${JSON.stringify(next, null, 2)}\n`);
     return next;
@@ -107,7 +150,7 @@ export function writeWhole(file, text) {
 const LOCK_WAIT_MS = 1000;
 const LOCK_STALE_MS = 5000;
 const pause = new Int32Array(new SharedArrayBuffer(4));
-function withLock(file, fn) {
+export function withLock(file, fn) {
   const lock = `${file}.lock`;
   const until = Date.now() + LOCK_WAIT_MS;
   let held = false;
@@ -153,13 +196,32 @@ export function readCopies(kind) {
 const SESSIONS = join(HOME, 'sessions');
 const slug = (cwd) => cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root';
 export const newSessionId = () => new Date().toISOString().replace(/[:.]/g, '-');
+// Where a folder's conversations are saved.
+export const sessionsDirOf = (cwd) => join(SESSIONS, slug(cwd));
 
 // Written whole (a file beside it, renamed over it): it is saved while a reply works too (app-run.mjs stepSave), and a
 // crash in the middle of a write must not leave half a conversation that /resume cannot read.
 export function saveSession(cwd, id, data) {
-  const dir = join(SESSIONS, slug(cwd));
-  mkdirSync(dir, { recursive: true });
-  writeWhole(join(dir, `${id}.json`), JSON.stringify({ ...data, cwd, id, updated: new Date().toISOString() }));
+  try {
+    const dir = join(SESSIONS, slug(cwd));
+    mkdirSync(dir, { recursive: true });
+    writeWhole(join(dir, `${id}.json`), JSON.stringify({ ...data, cwd, id, updated: new Date().toISOString() }));
+    lastSave = null;
+  } catch (e) { lastSave = e?.message ?? String(e); throw e; }
+}
+// How the last save of a conversation in this process went: null when it worked (or none was tried), else why not.
+// cli.jsx says it as the window ends, in place of "Saved." (the audit of 18 Nov 2026: a failed save said Saved).
+let lastSave = null;
+export const lastSessionSave = () => lastSave;
+export const noteSessionSave = (why) => { lastSave = why ?? null; };
+
+// What went wrong where nobody waited for it (cli.jsx: a promise that failed with no catch, which would end a Bun
+// program and the window with it): a line in <home>/logs/app-errors.log, nothing on the screen.
+export function logAppError(what, e) {
+  try {
+    mkdirSync(join(HOME, 'logs'), { recursive: true });
+    appendFileSync(join(HOME, 'logs', 'app-errors.log'), `${new Date().toISOString()} ${what}: ${String(e?.stack ?? e?.message ?? e).slice(0, 4000)}\n`);
+  } catch { /* nowhere to write it */ }
 }
 
 export function listSessions(cwd) {

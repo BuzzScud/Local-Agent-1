@@ -615,14 +615,17 @@ export async function runBoard({ home = HOME, pid = null, input = process.stdin,
       for (const t of timers) clearInterval(t);
       input.off('readable', onReadable);
       out.off('resize', onResize);
-      out.write('\x1b[0m\x1b[?25h\x1b[?2004l\x1b[?1049l');
-      input.setRawMode(false);
-      if (last) out.write(`${last}\n`);
+      try { out.write('\x1b[0m\x1b[?25h\x1b[?2004l\x1b[?1049l'); } catch { /* the terminal has gone */ }
+      try { input.setRawMode(false); } catch { /* the terminal has gone */ }
+      try { if (last) out.write(`${last}\n`); } catch { /* the terminal has gone */ }
       resolve(code);
     };
     const b = { get state() { return state; }, ui, send: (cmd) => sendCommand(home, pid, cmd), quit: () => leave(0, 'The loop board is closed. The loops go on in their window; /loop there shows them.') };
     const pasteState = { pasting: null };
-    const onReadable = () => {
+    // Whatever throws while it draws or reads a key ends the board with the terminal given back (its own screen left,
+    // the cursor shown, keys read as lines again) and says why, never a terminal left in raw mode with no cursor.
+    const safely = (fn) => (...args) => { try { return fn(...args); } catch (e) { leave(1, `The loop board stopped on an error: ${e?.message ?? e}. The loops go on in their window.`); return undefined; } };
+    const onReadable = safely(() => {
       let c;
       while (!done && (c = input.read()) !== null) {
         for (const part of inputParts(String(c), pasteState)) {
@@ -631,8 +634,8 @@ export async function runBoard({ home = HOME, pid = null, input = process.stdin,
         }
         paint();
       }
-    };
-    const onResize = () => { out.write('\x1b[2J'); paint(true); };
+    });
+    const onResize = safely(() => { out.write('\x1b[2J'); paint(true); });
     // The board grows to 124 × 38 where the terminal follows that (as /agents does), keeping a bigger window.
     if (canResize(env, out) && ((out.columns ?? 0) < BOARD_SIZE[0] || (out.rows ?? 0) < BOARD_SIZE[1])) out.write(resizeSeq(Math.max(out.columns ?? 0, BOARD_SIZE[0]), Math.max(out.rows ?? 0, BOARD_SIZE[1])));
     // Bracketed paste: the terminal marks a paste (and a drop), so its line breaks are never enter.
@@ -640,7 +643,7 @@ export async function runBoard({ home = HOME, pid = null, input = process.stdin,
     input.setRawMode(true);
     input.on('readable', onReadable);
     out.on('resize', onResize);
-    timers.push(setInterval(() => {
+    timers.push(setInterval(safely(() => {
       const next = readState(home, pid);
       // The window closed: its loops ended with it.
       if (!next) return leave(0, 'That coding window closed, and its loops ended with it.');
@@ -648,10 +651,10 @@ export async function runBoard({ home = HOME, pid = null, input = process.stdin,
       if (ui.sel >= state.loops.length) ui.sel = Math.max(0, state.loops.length - 1);
       // What the window said back to the last thing typed here.
       if (ui.stamp && state.reply?.stamp === ui.stamp) { ui.stamp = null; showReply(ui, state.loops, state.reply); }
-    }, 200));
-    timers.push(setInterval(() => paint(), 125));
+    }), 200));
+    timers.push(setInterval(safely(() => paint()), 125));
     process.once('SIGTERM', () => leave(143));
     process.once('SIGHUP', () => leave(129));
-    paint(true);
+    safely(() => paint(true))();
   });
 }

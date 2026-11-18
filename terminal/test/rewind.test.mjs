@@ -304,3 +304,19 @@ test('a copy that never comes back does not hold up the message: it goes ahead, 
   const done = await rw.finish(p, { files: ['README.md'] });
   expect(done.files.map((f) => f.path)).toEqual(['README.md']);
 });
+
+// The audit of 18 Nov 2026: the list of a conversation's points was written in place, and one that could not be read
+// started empty and was written over at the next save. Now a save is written whole and an unreadable list is kept aside.
+test('a conversation\'s list of points is written whole, and one that cannot be read is kept aside before the next save', () => {
+  const { home } = project();
+  const file = join(home, 'rewind', 'sessions', 's9.json');
+  mkdirSync(join(home, 'rewind', 'sessions'), { recursive: true });
+  writeFileSync(file, '{"id":"s9","points":[{"n":1');
+  const rw = new Rewind({ home, session: 's9' });
+  expect(rw.points).toEqual([]);
+  expect(read(`${file}.unreadable`)).toBe('{"id":"s9","points":[{"n":1');
+  rw.points.push({ n: 1, text: 'hi' });
+  rw.save();
+  expect(JSON.parse(read(file)).points).toEqual([{ n: 1, text: 'hi' }]);
+  expect(readdirSync(join(home, 'rewind', 'sessions')).sort()).toEqual(['s9.json', 's9.json.unreadable']); // no file left beside it
+});

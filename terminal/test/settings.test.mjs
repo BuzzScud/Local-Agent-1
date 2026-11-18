@@ -2,7 +2,7 @@
 // .agentic/settings.json sets mode and effort over the global file;
 // anything else in it is ignored, and an untrusted folder sets nothing.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -42,4 +42,72 @@ test('effort low in a folder file means no thinking (and the old name off still 
     expect(s.thinking).toBe(false);
     expect(s.effort).toBeUndefined();
   }
+});
+
+// The audit of 18 Nov 2026: a settings.json that did not parse was read as the defaults, and the next save (the window's
+// first, its lastMode) wrote the defaults over it: every service, key end and limit gone. Now it is left as it is.
+test('a settings.json that cannot be read is never written over: a copy is kept once, the save holds for the window only', async () => {
+  const { saveSettings, settingsProblem, onSettingsRefused, backupsDir, SETTINGS_FILE } = await import('../src/app/store.mjs');
+  const broken = '{ "remote": { "url": "http://10.0.0.5:11434" }, "limits": { "steps": 40 }, oops }\n';
+  writeFileSync(SETTINGS_FILE, broken);
+  const told = [];
+  onSettingsRefused((t) => told.push(t));
+  try {
+    const dir = backupsDir('settings');
+    const copies = () => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).length : 0);
+    const before = copies();
+    const next = saveSettings({ lastMode: 'edits' });
+    expect(next.lastMode).toBe('edits'); // this window's own copy has it
+    expect(readFileSync(SETTINGS_FILE, 'utf8')).toBe(broken); // the file is as it was
+    saveSettings({ meters: true });
+    saveSettings((now) => ({ remotes: { ...(now.remotes ?? {}), x: { url: 'http://x' } } }));
+    expect(readFileSync(SETTINGS_FILE, 'utf8')).toBe(broken);
+    // one copy of this version, not one a save, and one note
+    expect(copies()).toBe(before + 1);
+    expect(told).toHaveLength(1);
+    expect(told[0]).toMatch(/cannot be read .* saves nothing to it: fix or delete it/);
+    expect(settingsProblem()).toMatch(/A copy is kept in /);
+    // fixed by hand: saves go on as before
+    writeFileSync(SETTINGS_FILE, '{ "meters": false }\n');
+    expect(settingsProblem()).toBeNull();
+    saveSettings({ meters: true });
+    expect(JSON.parse(readFileSync(SETTINGS_FILE, 'utf8')).meters).toBe(true);
+  } finally { onSettingsRefused(null); rmSync(SETTINGS_FILE, { force: true }); }
+});
+
+test('the App tool never reaches past settings.json: __proto__, constructor and prototype are refused, a broken file is said', async () => {
+  const { appBridge } = await import('../src/app/app-self.mjs');
+  const { SETTINGS_FILE } = await import('../src/app/store.mjs');
+  const app = appBridge({});
+  try {
+    for (const key of ['__proto__.polluted', 'constructor.prototype.polluted', 'a.__proto__.mode', '__proto__.mode']) {
+      const r = await app.setting(key, 'yes');
+      expect(r.error).toMatch(/not a setting/);
+    }
+    expect({}.polluted).toBeUndefined();
+    expect((await app.setting('__proto__')).error).toMatch(/not a setting/);
+    expect((await app.setting('mode', 'bypass')).error).toMatch(/use \/mode/);
+    expect((await app.setting('meters', 'true')).value).toBe(true);
+    expect((await app.setting('meters')).value).toBe(true);
+    writeFileSync(SETTINGS_FILE, '{ nope');
+    expect((await app.setting('meters', 'false')).error).toMatch(/cannot be read/);
+    expect(readFileSync(SETTINGS_FILE, 'utf8')).toBe('{ nope');
+  } finally { rmSync(SETTINGS_FILE, { force: true }); }
+});
+
+// The audit of 18 Nov 2026: a save that failed was swallowed and the window still ended with "Saved." (cli.jsx).
+test('a conversation save that fails is kept as the reason (cli.jsx says it in place of Saved); the next good save clears it', async () => {
+  const { saveSession, lastSessionSave, logAppError } = await import('../src/app/store.mjs');
+  const { HOME } = await import('../../models/index.mjs');
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-settings-save-'));
+  const slug = cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100);
+  mkdirSync(join(HOME, 'sessions'), { recursive: true });
+  writeFileSync(join(HOME, 'sessions', slug), 'a file where its folder goes');
+  expect(() => saveSession(cwd, 'one', { title: 't', messages: [] })).toThrow();
+  expect(lastSessionSave()).toMatch(/\S/);
+  rmSync(join(HOME, 'sessions', slug));
+  saveSession(cwd, 'one', { title: 't', messages: [] });
+  expect(lastSessionSave()).toBeNull();
+  logAppError('unhandled rejection', new Error('nobody waited'));
+  expect(readFileSync(join(HOME, 'logs', 'app-errors.log'), 'utf8')).toMatch(/unhandled rejection: Error: nobody waited/);
 });

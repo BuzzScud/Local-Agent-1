@@ -206,3 +206,25 @@ test('a picture’s or PDF’s chip goes in one piece with one delete, and ctrl+
   expect(editInput({ value: 'see [File #3]', cursor: 13 }, '', { backspace: true }).value).toBe('see ');
   expect(editInput({ value: 'in [Folder #14]', cursor: 15 }, '', { backspace: true }).value).toBe('in ');
 });
+
+// The audit of 18 Nov 2026: ← → and delete moved by UTF-16 unit, so an emoji split into halves the terminal draws as boxes.
+test('← → and delete step over a whole letter as you see it: an emoji, a flag, a joined family, an accent', () => {
+  for (const g of ['😀', '👍🏽', '🇫🇷', '👨‍👩‍👧', 'é']) {
+    const v = `a${g}b`;
+    let s = { value: v, cursor: v.length - 1 }; // just after the letter
+    s = editInput(s, '', { leftArrow: true });
+    expect(s.cursor).toBe(1);
+    s = editInput(s, '', { rightArrow: true });
+    expect(s.cursor).toBe(v.length - 1);
+    s = editInput(s, '', { backspace: true });
+    expect(s).toEqual({ value: 'ab', cursor: 1 });
+    // shift + arrows select it whole
+    const sel = editInput({ value: v, cursor: 1 }, '', { shift: true, rightArrow: true });
+    expect(sel).toMatchObject({ cursor: v.length - 1, anchor: 1 });
+  }
+  // a chip still goes in one piece, and plain letters one at a time
+  expect(editInput({ value: 'see [Image #1]', cursor: 14 }, '', { backspace: true })).toEqual({ value: 'see ', cursor: 4 });
+  expect(editInput({ value: 'abc', cursor: 3 }, '', { backspace: true })).toEqual({ value: 'ab', cursor: 2 });
+  expect(editInput({ value: 'abc', cursor: 0 }, '', { leftArrow: true }).cursor).toBe(0);
+  expect(editInput({ value: 'abc', cursor: 3 }, '', { rightArrow: true }).cursor).toBe(3);
+});

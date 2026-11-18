@@ -3,7 +3,6 @@
 // slash commands, layouts, sessions and keys.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
-import { join } from 'node:path';
 import { existsSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, heldRows, menuHeight, shortcutRows, footerParts } from './screen.jsx';
@@ -30,7 +29,7 @@ import { startMemory, sayMemory } from './memory-start.mjs';
 import { claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, saveModeOf } from './autosave.mjs';
-import { loadSettings, saveSettings, newSessionId, loadHistory, firstMode, keepsLastMode } from './store.mjs';
+import { loadSettings, saveSettings, newSessionId, loadHistory, firstMode, keepsLastMode, settingsProblem, onSettingsRefused, sessionsDirOf } from './store.mjs';
 import { readRecord as sessionRecord } from './sessions.mjs';
 import { runReader } from './loops-board.mjs';
 import { drawBoard as drawLoops } from './loops-draw.mjs';
@@ -49,7 +48,7 @@ import { modelPart } from './app-model.mjs';
 import { remotePart } from './app-remote.mjs';
 import { panelsPart } from './app-panels.mjs';
 import { profilesPart } from './app-profiles.mjs';
-import { runPart } from './app-run.mjs';
+import { runPart, messageQueue } from './app-run.mjs';
 import { slashPart } from './app-slash.mjs';
 import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
@@ -96,7 +95,8 @@ export function App({ opts, win, onRestart }) {
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
     pendingContext: () => pendingContext, pendingSaveRef: () => pendingSaveRef, pickHere: () => pickHere,
     pickLevel: () => pickLevel, pickLevels: () => pickLevels, pre: () => pre, preloadRemote: () => preloadRemote,
-    psConn: () => psConn, psRef: () => psRef, push: () => push, queuedRef: () => queuedRef, quit: () => quit,
+    psConn: () => psConn, psRef: () => psRef, push: () => push, queuedRef: () => queuedRef, quit: () => quit, quittingRef: () => quittingRef,
+    busyNote: () => busyNote, canStartTurn: () => canStartTurn,
     railOn: () => railOn, ramGb: () => ramGb, recentRef: () => recentRef, redrawMac: () => redrawMac,
     redrawPs: () => redrawPs, refreshCatalog: () => refreshCatalog, relimit: () => relimit,
     remoteAtStart: () => remoteAtStart, remoteFnRef: () => remoteFnRef, remoteRef: () => remoteRef,
@@ -158,7 +158,9 @@ export function App({ opts, win, onRestart }) {
   const [menuClosedFor, setMenuClosedFor] = useState(null);
   // Where Agentic Coder works; it can move into a project named from the home folder.
   const [cwd, setCwd] = useState(opts.cwd);
-  const settings = useRef(loadSettings(opts.cwd)).current;
+  // Read once, as the window opens (a useState initializer: an argument to useRef would be worked out again at every
+  // render, every streamed token). The object is the window's own and changes in place.
+  const [settings] = useState(() => loadSettings(opts.cwd));
   // /remote on (and no --url or --local): the model on another machine. Until
   // it answers, `model` is a stand-in named after it.
   const remoteAtStart = !opts.url && !opts.local && Boolean(settings.remote?.use);
@@ -252,7 +254,12 @@ export function App({ opts, win, onRestart }) {
   const [startTook, setStartTook] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState(null);
-  const [queued, setQueued] = useState(null);
+  // The messages typed while it works, in order (app-run.mjs messageQueue): queuedRef.current is the next to go, and
+  // setQueued draws the Queued lines from the list as it is now, whatever it is given (its callers hand it the one
+  // message, or null after taking one).
+  const [queuedRef] = useState(messageQueue);
+  const [queued, setQueuedList] = useState([]);
+  const setQueued = useCallback(() => setQueuedList([...queuedRef.list]), [queuedRef]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [popup, setPopup] = useState(null); // a box in the middle of the window (/help); any key closes it
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
@@ -376,7 +383,8 @@ export function App({ opts, win, onRestart }) {
   // model that can: the one to load again once that reply is over.
   const switchBackRef = useRef(null);
   const abortRef = useRef(null);
-  const historyRef = useRef(loadHistory(cwd));
+  const historyRef = useRef(null);
+  if (historyRef.current === null) historyRef.current = loadHistory(cwd); // read once, not at every render
   const histIdx = useRef(null);
   const draftRef = useRef('');
   const pendingContext = useRef([]);
@@ -389,7 +397,6 @@ export function App({ opts, win, onRestart }) {
   const rewindArmed = useRef(0);
   const sessionRef = useRef({ id: newSessionId(), title: null, items: [] });
   const filesRef = useRef(null);
-  const queuedRef = useRef(null);
   const answerRef = useRef(null); // resolves Agentic Coder's question with what you type next
 
   // /rewind (rewind.mjs): copies of the folder around each message and
@@ -443,10 +450,11 @@ export function App({ opts, win, onRestart }) {
       // A message typed while it works goes to it with its next step, as in Claude Code (the owner's pick,
       // 10 Oct 2026), not after the whole reply; a wait it chose ends early for it (agent.mjs heard).
       steering: () => {
-        const q = queuedRef.current;
-        if (!steerable(q)) return [];
-        queuedRef.current = null; setQueued(null);
-        return [q];
+        // every message in line that may go now, in order, up to the first that waits for the reply's end
+        const out = [];
+        while (steerable(queuedRef.current)) { out.push(queuedRef.current); queuedRef.current = null; }
+        if (out.length) setQueued(null);
+        return out;
       },
       waiting: () => steerable(queuedRef.current),
       url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
@@ -492,7 +500,9 @@ export function App({ opts, win, onRestart }) {
   const pendingSaveRef = useRef(null);
   const askRef = useRef(null);
   const saveMode = saveModeOf(settings); // ask · auto · off (off: nothing is saved on its own)
-  autoRef.current ??= new AutoSave({ agent, ask: saveMode === 'ask' ? (p) => askRef.current(p) : null, say: (text, tone = 'dim') => push({ type: 'note', text, tone }), sessionsDir: join(HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root') });
+  autoRef.current ??= new AutoSave({ agent, ask: saveMode === 'ask' ? (p) => askRef.current(p) : null, say: (text, tone = 'dim') => push({ type: 'note', text, tone }), sessionsDir: sessionsDirOf(cwd) });
+  // The folder's conversations it reads at first use follow the window: a "Work in …?" move, /clear's way back.
+  autoRef.current.sessionsDir = sessionsDirOf(cwd);
 
   // Everything the key handler needs, always current.
   const S = useRef({});
@@ -504,6 +514,14 @@ export function App({ opts, win, onRestart }) {
   const copiedRef = useRef('');
   useEffect(copySelection, [input, flash]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMode = useCallback(setModeFn, [agent]);
+  // settings.json that cannot be read is left as it is (store.mjs saveSettings): said as the window opens, before the
+  // first save below, and again when a save is refused for a newer broken version of it.
+  useEffect(() => {
+    onSettingsRefused((text) => push({ type: 'note', text, tone: 'warn' }));
+    const bad = settingsProblem();
+    if (bad) push({ type: 'note', text: bad, tone: 'warn' });
+    return () => onSettingsRefused(null);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // The mode the window is left in is the next window's (store.mjs firstMode): kept in settings.json
   // as it changes, so a quit, a closed window or /update's restart all keep it.
   const keptMode = useRef(settings.lastMode ?? null);
@@ -657,7 +675,9 @@ export function App({ opts, win, onRestart }) {
 
   // Keep a copy of what was shown, for /resume.
   useEffect(() => { sessionRef.current.items = items.filter((it) => it.type !== 'welcome'); }, [items]);
-  const { sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeSession, resumeAtStart, jobWake, cleanUpAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey } = runPart(self);
+  // Leaving (quit, /update's restart): once, and no keys meanwhile (app-run.mjs quitFn, app-keys.mjs onKey).
+  const quittingRef = useRef(false);
+  const { busyNoteFn: busyNote, canStartTurnFn: canStartTurn, sendPromptFn, agentEvents, arenaTick, loadModel, windowOpens, stopModel, startModel, toggleModel, resumeSession, resumeAtStart, jobWake, cleanUpAtStart, quitFn, updateNowFn, interruptFn, closeBtwFn, askBtwFn, runShellFn, doctorFn, openAgentsTree, openLoops, loopsKey, loopsPaste, startAgents, agentsKey } = runPart(self);
   const sendPrompt = useCallback(sendPromptFn, [agent, cwd, push]);
 
   hookNoteRef.current = (text, tone) => push({ type: 'note', text, tone: tone ?? 'dim' });
@@ -812,7 +832,9 @@ export function App({ opts, win, onRestart }) {
   // it, a line and a gap each: the mode the last window left, and on a remote where it runs, its
   // Big-model mode and its load. Once printed it keeps the room it was shown with, until the window
   // changes size.
-  const underRows = heldRows(items, measure.current) + (menu ? menuHeight({ ...menu, index: menuIdx }, width) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
+  // Only while the page is held: heldRows walks every item, and once the page has gone nothing reads it (every render
+  // walked the whole conversation for it before, the audit of 18 Nov 2026).
+  const underRows = holdRef.current ? heldRows(items, measure.current) + (menu ? menuHeight({ ...menu, index: menuIdx }, width) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0) : 0;
   const heldRoom = (rows ?? 40) - 7 - underRows;
   if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRoom >= START_MIN)) holdRef.current = false;
   if (holdRef.current) pageRoomRef.current = { room: heldRoom, rows: rows ?? 40 };
@@ -828,9 +850,11 @@ export function App({ opts, win, onRestart }) {
   // On a service of its own (/remote's "Just this window"): "this window" too.
   const profileTag = model.remote && agent.router?.active() ? ((agent.pinned && agent.pinned.model === agent.modelName()) || agent.router.own ? 'this window' : agent.routeName ?? null) : null;
   const modelState = opts.url ? null : model.remote ? { remote: true, state: remoteState ?? 'connecting', name: remoteName, where: model.remote.label, gb: remoteGb, profile: profileTag } : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
+  // The start notes' item as drawn (sayStart), looked for once a list of items, not at every render.
+  const startSaidNow = useMemo(() => items.find((x) => x.type === 'startnotes')?.said ?? null, [items]);
   // What primeRows needs to measure items as they are printed. The tip (startTip) is on the page while
   // it has room for its Try rows, else on the footer.
-  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, svc: modelState, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running, said: items.find((x) => x.type === 'startnotes')?.said ?? null, modeId: mode };
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, svc: modelState, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running, said: startSaidNow, modeId: mode };
   const tipOnPage = homeLook === 'launcher' && Boolean(tip) && pageRoom - 2 >= START_BIG; // the Menu leaves it on the footer
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, view: stepsView };
   itemsRef.current = items;

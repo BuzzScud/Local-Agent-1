@@ -21,6 +21,7 @@ import {
 } from 'node:fs';
 import { join, dirname, relative, sep } from 'node:path';
 import { isHomeFolder } from '../agent/prompt.mjs';
+import { writeWhole } from './store.mjs';
 
 export const KEEP_DAYS = 7; // a conversation's copies go 7 days after it was last used
 export const MAX_FILES = 25_000; // more than this in a folder: its edits only
@@ -140,15 +141,21 @@ export class Rewind {
   }
 
   get file() { return join(this.root, 'sessions', `${this.session}.json`); }
+  // A list that cannot be read starts empty, and the file is copied aside first (<id>.json.unreadable), so the next save
+  // does not take its points with it.
   load() {
-    try { this.points = JSON.parse(readFileSync(this.file, 'utf8')).points ?? []; } catch { this.points = []; }
+    try { this.points = JSON.parse(readFileSync(this.file, 'utf8')).points ?? []; } catch (e) {
+      this.points = [];
+      if (e.code !== 'ENOENT') { try { copyFileSync(this.file, `${this.file}.unreadable`); } catch { /* left as it is */ } }
+    }
     this.next = (this.points.at(-1)?.n ?? 0) + 1;
   }
+  // Written whole (a file beside it renamed over it): a crash in the middle of a write leaves the list before, never half.
   save() {
     try {
       mkdirSync(dirname(this.file), { recursive: true });
       const points = this.points.map(({ msg, ...p }) => p);
-      writeFileSync(this.file, JSON.stringify({ id: this.session, updated: new Date(this.now()).toISOString(), points }));
+      writeWhole(this.file, JSON.stringify({ id: this.session, updated: new Date(this.now()).toISOString(), points }));
     } catch { /* the list comes back empty next time */ }
   }
   // /clear and /resume: another conversation, its own list.
