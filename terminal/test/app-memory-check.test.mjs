@@ -68,8 +68,13 @@ test('esc starts anyway beside the other copy, and says so', async () => {
 test('a copy kept loaded at another size restarts at the size you picked, and /stats shows that size checked', async () => {
   const { cwd, env, base, home } = withStandIns();
   writeFileSync(join(home, 'settings.json'), JSON.stringify({ limits: { context: 65536 } }));
-  // An earlier window kept the model loaded at 256k; no window is on it now.
-  const old = spawn('sleep', ['60'], { stdio: 'ignore' });
+  // An earlier window kept the model loaded at 256k; no window is on it now. The stand-in is a program called
+  // llama-server, as the real one is: a saved number whose program is something else is never stopped (the audit,
+  // 18 Nov 2026: after a restart such a number can be any program's).
+  const sleeper = join(base, 'old-engine', 'llama-server');
+  mkdirSync(join(base, 'old-engine'), { recursive: true });
+  symlinkSync('/bin/sleep', sleeper);
+  const old = spawn(sleeper, ['60'], { stdio: 'ignore' });
   const oldExit = new Promise((r) => old.on('exit', (code, sig) => r(sig)));
   const gone = spawn('true');
   await new Promise((r) => gone.on('exit', r));

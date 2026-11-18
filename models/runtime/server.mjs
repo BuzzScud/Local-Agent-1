@@ -79,6 +79,14 @@ const canListen = (port) => new Promise((resolve) => {
 });
 export const portFree = async (port) => !(await answers(port)) && (await canListen(port));
 
+// A process number that still belongs to a model server: after a restart a saved number may be another program's
+// (18 Nov 2026, the audit: it was stopped by the number alone). A test's stand-in counts by its name too.
+export function isModelServer(pid) {
+  if (!pid || !alive(pid)) return false;
+  return SERVER_PROCESS.test(spawnSyncText('/bin/ps', ['-p', String(pid), '-o', 'command=']).trim());
+}
+const stopIfServer = (pid) => { if (isModelServer(pid)) { try { process.kill(pid, 'SIGTERM'); } catch {} } };
+
 function alive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
@@ -95,12 +103,12 @@ export function scanServers() {
     if (!alive(e.pid)) { rmSync(join(REG_DIR, f), { force: true }); rmSync(usersDir(e.port), { recursive: true, force: true }); continue; }
     // One that stays loaded after you quit: its watcher stops it when idle.
     if (e.linger) { live.push({ ...e, users: liveUsers(e.port) }); continue; }
-    if (!alive(e.owner)) { try { process.kill(e.pid, 'SIGTERM'); } catch {} rmSync(join(REG_DIR, f), { force: true }); continue; }
+    if (!alive(e.owner)) { stopIfServer(e.pid); rmSync(join(REG_DIR, f), { force: true }); continue; }
     live.push(e);
   }
   // Older versions kept a single pid file.
   const legacy = join(HOME, 'server.pid');
-  if (existsSync(legacy)) { const pid = Number(readFileSync(legacy, 'utf8')); if (pid && alive(pid)) { try { process.kill(pid, 'SIGTERM'); } catch {} } rmSync(legacy, { force: true }); }
+  if (existsSync(legacy)) { const pid = Number(readFileSync(legacy, 'utf8')); if (pid) stopIfServer(pid); rmSync(legacy, { force: true }); }
   return live;
 }
 
@@ -365,7 +373,7 @@ export function dropRegistration(port, pid) {
 
 // One server from the list stopped, with its files (its watcher then ends).
 export function stopServer(e) {
-  try { process.kill(e.pid, 'SIGTERM'); } catch {}
+  stopIfServer(e.pid);
   dropRegistration(e.port, e.pid);
 }
 
@@ -407,14 +415,27 @@ export function serverProcesses({ psText = null } = {}) {
     .map((m) => ({ pid: Number(m[1]), bytes: Number(m[2]) * 1024 }));
 }
 
-// Who a server belongs to, from the programs above it.
+// The program a command line runs, and the script after bun or node: "bun /x/terminal/src/cli.jsx -p hi" is cli.jsx.
+function programOf(cmd) {
+  const words = String(cmd ?? '').trim().split(/\s+/);
+  const prog = (words[0] ?? '').split('/').pop();
+  if (!/^(bun|node|bunx)$/.test(prog)) return { prog, path: words[0] ?? '', script: '', args: words.slice(1) };
+  const i = words.findIndex((w, k) => k > 0 && !w.startsWith('-'));
+  return { prog, path: i > 0 ? words[i] : '', script: i > 0 ? words[i].split('/').pop() : '', args: i > 0 ? words.slice(i + 1) : [] };
+}
+// Agentic Coder itself: its command, its built app, or its cli.jsx run by bun.
+const isCoding = ({ prog, script }) => /^(coding|agentic-coder)$/.test(prog) || script === 'cli.jsx';
+
+// Who a server belongs to, from the programs above it. Each by its own program, not by words anywhere in its line
+// (18 Nov 2026, the audit: a shell whose line held "agentic" and "mkdir -p" was taken for a coding -p run).
 function whoStarted(r, byPid) {
   for (let p = byPid.get(r.ppid), i = 0; p && i < 8; p = byPid.get(p.ppid), i++) {
-    if (/evals\/bench\//.test(p.cmd)) return 'a practice-test run';
-    if (/evals\/battle\//.test(p.cmd)) return 'a battle (Gemma vs Qwen)';
-    if (/probe|speed|compare/i.test(p.cmd)) return 'a speed test';
-    if (/(^|\s)(-p|--print)(\s|$)/.test(p.cmd) && /coding|agentic|cli\.jsx/.test(p.cmd)) return 'a coding -p run';
-    if (/(^|\s)serve(\s|$)/.test(p.cmd) && /coding|agentic|cli\.jsx/.test(p.cmd)) return 'coding serve (for another machine)';
+    const own = programOf(p.cmd);
+    if (/evals\/bench\//.test(own.path)) return 'a practice-test run';
+    if (/evals\/battle\//.test(own.path)) return 'a battle (Gemma vs Qwen)';
+    if (/probe|speed|compare/i.test(own.path.split('/').pop())) return 'a speed test';
+    if (isCoding(own) && own.args.some((a) => a === '-p' || a === '--print')) return 'a coding -p run';
+    if (isCoding(own) && own.args[0] === 'serve') return 'coding serve (for another machine)';
   }
   return /probe/i.test(r.cmd) ? 'a speed test' : 'another program';
 }

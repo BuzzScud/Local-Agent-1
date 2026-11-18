@@ -18,22 +18,35 @@ test('a second window shares a live server; a left-over one is stopped', () => {
     const { scanServers } = await import(${JSON.stringify(join(import.meta.dir, '../runtime/server.mjs'))});
     const reg = join(HOME, 'servers');
     mkdirSync(reg, { recursive: true });
-    const orphan = spawn('sleep', ['30']);
-    const shared = spawn('sleep', ['30']);
+    // Stand-ins named llama-server, as the real one is: a saved number whose program is something else is left
+    // alone (the audit, 18 Nov 2026), checked below with a plain sleep.
+    const { symlinkSync } = await import('node:fs');
+    const engine = join(HOME, 'engine-x', 'llama-server');
+    mkdirSync(join(HOME, 'engine-x'), { recursive: true });
+    symlinkSync('/bin/sleep', engine);
+    const orphan = spawn(engine, ['30']);
+    const shared = spawn(engine, ['30']);
+    const stranger = spawn('sleep', ['30']);
+    const gone2 = spawn('true');
+    await new Promise((r) => gone2.on('exit', r));
     const gone = spawn('true');
     await new Promise((r) => gone.on('exit', r));
     writeFileSync(join(reg, '17600.json'), JSON.stringify({ pid: shared.pid, owner: process.pid, port: 17600, ctx: 32768, model: 'm.gguf' }));
     writeFileSync(join(reg, '17601.json'), JSON.stringify({ pid: orphan.pid, owner: gone.pid, port: 17601, ctx: 32768, model: 'm.gguf' }));
     writeFileSync(join(reg, '17602.json'), JSON.stringify({ pid: gone.pid, owner: process.pid, port: 17602, ctx: 32768, model: 'm.gguf' }));
+    writeFileSync(join(reg, '17603.json'), JSON.stringify({ pid: stranger.pid, owner: gone2.pid, port: 17603, ctx: 32768, model: 'm.gguf' }));
     const orphanExit = new Promise((r) => orphan.on('exit', (code, sig) => r(sig)));
     const live = scanServers().map((e) => e.port);
     const sig = await orphanExit;
     shared.kill();
-    console.log(JSON.stringify({ live, sig, left: [17601, 17602].map((p) => existsSync(join(reg, p + '.json'))) }));
+    let strangerAlive = false;
+    try { process.kill(stranger.pid, 0); strangerAlive = true; } catch {}
+    stranger.kill();
+    console.log(JSON.stringify({ live, sig, strangerAlive, left: [17601, 17602, 17603].map((p) => existsSync(join(reg, p + '.json'))) }));
   `;
   const r = spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 20000 });
   const out = JSON.parse(r.stdout.trim().split('\n').pop());
-  expect(out).toEqual({ live: [17600], sig: 'SIGTERM', left: [false, false] });
+  expect(out).toEqual({ live: [17600], sig: 'SIGTERM', strangerAlive: true, left: [false, false, false] });
 });
 
 // Staying loaded after you quit: a stand-in llama-server, a window that starts

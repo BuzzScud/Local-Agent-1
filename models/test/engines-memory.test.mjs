@@ -154,3 +154,22 @@ test('a start that waited for other copies counts what the servers that quit hel
   expect(freeAfterQuit({ free: 1e9, servers: [] }, [])).toBe(0);
   expect(freeAfterQuit(null, [])).toBe(0);
 });
+
+// The audit of 18 Nov 2026: the label came from words anywhere in a parent's line, so a shell running the tests
+// (`cd ~/…/agentic-coder && mkdir -p x && bun run test`) made a stand-in "a coding -p run".
+test('who has the model is read from each program above it, not from words in a shell line', () => {
+  const model = gemma;
+  const file = modelPath(gemma);
+  const row = (pid, ppid, cmd) => `${pid} ${ppid} 1000 ${cmd}`;
+  const ps = (parent) => [
+    row(1, 0, '/sbin/launchd'),
+    row(50, 1, parent),
+    row(60, 50, `/x/llama-server -m ${file} --port 17999`),
+  ].join('\n');
+  const who = (parent) => otherCopies(model, { psText: ps(parent), live: [] })[0]?.who;
+  const shell = "/bin/zsh -c source ~/.zshrc && eval 'cd ~/Desktop/PROJECTS/agentic-coder && mkdir -p x && bun run test'";
+  expect(who(shell)).toBe('another program');
+  expect(who('bun /Users/x/agentic-coder/terminal/src/cli.jsx -p "what is 6 times 7"')).toBe('a coding -p run');
+  expect(who('/Users/x/.agentic-coder/app/agentic-coder serve --port 8080')).toBe('coding serve (for another machine)');
+  expect(who('node models/evals/bench/run.mjs --only 3')).toBe('a practice-test run');
+});
