@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, sideByMost, pathOf, taskSteps, SNAPSHOT, REAL_RECORD, skipsIn, skipWords } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, sideByMost, pathOf, taskSteps, SNAPSHOT, REAL_RECORD, skipsIn, skipWords, flakyFile, addFlaky, readFlaky } from '../evals/record.mjs';
 import { RUN_TESTS } from '../evals/run-tests.mjs';
 import { MODELS } from '../registry.mjs';
 
@@ -79,6 +79,33 @@ test('a record that is not the real one never reaches the DOCS folder by itself,
   } finally {
     for (const [k, v] of [['AGENTIC_DOCS', was.docs], ['AGENTIC_HOME', was.home], ['AGENTIC_TEST_RECORD', was.rec]]) { if (v == null) delete process.env[k]; else process.env[k] = v; }
   }
+});
+
+test('a run no longer writes the record\'s page by itself; asked (bun run docs), it does', () => {
+  const { dir, file } = scratch();
+  const docsDir = join(dir, 'docs'); mkdirSync(docsDir);
+  const was = process.env.AGENTIC_DOCS;
+  process.env.AGENTIC_DOCS = docsDir;
+  try {
+    recordTest({ kind: 'suite', name: 'Unit tests', passed: 3, total: 3 }, { file, quiet: true });
+    expect(existsSync(join(docsDir, SNAPSHOT))).toBe(false);
+    recordTest({ kind: 'suite', name: 'Unit tests', passed: 3, total: 3 }, { file, quiet: true, snapshot: true });
+    expect(existsSync(join(docsDir, SNAPSHOT))).toBe(true);
+  } finally { if (was == null) delete process.env.AGENTIC_DOCS; else process.env.AGENTIC_DOCS = was; }
+});
+
+test('the flaky tests\' ledger: a line for each, read back newest first and from a moment on; a ledger that cannot be written fails nothing', () => {
+  const { dir, file } = scratch();
+  const ledger = flakyFile(file);
+  expect(ledger).toBe(join(dir, 'tests', 'flaky.jsonl'));
+  addFlaky(['app-effort.test.mjs › /effort with a server'], { at: '2026-11-10T10:00:00.000Z', code: 'abc1234', file: ledger });
+  addFlaky(['app-settings.test.mjs › /settings: three groups', 'sessions.test.mjs › a window'], { at: '2026-11-17T10:00:00.000Z', code: 'def5678', file: ledger });
+  addFlaky([], { file: ledger });
+  expect(readFlaky({ file: ledger }).map((x) => x.test)).toEqual(['app-settings.test.mjs › /settings: three groups', 'sessions.test.mjs › a window', 'app-effort.test.mjs › /effort with a server']);
+  expect(readFlaky({ file: ledger, since: Date.parse('2026-11-15T00:00:00.000Z') })).toHaveLength(2);
+  expect(readFlaky({ file: join(dir, 'none.jsonl') })).toEqual([]);
+  const blocked = scratch(); writeFileSync(join(blocked.dir, 'tests'), 'a file where the folder should be');
+  expect(() => addFlaky(['x'], { file: flakyFile(blocked.file) })).not.toThrow();
 });
 
 test('the code under test is named by its commit, and a frozen copy inside another repo by its folder', () => {

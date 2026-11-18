@@ -25,7 +25,7 @@
     "codemap": "bun terminal/scripts/codemap.mjs",
     "eval:recall": "node models/evals/bench/memory/recall.mjs",
     "eval:code": "node models/evals/bench/code/search.mjs",
-    "docs": "node docs/tools/sync-docs.mjs",
+    "docs": "node models/evals/record.mjs --snapshot && node docs/tools/sync-docs.mjs",
     "check": "node models/evals/tools/check.mjs",
     "build": "bun build --compile --minify terminal/src/cli.jsx --outfile dist/agentic-coder && chmod 755 dist/agentic-coder",
     "window": "sh terminal/app/window/build.sh",

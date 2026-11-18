@@ -202,7 +202,7 @@ export function appVersion(file = join(homedir(), '.agentic-coder', 'app', 'agen
 
 // Connections that have not given the key yet, at once: past this, a new one is let go at once (18 Nov 2026: each
 // could hold 8 MB for 10 s, and there was no limit to how many).
-export const UNKNOWN_MAX = 16;
+const UNKNOWN_MAX = 16;
 export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {}, mac = '', peerName = tailscalePeer, show = showHere, start = startHost, folders = doorFolders, staleMs = 35_000, foldersMs = 4000, version = appVersion, unknownMax = UNKNOWN_MAX }) {
   const recentHere = () => limited(Promise.resolve().then(() => folders()), foldersMs, []);
   const limit = limiter();

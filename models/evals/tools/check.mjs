@@ -13,7 +13,7 @@ import { createReadStream, existsSync, readFileSync, readdirSync, statSync, lsta
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, tmpdir } from 'node:os';
-import { recordTest, codeLabel } from '../record.mjs';
+import { recordTest, codeLabel, readFlaky } from '../record.mjs';
 import { isAppCode } from '../../../terminal/index.mjs';
 import { published, ownerMarks } from '../../../docs/tools/to-docs.mjs';
 
@@ -30,11 +30,14 @@ const SHAPES = [
   ['a Hugging Face token', /\bhf_[A-Za-z0-9]{30,}/g],
   ['a private key', /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:\\n|\s)*[A-Za-z0-9+/=]{40,}/g],
   ['a broker setting', /\b(?:PROJECTX|TOPSTEP)_[A-Z]{2,}\w*/g],
+  // Agentic Coder's own keys (18 Nov 2026): the door's (acd-) and coding serve's (ac-), 24 random bytes in base64url;
+  // a web API key (acw_) and a web run's token (acr_), letters and digits.
+  ['an Agentic Coder key', /\b(?:acd?-[A-Za-z0-9_-]{32}|acw_[A-Za-z0-9]{32}|acr_[A-Za-z0-9]{40})(?![A-Za-z0-9_-])/g],
   ['a password or key written out', /\b(?:api[_-]?key|secret|passwd|password|auth[_-]?token)["']?\s*[:=]\s*["']([^"'\s]{12,})["']/gi],
 ];
 
 export function looksMadeUp(value) {
-  const body = String(value).replace(/^(?:gh[pousr]_|github_pat_|sk-|hf_|xox[baprs]-|AKIA)/, '');
+  const body = String(value).replace(/^(?:gh[pousr]_|github_pat_|sk-|hf_|xox[baprs]-|AKIA|acd?-|acw_|acr_)/, '');
   if (body.length < 8) return true;
   if (/example|sample|dummy|placeholder|changeme|your[-_]|\$\{|<|\.\.\./i.test(body)) return true;
   if (new Set(body.toLowerCase()).size <= 3) return true;
@@ -105,7 +108,8 @@ export const buildsCode = (text) => /\beval\s*\(|\bnew Function\s*\(/.test(text)
 // Numbers that only look like one are left alone: a version (Chrome/120.0.0.0, v1.2.3.4), and the
 // drawing numbers of a page's pictures (an SVG path's d="…").
 // An address a test made up, or one that is public knowledge, is listed here on purpose.
-export const KNOWN_ADDRESSES = ['1.2.3.4', '1.1.1.1', '8.8.8.8', '8.8.4.4', '9.9.9.9', '164.92.10.7', '172.32.0.1', '100.128.0.1'];
+// 100.63.255.255: the address just below Tailscale's range, in the door's test of where its key may go.
+export const KNOWN_ADDRESSES = ['1.2.3.4', '1.1.1.1', '8.8.8.8', '8.8.4.4', '9.9.9.9', '164.92.10.7', '172.32.0.1', '100.128.0.1', '100.63.255.255'];
 const DRAWN = /\b(?:d|points|transform|viewBox|values|keyTimes|keySplines|stroke-dasharray)=(?:"[^"]*"|'[^']*')/g;
 const ADDRESS = /(?<![\w.-])(?<!(?:^|[^/])\/)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?::(\d{2,5}))?(?![\w-]|\.\d)/g;
 const reachable = ([a, b, c]) => !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127)
@@ -478,8 +482,9 @@ async function modelFiles({ fast }) {
 // Main, always (18 Oct 2026): the launcher builds the app and installs itself from a clean copy of GitHub's main
 // only (terminal/app/agentic-coder-launcher.sh), and writes the commit beside the app (agentic-coder.commit).
 // So the app is right when that commit is GitHub's main (or main has none of the app's code since: isAppCode,
-// the launcher's own list), the launcher is that commit's, and a build of a clean copy of it is the app,
-// byte for byte.
+// the launcher's own list) and the launcher is that commit's. A build of a clean copy of it is compared byte for
+// byte too, but a difference there is only worth a look (18 Nov 2026, the audit: the same commit built here again
+// differs from the launcher's build, so the line was always wrong): the commit stamp is what says which main it is.
 async function installedApp() {
   const home = process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
   const app = join(home, 'app', 'agentic-coder'), launcher = join(homedir(), '.local', 'bin', 'coding');
@@ -491,7 +496,7 @@ async function installedApp() {
   const repo = /^REPO="\$\{AGENTIC_REPO:-\$\{BONSAI_REPO:-(.*)\}\}"$/m.exec(have)?.[1] ?? /^REPO="\$\{AGENTIC_REPO:-([^$]*)\}"$/m.exec(have)?.[1];
   if (!repo) bad.push(`${tilde(launcher)} is not Agentic Coder's launcher`);
   else if (resolve(repo) !== resolve(root)) notes.push(`the installed app is built from another folder's git: ${tilde(repo)}`);
-  const commit = (() => { try { return readFileSync(`${app}.commit`, 'utf8').trim(); } catch { return ''; } })();
+  const commit = (() => { try { return readFileSync(`${app}.commit`, 'utf8').trim(); } catch { return ''; } })() || (/^[0-9a-f]{40}$/.test(process.env.AGENTIC_BUILT_COMMIT ?? '') ? process.env.AGENTIC_BUILT_COMMIT : '');
   const main = lines((await git('rev-parse', '-q', '--verify', 'refs/remotes/origin/main^{commit}')).out)[0] ?? lines((await git('rev-parse', '-q', '--verify', 'refs/heads/main^{commit}')).out)[0];
   if (!commit) notes.push('the app was built from a folder by a launcher from before 18 Oct 2026; the next coding builds GitHub\'s main');
   else if ((await git('cat-file', '-e', `${commit}^{commit}`)).code !== 0) notes.push(`the app's commit (${commit.slice(0, 7)}) is not in this repo, so it could not be compared`);
@@ -521,7 +526,7 @@ async function installedApp() {
         delete env.NODE_ENV;
         const built = copied ? await run(bun, ['build', '--compile', '--minify', 'terminal/src/cli.jsx', '--outfile', join(tmp, name)], { cwd: src, timeout: 120_000, env }) : { code: 1 };
         if (built.code !== 0) notes.push(`main as it was at ${short} does not build just now, so the app could not be compared`);
-        else if (!readFileSync(join(tmp, name)).equals(readFileSync(app))) bad.push(`the installed app is not what main at ${short} builds (a bun update also causes this; bun run install-cli builds it again)`);
+        else if (!readFileSync(join(tmp, name)).equals(readFileSync(app))) notes.push(`built from main at ${short}, as its stamp says, but not byte for byte what a build of it here makes (a Bun version or a build on another Mac also does this; bun run install-cli builds it again)`);
       } finally { rmSync(tmp, { recursive: true, force: true }); }
     }
   }
@@ -574,6 +579,18 @@ async function unitTests() {
   return fine(`${pass} of ${pass} unit tests pass`, skipped ? [`skipped for want of a tool on this Mac: ${skipped}`] : []);
 }
 
+// The tests that failed in a full run and passed alone (run-suite.mjs keeps them in flaky.jsonl) in the last
+// FLAKY_DAYS: worth a look, though each of those runs passed (18 Nov 2026, the audit).
+export const FLAKY_DAYS = 7;
+export function flakyTests({ now = Date.now(), file } = {}) {
+  const recent = readFlaky({ since: now - FLAKY_DAYS * 864e5, ...(file ? { file } : {}) });
+  if (!recent.length) return fine(`no test was flaky in the last ${FLAKY_DAYS} days`);
+  const by = new Map();
+  for (const x of recent) { const b = by.get(x.test) ?? { n: 0, last: x.at }; b.n++; by.set(x.test, b); }
+  const rows = [...by].sort((a, b) => b[1].n - a[1].n || String(b[1].last).localeCompare(String(a[1].last))).map(([t, b]) => `${t}  ${b.n === 1 ? 'once' : `${b.n} times`}, last ${String(b.last).slice(0, 10)}`);
+  return look(`${by.size} test${by.size > 1 ? 's' : ''} failed in a full run and passed alone in the last ${FLAKY_DAYS} days (the runs passed)`, few(rows, 6));
+}
+
 // ---- the run ---------------------------------------------------------------------------------
 const MARK = { fine: ['✓', 32], look: ['!', 33], wrong: ['✗', 31], skip: ['–', 2] };
 
@@ -589,6 +606,7 @@ export async function check({ fast = false, tests = true, offline = false, say =
     safe('Same as GitHub', sameAsGitHub), safe('Who can read it', whoCanRead), safe('No secrets in the files', secretsInFiles), safe('Only files that belong', filesThatBelong),
     safe('No secrets in the history', history), safe('No server addresses', addresses), safe('Packages', packages), safe('Where the code connects', connections), safe('No leftover code', leftovers),
     safe('Files a model can read', readable), safe('The model files', modelFiles), safe('The installed app', installedApp), safe('Private pages stay private', docsStayPrivate), safe('Only on this Mac', onlyOnThisMac),
+    safe('Flaky tests', () => flakyTests()),
   ];
   const results = [];
   const show = (name, r) => {

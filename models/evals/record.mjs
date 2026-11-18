@@ -1,9 +1,10 @@
 // The test record: one line per test run, kept on this Mac in
 // ~/.agentic-coder/tests/record.jsonl (AGENTIC_HOME moves it, AGENTIC_TEST_RECORD
 // names the file outright). Every runner adds its result with recordTest();
-// the hub's Tests tab reads the file live, and a snapshot page goes into the
-// DOCS folder (tests/agentic-coder-test-record.html) so the record reaches GitHub
-// with the other pages.
+// the hub's Tests tab reads the file live, and `bun run docs` writes a snapshot page into the
+// DOCS folder (tests/agentic-coder-test-record.html) so the record reaches GitHub with the
+// other pages (before 18 Nov 2026 every run wrote it: a 740 KB tracked page changed by each test).
+// Beside it, flaky.jsonl: a line for each test that failed in a full run and passed alone (run-suite.mjs).
 //
 // A line:
 //   { id, at, kind, name, code, model, effort, ctx, passed, total, secs, result, part, note, raw, page, bar?, failed? }
@@ -23,7 +24,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, statSync } from 'node:fs';
 import { join, dirname, basename, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, MODELS_DIR } from '../registry.mjs';
 import { RUN_TESTS, practiceChoices } from './run-tests.mjs';
@@ -138,7 +139,8 @@ export function skipsIn(text, into = {}) {
 }
 export const skipWords = (why) => Object.entries(why ?? {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, n]) => `${n} ${k}`).join(', ');
 
-export function recordTest(row, { file = recordFile(), snapshot = true, quiet = false } = {}) {
+// snapshot: write the page into the DOCS folder too (only when asked; `bun run docs` does it).
+export function recordTest(row, { file = recordFile(), snapshot = false, quiet = false } = {}) {
   try {
     if (!KINDS[row?.kind] || !row.name) throw new Error('a line needs a kind (tasks, sets, requests, bug, suite, check, other) and a name');
     const at = row.at ?? new Date().toISOString();
@@ -162,6 +164,24 @@ export function recordTest(row, { file = recordFile(), snapshot = true, quiet = 
     if (!quiet) console.log(`not recorded in the test record: ${e.message}`);
     return null;
   }
+}
+
+// The flaky tests' ledger, beside the record: one line each, { at, test, code }, from `bun run test` (run-suite.mjs:
+// a test that failed in the busy run and passed when its file ran again alone). `bun run check` names the recent ones.
+export const flakyFile = (file = recordFile()) => join(dirname(file), 'flaky.jsonl');
+export function addFlaky(tests, { at = new Date().toISOString(), code = '', file = flakyFile() } = {}) {
+  try {
+    if (!tests?.length) return;
+    mkdirSync(dirname(file), { recursive: true });
+    appendFileSync(file, tests.map((test) => `${JSON.stringify({ at, test: String(test), code })}\n`).join(''));
+  } catch { /* a ledger that cannot be written never fails a run */ }
+}
+// The ledger's lines since a moment, newest first.
+export function readFlaky({ since = 0, file = flakyFile() } = {}) {
+  let text = '';
+  try { text = readFileSync(file, 'utf8'); } catch { return []; }
+  return text.split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter((x) => x?.test && Date.parse(x.at) >= since).sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 
 // The models whose file is on this Mac: the Tests tab's side panel lists these.
@@ -313,4 +333,10 @@ export function writeSnapshot({ file = recordFile(), docsDir = process.env.AGENT
     writeFileSync(out, html.replace('<!--DATA-->', () => `<script id="data" type="application/json">${JSON.stringify(recordData(file)).replace(/</g, '\\u003c')}</script>`));
     return out;
   } catch { return null; }
+}
+
+// `node models/evals/record.mjs --snapshot` (`bun run docs` runs it first): the record's page into the DOCS folder.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href && process.argv.includes('--snapshot')) {
+  const out = writeSnapshot();
+  console.log(out ? `the test record's page: ${relative(repo, out)}` : 'the test record\'s page was not written (only the real record, from the main folder)');
 }
