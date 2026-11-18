@@ -83,3 +83,32 @@ test.if(process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))('t
   expect(readFileSync(join(ssh, 'known_hosts'), 'utf8')).toBe('known_hosts\n');
   expect(run(`cat ${JSON.stringify(join(ssh, 'config'))}`, false).stdout).toBe(''); // outside Bypass the home is closed
 });
+
+// The audit of 18 Nov 2026: the normal fence let a command write to system folders, and Bypass kept the door's key
+// and cloud sign-ins out of reach only by the words of the command.
+test.if(process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))('the fence writes only in the project, the caches and temp; Bypass never reads the door key or cloud sign-ins', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agentic-sandbox-'));
+  const home = join(root, 'home');
+  const project = join(root, 'project');
+  const outside = join(root, 'outside');
+  for (const d of [home, project, outside, join(home, '.agentic-coder'), join(home, '.aws')]) mkdirSync(d, { recursive: true });
+  writeFileSync(join(home, '.agentic-coder', 'door.key'), 'acd-secret');
+  writeFileSync(join(home, '.aws', 'credentials'), 'aws-secret');
+  const run = (profile, cmd) => spawnSync('/usr/bin/sandbox-exec', ['-p', profile, '/bin/zsh', '-c', cmd], { encoding: 'utf8', cwd: project });
+  const fence = sandboxProfile(project, { home });
+  expect(run(fence, 'echo hi > made.txt && cat made.txt').stdout).toBe('hi\n');
+  expect(run(fence, `echo x > ${JSON.stringify(join(tmpdir(), `agentic-fence-${process.pid}.txt`))} && echo ok`).stdout).toBe('ok\n');
+  expect(run(fence, 'echo x > /dev/null && echo ok').stdout).toBe('ok\n');
+  // A folder outside the project that is not temp: here, a stand-in for /opt/homebrew/bin.
+  if (!outside.startsWith('/private/tmp') && !outside.startsWith('/private/var/folders') && !outside.startsWith('/tmp')) {
+    expect(run(fence, `echo x > ${JSON.stringify(join(outside, 'evil'))}`).status).not.toBe(0);
+  }
+  expect(fence).toContain('(deny file-write* (subpath "/"))');
+  const open = sandboxProfile(project, { home, open: true });
+  expect(run(open, `cat ${JSON.stringify(join(home, '.agentic-coder', 'door.key'))}`).stdout).toBe('');
+  expect(run(open, `cat ${JSON.stringify(join(home, '.agentic-coder'))}/door.*`).stdout).toBe('');
+  expect(run(open, `cat ${JSON.stringify(join(home, '.aws', 'credentials'))}`).stdout).toBe('');
+  expect(run(open, 'echo hi && echo ok').stdout).toBe('hi\nok\n');
+  const self = sandboxProfile(project, { home, open: true, self: true });
+  expect(run(self, `cat ${JSON.stringify(join(home, '.agentic-coder', 'door.key'))}`).stdout).toBe('');
+});

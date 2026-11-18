@@ -41,6 +41,13 @@ const reText = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Service data outside the home folder (Homebrew's Postgres, MySQL, Redis…).
 // (Not /var/run or /var/db: DNS and time zones live there.)
 const SERVICE_DATA = ['/opt/homebrew/var', '/usr/local/var'];
+// Keys and sign-ins in the home folder that stay unreadable even in Bypass, where any folder opens (18 Nov 2026,
+// the audit: only a word check kept the door's key out of reach, and "cat ~/.agentic-coder/door.*" got past it;
+// ~/.aws/credentials was open). Checked by the sandbox itself, so no spelling of the path reaches them.
+const SECRET_FILES = ['.aws', '.netrc', '.npmrc', '.pypirc', '.docker/config.json', '.kube/config', '.gnupg', '.config/gh', '.config/gcloud',
+  '.azure', '.git-credentials', 'Library/Keychains', 'Library/Application Support/com.apple.TCC'];
+// Where a command may still write outside the project in the normal fence: the temp folders and the devices.
+const TEMP_WRITES = ['/dev', '/private/tmp', '/private/var/folders', '/tmp'];
 // Their sockets: Postgres (/tmp/.s.PGSQL.5432), MySQL, Docker, Homebrew services.
 const SOCKETS = '^/(private/)?tmp/(\\.s\\.|mysql)|^/(private/)?var/run/docker\\.sock|^/(opt/homebrew|usr/local)/var/';
 
@@ -90,6 +97,9 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [], net = fa
   const paths = (list) => list.map((p) => `(subpath ${q(p)})`).join(' ');
   const ownDirs = [...new Set([inHome('.agentic-coder'), process.env.AGENTIC_HOME].filter(Boolean).map(real))];
   const ownClosed = self ? ownDirs.flatMap((d) => ['door.key', 'trust.json'].map((f) => `(literal ${q(join(d, f))})`)).join(' ') : paths(ownDirs);
+  // Never read, in any mode: the door's key and the secret files above.
+  const keyFiles = ownDirs.map((d) => `(literal ${q(join(d, 'door.key'))})`).join(' ');
+  const secretFiles = SECRET_FILES.map((f) => `(subpath ${q(inHome(f))})`).join(' ');
   return [
     '(version 1)',
     '(allow default)',
@@ -99,9 +109,13 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [], net = fa
     // sandbox-exec takes only "localhost" or "*" as the host ("127.0.0.1:*"
     // stops every command with exit 65); localhost covers 127.0.0.1 and ::1.
     ...(net || open ? [] : ['(deny network-outbound)', '(allow network-outbound (remote ip "localhost:*"))', '(allow network-outbound (remote unix-socket))']),
-    ...(open ? [`(deny file-write* ${ownClosed})`, `(deny file-read-data file-write* (subpath ${q(inHome('.ssh'))}))`,
+    ...(open ? [`(deny file-write* ${ownClosed})`, `(deny file-read-data ${keyFiles} ${secretFiles})`, `(deny file-read-data file-write* (subpath ${q(inHome('.ssh'))}))`,
       `(allow file-read-data ${SSH_PUBLIC.map((f) => `(literal ${q(inHome(`.ssh/${f}`))})`).join(' ')} (subpath ${q(inHome('.ssh/config.d'))}) (regex #"^${reText(inHome('.ssh'))}/[^/]+\\.pub$"))`] : [
       `(deny file-read-data (subpath ${q(h)}))`,
+      // No writes anywhere but the project, the caches and the temp folders (18 Nov 2026, the audit: only the
+      // home folder and /Volumes were closed, so a command could put a program in /opt/homebrew/bin or /usr/local).
+      '(deny file-write* (subpath "/"))',
+      `(allow file-write* ${TEMP_WRITES.map((p) => `(subpath ${q(p)})`).join(' ')})`,
       `(deny file-write* (subpath ${q(h)}) (subpath "/Volumes"))`,
       '(deny file-read-data (subpath "/Volumes"))',
       tools.length ? `(allow file-read-data ${paths(tools)})` : '',
