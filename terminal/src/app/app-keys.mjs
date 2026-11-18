@@ -249,7 +249,7 @@ export function keysPart(self) {
   };
   const onTerminalReply = (seq) => {
     const m = self.mouseRef.current;
-    if (!m.armed || typeof seq !== 'string') return;
+    if (!m.armed || typeof seq !== 'string' || self.quittingRef.current) return; // leaving: no click does anything more
     const at = parseCursorReply(seq);
     if (at) {
       if (!m.asked) return;

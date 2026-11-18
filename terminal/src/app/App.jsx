@@ -514,8 +514,6 @@ export function App({ opts, win, onRestart }) {
   const copiedRef = useRef('');
   useEffect(copySelection, [input, flash]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMode = useCallback(setModeFn, [agent]);
-  // The mode the window is left in is the next window's (store.mjs firstMode): kept in settings.json
-  // as it changes, so a quit, a closed window or /update's restart all keep it.
   // settings.json that cannot be read is left as it is (store.mjs saveSettings): said as the window opens, before the
   // first save below, and again when a save is refused for a newer broken version of it.
   useEffect(() => {
@@ -524,6 +522,8 @@ export function App({ opts, win, onRestart }) {
     if (bad) push({ type: 'note', text: bad, tone: 'warn' });
     return () => onSettingsRefused(null);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The mode the window is left in is the next window's (store.mjs firstMode): kept in settings.json
+  // as it changes, so a quit, a closed window or /update's restart all keep it.
   const keptMode = useRef(settings.lastMode ?? null);
   useEffect(() => {
     if (!keepsLastMode() || mode === keptMode.current) return;
