@@ -53,6 +53,9 @@ export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, PING: 6, JUMP:
 // is an app from before 3 Oct 2026: it is served as before.
 export const PROTO = 2;
 const MAX_FRAME = 8 * 1024 * 1024;
+// Before a window has said hello (and, through the door, given its key) a frame is a few hundred bytes: one bigger
+// than this is not ours, so a socket that has not said who it is cannot make this Mac hold 8 MB for it (18 Nov 2026).
+export const HELLO_MAX = 4096;
 // A dropped file goes in pieces of this (its base64 stays under MAX_FRAME), up to DROP_MAX in all.
 export const DROP_PIECE = 4 * 1024 * 1024;
 const DROP_MAX = 200 * 1024 * 1024;
@@ -71,14 +74,14 @@ export function frame(kind, body = {}) {
 }
 
 // Feed it the bytes as they come; it calls onFrame(kind, body) for each whole
-// frame. A frame over 8 MB is not ours: it throws.
-export function frameReader(onFrame) {
+// frame. A frame over 8 MB is not ours: it throws. max(): a smaller limit while it holds (HELLO_MAX before a hello).
+export function frameReader(onFrame, { max = () => MAX_FRAME } = {}) {
   let buf = Buffer.alloc(0);
   return (chunk) => {
     buf = buf.length ? Buffer.concat([buf, chunk]) : Buffer.from(chunk);
     while (buf.length >= 5) {
       const n = buf.readUInt32BE(1);
-      if (n > MAX_FRAME) throw new Error('frame too big');
+      if (n > Math.min(MAX_FRAME, max())) throw new Error('frame too big');
       if (buf.length < 5 + n) break;
       const kind = buf[0];
       const body = buf.subarray(5, 5 + n);
@@ -418,7 +421,7 @@ export async function runHost(spec, env = process.env) {
         sock.end();
         end();
       }
-    });
+    }, { max: () => (v.hello ? Infinity : HELLO_MAX) }); // a window says hello first; a jump asks in one small frame
     sock.on('data', (chunk) => { try { read(chunk); } catch { sock.destroy(); } });
     sock.on('close', lost);
     sock.on('error', () => {});

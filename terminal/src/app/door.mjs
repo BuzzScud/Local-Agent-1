@@ -11,6 +11,7 @@
 // On the other Mac, `coding attach <this Mac's name>` asks for the key once and
 // keeps it in the Keychain (agentic-coder-remote, account door-<name>).
 import net from 'node:net';
+import { lookup } from 'node:dns/promises';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync, statSync, openSync, closeSync } from 'node:fs';
@@ -18,7 +19,7 @@ import { stat } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HOME, lanAddresses, readKey, saveKey, removeKey } from '../../../models/index.mjs';
-import { F, PROTO, BG_DIR, DETACH_LABEL, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
+import { F, PROTO, BG_DIR, DETACH_LABEL, HELLO_MAX, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
 import { recentFolders, saveSettings, loadSettings } from './store.mjs';
 import { MAC_NAME } from './jump-box.mjs';
 import { versionText } from './update.mjs';
@@ -199,12 +200,19 @@ export function appVersion(file = join(homedir(), '.agentic-coder', 'app', 'agen
   try { const commit = readFileSync(file, 'utf8').trim(); return /^[0-9a-f]{40}$/.test(commit) ? { commit } : null; } catch { return null; }
 }
 
-export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {}, mac = '', peerName = tailscalePeer, show = showHere, start = startHost, folders = doorFolders, staleMs = 35_000, foldersMs = 4000, version = appVersion }) {
+// Connections that have not given the key yet, at once: past this, a new one is let go at once (18 Nov 2026: each
+// could hold 8 MB for 10 s, and there was no limit to how many).
+export const UNKNOWN_MAX = 16;
+export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {}, mac = '', peerName = tailscalePeer, show = showHere, start = startHost, folders = doorFolders, staleMs = 35_000, foldersMs = 4000, version = appVersion, unknownMax = UNKNOWN_MAX }) {
   const recentHere = () => limited(Promise.resolve().then(() => folders()), foldersMs, []);
   const limit = limiter();
+  let unknown = 0;
   const server = net.createServer((sock) => {
     const from = sock.remoteAddress ?? '?';
-    if (limit.blocked(from)) { sock.destroy(); return; }
+    if (limit.blocked(from) || unknown >= unknownMax) { sock.destroy(); return; }
+    unknown++;
+    let counted = true;
+    const known = () => { if (counted) { counted = false; unknown--; } };
     // Keys go at once (no waiting to fill a packet), and a link that died is noticed by the system too.
     try { sock.setNoDelay(true); sock.setKeepAlive(true, 15_000); } catch {}
     let state = 'hello';
@@ -236,6 +244,7 @@ export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = proces
         setTimeout(() => say('wrong key'), 1000);
         return;
       }
+      known();
       if (h.op === 'list') {
         recentHere().then((recent) => { if (!sock.destroyed) sock.end(frame(F.LIST, { v: PROTO, mac, sessions: listBackground().map(shown), folders: recent, last: recent[0] ?? null, app: version() })); });
         return;
@@ -296,10 +305,10 @@ export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = proces
         return;
       }
       say('the door does not know that');
-    });
+    }, { max: () => (state === 'hello' || state === 'refused' ? HELLO_MAX : Infinity) }); // 4 KB until the key is taken
     sock.on('data', (c) => { heard = Date.now(); try { read(c); } catch { sock.destroy(); } });
     sock.on('error', () => {});
-    sock.on('close', () => { clearTimeout(quiet); clearInterval(watch); });
+    sock.on('close', () => { known(); clearTimeout(quiet); clearInterval(watch); });
   });
   return new Promise((res, rej) => {
     server.once('error', rej);
@@ -419,21 +428,25 @@ function stopDoor(st) {
   if (doorRunning(st)) { try { process.kill(st.pid, 'SIGTERM'); } catch {} }
 }
 
-// `coding door [on|off|start|ensure|new-key]`. say(text) prints a line. Answers the exit code.
+// `coding door [on|off|start|ensure|key|new-key]`. say(text) prints a line. Answers the exit code.
 export async function doorCli(args, { say = (t) => process.stdout.write(`${t}\n`) } = {}) {
   const what = args[0] ?? 'status';
   const at = tailscaleAddress();
   const st = readState();
   const port = Number(args[args.indexOf('--port') + 1]) || st.port || DOOR_PORT;
-  const how = () => {
+  // The key is shown when it is made (the first coding door on, and new-key) and when asked for (coding door key),
+  // never with the door's state: a status typed in a shared or recorded Terminal showed it every time (18 Nov 2026).
+  const how = ({ key = false } = {}) => {
     say(`  On your other Mac:  coding attach ${tailscaleName()}`);
-    say(`  It asks once for this key (keep it to yourself):  ${doorKey()}`);
+    if (key) say(`  It asks once for this key (keep it to yourself):  ${doorKey()}`);
+    else say('  It asks once for this Mac\'s door key: coding door key shows it here.');
   };
   const where = () => (at ? ` on ${at}, port ${port}` : ' (waiting for Tailscale)');
   if (what === 'on' || what === 'start') {
     if (!canHost()) { say(`coding door: ${OLD_BUN()}; then coding door on again.`); return 1; }
     if (what === 'start' && !st.on) { say('The door is off. coding door on opens it.'); return 1; }
     if (!at) say('! Tailscale is not on here yet; the door opens as soon as it is.');
+    const made = !existsSync(KEY_FILE());
     doorKey();
     // A port or PATH changed with `on` takes a fresh door; `start` keeps a running one. The login
     // item goes first: one from before ran the door itself and holds the port.
@@ -450,7 +463,7 @@ export async function doorCli(args, { say = (t) => process.stdout.write(`${t}\n`
     }
     say(`The door is open${where()}: only your Tailscale devices can reach it, and only with the key.`);
     if (what === 'on') {
-      how();
+      how({ key: made });
       say('  After a restart it comes back by itself (a Terminal window opens to start it). coding door off closes it.');
     }
     return 0;
@@ -474,7 +487,12 @@ export async function doorCli(args, { say = (t) => process.stdout.write(`${t}\n`
   if (what === 'new-key') {
     doorKey({ fresh: true });
     say('A new key: the old one no longer opens the door.');
-    how();
+    how({ key: true });
+    return 0;
+  }
+  if (what === 'key') {
+    if (!existsSync(KEY_FILE())) { say('There is no door key yet: coding door on makes one.'); return 1; }
+    say(`This Mac's door key (keep it to yourself):  ${doorKey()}`);
     return 0;
   }
   if (what === 'status') {
@@ -483,7 +501,7 @@ export async function doorCli(args, { say = (t) => process.stdout.write(`${t}\n`
     if (on) how();
     return 0;
   }
-  say('coding door: on · off · start · new-key (with nothing: whether it is open)');
+  say('coding door: on · off · start · key · new-key (with nothing: whether it is open)');
   return 2;
 }
 
@@ -497,10 +515,29 @@ const standIn = (host) => (process.env.AGENTIC_DOOR_AT ?? '').split(',').map((x)
 const addressOf = (host) => standIn(host).split(':')[0] || host;
 const portOf = (host, port) => Number(standIn(host).split(':')[1]) || port;
 
+// Where the key may go (18 Nov 2026, the audit): it travels as it is, so only to an address on your Tailscale
+// network (100.64.0.0/10, fd7a:115c:a1e0::/48, encrypted by Tailscale) or this Mac itself, never to whatever a name
+// happens to resolve to on another network.
+export function keyAddress(addr) {
+  const a = String(addr ?? '').toLowerCase().replace(/^::ffff:(?=\d+\.)/, '');
+  if (net.isIPv4(a)) { const [x, y] = a.split('.').map(Number); return x === 127 || (x === 100 && y >= 64 && y <= 127); }
+  if (net.isIPv6(a)) return a === '::1' || a.startsWith('fd7a:115c:a1e0:');
+  return false;
+}
+// The address a Mac's name leads to that the key may go to: a Tailscale one, else an error (code NOT_TAILSCALE).
+export async function doorAddress(host, { resolve = (name) => lookup(name, { all: true, verbatim: true }) } = {}) {
+  const name = addressOf(host);
+  const found = net.isIP(name) ? [name] : (await resolve(name)).map((x) => x.address);
+  const at = found.find(keyAddress);
+  if (!at) throw Object.assign(new Error(`${host} is not on Tailscale`), { code: 'NOT_TAILSCALE', found });
+  return at;
+}
+
 // One question through the door, then the answer frame: { kind, body }.
-function ask({ host, port, hello, timeoutMs = 8000 }) {
+async function ask({ host, port, hello, timeoutMs = 8000 }) {
+  const at = await doorAddress(host);
   return new Promise((resolve, reject) => {
-    const sock = net.connect({ host: addressOf(host), port: portOf(host, port) });
+    const sock = net.connect({ host: at, port: portOf(host, port) });
     let up = false; // connected: a silence after that is the door's, not the way there
     const t = setTimeout(() => { sock.destroy(); reject(Object.assign(new Error('timeout'), up ? { code: 'SILENT' } : {})); }, timeoutMs);
     sock.on('connect', () => { up = true; sock.write(frame(F.HELLO, hello)); });
@@ -530,6 +567,7 @@ export const SILENT = (host) => `${host} took the connection but did not answer.
 // In plain words, why the door could not be reached.
 export function reachProblem(e, host) {
   if (e.code === 'SILENT') return SILENT(host);
+  if (e.code === 'NOT_TAILSCALE') return `${host} is at ${(e.found ?? []).join(', ') || 'an address'}, which is not on your Tailscale network, so its door key was not sent there. Is Tailscale on here? (tailscale status lists the names its Macs go by)`;
   if (e.code === 'ECONNREFUSED') return `${host} answered, but its door is closed. On ${host}, run: coding door on`;
   if (e.code === 'ENOTFOUND' || e.code === 'EAI_AGAIN') return `No Mac called ${host} was found. Is Tailscale on here? (tailscale status lists the names)`;
   if (e.message === 'timeout' || e.code === 'ETIMEDOUT' || e.code === 'EHOSTUNREACH') return `${host} did not answer. Is it awake, with Tailscale on?`;
@@ -569,7 +607,7 @@ async function remoteList({ host, port = DOOR_PORT, askKey = typeKey }) {
   let key = readKey(id);
   for (let tries = 0; tries < 3; tries++) {
     if (!key) {
-      key = await askKey(`The key for ${host}'s door (on ${host}: coding door on shows it): `);
+      key = await askKey(`The key for ${host}'s door (on ${host}: coding door key shows it): `);
       if (!key) throw new Error('No key given; nothing was opened.');
     }
     let r;
@@ -606,6 +644,8 @@ export function newRows({ host, v, folders = [], last = null }) {
 // `coding attach <host> [name]` and `coding sessions <host>`: through the door.
 export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnly = false, askSave = false, say = (t) => process.stdout.write(`${t}\n`), typeLine = (p) => typeKey(p, { show: true }), beatMs, retryMs }) {
   const { sessions, key, v, folders, last, app } = await remoteList({ host, port });
+  // Its Tailscale address, looked up once: every connection after the list goes there (the key only ever does).
+  const at = await doorAddress(host).catch((e) => { throw new Error(reachProblem(e, host)); });
   // Which Agentic Coder it runs, against GitHub's main as this Mac knows it.
   const runs = await versionText(typeof app?.commit === 'string' && /^[0-9a-f]{40}$/.test(app.commit) ? app.commit : null).catch(() => null);
   if (listOnly) {
@@ -649,7 +689,7 @@ export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnl
     if (v < 2) process.stderr.write(`\x1b[2m${host} runs an older Agentic Coder: update it there (git pull, then coding) to pick a folder or carry on a conversation.\x1b[0m\n`);
   }
   // Keys go at once, and a dead link is noticed by the system too; the window's own check-in is faster.
-  const connect = () => { const s = net.connect({ host: addressOf(host), port: portOf(host, port) }); try { s.setNoDelay(true); s.setKeepAlive(true, 15_000); } catch {} return s; };
+  const connect = () => { const s = net.connect({ host: at, port: portOf(host, port) }); try { s.setNoDelay(true); s.setKeepAlive(true, 15_000); } catch {} return s; };
   return viewJumping({
     name: hello.name ?? `a new session on ${host}`, where: host,
     connect,

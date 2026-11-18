@@ -133,6 +133,79 @@ test('why the door could not be reached, in plain words', () => {
   expect(D.reachProblem(new Error('timeout'), 'mac-2')).toContain('did not answer');
 });
 
+// ---- 18 Nov 2026, the audit: where the key may go, when it is shown, what a socket without it may hold ----
+
+test('the door\'s key goes only to a Tailscale address or this Mac; a name that leads elsewhere is refused before connecting, in plain words', async () => {
+  for (const a of ['100.64.0.1', '100.101.12.7', '100.127.255.254', '127.0.0.1', '::1', 'fd7a:115c:a1e0::53', 'fd7a:115c:a1e0:ab12:4843:cd96:6258:b240', '::ffff:100.100.1.1']) expect([a, D.keyAddress(a)]).toEqual([a, true]);
+  for (const a of ['100.63.255.255', '100.128.0.1', '192.168.1.40', '10.0.0.2', '203.0.113.5', '8.8.8.8', 'fd7a:115c:a1e1::1', 'fe80::1', 'server-1', '']) expect([a, D.keyAddress(a)]).toEqual([a, false]);
+  expect(await D.doorAddress('mac-2', { resolve: async () => [{ address: '192.168.1.40' }, { address: '100.101.12.7' }] })).toBe('100.101.12.7');
+  let e = null;
+  try { await D.doorAddress('mac-2', { resolve: async () => [{ address: '203.0.113.5' }] }); } catch (x) { e = x; }
+  expect(e?.code).toBe('NOT_TAILSCALE');
+  expect(D.reachProblem(e, 'mac-2')).toBe('mac-2 is at 203.0.113.5, which is not on your Tailscale network, so its door key was not sent there. Is Tailscale on here? (tailscale status lists the names its Macs go by)');
+  // An address typed in is taken as it is: a Tailscale one goes, any other is refused.
+  expect(await D.doorAddress('100.101.12.7')).toBe('100.101.12.7');
+  await expect(D.doorAddress('192.168.1.40')).rejects.toThrow('not on Tailscale');
+});
+
+test('before its key is taken a socket may send 4 KB at most, and only a few such sockets are let in at once', async () => {
+  const read = S.frameReader(() => {}, { max: () => S.HELLO_MAX });
+  const big = Buffer.alloc(5);
+  big[0] = S.F.HELLO;
+  big.writeUInt32BE(S.HELLO_MAX + 1, 1);
+  expect(() => read(big)).toThrow('frame too big');
+  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-right', unknownMax: 3 });
+  const port = door.address().port;
+  const closed = (sock, ms) => new Promise((r) => { const t = setTimeout(() => r(false), ms); sock.on('close', () => { clearTimeout(t); r(true); }); });
+  const open = async () => { const s = net.connect({ host: '127.0.0.1', port }); s.on('error', () => {}); await new Promise((r) => s.on('connect', r)); return s; };
+  try {
+    // a hello that says it is 1 MB long is let go at once, not held 10 s while it fills
+    const s = await open();
+    s.write(big.subarray(0, 1));
+    s.write(Buffer.from([0, 16, 0, 0]));
+    expect(await closed(s, 2000)).toBe(true);
+    // three sockets that say nothing are held; a fourth is let go at once
+    const quiet = [await open(), await open(), await open()];
+    await new Promise((r) => setTimeout(r, 100));
+    const fourth = await open();
+    expect(await closed(fourth, 2000)).toBe(true);
+    for (const q of quiet) q.destroy();
+    await new Promise((r) => setTimeout(r, 200));
+    // once they are gone there is room again, and the key still opens the door
+    expect((await askDoor(port, { key: 'acd-right', op: 'list' })).kind).toBe(S.F.LIST);
+  } finally { door.close(); }
+});
+
+test('coding door shows its key only when asked (coding door key) or when it is made, never with the door\'s state', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'door-key-'));
+  const was = process.env.AGENTIC_HOME;
+  process.env.AGENTIC_HOME = home;
+  const said = [];
+  const say = (t) => said.push(t);
+  // a door that runs: a process whose command says `door run` (door.mjs doorRunning)
+  const fake = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30_000)', 'door', 'run'], { stdio: 'ignore' });
+  try {
+    expect(await D.doorCli(['key'], { say })).toBe(1);
+    expect(said.pop()).toBe('There is no door key yet: coding door on makes one.');
+    expect(await D.doorCli(['new-key'], { say })).toBe(0);
+    const key = readFileSync(join(home, 'door.key'), 'utf8').trim();
+    expect(said.join('\n')).toContain(key); // made now: shown once
+    said.length = 0;
+    writeFileSync(join(home, 'door.json'), JSON.stringify({ on: true, pid: fake.pid, port: 7790 }));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(await D.doorCli(['status'], { say })).toBe(0);
+    expect(said.join('\n')).toContain('The door is ');
+    expect(said.join('\n')).not.toContain(key);
+    expect(said.join('\n')).toContain('coding door key shows it here');
+    said.length = 0;
+    expect(await D.doorCli(['key'], { say })).toBe(0);
+    expect(said).toEqual([`This Mac's door key (keep it to yourself):  ${key}`]);
+  } finally {
+    fake.kill();
+    if (was == null) delete process.env.AGENTIC_HOME; else process.env.AGENTIC_HOME = was;
+  }
+});
+
 // ---- end to end: needs a Bun with a pretend terminal (1.3.5 and later) ----------------------------------
 
 const homes = [];
