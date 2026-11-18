@@ -213,3 +213,38 @@ test('a project\'s loop asks once, a {repo} is read from git, /loop <name> loads
   expect(ui.view).toBe('shelf');
   m.close();
 });
+
+// ↑↓ on the Library land on the card drawn above or below, at any width (18 Nov 2026, the UI audit: the keys counted
+// 4 cards a row while a board under 120 columns draws 3). One cardsPerRow for both.
+test('the Library\'s ↑↓ go to the card drawn below or above it, at 100 and at 140 columns', () => {
+  expect([99, 100, 119, 120, 140].map(Lib.cardsPerRow)).toEqual([3, 3, 3, 4, 4]);
+  for (const [cols, per] of [[100, 3], [140, 4]]) {
+    const w = windowIn();
+    const { ui, press, frame, m } = w;
+    B.openFromChat(ui, '', m.snapshot());
+    // The row and the left edge of the card a name is on.
+    const where = (f, name) => { const lines = f.split('\n'); const y = lines.findIndex((l) => l.includes(name)); return [y, lines[y]?.lastIndexOf('╭', lines[y].indexOf(name))]; };
+    const picked = (f) => /^ {2}(.+?) {2}· {2}(ready-made|yours|from )/m.exec(f.split('\n').slice(-4).join('\n'))?.[1];
+    frame(cols, 44);
+    // + New loop, the project's loop, then the 15 ready-made from item 2: "Watch the tests" starts their first row.
+    press('right', 'right');
+    let f = frame(cols, 44);
+    expect(picked(f)).toBe('Watch the tests');
+    const ready = F.libraryOf({ home: join(root, 'nobody') }).map((l) => l.name);
+    press('down');
+    f = frame(cols, 44);
+    expect(picked(f)).toBe(ready[per]); // the card under it: one row of `per` on
+    const [y0, x0] = where(f, 'Watch the tests'), [y1, x1] = where(f, ready[per]);
+    expect(x1).toBe(x0); // drawn right under it
+    expect(y1).toBeGreaterThan(y0);
+    press('right', 'down');
+    f = frame(cols, 44);
+    expect(picked(f)).toBe(ready[2 * per + 1]);
+    expect(where(f, ready[2 * per + 1])[1]).toBe(where(f, ready[1])[1]);
+    press('up', 'up');
+    expect(picked(frame(cols, 44))).toBe(ready[1]);
+    press('up'); // from the first ready-made row to the project's one card
+    expect(picked(frame(cols, 44))).toBe('Check the export');
+    m.close();
+  }
+});

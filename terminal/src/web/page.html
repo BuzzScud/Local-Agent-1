@@ -523,15 +523,27 @@ function enter(user) {
 $('#who').onclick = (e) => {
   e.stopPropagation();
   $('.menu-pop')?.remove();
-  const m = document.createElement('div'); m.className = 'menu-pop';
-  m.innerHTML = '<button type="button" data-a="pass">Change password</button><button type="button" data-a="out">Sign out</button>';
+  const m = document.createElement('div'); m.className = 'menu-pop'; m.setAttribute('role', 'menu');
+  m.innerHTML = '<button type="button" role="menuitem" data-a="pass">Change password</button><button type="button" role="menuitem" data-a="out">Sign out</button>';
   document.body.append(m);
+  $('#who').setAttribute('aria-expanded', 'true');
+  // Esc closes it, ↑↓ move between its two items, and the focus goes back to the button.
+  const shut = (focus) => { m.remove(); document.removeEventListener('keydown', onKey, true); $('#who').setAttribute('aria-expanded', 'false'); if (focus) $('#who').focus(); };
+  const onKey = (ev) => {
+    if (!m.isConnected) { document.removeEventListener('keydown', onKey, true); return; }
+    const items = [...m.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); shut(true); }
+    else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); items[(i + (ev.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+    else if (ev.key === 'Tab') shut(false);
+  };
+  document.addEventListener('keydown', onKey, true);
+  m.querySelector('button').focus();
   m.onclick = async (ev) => {
-    const a = ev.target.dataset.a; m.remove();
+    const a = ev.target.closest('[data-a]')?.dataset.a; shut(true);
     if (a === 'out') { try { await api('/api/signout', { method: 'POST' }); } catch {} showSignin(); }
     if (a === 'pass') modal('Change your password', '<label class="f">Current password<input type="password" id="pw-old" autocomplete="current-password"></label><label class="f">New password (at least 10 characters)<input type="password" id="pw-new" autocomplete="new-password"></label>', 'Save', async () => { await api('/api/password', { method: 'POST', body: { old: $('#pw-old').value, next: $('#pw-new').value } }); toast('Password changed.'); });
   };
-  setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 0);
+  setTimeout(() => document.addEventListener('click', () => { if (m.isConnected) shut(false); }, { once: true }), 0);
 };
 
 function show(v) {
@@ -1014,9 +1026,22 @@ $('#invite-btn').onclick = () => {
   });
 };
 
+// A window over the page: esc closes it, the focus goes to its first box or button and back where it was when it closes,
+// and Tab stays inside it while it is open (18 Nov 2026, the UI audit: only a click outside closed one).
 function modal(title, body, ok = 'OK', action = null, danger = false) {
+  const back = document.activeElement;
   const bg = document.createElement('div'); bg.className = 'modal-bg';
   bg.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><h3>${esc(title)}</h3>${body}<div class="notice" data-err hidden></div><div class="row">${action ? '<button class="btn" data-x type="button">Cancel</button>' : ''}<button class="btn ${danger ? 'danger' : 'primary'}" data-ok type="button">${esc(ok)}</button></div></div>`;
+  const controls = () => [...bg.querySelectorAll('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')].filter((x) => !x.disabled && x.offsetParent !== null);
+  const onKey = (e) => {
+    if (!bg.isConnected) { document.removeEventListener('keydown', onKey, true); return; }
+    if (bg !== [...document.querySelectorAll('.modal-bg')].at(-1)) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+    if (e.key === 'Tab') { const cs = controls(); if (!cs.length) return; const i = cs.indexOf(document.activeElement); if (e.shiftKey && i <= 0) { e.preventDefault(); cs.at(-1).focus(); } else if (!e.shiftKey && (i < 0 || i === cs.length - 1)) { e.preventDefault(); cs[0].focus(); } }
+  };
+  document.addEventListener('keydown', onKey, true);
+  // Closed by a pick inside it too (Your chats removes it itself): the focus goes back either way.
+  new MutationObserver((_, mo) => { if (bg.isConnected) return; mo.disconnect(); document.removeEventListener('keydown', onKey, true); if (back?.isConnected && !document.querySelector('.modal-bg') && (document.activeElement === document.body || !document.activeElement)) back.focus(); }).observe(document.body, { childList: true });
   const close = () => bg.remove();
   bg.onclick = (e) => { if (e.target === bg) close(); };
   bg.querySelector('[data-x]')?.addEventListener('click', close);
@@ -1025,7 +1050,7 @@ function modal(title, body, ok = 'OK', action = null, danger = false) {
     try { const r = await action(); if (r === 'keep') { bg.querySelector('[data-ok]').textContent = 'Done'; bg.querySelector('[data-ok]').onclick = close; bg.querySelector('[data-x]')?.remove(); return; } close(); } catch (e) { const er = bg.querySelector('[data-err]'); er.hidden = false; er.textContent = e.message; }
   };
   document.body.append(bg);
-  bg.querySelector('input, select, textarea')?.focus();
+  (bg.querySelector('input, select, textarea') ?? controls()[0])?.focus();
 }
 
 boot();

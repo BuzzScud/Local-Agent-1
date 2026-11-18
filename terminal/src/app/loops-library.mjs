@@ -139,13 +139,17 @@ function card(e, w, on) {
     fit([p('╰', bs), p('─'.repeat(w - 2), bs), p('╯', bs)], w),
   ];
 }
+// Cards a row on the shelf at a width: the drawing and the arrow keys both go by it (18 Nov 2026: the keys assumed 4
+// while a board under 120 columns draws 3, so ↑↓ landed on the wrong card).
+export const cardsPerRow = (cols) => (cols >= 120 ? 4 : 3);
 export function drawShelf(state, ui, { cols, rows, now }) {
   const sh = ui.shelf ?? (ui.shelf = { at: 0, find: '' });
   const out = [header(state, ui, now, cols, 'Loops'), rule(cols), ...shelfTabs(state, ui, cols)];
   const sections = shelfSections(state, sh.find);
   const items = sections.flatMap((s) => s.items);
   sh.at = Math.max(0, Math.min(sh.at, items.length - 1));
-  const per = cols >= 120 ? 4 : 3;
+  const per = cardsPerRow(cols);
+  sh.cols = cols; // for the keys
   const gap = 2;
   const cw = Math.min(34, Math.floor((cols - 4 - (per - 1) * gap) / per));
   const x0 = Math.floor((cols - (per * cw + (per - 1) * gap)) / 2);
@@ -188,7 +192,7 @@ export function shelfKey(b, k) {
   const sh = ui.shelf ?? (ui.shelf = { at: 0, find: '' });
   const sections = shelfSections(state, sh.find);
   const items = sections.flatMap((s) => s.items);
-  const per = 4;
+  const per = cardsPerRow(sh.cols ?? 120); // as last drawn
   // Each card's place: [row, column], row counted over the sections.
   const places = [];
   let r = 0;

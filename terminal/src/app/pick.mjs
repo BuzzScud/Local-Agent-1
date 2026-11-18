@@ -11,6 +11,8 @@
 // 2026, "it won't let me type"; the first fix took readline out but kept the pause). The menu
 // takes off all it put on; keys typed after the one that closes it stay for the app.
 
+import stringWidth from 'string-width';
+
 const MARK = '\x1b[38;5;147m'; // the app's C.ask (#afafff)
 const OFF = '\x1b[0m';
 
@@ -20,10 +22,11 @@ const OFF = '\x1b[0m';
 export function pickOnTerminal(options, { input = process.stdin, output = process.stderr, index = 0, hint = 'Enter to confirm · Esc to exit', page = null, rule = -1 } = {}) {
   const n = options.length;
   const text = (i) => (page ? page(i) : options.map((o, k) => `${k === rule ? `\x1b[2m  ${'─'.repeat(44)}\x1b[0m\n` : ''}${k === i ? `${MARK}❯` : ' '} ${k + 1}. ${o}${k === i ? OFF : ''}\n`).join('') + (hint ? `\n\x1b[2m${hint}\x1b[0m\n` : ''));
-  let rows = 0;
-  const draw = (i) => { const t = text(i); rows = (t.match(/\n/g) ?? []).length; output.write(t); };
-  // Rows are redrawn in place: move up, clear below, and print them again.
-  const redraw = (i) => { output.write(`\x1b[${rows}A\x1b[J`); draw(i); };
+  let last = '';
+  const draw = (i) => { last = text(i); output.write(last); };
+  // Rows are redrawn in place: move up, clear below, and print them again. Up by the rows the block takes on the
+  // screen, not its lines: a row wider than the terminal wraps, and counting lines left a copy above at each move.
+  const redraw = (i) => { const up = rowsUp(last, output.columns); output.write(`${up ? `\x1b[${up}A` : ''}\r\x1b[J`); draw(i); };
   draw(index);
   return new Promise((resolve) => {
     let i = index;
@@ -54,6 +57,16 @@ export function pickOnTerminal(options, { input = process.stdin, output = proces
     };
     input.on('readable', onReadable);
   });
+}
+
+// How far up the cursor is from the first row of text written at the left edge of a terminal cols wide: each line
+// that ended takes its width over cols rows (at least one), and the line the cursor is on adds the rows it wrapped
+// onto. Colours take no room and a wide character two (string-width). No width known (not a terminal): lines only.
+export function rowsUp(text, cols) {
+  const w = cols > 0 ? cols : Infinity;
+  const lines = String(text).split('\n'), open = lines.pop();
+  const rows = (s) => Math.max(1, Math.ceil(stringWidth(s) / w));
+  return lines.reduce((n, l) => n + rows(l), 0) + (open ? rows(open) - 1 : 0);
 }
 
 // The keys in a chunk of terminal input: arrows (ESC [ A or ESC O A) as 'up' / 'down' / 'right' / 'left',
