@@ -99,3 +99,21 @@ test('an Edit worked out before the question is not written over a file saved me
   const typo = `/Users/someone/${name.slice(0, -1)}X/README.md`;
   expect(resolvePath(d, typo, { write: true }).abs).toBe(join(d, 'README.md'));
 });
+
+test('Edit: "already done" only when old_text is truly gone; Windows line endings are kept', async () => {
+  const { findEdit } = await import('../src/agent/tools.mjs');
+  // old_text with spaces where the file has a tab, and new_text happens to appear elsewhere: a real edit, not "done"
+  const file = 'function a() {\n\treturn 1;\n}\nfunction b() {\n  return null;\n}\n';
+  const m = findEdit(file, 'function a() {\n  return 1;\n}', 'function a() {\n  return null;\n}');
+  expect([m.ok, m.done]).toEqual([true, undefined]);
+  expect(m.after).not.toContain('return 1;');
+  // truly done
+  expect(findEdit('x = 2;\n', 'x = 1;', 'x = 2;').done).toBe(true);
+  // CRLF
+  const crlf = 'one\r\ntwo\r\nthree\r\n';
+  const e1 = findEdit(crlf, 'two', 'TWO\nTWO-B');
+  expect(e1.after).toBe('one\r\nTWO\r\nTWO-B\r\nthree\r\n');
+  const e2 = findEdit(crlf, 'two  \nthree', 'deux\ntrois');
+  expect(e2.ok).toBe(true);
+  expect(e2.after.replace(/\r\n/g, '').includes('\n')).toBe(false);
+});

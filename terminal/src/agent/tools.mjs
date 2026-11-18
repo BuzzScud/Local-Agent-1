@@ -35,7 +35,7 @@ export { desktopDefault, plainFetch, plainRead, wallOf } from './tools-web.mjs';
 // Work out a change before asking permission, so the prompt can show the diff.
 export function prepare(name, args, env) {
   if (name === 'Edit' || name === 'Write') {
-    for (const k of ['old_text', 'new_text', 'content']) if (args[k] !== undefined) args[k] = stripLineNumbers(args[k]).text;
+    for (const k of ['old_text', 'new_text', 'content']) if (args[k] !== undefined) args[k] = stripLineNumbers(args[k], args.path).text;
     // SKILLS/<name>: a skill saved in the app's home for every project (skill-write.mjs); SKILLS.md's stay read-only.
     const skill = prepareSkill(name, args, env);
     if (skill) return skill;

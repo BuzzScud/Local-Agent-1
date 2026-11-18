@@ -69,6 +69,8 @@ const shownLines = (fileLines, from, count) => fileLines.slice(from, from + Math
 // line: when old_text appears more than once, the line the one meant starts on (from Read).
 // at: the line (from 1) where the change starts, on a match.
 export function findEdit(text, oldText, newText, { replaceAll = false, line = null } = {}) {
+  // A file with Windows line endings only: new lines go in the same way, not as bare new lines among them.
+  if (typeof newText === 'string' && text.includes('\r\n') && !text.replace(/\r\n/g, '').includes('\n')) newText = newText.replace(/\r?\n/g, '\r\n');
   const places = startsOf(text, oldText);
   const count = places.length;
   const span = oldText.replace(/\n$/, '').split('\n').length;
@@ -80,9 +82,6 @@ export function findEdit(text, oldText, newText, { replaceAll = false, line = nu
     const lines = [...new Set(places.map((p) => p.line))].slice(0, 8).join(', ');
     return { ok: false, error: `old_text appears ${count} times (lines ${lines}).${line ? ` None of them is at line ${line}.` : ''} Pass line with the one you mean (the line it starts on), or include more surrounding lines so it matches once, or set replace_all to true to change all of them.` };
   }
-  // The change is already there (the model is repeating an edit it made).
-  // done: nothing failed, the file is already as asked (agent-step.mjs shows it as done, not as an error).
-  if (newText.trim() && text.includes(newText.trim())) return { ok: false, done: true, error: 'This change is already in the file: new_text is there and old_text is gone, so nothing needed changing. Do not repeat it; go on with the next step.' };
   const fileLines = text.split('\n');
   const want = oldText.replace(/\n$/, '').split('\n');
   for (const mode of ['trailing', 'indent']) {
@@ -96,7 +95,9 @@ export function findEdit(text, oldText, newText, { replaceAll = false, line = nu
     const one = hits.length === 1 ? hits[0] : placeAt(hits.map((i) => ({ i, line: i + 1 })), Number(line), want.length)?.i;
     if (one !== undefined) {
       const i = one;
-      let repl = newText.replace(/\n$/, '').split('\n');
+      // A file with Windows line endings keeps them on the lines put in (18 Nov 2026, the audit).
+      const crlf = /\r$/.test(fileLines[i + want.length - 1] ?? '') || /\r$/.test(fileLines[i] ?? '');
+      let repl = newText.replace(/\r?\n$/, '').split('\n').map((l) => (crlf ? `${l.replace(/\r$/, '')}\r` : l));
       if (mode === 'indent') {
         const have = /^\s*/.exec(fileLines[i])[0];
         const gave = /^\s*/.exec(want[0])[0];
@@ -107,6 +108,11 @@ export function findEdit(text, oldText, newText, { replaceAll = false, line = nu
     }
     if (hits.length > 1) return { ok: false, error: `old_text matches ${hits.length} places (lines ${hits.slice(0, 8).map((i) => i + 1).join(', ')}); pass line with the one you mean, or include more surrounding lines so it matches once.` };
   }
+  // The change is already there (the model is repeating an edit it made): only once old_text is not in the file even
+  // with spaces and indents forgiven (18 Nov 2026, the audit: a near miss whose new text happened to be elsewhere in
+  // the file said "done" and changed nothing).
+  // done: nothing failed, the file is already as asked (agent-step.mjs shows it as done, not as an error).
+  if (newText.trim() && text.includes(newText.trim())) return { ok: false, done: true, error: 'This change is already in the file: new_text is there and old_text is gone, so nothing needed changing. Do not repeat it; go on with the next step.' };
   // Point at the closest line to help the model try again.
   // Near-copies: the model mistyped a character or two. Accept only one
   // clear place where every line is at least 85% the same, and put back the
@@ -143,9 +149,13 @@ export function findEdit(text, oldText, newText, { replaceAll = false, line = nu
 }
 
 // Small models copy Read's line numbers ("    12\t…") into what they write.
-// When most lines carry one, take them off.
-export function stripLineNumbers(text) {
+// When most lines carry one, take them off. Only Read's own shape counts (18 Nov 2026, the audit): a number padded
+// to five places at least, as Read pads it; a table whose first column is an id ("1\tAlice\t30") and a file of
+// numbers alone ("1\n2\n3") are what they say. A data file (path: .csv, .tsv, .txt, .json…) is never touched.
+const DATA_FILE = /\.(?:csv|tsv|tab|psv|txt|dat|log|json|jsonl|ndjson|ya?ml|tsv\.gz)$/i;
+export function stripLineNumbers(text, path = '') {
   if (typeof text !== 'string' || !text) return { text, stripped: false };
+  if (DATA_FILE.test(String(path ?? ''))) return { text, stripped: false };
   // Read's header line ("strings.mjs (9 lines):") copied along with the text.
   const header = /^[^\n]*\((?:\d+ lines?|lines \d+-\d+ of \d+[^)]*)\):[ \t]*\n/;
   if (header.test(text)) return { text: stripLineNumbers(text.replace(header, '')).text, stripped: true };
@@ -155,19 +165,20 @@ export function stripLineNumbers(text) {
     const bare = ls.map((l, i) => (/^\s*\d+\s*$/.test(l) ? i : -1)).filter((i) => i >= 0);
     const vals = bare.map((i) => Number(ls[i]));
     const rising = vals.every((v, k) => k === 0 || v === vals[k - 1] + 1);
-    if (bare.length >= 3 && rising && vals[0] <= 1 + (vals.length > 50 ? 1000 : 50) && bare.length >= ls.filter((l) => l.trim()).length * 0.35) {
+    const filled = ls.filter((l) => l.trim()).length;
+    if (bare.length >= 3 && bare.length < filled && rising && vals[0] <= 1 + (vals.length > 50 ? 1000 : 50) && bare.length >= filled * 0.35) {
       const drop = new Set(bare);
       return { text: ls.filter((_, i) => !drop.has(i)).join('\n').replace(/^ {4}/gm, (m) => m), stripped: true };
     }
   }
   const lines = text.split('\n');
   const full = lines.filter((l) => l.trim());
-  // "   12\tcode", "   12    code", or a numbered empty line "   12"
-  const re = /^\s*(\d+)(?:\t| {2,}|$)/;
-  const nums = full.map((l) => re.exec(l)).filter(Boolean).map((m) => Number(m[1]));
+  // "   12\tcode", "   12    code", or a numbered empty line "   12": padded to five places, as Read pads them.
+  const re = /^(?: {4}\d| {3}\d\d| {2}\d{3}| \d{4}|\d{5,})(?:\t| {2,}|$)/;
+  const nums = full.map((l) => re.exec(l)).filter(Boolean).map((m) => Number(m[0].trim()));
   // At least two numbered lines, one of them with content after the number
   // (a lone "8790" is a number, not a line from Read).
-  const withContent = full.filter((l) => /^\s*\d+(?:\t| {2,})\S/.test(l)).length;
+  const withContent = full.filter((l) => /^(?: {4}\d| {3}\d\d| {2}\d{3}| \d{4}|\d{5,})(?:\t| {2,})\S/.test(l)).length;
   if (nums.length < 2 || !withContent || nums.length < full.length * 0.6) return { text, stripped: false };
   // The numbers must run upward, as Read prints them; otherwise it is real content.
   let rising = 0;

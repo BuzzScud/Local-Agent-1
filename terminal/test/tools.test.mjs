@@ -165,7 +165,13 @@ test('line numbers copied from Read are taken off, tabs or spaces', async () => 
   expect(stripLineNumbers('const a = 1;\n  2\tnot really').stripped).toBe(false);
   expect(stripLineNumbers('10  apples\n3  pears\n7  plums').stripped).toBe(false);
   expect(stripLineNumbers('8790').stripped).toBe(false);
-  expect(stripLineNumbers('1\n2\n3').stripped).toBe(true); // three bare rising numbers
+  // A file of numbers alone is data, not Read's numbers (18 Nov 2026, the audit: it was written out empty).
+  expect(stripLineNumbers('1\n2\n3').stripped).toBe(false);
+  expect(stripLineNumbers('1\n2\n3\n4\n5\n').text).toBe('1\n2\n3\n4\n5\n');
+  // A table whose first column is an id keeps it; so does an aligned table and any data file.
+  expect(stripLineNumbers('1\tAlice\t30\n2\tBob\t41\n3\tCyd\t22').stripped).toBe(false);
+  expect(stripLineNumbers('  1  apples\n  2  pears\n  3  plums').stripped).toBe(false);
+  expect(stripLineNumbers('    1\tid,name\n    2\t1,Al', 'people.csv').stripped).toBe(false);
   expect(stripLineNumbers('    1\n// a\n    2\n\n    3\nexport function f() {').text).toBe('// a\n\nexport function f() {');
   expect(stripLineNumbers('x = [\n  1,\n  2\n]').stripped).toBe(false);
 });
