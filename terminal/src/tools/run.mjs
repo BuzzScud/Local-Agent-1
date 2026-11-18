@@ -34,6 +34,16 @@ export function squeezeTests(lines) {
   return out;
 }
 
+// The names of keys, tokens and passwords in an environment; SSH_AUTH_SOCK (git over ssh) is a socket, not a key.
+const SECRET_NAME = /(?:^|_)(?:API_?KEY|KEYS?|TOKENS?|SECRETS?|PASSWORDS?|PASSWD|CREDENTIALS?|PRIVATE)(?:_|$)|^ANTHROPIC_|^AGENTIC_.*KEY/i;
+const KEEP_NAMES = new Set(['SSH_AUTH_SOCK', 'GPG_AGENT_INFO', 'KEYCHAIN_PATH']);
+export const secretName = (name) => SECRET_NAME.test(name) && !KEEP_NAMES.has(name);
+export function withoutSecrets(env) {
+  const out = {};
+  for (const [k, v] of Object.entries(env)) if (!secretName(k)) out[k] = v;
+  return out;
+}
+
 // The shell a command runs in, in its own process group, so stopping it stops everything it
 // started (npm → node → test workers), not just the shell. Also the background jobs' (jobs.mjs).
 // Each command carries a mark of its own in its environment (COMMAND_MARK), and so does every program
@@ -42,7 +52,10 @@ let commands = 0;
 const COMMAND_MARK = 'AGENTIC_COMMAND';
 export function startShell(command, { cwd, sandbox = {} } = {}) {
   const mark = `${process.pid}-${++commands}`;
-  const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', CI: '1', [COMMAND_MARK]: mark };
+  // A command the model runs gets no keys (18 Nov 2026, the audit: every command had the whole environment, the
+  // Claude and service keys included, and "echo $ANTHROPIC_API_KEY" put one in the conversation). One you type
+  // yourself (sandbox: false, "!" in the app) keeps everything, as your shell does.
+  const env = { ...(sandbox === false ? process.env : withoutSecrets(process.env)), FORCE_COLOR: '0', NO_COLOR: '1', CI: '1', [COMMAND_MARK]: mark };
   delete env.AGENTIC_RESTART_FILE; // where /update leaves its restart: the app's alone
   const fenced = sandbox !== false && sandboxAvailable();
   const child = fenced
@@ -84,6 +97,26 @@ export function signalCommand(child, mark, sig, seen = []) {
   for (const pid of seen) { try { process.kill(pid, sig); } catch {} }
 }
 
+// The first and last OUT_KEEP characters of a stream, with a line for what was left out between them.
+export const OUT_KEEP = 2_500_000;
+export function keepEnds(keep = OUT_KEEP) {
+  let head = '';
+  let tail = '';
+  let dropped = 0;
+  return {
+    add(d) {
+      const t = String(d);
+      if (head.length < keep) { const room = keep - head.length; head += t.slice(0, room); if (t.length <= room) return; tail += t.slice(room); }
+      else tail += t;
+      if (tail.length > keep * 2) { dropped += tail.length - keep; tail = tail.slice(-keep); }
+    },
+    text() {
+      if (tail.length > keep) { dropped += tail.length - keep; tail = tail.slice(-keep); }
+      return dropped ? `${head}\n… ${dropped.toLocaleString('en-US')} characters of output left out …\n${tail}` : head + tail;
+    },
+  };
+}
+
 export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, signal, sandbox = {}, squeeze = false } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
@@ -103,9 +136,15 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
     const onAbort = () => stop();
     if (signal?.aborted) queueMicrotask(stop);
     signal?.addEventListener('abort', onAbort, { once: true });
+    // What it printed, kept to its first and last OUT_KEEP characters (18 Nov 2026, the audit: a command that printed
+    // a gigabyte kept all of it in memory beside the model); decoded as UTF-8 across chunks, so a character split
+    // between two chunks is not two broken ones.
+    const kept = keepEnds();
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (d) => kept.add(d));
+    child.stderr.on('data', (d) => kept.add(d));
     let out = '';
-    child.stdout.on('data', (d) => { out += d; });
-    child.stderr.on('data', (d) => { out += d; });
     const timer = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
     const finish = (code) => {
       if (done) return;
@@ -115,6 +154,7 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
       signal?.removeEventListener('abort', onAbort);
       child.stdout.destroy();
       child.stderr.destroy();
+      out = kept.text();
       if (fenced) out += fenceHint(out, { open: Boolean(sandbox?.open), self: Boolean(sandbox?.self), command }); // also when a pipe hid the error code
       const all = out.replace(/\n$/, '').split('\n');
       const lines = squeeze ? squeezeTests(all) : all;
@@ -130,6 +170,6 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
       });
     };
     child.on('close', (code) => finish(code));
-    child.on('error', (e) => { out += String(e.message ?? e); finish(1); });
+    child.on('error', (e) => { kept.add(String(e.message ?? e)); finish(1); });
   });
 }
