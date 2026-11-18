@@ -64,7 +64,9 @@ export function listFiles(root, { path = '.', pattern, max = 200 } = {}) {
       if (out.length < max) out.push(e.isDirectory() ? `${e.name}/` : e.name);
     }
   } else {
+    const stop = walkLimit();
     for (const f of walk(base)) {
+      if (stop.over()) return { lines: out, total, cut: stop.words() };
       if (f.dir) continue;
       if (!re.test(f.path)) continue;
       total++;
@@ -74,9 +76,36 @@ export function listFiles(root, { path = '.', pattern, max = 200 } = {}) {
   return { lines: out, total };
 }
 
+// A walk of a very big folder (the home folder in Bypass) stops after WALK_FILES entries or WALK_SECS
+// seconds and says so, instead of freezing the window where esc cannot reach it (18 Nov 2026, the audit).
+export const WALK_FILES = 200_000;
+export const WALK_SECS = 15;
+function walkLimit({ files = WALK_FILES, secs = WALK_SECS } = {}) {
+  const t0 = Date.now();
+  let n = 0;
+  let why = null;
+  return {
+    over() { n++; if (!why && n > files) why = `${files.toLocaleString('en-US')} files`; if (!why && (n & 255) === 0 && Date.now() - t0 > secs * 1000) why = `${secs} s`; return Boolean(why); },
+    words: () => `stopped after ${why}: name a smaller folder`,
+  };
+}
+
 function isGitRepo(root) {
-  const r = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: root, encoding: 'utf8' });
+  const r = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: root, encoding: 'utf8', timeout: 5000 });
   return r.status === 0 && r.stdout.trim() === 'true';
+}
+
+// git grep with the pattern as the model wrote it, a JavaScript one: -P (Perl's patterns) knows \d, \w,
+// \s and \b as JavaScript does; -E did not, so "MAX_\w+ = " found nothing in any git project and said
+// "No matches" (18 Nov 2026, the audit). A git built without Perl's patterns answers 128: the walk below.
+// The pattern goes after -e, so one that starts with - is not read as a flag. null: git could not do it.
+function gitGrep(root, { pattern, anyCase, path, glob, max }) {
+  const rel = relative(root, resolve(root, path)) || '.';
+  const args = ['grep', '-n', '-I', '-P', ...(anyCase ? ['-i'] : []), '--untracked', '-e', pattern, '--', glob ? `${rel}/${glob}`.replace(/^\.\//, '') : rel];
+  const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 20e6, timeout: 20_000 });
+  if (r.error || (r.status !== 0 && r.status !== 1)) return null;
+  const lines = r.stdout.split('\n').filter(Boolean);
+  return { lines: lines.slice(0, max).map((l) => l.length > 220 ? `${l.slice(0, 220)}…` : l), total: lines.length };
 }
 
 export function searchFiles(root, { pattern, path = '.', glob, max = 50 } = {}) {
@@ -89,13 +118,8 @@ export function searchFiles(root, { pattern, path = '.', glob, max = 50 } = {}) 
   const matches = [];
   let total = 0;
   if (isGitRepo(root)) {
-    const rel = relative(root, resolve(root, path)) || '.';
-    const args = ['grep', '-n', '-I', '-E', ...(anyCase ? ['-i'] : []), '--untracked', pattern, '--', glob ? `${rel}/${glob}`.replace(/^\.\//, '') : rel];
-    const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 20e6 });
-    if (r.status === 0 || r.status === 1) {
-      const lines = r.stdout.split('\n').filter(Boolean);
-      return { lines: lines.slice(0, max).map((l) => l.length > 220 ? `${l.slice(0, 220)}…` : l), total: lines.length };
-    }
+    const found = gitGrep(root, { pattern, anyCase, path, glob, max });
+    if (found) return found;
   }
   const globRe = glob ? globToRegExp(glob.includes('/') ? glob : `**/${glob}`) : null;
   const base = resolve(root, path);
@@ -103,7 +127,9 @@ export function searchFiles(root, { pattern, path = '.', glob, max = 50 } = {}) 
   let isFile = false;
   try { isFile = statSync(base).isFile(); } catch { return { error: `${path} does not exist. Use List to see what is there.` }; }
   const files = isFile ? [{ path: '', dir: false }] : walk(base);
+  const stop = walkLimit();
   for (const f of files) {
+    if (stop.over()) return { lines: matches, total, cut: stop.words() };
     if (f.dir) continue;
     const rel = relative(root, join(base, f.path)) || path;
     if (globRe && !globRe.test(f.path) && !globRe.test(rel)) continue;

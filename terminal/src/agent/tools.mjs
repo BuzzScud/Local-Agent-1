@@ -23,6 +23,8 @@ import { APP_NOT, PART_DEFAULT, PART_MAX, WHOLE_MAX, oldSteps } from './tools-de
 import { findEdit, stripLineNumbers, syntaxError } from './tools-edit.mjs';
 import { missing, notThere, resolvePath, settlePath } from './tools-paths.mjs';
 import { cut, webFetch, webSearch } from './tools-web.mjs';
+// The biggest file Read and List read into memory (18 Nov 2026, the audit).
+export const READ_WHOLE_MAX = 50_000_000;
 export { arrivedNote, display, needsText, normalizeArgs, parseArgs, patchOps, sentArgs } from './tools-args.mjs';
 export { AGENT_TOOL_DEF, agentToolDef, APP_NOT, APP_TOOL_DEF, EXPLORE_TOOLS, MODEL_TOOL_DEFS, oldSteps, TOOL_DEFS, toolDefs, toolNameOf, toolSchemas, WHOLE_MAX } from './tools-defs.mjs';
 export { findEdit, pageScriptError, stripLineNumbers, syntaxError } from './tools-edit.mjs';
@@ -247,6 +249,12 @@ export async function execute(name, args, prepared, env) {
       // line ranges), then the model reads only the part it needs: reading is
       // the slow part (~60 tokens a second).
       // A page with the design studio's built styles: that one line folded (studio.mjs), never read or edited.
+      // A file too big to hold (a multi-GB log or dump) is not read into memory beside the model (18 Nov 2026, the audit).
+      const bytes = statSync(p.abs).size;
+      if (bytes > READ_WHOLE_MAX) {
+        const mb = (bytes / 1e6).toFixed(0);
+        return { text: `${note}${p.rel} is ${mb} MB, too big to read here. Read a part of it with Bash: head -n 200, tail -n 200, sed -n '1000,1200p' or grep -n.`, error: true, view: { kind: 'error', message: `${mb} MB: too big to read` } };
+      }
       const full = hideBuilt(readFileSync(p.abs, 'utf8'));
       const total = full.split('\n').length;
       const lim = env.read ?? {};
@@ -330,14 +338,16 @@ export async function execute(name, args, prepared, env) {
         lp = resolvePath(env.cwd, fix.path);
       }
       if (existsSync(lp.abs) && statSync(lp.abs).isFile()) {
-        const lines = readFileSync(lp.abs, 'utf8').split('\n').length;
-        return { text: `${lp.rel} is a file (${lines} lines, ${(statSync(lp.abs).size / 1024).toFixed(1)} KB). Use Read to see it.`, view: { kind: 'list', count: 1, content: lp.rel } };
+        // Its lines are counted only when it is of a size to read (18 Nov 2026, the audit: a multi-GB file was read whole to count them).
+        const size = statSync(lp.abs).size;
+        const lines = size <= READ_WHOLE_MAX ? `${readFileSync(lp.abs, 'utf8').split('\n').length} lines, ` : '';
+        return { text: `${lp.rel} is a file (${lines}${(size / 1024).toFixed(1)} KB). Use Read to see it.`, view: { kind: 'list', count: 1, content: lp.rel } };
       }
       const r = listFiles(lp.shelf ? lp.shelf.root : env.cwd, { path: lp.abs, pattern: args.pattern });
       if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: r.error } };
       // Entries in the math notes (or the design examples) keep their MATH/ prefix so Read can use them as they are.
       const lines = lp.shelf ? r.lines.map((l) => `${lp.rel}/${l}`) : r.lines;
-      const more = r.total > lines.length ? `\n… and ${r.total - lines.length} more` : '';
+      const more = (r.total > lines.length ? `\n… and ${r.total - lines.length} more` : '') + (r.cut ? `\n(${r.cut})` : '');
       return { text: fixed + (lines.join('\n') || `(nothing found)${lp.shelf ? '' : projectFiles(env.cwd)}`) + more, view: { kind: 'list', count: r.total, content: lines.join('\n') } };
     }
     case 'Search': {
@@ -354,7 +364,7 @@ export async function execute(name, args, prepared, env) {
       if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: r.error } };
       // Matches in the math notes (or the design examples) keep their MATH/ prefix so Read can use them as they are.
       const lines = sp.shelf ? r.lines.map((l) => `${sp.shelf.name}/${l}`) : r.lines;
-      const more = r.total > lines.length ? `\n… and ${r.total - lines.length} more matches` : '';
+      const more = (r.total > lines.length ? `\n… and ${r.total - lines.length} more matches` : '') + (r.cut ? `\n(${r.cut})` : '');
       return { text: fixed + cut((lines.join('\n') || `No matches. Try one plain word, or Read a likely file.${sp.shelf ? '' : projectFiles(env.cwd)}`) + more, max), view: { kind: 'search', count: r.total, content: lines.join('\n') } };
     }
     case 'Edit':
