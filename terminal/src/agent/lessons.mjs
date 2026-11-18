@@ -11,7 +11,7 @@ import { homedir } from 'node:os';
 import { testPrompts } from '../../../models/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { digest } from './memory.mjs';
-import { memoryDirs, dirFor, readFacts, applyChanges, tidy, readState, writeState, namesMissingFile, fileNames, countDay, KINDS } from './facts.mjs';
+import { memoryDirs, dirFor, readFacts, applyChanges, tidy, readState, writeState, namesMissingFile, fileNames, countDay, KINDS, normText } from './facts.mjs';
 import { closest, factVectors } from './recall.mjs';
 import { holdSave, whyNotSaved } from './memory-home.mjs';
 
@@ -130,7 +130,7 @@ const RUN = 5;
 const MIN_WORDS = 12;
 const SAME = 0.6;
 const runsOf = (text, max = 120) => {
-  const w = String(text ?? '').toLowerCase().match(/[a-z0-9]+/g)?.slice(0, max) ?? [];
+  const w = normText(text).split(' ').filter(Boolean).slice(0, max);
   const out = new Set();
   for (let i = 0; i + RUN <= w.length; i++) out.add(w.slice(i, i + RUN).join(' '));
   return { words: w.length, runs: out };
@@ -317,14 +317,13 @@ export function rememberDeclined(dirs, texts = []) {
   try { writeState(dirs.you, { declined: [...new Set([...declinedBefore(dirs), ...add])].slice(-DECLINED_KEEP) }); } catch { /* not kept: asked again next time */ }
 }
 
-const normText = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const dotOf = (x, y) => { let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * y[i]; return s; };
 
 export function tidyDue(dirs, today) {
   const did = [];
   for (const dir of [dirs.you, dirs.project].filter(Boolean)) {
     if (!existsSync(dir) || readState(dir).tidied === today) continue;
-    const t = tidy(dir, { today, root: dir === dirs.project ? dirname(dirname(dir)) : null });
+    const t = tidy(dir, { today, root: dir === dirs.project ? dirname(dirname(dir)) : null, you: dir === dirs.you && dir !== dirs.project });
     writeState(dir, { tidied: today });
     if (t.merged.length || t.retired.length) did.push({ dir, ...t });
   }
@@ -338,6 +337,10 @@ export function saveLine(out) {
   const n = (k, word) => (out[k].length ? `${out[k].length} ${word}` : '');
   const parts = [n('added', 'saved'), n('replaced', 'replaced'), n('retired', 'retired')].filter(Boolean);
   const failed = (out.failed ?? []).map((f) => `not saved about ${f.about === 'you' ? 'you' : 'this project'}: ${f.why}${f.kept ? ' · kept for the next start' : ''}`);
+  // What the daily tidy that followed took out of use is said too (18 Nov 2026, the audit: it went quietly).
+  const tidiedN = (out.tidied ?? []).reduce((n, t) => n + (t.retired?.length ?? 0) + (t.merged?.length ?? 0), 0);
+  const tidied = tidiedN ? `tidied: ${tidiedN} out of use (/memory shows them under Taken out)` : '';
+  if (tidied) failed.push(tidied);
   if (!parts.length) return failed.length ? `Memory: ${failed.join(' · ')}` : '';
   const about = (f) => (f.dir && out.where?.you && f.dir === out.where.you ? 'you' : 'project');
   const facts = [...out.added, ...out.replaced.map((r) => ({ ...r.fact, dir: r.dir }))];

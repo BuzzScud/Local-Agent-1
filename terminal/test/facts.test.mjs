@@ -226,3 +226,30 @@ test('the health line: requests with a fact, saves offered and taken, what was t
   expect(h).toMatchObject({ requests: 2, found: 1, asked: 1, yes: 1, no: 0, saved: 1 });
   expect(healthLine(h)).toBe('facts came with 1 of 2 requests · 1 fact saved (1 of 1 offers taken) · 0 taken out · trust moved 0 times');
 });
+
+// The audit of 18 Nov 2026.
+test('facts about you stay however long unused; non-English facts are their own; undo takes back the save, not the tidy after it', async () => {
+  const { tidyDue, applySave } = await import('../src/agent/lessons.mjs');
+  const { undoSave, filesIn, normText } = await import('../src/agent/facts.mjs');
+  const { home, repo, you, project } = place();
+  mkdirSync(you, { recursive: true });
+  applyChanges(you, { add: [{ kind: 'you', text: 'Explain things simply, in three to five plain steps.' }] }, { today: '2026-08-01' });
+  applyChanges(project, { add: [{ kind: 'project', text: 'Old and never used: the build takes two minutes.' }] }, { today: '2026-08-01' });
+  tidyDue({ you, project }, '2026-11-18');
+  expect(readFacts(you).map((f) => f.text)).toEqual(['Explain things simply, in three to five plain steps.']);
+  expect(readFacts(project)).toHaveLength(0);
+  // any language
+  expect(normText('请用简单的话解释')).not.toBe('');
+  expect(normText('请用简单的话解释')).not.toBe(normText('日本語で答えてください'));
+  const a = applyChanges(you, { add: [{ kind: 'you', text: '请用简单的话解释每一步' }] }, { today: '2026-11-18' });
+  const b = applyChanges(you, { add: [{ kind: 'you', text: '日本語で短く答えてください' }] }, { today: '2026-11-18' });
+  expect([a.added.length, b.added.length]).toEqual([1, 1]);
+  // Node.js is a thing, not a file
+  expect(filesIn('The app runs on Node.js 22 and uses Chart.js for graphs; see src/app.js')).toEqual(['src/app.js']);
+  // undo after a save that set off the tidy
+  const cwd = join(repo, 'src');
+  const out = applySave({ cwd, home, adds: [{ kind: 'project', text: 'The shop keeps its prices in cents, never floats.' }] }, { today: '2026-11-19' });
+  expect(out.added).toHaveLength(1);
+  const u = undoSave(memoryDirs(cwd, home));
+  expect(u.of).toBe(out.added[0] && readLog(out.added[0].dir).find((l) => l.id === out.added[0].id)?.batch);
+});

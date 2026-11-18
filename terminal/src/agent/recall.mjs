@@ -54,7 +54,8 @@ const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] 
 const STOP = new Set('a an the and or of to in on at for with from by is are was were be it its this that these those i me my we our you your do does did can could should would will what where when why how which who not no so as if then than there here have has had one only each every all any some more most such also into out up down over under again very just about before after'.split(' '));
 export function wordsOf(text) {
   const out = [];
-  for (let w of String(text).toLowerCase().replace(/z-index/g, 'zindex').match(/[a-z0-9][a-z0-9_+#-]*/g) ?? []) {
+  // Words in any language (the audit, 18 Nov 2026: a-z only, so a fact in another language shared no word with anything).
+  for (let w of String(text).normalize('NFKC').toLowerCase().replace(/z-index/g, 'zindex').match(/[\p{L}\p{N}][\p{L}\p{N}_+#-]*/gu) ?? []) {
     w = w.replace(/^[-_]+|[-_]+$/g, '');
     if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) w = w.slice(0, -1);
     if (w.length > 1 && !STOP.has(w)) out.push(w);

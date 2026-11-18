@@ -122,7 +122,9 @@ test('the memory in one line: the start page, the Launcher, the window, /memory 
   applyChanges(memoryDirs(m.repo, m.h).project, { add: [{ kind: 'project', text: 'The shop keeps its prices in cents.' }] }, { why: 'save', today: '2026-10-18' });
   const st = memoryStatus(m.repo, m.h);
   expect(st).toMatchObject({ you: 1, project: 1, state: 'ok' });
-  expect(statusWords(st)).toBe(`Memory · 1 about you · 1 this project · last saved ${new Date(st.last).getDate()} Oct`);
+  // The month of the save itself, not a month written in (18 Nov 2026: the test said "Oct" and failed in November).
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][new Date(st.last).getMonth()];
+  expect(statusWords(st)).toBe(`Memory · 1 about you · 1 this project · last saved ${new Date(st.last).getDate()} ${month}`);
   expect(statusWords({ you: 0, project: null, last: null, state: 'ok' })).toBe('Memory · 0 about you · nothing saved yet');
   expect(statusWords({ you: 0, project: 3, last: null, state: 'broken' })).toBe('Memory · the folder about you is missing · 3 this project · nothing saved yet');
   // The Menu's row (enter: /memory) and the Launcher's line, which loses it first in a narrow window.

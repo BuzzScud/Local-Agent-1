@@ -8,6 +8,7 @@
 //     log.jsonl     one line per change, so the last save can be undone
 // A fact is plain text you can edit: a few "name: value" lines, an empty
 // line, then the fact.
+import { writeWhole } from './write-whole.mjs';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, appendFileSync, statSync, rmSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -49,7 +50,11 @@ export function memoryDirs(cwd, home = homedir()) {
 export const dirFor = (dirs, kind) => (ABOUT_YOU.has(kind) || !dirs.project ? dirs.you : dirs.project);
 
 const day = (d = new Date()) => (typeof d === 'string' ? d : d.toISOString()).slice(0, 10);
-const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// A fact's words for comparing two facts, in any language (18 Nov 2026, the audit: only a-z and 0-9 were kept, so
+// every Chinese, Japanese or Arabic fact became the same empty key, a new one was refused as "saved already" and the
+// tidy merged unrelated ones). Shared with lessons, agent-memory, recall and autosave.
+export const normText = (s) => String(s ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const norm = normText;
 const oneLine = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 
 // A key, a token or a password is never saved.
@@ -128,10 +133,24 @@ export function formatFact(f) {
 // lock left by a window that was killed is taken over at once. A change never
 // waits longer than LOCK_WAIT: past it, it goes ahead as before.
 const LOCK_WAIT = 5000;
-const LOCK_OLD = 10_000;
+// A change holds the lock for milliseconds: a lock older than this is left over, whoever its pid names now (18 Nov
+// 2026, the audit: a left-over lock whose pid had been reused by another program was never cleared, and every
+// memory step waited LOCK_WAIT with the screen frozen).
+const LOCK_OLD = 5000;
 const held = new Set();
 const nap = (ms) => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { const t = Date.now() + ms; while (Date.now() < t); } };
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+// A left-over lock moved aside in one step, so of two windows that find it only one takes it: the second's rename
+// fails, and it waits for the new lock as usual. One moved aside that turns out to be new is put back.
+function takeOver(lock) {
+  const aside = `${lock}.old-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  try { renameSync(lock, aside); } catch { return; }
+  let age = Infinity;
+  let owner = null;
+  try { age = Date.now() - statSync(aside).mtimeMs; owner = Number(readFileSync(join(aside, 'pid'), 'utf8')); } catch {}
+  if (age < 1000 && owner && alive(owner)) { try { renameSync(aside, lock); return; } catch {} }
+  try { rmSync(aside, { recursive: true, force: true }); } catch {}
+}
 export function locked(dir, change) {
   if (!dir || held.has(dir)) return change();
   const lock = join(dir, '.lock');
@@ -144,7 +163,7 @@ export function locked(dir, change) {
       }
       let owner = null; let age = 0;
       try { age = Date.now() - statSync(lock).mtimeMs; owner = Number(readFileSync(join(lock, 'pid'), 'utf8')); } catch { /* made this instant, or gone again */ }
-      if ((owner && !alive(owner)) || (!owner && age > LOCK_OLD)) { try { rmSync(lock, { recursive: true, force: true }); } catch {} continue; }
+      if ((owner && !alive(owner)) || age > LOCK_OLD) { takeOver(lock); continue; }
       if (Date.now() > until) break;
       nap(8 + Math.floor(Math.random() * 12));
     }
@@ -179,13 +198,17 @@ function newId(dir, text) {
 function write(dir, f, retired = false) {
   mkdirSync(folder(dir, retired), { recursive: true });
   const { dir: _d, id, ...rest } = f;
-  writeFileSync(join(folder(dir, retired), `${id}.md`), formatFact(rest));
+  writeWhole(join(folder(dir, retired), `${id}.md`), formatFact(rest));
   keepOutOfGit(dir);
 }
 // What undo never takes back: the rules saved at the first start.
 const KEPT = new Set(['first use']);
 const CHANGES = ['add', 'replace', 'retire', 'restore', 'edit'];
 const canUndo = (l, undone) => CHANGES.includes(l.what) && !undone.has(l.batch) && !KEPT.has(l.why);
+// "/memory undo" takes back a save (yours, a Remember, a hand edit), not the daily tidy or a trust change that ran
+// after it (18 Nov 2026, the audit: the line after a save said "/memory undo takes it back" and undo took back the
+// tidy that followed it). A tidy is still undone on its own: undoLast with its batch, or Taken out's Bring back.
+const AUTO_BATCH = /^(?:tidy|trust)-/;
 const logLine = (dir, row) => { mkdirSync(dir, { recursive: true }); appendFileSync(join(dir, 'log.jsonl'), `${JSON.stringify({ at: new Date().toISOString(), ...row })}\n`); };
 export function readLog(dir) {
   try { return readFileSync(join(dir, 'log.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return []; }
@@ -216,7 +239,7 @@ function rebuildIndexNow(dir) {
   const shown = facts.slice(0, INDEX_LINES);
   const text = `# Agentic Coder memory\nOne line per fact; the facts are in facts/. Kept by Agentic Coder, edit freely.\n\n${shown.map((f) => `- ${short(f)}`).join('\n')}${facts.length > shown.length ? `\n- (and ${facts.length - shown.length} more, brought back when a request fits them)` : ''}\n`;
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'index.md'), text);
+  writeWhole(join(dir, 'index.md'), text);
   return text;
 }
 
@@ -336,7 +359,7 @@ export function undoSave(dirs) {
   for (const dir of list) {
     const log = readLog(dir);
     const undone = new Set(log.filter((l) => l.what === 'undo').map((l) => l.of));
-    const l = [...log].reverse().find((x) => canUndo(x, undone));
+    const l = [...log].reverse().find((x) => canUndo(x, undone) && !AUTO_BATCH.test(String(x.batch ?? '')));
     if (l && (!newest || l.at > newest.at)) newest = l;
   }
   if (!newest) return null;
@@ -404,7 +427,13 @@ function pinFactNow(dir, id, pinned = true) {
 
 // Files a fact names ("legend.js", "terminal/rules/bug-fixing.md"): when the
 // fact is about a file that is gone, it is not brought back.
+// Names that look like files but are things (18 Nov 2026, the audit: "Node.js" made a fact about Node never recalled,
+// then retired as "the file it names is gone").
+const NOT_FILES = /^(?:node|next|nuxt|vue|react|angular|express|nest|deno|bun|three|chart|d3|p5|socket\.io|ember|backbone|knockout|alpine|solid|svelte|preact|gatsby|remix|astro|electron|moment|lodash|underscore|jquery|anime|pixi|babylon|tensorflow|brain|ml5|tone|howler|paper|fabric|leaflet|mapbox-gl|video|plotly|highcharts|handlebars|mustache|riot|mithril|marko|qwik|htmx|hyperscript|immer|redux|zustand|rxjs|zod|yup|joi|sequelize|mongoose|knex|prisma|drizzle|typeorm)\.js$/i;
 export function filesIn(text) {
+  return filesSeen(text).filter((p) => !NOT_FILES.test(p));
+}
+function filesSeen(text) {
   return [...String(text).matchAll(/(?:^|[\s`'"(])((?:[\w@.-]+\/)+[\w@.-]+\.[A-Za-z]\w{0,5}|[\w@-]+\.(?:mjs|cjs|jsx?|tsx?|py|rb|go|rs|md|json|html|css|sh|toml|ya?ml))(?=$|[\s`'",:;!?)]|\.(?:\s|$))/g)].map((m) => m[1]);
 }
 // names: a fileNames(root) made once for many facts (a recall, a tidy);
@@ -446,11 +475,24 @@ export function fileNames(root) {
 // Keeps the memory clean: repeats merge, a fact about a file that is gone
 // and one never brought back in UNUSED_DAYS days go out of use. Every change
 // is in the log, so it can be undone.
-function tidyNow(dir, { today = day(), root = null } = {}) {
+// you: the folder about you. Its facts never go for not being used (18 Nov 2026, the audit): a standing preference
+// ("explain things simply") is in every start's short lines but is seldom the fact a request picks, so it was
+// retired after UNUSED_DAYS while still true. Dated news and a fact about a file that is gone still go.
+function tidyNow(dir, { today = day(), root = null, you = false } = {}) {
   const batch = `tidy-${Date.now()}`;
   const out = { merged: [], retired: [] };
   const seen = new Map();
   const names = root ? fileNames(root) : null;
+  const goes = (f) => {
+    if (f.always || f.pinned) return null;
+    if (namesMissingFile(f, root, names)) return 'the file it names is gone';
+    const age = f.saved ? Math.floor((Date.parse(today) - Date.parse(f.saved)) / 86_400_000) : 0;
+    if (looksLikeNews(f.text) && age >= NEWS_DAYS) return `dated news, ${age} days old`;
+    if (you || ABOUT_YOU.has(f.kind)) return null;
+    const since = f.last ?? f.saved;
+    const days = since ? Math.floor((Date.parse(today) - Date.parse(since)) / 86_400_000) : 0;
+    return days >= UNUSED_DAYS ? `not used in ${days} days` : null;
+  };
   for (const f of readFacts(dir).sort(byWorth)) {
     const key = norm(f.text);
     const first = seen.get(key);
@@ -461,14 +503,10 @@ function tidyNow(dir, { today = day(), root = null } = {}) {
       out.merged.push({ kept: first, gone: f });
       continue;
     }
+    // Only a fact that stays is one to merge into: one retired here is never written back by a repeat of it after.
+    const why = goes(f);
+    if (why) { retireFact(dir, f, why, batch); out.retired.push({ fact: f, why }); continue; }
     seen.set(key, f);
-    if (f.always || f.pinned) continue;
-    if (namesMissingFile(f, root, names)) { retireFact(dir, f, 'the file it names is gone', batch); out.retired.push({ fact: f, why: 'the file it names is gone' }); continue; }
-    const age = f.saved ? Math.floor((Date.parse(today) - Date.parse(f.saved)) / 86_400_000) : 0;
-    if (looksLikeNews(f.text) && age >= NEWS_DAYS) { retireFact(dir, f, `dated news, ${age} days old`, batch); out.retired.push({ fact: f, why: `dated news, ${age} days old` }); continue; }
-    const since = f.last ?? f.saved;
-    const days = since ? Math.floor((Date.parse(today) - Date.parse(since)) / 86_400_000) : 0;
-    if (days >= UNUSED_DAYS) { retireFact(dir, f, `not used in ${days} days`, batch); out.retired.push({ fact: f, why: `not used in ${days} days` }); }
   }
   if (out.merged.length || out.retired.length) rebuildIndex(dir);
   return out;
@@ -488,7 +526,7 @@ export function tidy(...a) { return locked(a[0], () => tidyNow(...a)); }
 
 const readState = (dir) => { try { return JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')); } catch { return {}; } };
 const writeState = (dir, patch) => locked(dir, () => writeStateNow(dir, patch));
-const writeStateNow = (dir, patch) => { mkdirSync(dir, { recursive: true }); const next = { ...readState(dir), ...patch }; writeFileSync(join(dir, 'state.json'), `${JSON.stringify(next, null, 1)}\n`); return next; };
+const writeStateNow = (dir, patch) => { mkdirSync(dir, { recursive: true }); const next = { ...readState(dir), ...patch }; writeWhole(join(dir, 'state.json'), `${JSON.stringify(next, null, 1)}\n`); return next; };
 export { readState, writeState };
 
 // How the memory is doing, for /memory's health line: counts by day in

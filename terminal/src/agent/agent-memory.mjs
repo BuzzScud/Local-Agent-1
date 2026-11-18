@@ -7,7 +7,7 @@ import { isHomeFolder } from './prompt.mjs';
 import { folderCard, folderKind, namesInRequest } from './folder.mjs';
 import { basename, dirname, join } from 'node:path';
 import { routeByRules } from '../flows/index.mjs';
-import { applyChanges, changeTrust, dirFor, memoryDirs, readFacts } from './facts.mjs';
+import { applyChanges, changeTrust, dirFor, memoryDirs, readFacts, normText } from './facts.mjs';
 import { nearFacts, recall, recallNotes, usedFacts } from './recall.mjs';
 import { claudeText, notesDir, recallClaude, topicOf } from './claude-notes.mjs';
 import { packDir, packView } from './claude-pack.mjs';
@@ -330,7 +330,7 @@ export class MemoryPart {
     let out;
     try {
       // The new fact was saved by the call before: only the old one goes.
-      const plain = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const plain = normText;
       out = old && readFacts(dir).some((f) => plain(f.text) === plain(text))
         ? { added: [], replaced: [], refused: [], retired: applyChanges(dir, { retire: [{ id, reason: `replaced by: ${text.replace(/\s+/g, ' ').trim().slice(0, 120)}` }] }, { why: 'remember' }).retired }
         : applySave({ cwd: this.cwd, home: this.memory.home, adds: [{ text, kind, from: 'saved by the model while it worked', ...(old ? { replaces: id } : {}) }] }, { why: 'remember' });

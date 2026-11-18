@@ -12,8 +12,8 @@
 //   holdSave     what could not be written, kept in <home>/memory-jobs/held-*.json
 //   saveHeld     written at a start once its folder can be reached (two weeks at most)
 //   memoryStatus how many facts about you and this project, the last save, the folder's state
-import { existsSync, lstatSync, readlinkSync, statSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync, symlinkSync, realpathSync } from 'node:fs';
-import { join, dirname, resolve, sep } from 'node:path';
+import { existsSync, lstatSync, readlinkSync, statSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, unlinkSync, symlinkSync, realpathSync, renameSync } from 'node:fs';
+import { join, dirname, resolve, sep, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { HOME } from '../../../models/index.mjs';
 import { youDir, memoryDirs, readFacts, readLog } from './facts.mjs';
@@ -108,14 +108,22 @@ export function holdSave({ cwd, home, about, adds = [], drops = [], why = '' }) 
   } catch { return null; }
 }
 
+const ageOf = (file) => { try { return Date.now() - statSync(file).mtimeMs; } catch { return 0; } };
+// A kept save that will not be written: moved into memory-jobs/set-aside/, where it can still be read.
+function aside(file) {
+  try { const to = join(dirname(file), 'set-aside'); mkdirSync(to, { recursive: true }); renameSync(file, join(to, basename(file))); } catch { /* left where it is */ }
+}
+
 export function heldSaves() {
   const out = [];
   try {
     for (const f of readdirSync(JOBS()).filter((x) => x.startsWith('held-') && x.endsWith('.json')).sort()) {
       const file = join(JOBS(), f);
       let p;
-      try { p = JSON.parse(readFileSync(file, 'utf8')); } catch { rmSync(file, { force: true }); continue; }
-      if (Date.now() - Date.parse(p.at) > HELD_DAYS * 86_400_000) { rmSync(file, { force: true }); continue; }
+      // One that does not read may still be being written: left for a minute, then moved aside, never deleted; one
+      // past HELD_DAYS is moved aside too (18 Nov 2026, the audit: both were deleted without a word).
+      try { p = JSON.parse(readFileSync(file, 'utf8')); } catch { if (ageOf(file) > 60_000) aside(file); continue; }
+      if (Date.now() - Date.parse(p.at) > HELD_DAYS * 86_400_000) { aside(file); continue; }
       out.push({ ...p, adds: p.adds ?? [], drops: p.drops ?? [], file });
     }
   } catch { /* none kept */ }
@@ -124,14 +132,17 @@ export function heldSaves() {
 
 // At a start: each kept save whose folder can be reached now is written (save = lessons.mjs applySave, passed in so
 // this file does not import it). → how many facts were saved, and how many saves still wait.
-export function saveHeld(save) {
+export function saveHeld(save, { today } = {}) {
   let saved = 0;
   let left = 0;
   for (const p of heldSaves()) {
     const home = p.home ?? undefined;
     if (p.about === 'you' && youState(home).state === 'broken') { left++; continue; }
+    // A project that is not where it was (moved, renamed): kept until it is found, never written to a new empty
+    // memory at the old place (18 Nov 2026, the audit).
+    if (p.about !== 'you' && p.cwd && !existsSync(p.cwd)) { left++; continue; }
     try {
-      const out = save({ cwd: p.cwd, home, adds: p.adds, drops: p.drops }, { why: 'kept while the folder was missing', hold: false });
+      const out = save({ cwd: p.cwd, home, adds: p.adds, drops: p.drops }, { why: 'kept while the folder was missing', hold: false, ...(today ? { today } : {}) });
       if (out.failed?.length) { left++; continue; }
       saved += out.added.length + out.replaced.length;
       rmSync(p.file, { force: true });
