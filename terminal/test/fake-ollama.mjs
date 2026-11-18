@@ -32,7 +32,7 @@ export function answerOf(body, { review = 'LGTM', look = 'LGTM', describe = 'A l
   const sys = String(body.messages?.find((x) => x.role === 'system')?.content ?? '');
   if (/describe pictures/i.test(sys)) return { content: describe };
   if (/review a code change/i.test(sys)) return { content: review };
-  if (/check how a web page looks/i.test(sys)) return { content: look };
+  if (/check how a web page looks|review how a web page (?:or component )?looks/i.test(sys)) return { content: look };
   if (/summarize a coding session/i.test(sys)) return { content: `Summary by ${m}.` };
   if (/whether a coding assistant is still working on what the user asked/i.test(sys)) return { content: JSON.stringify({ verdict: 'on', reason: `Checked by ${m}` }) };
   if (/side question from the user, asked with \/btw/i.test(sys)) return { content: `Side answer by ${m}.` };

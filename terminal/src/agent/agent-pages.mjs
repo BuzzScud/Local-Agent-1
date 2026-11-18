@@ -478,7 +478,7 @@ export class PagesPart {
     const p = (this.turn.polish ??= {});
     for (const rel of pages) {
       const abs = resolvePath(this.cwd, rel).abs;
-      const image = (chrome ? await pagePictures(abs, { chrome }) : null) ?? screenshotPage(abs, chrome);
+      const image = (chrome ? await pagePictures(abs, { chrome }) : null) ?? await screenshotPage(abs, chrome);
       if (!image) continue;
       const ways = image.views?.length ? 'four ways' : 'on a desktop';
       this.emit('busy', { task: `${who.name} looks at ${basename(rel)} ${ways}` });

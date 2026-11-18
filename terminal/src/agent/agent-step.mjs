@@ -480,7 +480,7 @@ export class StepPart {
     }
     // /agents' stop list (agents-guards.mjs): a step on it asks you first, and a no turns it away.
     if (this.toolGuard) {
-      const stop = await this.toolGuard({ name: call.name, args, before: prepared.before ?? '', cwd: this.cwd });
+      const stop = await this.toolGuard({ name: call.name, args, before: prepared.before ?? '', after: prepared.after ?? null, cwd: this.cwd });
       if (stop) {
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: stop.denied }, error: true });
         return { text: stop.text, error: true };

@@ -121,6 +121,10 @@ test('findings: LGTM is none; "- " lines are the findings, at most three', () =>
   expect(findingsOf('LGTM')).toEqual({ ok: true, findings: [] });
   expect(findingsOf('- a.js: x is never closed\n- b.js: the test was removed\n- c\n- d')).toEqual({ ok: false, findings: ['a.js: x is never closed', 'b.js: the test was removed', 'c'] });
   expect(findingsOf('1. one thing').findings).toEqual(['one thing']);
+  // Nothing back, or prose that names a problem, is not a pass (the audit, 18 Nov 2026).
+  expect(findingsOf('')).toEqual({ ok: false, findings: [], empty: true });
+  expect(findingsOf('The loop in a.js never ends when the list is empty.').ok).toBe(false);
+  expect(findingsOf('Looks good to me.').ok).toBe(true);
 });
 
 test('try-outs are kept by service and model; the list words', () => {
@@ -179,7 +183,7 @@ test('UI design · checks: a picture of the page (headless Chrome, when this Mac
   const page = join(dir, 'card.html');
   writeFileSync(page, '<!doctype html><meta charset="utf-8"><title>Card</title><body style="font:20px sans-serif"><h1>Card</h1><button>Save</button>');
   const chrome = findChrome();
-  const image = chrome ? screenshotPage(page, chrome) : { path: page, mime: 'image/png', data: 'iVBORw0KGgo=', w: 1440, h: 900 };
+  const image = chrome ? await screenshotPage(page, chrome) : { path: page, mime: 'image/png', data: 'iVBORw0KGgo=', w: 1440, h: 900 };
   if (chrome) { expect(image).toMatchObject({ mime: 'image/png', w: 1440, h: 900 }); expect(Buffer.from(image.data, 'base64').subarray(1, 4).toString()).toBe('PNG'); }
   const r = await checkPagePicture({ url: svc.url, use: { model: 'thinker:35b', numCtx: 16384, keepAlive: '30m' }, image, page: 'card.html', request: 'a card with a Save button' });
   expect(r.ok).toBe(true);

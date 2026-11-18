@@ -300,6 +300,7 @@ export class ChecksPart {
     try {
       const r = await reviewChange({ url: this.url, use, request: this.turn.request, diff: this.turn.diffs, signal });
       if (r.ok) { this.emit('note', { text: `Second opinion: ${use.model} found nothing wrong (${r.secs.toFixed(0)} s).`, tone: 'dim' }); return null; }
+      if (r.empty) { this.emit('note', { text: `Second opinion: ${use.model} gave no answer (${r.secs.toFixed(0)} s), so the change was not read by a second model.`, tone: 'warn' }); return null; }
       this.emit('note', { text: `Second opinion: ${use.model} found ${r.findings.length} thing${r.findings.length === 1 ? '' : 's'} (${r.secs.toFixed(0)} s): ${r.findings.join(' · ')}`, tone: 'warn' });
       return `Another model read your change and thinks ${r.findings.length === 1 ? 'this is' : 'these are'} wrong (it can be wrong itself):\n${r.findings.map((f) => `- ${f}`).join('\n')}\nCheck each one with the tools. Fix what is real; for what is not, say why in one sentence. Then report.`;
     } catch (e) {

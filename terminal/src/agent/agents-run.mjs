@@ -211,7 +211,7 @@ export class AgentsRun extends EventEmitter {
     const r = await this.d.review({ request, diff, signal: this.ac.signal });
     const adv = this.s.adv;
     adv.calls++; adv.tokens += r?.tokens ?? Math.round((String(request).length + String(diff).length) / 3.6) + 400;
-    adv.last = r?.ok ? (r.note ?? 'nothing wrong found') : (r?.findings ?? []).join('; ');
+    adv.last = r?.empty ? 'gave no answer (not counted as a pass)' : r?.ok ? (r.note ?? 'nothing wrong found') : (r?.findings ?? []).join('; ');
     adv.at = at; adv.atTime = this.now();
     this.log('2nd opinion', `${at === 'plan' ? 'before the plan' : at === 'miss' ? 'after a miss' : 'before done'}: ${adv.last}`);
     return r ?? { ok: true, findings: [] };
@@ -379,7 +379,7 @@ export class AgentsRun extends EventEmitter {
     this.log('main', `tasks/plan.md: ${tasks.length} tasks`);
     // The second opinion reads the plan before you say yes.
     const r = await this.doubt('plan', `Check this plan against the spec. Is a part of the spec missing, or a task too big?\n\nSPEC.md:\n${spec}`, plan);
-    const said = r.ok ? '' : ` The second opinion says: ${r.findings.join('; ')}.`;
+    const said = r.empty ? ' The second opinion gave no answer, so nobody else has read it.' : r.ok ? '' : ` The second opinion says: ${r.findings.join('; ')}.`;
     let detail = `${tasks.length} tasks in tasks/plan.md, each with its check.${said} Only 1 builds it: "looks fine" is not a yes.`;
     for (;;) {
       const { n, text } = await this.ask({ kind: 'plan', title: 'Approve the plan', detail, opts: ['Yes, build it', 'Change it (type how)', 'Show the plan'], typeAt: 1 });
@@ -520,7 +520,7 @@ export class AgentsRun extends EventEmitter {
       await this.send(`/agents · ${name}: a second opinion read this change and thinks (it can be wrong):\n${d.findings.map((f) => `- ${f}`).join('\n')}\nCheck each one; fix what is real, and say in one line why the rest is fine.`, `/agents · ${name} · doubt`);
       if (cmd) await this.exec(cmd);
       t.doubt = 'fixed';
-    } else t.doubt = 'held';
+    } else t.doubt = d.empty ? 'unread' : 'held';
     this.done(3);
     this.finishItem(t.suiteFails ? 'open' : 'done');
   }

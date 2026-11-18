@@ -79,7 +79,7 @@ export function newPackages(rel, before, after) {
 }
 
 export function guardStep(step, ctx = {}) {
-  const { name, args = {}, before = '', mcp = null } = step ?? {};
+  const { name, args = {}, before = '', mcp = null, after: made = null } = step ?? {};
   // A tool of an MCP server: one marked as reading goes on; any other is turned away where a stage
   // only reads, and asks first while it builds.
   if (mcp) {
@@ -97,7 +97,10 @@ export function guardStep(step, ctx = {}) {
   // The test a task is making pass stays as it was written.
   if (writes && ctx.cover && ctx.node === 1 && rel === ctx.cover) return { deny: `${rel} is the test this task is making pass: change the code, not the test.`, title: 'The test stays' };
   // What the step would leave in the file.
-  const after = name === 'Write' ? String(args.content ?? '') : name === 'Edit' ? (args.replace_all ? String(before).split(String(args.old_text ?? '')).join(String(args.new_text ?? '')) : String(before).replace(String(args.old_text ?? ''), String(args.new_text ?? ''))) : null;
+  // What the step would leave: the file as the tool worked it out (made: its tolerant match, 18 Nov 2026, the audit:
+  // an edit that matched only with its spaces forgiven looked like no change here, so a test's numbers changed with
+  // no question), else as a literal replace does it ($& in new_text is text, not the match).
+  const after = typeof made === 'string' ? made : name === 'Write' ? String(args.content ?? '') : name === 'Edit' ? (args.replace_all ? String(before).split(String(args.old_text ?? '')).join(String(args.new_text ?? '')) : String(before).replace(String(args.old_text ?? ''), () => String(args.new_text ?? ''))) : null;
   // Secrets: reading or changing them, or a command that names one.
   if ((name === 'Read' || writes) && SECRET.test(` ${rel} `)) return { key: 'secret', title: 'Secrets', detail: `It wants to ${name === 'Read' ? 'read' : 'change'} ${rel}.` };
   if (cmd && SECRET.test(` ${cmd} `)) return { key: 'secret', title: 'Secrets', detail: `The command names a secret file: ${cmd.slice(0, 120)}` };

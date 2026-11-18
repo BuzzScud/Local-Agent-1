@@ -12,7 +12,7 @@
 // A helper is asked through the main model's endpoint with another model named
 // (client.mjs `use`); one that cannot load or answer never stops the work: the job
 // falls back to the main model or is skipped, with a note.
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
@@ -136,11 +136,15 @@ export function scoresOf(text) {
 }
 
 // "LGTM" or "- one\n- two" → { ok, findings }.
+// A review that says nothing (it ran out of room while thinking) or says something in prose is not a pass (18 Nov
+// 2026, the audit: both counted as "LGTM", so a change went through unreviewed). empty: nothing came back.
 export function findingsOf(text) {
   const t = String(text ?? '').trim();
+  if (!t) return { ok: false, findings: [], empty: true };
   const findings = t.split('\n').map((l) => l.trim()).filter((l) => /^[-*•]\s+\S/.test(l) || /^\d+[.)]\s+\S/.test(l)).map((l) => l.replace(/^([-*•]|\d+[.)])\s+/, '')).slice(0, 3);
-  if (!findings.length && /\bLGTM\b|looks good|no (real )?problems/i.test(t)) return { ok: true, findings: [] };
-  return { ok: findings.length === 0, findings };
+  if (!findings.length && /\bLGTM\b|looks good|no (real )?(problems|issues)|nothing (?:to fix|wrong)/i.test(t)) return { ok: true, findings: [] };
+  if (!findings.length) return { ok: false, findings: [t.replace(/\s+/g, ' ').slice(0, 300)] };
+  return { ok: false, findings };
 }
 
 // A 1440 × 900 picture of a page in headless Chrome (layoutcheck's findChrome), as
@@ -148,22 +152,32 @@ export function findingsOf(text) {
 // Quick Look (macOS qlmanage) draws a page's top when there is no Chrome (4 Oct 2026: the Mac the
 // owner's report page was made on has none, so no page was ever looked at there).
 export const canQuickLook = () => process.platform === 'darwin' && existsSync('/usr/bin/qlmanage');
-function quickLookPage(abs) {
+// Run off the window's thread (18 Nov 2026, the audit: spawnSync held the screen still for up to 30 s).
+function runQuiet(cmd, args, timeoutMs = 30_000) {
+  return new Promise((done) => {
+    let child;
+    try { child = spawn(cmd, args, { stdio: 'ignore' }); } catch { done(); return; }
+    const t = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, timeoutMs);
+    child.on('error', () => { clearTimeout(t); done(); });
+    child.on('close', () => { clearTimeout(t); done(); });
+  });
+}
+async function quickLookPage(abs) {
   const dir = mkdtempSync(join(tmpdir(), 'agentic-look-'));
   try {
-    spawnSync('/usr/bin/qlmanage', ['-t', '-s', '1440', '-o', dir, abs], { timeout: 30_000, stdio: 'ignore' });
+    await runQuiet('/usr/bin/qlmanage', ['-t', '-s', '1440', '-o', dir, abs]);
     const png = readFileSync(join(dir, `${basename(abs)}.png`));
     // The size from the PNG's own header (IHDR: width at byte 16, height at 20).
     return { path: abs, mime: 'image/png', data: png.toString('base64'), w: png.readUInt32BE(16), h: png.readUInt32BE(20) };
   } catch { return null; } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
-export function screenshotPage(abs, chrome) {
+export async function screenshotPage(abs, chrome) {
   if (!chrome) return canQuickLook() ? quickLookPage(abs) : null;
   const dir = mkdtempSync(join(tmpdir(), 'agentic-look-'));
   const out = join(dir, 'page.png');
   try {
-    spawnSync(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--window-size=1440,900', `--screenshot=${out}`, pathToFileURL(abs).href], { timeout: 30_000, stdio: 'ignore' });
+    await runQuiet(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--window-size=1440,900', `--screenshot=${out}`, pathToFileURL(abs).href]);
     const data = readFileSync(out).toString('base64');
     return { path: abs, mime: 'image/png', data, w: 1440, h: 900 };
   } catch { return null; } finally { rmSync(dir, { recursive: true, force: true }); }
