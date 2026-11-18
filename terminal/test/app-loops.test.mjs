@@ -278,3 +278,15 @@ test('coding loops with no loop anywhere says how to make one', async () => {
   expect(r.text).toMatch(/No coding window has a loop now\. In a coding window, type \/loop to load a ready-made loop or make/);
   expect(r.code).toBe(0);
 }, T);
+
+// The audit of 18 Nov 2026: the board drew with nothing around it, so a throw while drawing left the terminal in raw
+// mode, on the board's own screen, with no cursor. Now the board ends, gives the terminal back and says why.
+test('coding loops: a board that cannot be drawn ends with the terminal given back and says why', async () => {
+  const { cwd, env } = setup();
+  const dir = join(env.AGENTIC_HOME, 'loops', String(process.pid)); // this test's own process stands in for the window
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'state.json'), JSON.stringify({ pid: process.pid, name: 'broken', folder: cwd, started: 1, loops: [null] }));
+  const r = await runInPty({ cwd, env, args: ['loops'], cols: 124, rows: 38, timeoutMs: 20_000, steps: [{ wait: 'The loop board stopped on an error' }, { sleep: 300 }] });
+  expect(r.text).toContain('The loop board stopped on an error');
+  expect(r.code).toBe(1);
+}, T);
