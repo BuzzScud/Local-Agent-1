@@ -194,6 +194,8 @@ export function readCopies(kind) {
 const SESSIONS = join(HOME, 'sessions');
 const slug = (cwd) => cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root';
 export const newSessionId = () => new Date().toISOString().replace(/[:.]/g, '-');
+// Where a folder's conversations are saved.
+export const sessionsDirOf = (cwd) => join(SESSIONS, slug(cwd));
 
 // Written whole (a file beside it, renamed over it): it is saved while a reply works too (app-run.mjs stepSave), and a
 // crash in the middle of a write must not leave half a conversation that /resume cannot read.

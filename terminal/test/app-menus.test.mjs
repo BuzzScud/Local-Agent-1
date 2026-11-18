@@ -263,3 +263,24 @@ test('/meters shows the status bar; off by default, like Claude Code', async () 
   expect(r.snapshots.on).toMatch(new RegExp(`${DN}\\s+idle\\s+ctx .* of 32k\\s+effort`));
   expect(r.snapshots.offAgain).not.toMatch(/ctx .* of 32k/);
 }, T);
+
+// The audit of 18 Nov 2026: the @ menu's files were listed once a window, so a file made since was never offered.
+test('the @ menu lists the files again when it opens (not while you type in it), and in the folder the window works in now', async () => {
+  const { promptMenu, FILES_FRESH_MS } = await import('../src/app/app-menu.mjs');
+  const { mkdtempSync: tmp, writeFileSync: write } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const one = tmp(join(tmpdir(), 'at-menu-'));
+  write(join(one, 'first.txt'), '1');
+  const filesRef = { current: null };
+  const menuFor = (value, cwd = one) => promptMenu({ input: { value, cursor: value.length }, holdRef: { current: false }, rows: 40, items: [], measure: { current: {} }, model: {}, remoteRef: { current: {} }, opts: {}, agent: {}, mcpHub: null, mcpLists: { current: {} }, cwd }, { inputMode: 'prompt', claudeModel: null, offerList: () => [], filesRef });
+  const names = (m) => (m?.items ?? []).map((it) => it.value);
+  expect(names(menuFor('see @'))).toEqual(['first.txt']);
+  write(join(one, 'second.txt'), '2');
+  filesRef.current.made -= FILES_FRESH_MS + 1; // the list is old now
+  expect(names(menuFor('see @f'))).toEqual(['first.txt']); // still typing in the same @: not listed again
+  menuFor('see '); // the @ went
+  expect(names(menuFor('see @'))).toEqual(['first.txt', 'second.txt']); // a new @: listed again
+  const other = tmp(join(tmpdir(), 'at-menu-other-'));
+  write(join(other, 'elsewhere.md'), '3');
+  expect(names(menuFor('see @', other))).toEqual(['elsewhere.md']); // "Work in …?" moved the window
+});

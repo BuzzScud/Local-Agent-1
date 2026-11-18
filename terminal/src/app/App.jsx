@@ -3,7 +3,6 @@
 // slash commands, layouts, sessions and keys.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
-import { join } from 'node:path';
 import { existsSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, heldRows, menuHeight, shortcutRows, footerParts } from './screen.jsx';
@@ -30,7 +29,7 @@ import { startMemory, sayMemory } from './memory-start.mjs';
 import { claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, saveModeOf } from './autosave.mjs';
-import { loadSettings, saveSettings, newSessionId, loadHistory, firstMode, keepsLastMode, settingsProblem, onSettingsRefused } from './store.mjs';
+import { loadSettings, saveSettings, newSessionId, loadHistory, firstMode, keepsLastMode, settingsProblem, onSettingsRefused, sessionsDirOf } from './store.mjs';
 import { readRecord as sessionRecord } from './sessions.mjs';
 import { runReader } from './loops-board.mjs';
 import { drawBoard as drawLoops } from './loops-draw.mjs';
@@ -501,7 +500,9 @@ export function App({ opts, win, onRestart }) {
   const pendingSaveRef = useRef(null);
   const askRef = useRef(null);
   const saveMode = saveModeOf(settings); // ask · auto · off (off: nothing is saved on its own)
-  autoRef.current ??= new AutoSave({ agent, ask: saveMode === 'ask' ? (p) => askRef.current(p) : null, say: (text, tone = 'dim') => push({ type: 'note', text, tone }), sessionsDir: join(HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root') });
+  autoRef.current ??= new AutoSave({ agent, ask: saveMode === 'ask' ? (p) => askRef.current(p) : null, say: (text, tone = 'dim') => push({ type: 'note', text, tone }), sessionsDir: sessionsDirOf(cwd) });
+  // The folder's conversations it reads at first use follow the window: a "Work in …?" move, /clear's way back.
+  autoRef.current.sessionsDir = sessionsDirOf(cwd);
 
   // Everything the key handler needs, always current.
   const S = useRef({});

@@ -7,6 +7,11 @@ import { START_BIG } from './start.jsx';
 import { mentionAt } from './edit-input.mjs';
 import { walk } from '../tools/fs.mjs';
 
+// The project's files for the @ menu (filesRef: { cwd, made, at, list }): listed when an @ menu opens and the list is
+// older than this, or the window works in another folder now; never again while you type in the same @ (the audit of
+// 18 Nov 2026: it was listed once a window, so a file made since was never offered).
+export const FILES_FRESH_MS = 5000;
+
 export function promptMenu(self, { inputMode, claudeModel, offerList, filesRef }) {
   const { input, holdRef, rows, items, measure, model, remoteRef, opts, agent, mcpHub, mcpLists, cwd } = self;
   let menu = null;
@@ -26,6 +31,7 @@ export function promptMenu(self, { inputMode, claudeModel, offerList, filesRef }
     if (list.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...list.map((p) => slashServer[1].length + p.name.length + 4)), items: list.map((p) => ({ label: `/${slashServer[1]}:${p.name}`, desc: `${p.description ?? p.title ?? 'a prompt of this server'}${p.arguments?.length ? ` · ${p.arguments.map((a) => `${a.name}${a.required ? '' : '?'}`).join(' ')}` : ''}`, value: `${slashServer[1]}:${p.name}`, takesArg: Boolean(p.arguments?.length) })) };
   }
   const at = mentionAt(input);
+  if (!at && filesRef.current) filesRef.current.at = null; // no @ menu now: the next one is a new one
   // @shop: lists that MCP server's resources; @sh offers the servers that have them.
   const offers = mcpHub && at ? mcpHub.offers().resources : [];
   const atServer = at ? /^([A-Za-z0-9][A-Za-z0-9-]{0,31}):(.*)$/.exec(at.query) : null;
@@ -37,9 +43,15 @@ export function promptMenu(self, { inputMode, claudeModel, offerList, filesRef }
   }
   if (!menu && at && !atServer) for (const s of offers.filter((n) => n.toLowerCase().startsWith(at.query.toLowerCase()))) (menu ??= { kind: 'files', pad: 20, at, items: [] }).items.push({ label: `@${s}:`, desc: `the resources of your MCP server ${s}`, value: `${s}:`, open: true });
   if (!menu && at) {
-    if (!filesRef.current) { filesRef.current = []; let n = 0; for (const f of walk(cwd)) { if (!f.dir) filesRef.current.push(f.path); if (++n > 5000) break; } }
+    const had = filesRef.current;
+    if (!had || had.cwd !== cwd || (had.at !== at.start && Date.now() - had.made > FILES_FRESH_MS)) {
+      const list = [];
+      let n = 0;
+      for (const f of walk(cwd)) { if (!f.dir) list.push(f.path); if (++n > 5000) break; }
+      filesRef.current = { cwd, made: Date.now(), at: at.start, list };
+    } else had.at = at.start;
     const q = at.query.toLowerCase();
-    const hits = filesRef.current.filter((f) => f.toLowerCase().includes(q)).sort((a, b) => (a.toLowerCase().startsWith(q) ? 0 : 1) - (b.toLowerCase().startsWith(q) ? 0 : 1) || a.length - b.length).slice(0, 50);
+    const hits = filesRef.current.list.filter((f) => f.toLowerCase().includes(q)).sort((a, b) => (a.toLowerCase().startsWith(q) ? 0 : 1) - (b.toLowerCase().startsWith(q) ? 0 : 1) || a.length - b.length).slice(0, 50);
     if (hits.length) menu = { kind: 'files', pad: 0, at, items: hits.map((f) => ({ label: `@${f}`, value: f })) };
   }
   return menu;
