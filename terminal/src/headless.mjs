@@ -182,6 +182,9 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     try { return await saveLessons({ url, model, slot: slots?.side, cwd, home: mem.home, lessons: agent.lessons, messages: agent.messages, embedder: mem.embedder }); } catch { return null; /* a save that fails never fails the run */ }
   };
   // (When the model decides it saved what it chose with Remember as it worked: no save at the end.)
+  // The answer is out before the save, which is a model call of its own (18 Nov 2026, the audit: coding -p printed
+  // nothing until it ended).
+  onEvent('answer', { text: finalText, reason });
   if (mem?.save === true && !signal?.aborted && agent.way !== 'model') { saved = await save(); if (saved) onEvent('saved', saved); }
   if (mem?.embedder && !memory?.embedder && !embedder) await mem.embedder.stop({ keep: true }).catch(() => {});
   await own?.stop({ keep: true }).catch(() => {});

@@ -35,7 +35,7 @@ async function askOnTerminal(question, req) {
 import { loadSettings, listSessions } from './app/store.mjs';
 import { helpersFrom } from './app/helpers.mjs';
 import { hooksFrom, leanFrom } from './agent/way.mjs';
-import { memoryOn } from './app/autosave.mjs';
+import { memoryOn, saveModeOf } from './app/autosave.mjs';
 import { claudeOn } from './agent/claude-notes.mjs';
 import { openMemory } from './agent/facts.mjs';
 import { repairMemory } from './app/memory-start.mjs';
@@ -537,6 +537,7 @@ if (opts.print) {
     const { modeOf } = await import('./agent/permissions.mjs');
     const asked = !loop && opts.mode ? modeOf(opts.mode) : null;
     if (!loop && opts.mode && !asked) process.stderr.write(`· --mode ${opts.mode} is not a mode (auto, manual, edits, plan, bypass): the run goes on as if it were not given\n`);
+    let printed = false;
     const r = await runHeadless({
       images, canSee, visionOn, userHooks: true,
       prompt: opts.prompt, cwd: opts.cwd, url, model: runModel, ctx: ctx ?? 32768,
@@ -559,7 +560,9 @@ if (opts.print) {
       // The design examples and the layout check: as /design left them (AGENTIC_DESIGN… wins).
       design: settings.design ?? {},
       // The memory: facts brought back, and what the run taught saved before it ends.
-      memory: memoryOn(settings) ? { save: process.env.AGENTIC_MEMORY_SAVE !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
+      // Saved only when Memory save is auto (or AGENTIC_MEMORY_SAVE=on): with "ask" nobody is here to be asked, and
+      // "off" is off (18 Nov 2026, the audit: coding -p saved whatever the setting said).
+      memory: memoryOn(settings) ? { save: saveModeOf(settings) === 'auto', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
       // Agentic Coder's questions: asked on the terminal when there is one; otherwise unanswered.
       answers: process.stdin.isTTY && !loop ? askOnTerminal : null,
       // A loop's run: its window's mode, its questions answered on the loop board, a note typed there sent
@@ -568,7 +571,7 @@ if (opts.print) {
       ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, steering: loop.io.steering, signal: loop.io.signal, keepProgress: true, testsFirst: loop.testsFirst, maxSteps: loop.steps, rewind: loop.rewind, resume: loop.resume } : {}),
       helperJobs,
       // What the app read for it before its first step (the project map, the files a question names) ends " [app]".
-      onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
+      onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'answer') { if (!printed) process.stdout.write(`${String(ev.text ?? '').trim()}\n`); printed = true; return; } if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
     });
     // AGENTIC_TRANSCRIPT=<file>: the whole conversation and every step, for a measurement that scores a run
     // (models/evals/tools/follow-through-replay.mjs). Nothing is written without it.
@@ -592,7 +595,7 @@ if (opts.print) {
         }
       }
       loop.io.end(r, { usd: windowSpend().usd, point: loop.points[0]?.n ?? null, until: loop.points.at(-1)?.n ?? null, files: [...files.values()] });
-    } else process.stdout.write(`${r.finalText.trim()}\n`);
+    } else if (!printed) process.stdout.write(`${r.finalText.trim()}\n`);
     await stop();
     process.exit(r.reason === 'done' ? 0 : 1);
   } catch (e) {
