@@ -5,7 +5,7 @@
 import { test, expect } from 'bun:test';
 import { needs } from './needs.mjs';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent, filesNamed } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
@@ -15,9 +15,9 @@ import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { renameInCode, planRename } from '../src/flows/rename.mjs';
 import { outline } from '../src/tools/outline.mjs';
 import { runCommand } from '../src/tools/run.mjs';
-import { sandboxAvailable, forgetPorts } from '../src/tools/sandbox.mjs';
+import { sandboxAvailable, forgetPorts, sandboxProfile, SANDBOX_EXEC } from '../src/tools/sandbox.mjs';
 import { createServer } from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { complete, SETUP_THINK_CAP } from '../src/flows/llm.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
@@ -73,9 +73,14 @@ test.skipIf(needs('sandbox', sandboxAvailable))('commands cannot read the home f
   expect(home.lines.join('\n')).toMatch(/Operation not permitted/);
   expect(home.lines.join('\n')).toMatch(/cannot be read or changed/);
   expect((await runCommand('ls "$HOME"/Documents; ls ~$USER/Library', { cwd })).lines.join('\n')).not.toMatch(/^\w+\.\w+$/m);
-  const probe = join(homedir(), `agentic-fence-probe-${process.pid}.txt`);
-  await runCommand(`echo x > ${probe}`, { cwd });
+  // Writing into the home folder: tried against a home of the test's own (18 Nov 2026: the probe was aimed at the
+  // real home folder, and a fence that failed would have left a file there), through the same fence a command gets.
+  const fakeHome = mkdtempSync(join(tmpdir(), 'agentic-fence-home-'));
+  const probe = join(fakeHome, `agentic-fence-probe-${process.pid}.txt`);
+  spawnSync(SANDBOX_EXEC, ['-p', sandboxProfile(cwd, { home: fakeHome }), '/bin/zsh', '-c', `echo x > '${probe}'`], { cwd, timeout: 20_000 });
   expect(existsSync(probe)).toBe(false);
+  spawnSync('/bin/zsh', ['-c', `echo x > '${probe}'`], { timeout: 20_000 });
+  expect(existsSync(probe)).toBe(true); // outside the fence the same command writes it: the fence is what stopped it
   expect((await runCommand('echo ok > b.txt && cat a.txt b.txt', { cwd })).lines).toEqual(['inside', 'ok']);
   expect((await runCommand('open -h', { cwd })).code).not.toBe(0);
   expect((await runCommand('node -e "console.log(1+1)"', { cwd })).lines).toEqual(['2']);
