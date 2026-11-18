@@ -4,6 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import net from 'node:net';
 import { startWeightsServer, listDocs, findDocsDir, HUB_PORT } from '../src/app/weights.mjs';
 import { findPrivateDir } from '../src/app/docs-dir.mjs';
 
@@ -42,6 +43,34 @@ test('the pages, the model facts and exact byte ranges come back; bad ranges are
     // no DOCS folder: the list says so, a page is 404
     expect((await (await fetch(s.url + 'docs.json')).json()).missing).toBe(true);
     expect((await fetch(s.url + 'docs/anything.html')).status).toBe(404);
+  } finally { s.stop(); }
+});
+
+test('only the hub\'s own address and pages: another Host name (DNS rebinding) and another page\'s Origin are turned away before any route', async () => {
+  const { path } = standIn();
+  const s = startWeightsServer({ path, docsDir: null, port: 0 });
+  try {
+    // A raw request, so the Host line is the one a browser sends after a rebound name.
+    const raw = (host) => new Promise((ok) => {
+      let got = '';
+      const c = net.connect(s.port, '127.0.0.1', () => c.write(`GET /models.json HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`));
+      c.on('data', (d) => { got += d; });
+      c.on('end', () => ok(got.split('\r\n')[0]));
+      c.on('error', () => ok(got.split('\r\n')[0]));
+    });
+    expect(await raw(`evil.example:${s.port}`)).toContain(' 403');
+    expect(await raw(`127.0.0.1.nip.io:${s.port}`)).toContain(' 403');
+    expect(await raw(`localhost:${s.port}`)).toContain(' 200');
+    expect(await raw(`127.0.0.1:${s.port}`)).toContain(' 200');
+    const post = (to, headers = {}) => fetch(s.url + to, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: '{}' });
+    expect((await post('edits/revert', { origin: 'http://evil.example' })).status).toBe(403); // it checked no Origin before
+    expect((await post('memory/add', { origin: 'http://evil.example' })).status).toBe(403);
+    expect((await post('profiles/use', { origin: 'http://127.0.0.1:9' })).status).toBe(403); // another port is another page
+    expect((await post('edits/revert', { origin: `http://127.0.0.1:${s.port}` })).status).toBe(200);
+    expect((await post('edits/revert')).status).toBe(200); // no Origin: not a page's request (curl, the app)
+    expect((await fetch(s.url + 'models.json', { headers: { origin: 'http://evil.example' } })).status).toBe(403);
+    // a link from another site to the Arena tab (it starts a runner) does nothing
+    expect((await fetch(s.url + 'arena', { headers: { 'sec-fetch-site': 'cross-site' }, redirect: 'manual' })).status).toBe(403);
   } finally { s.stop(); }
 });
 
