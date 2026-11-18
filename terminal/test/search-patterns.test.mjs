@@ -117,3 +117,17 @@ test('Edit: "already done" only when old_text is truly gone; Windows line ending
   expect(e2.ok).toBe(true);
   expect(e2.after.replace(/\r\n/g, '').includes('\n')).toBe(false);
 });
+
+test('arguments sent in another shape: an object as JSON, a list a line each, a command in pieces quoted', async () => {
+  const { parseArgs, normalizeArgs } = await import('../src/agent/tools-args.mjs');
+  const w1 = parseArgs('Write', JSON.stringify({ path: 'a.json', content: { name: 'x' } }));
+  expect(w1.args.content).toBe('{\n  "name": "x"\n}');
+  const w2 = parseArgs('Write', JSON.stringify({ path: 'a.py', content: ['import os', 'print(1)'] }));
+  expect(w2.args.content).toBe('import os\nprint(1)');
+  const b = normalizeArgs('Bash', { command: ['rm', '-rf', 'build dir'] });
+  expect((b.args ?? b).command).toBe("rm -rf 'build dir'");
+  const s = normalizeArgs('Bash', { commands: ['cd src', 'ls'] });
+  expect((s.args ?? s).command).toBe('cd src && ls');
+  const sh = normalizeArgs('Bash', { command: ['bash', '-lc', 'npm test | tail -5'] });
+  expect((sh.args ?? sh).command).toBe('npm test | tail -5');
+});

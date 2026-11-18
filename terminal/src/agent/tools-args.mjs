@@ -5,6 +5,17 @@ import { defOf, oldSteps, toolDefs } from './tools-defs.mjs';
 // apply_patch's text as the app's changes, in order: each hunk of an "*** Update File:" an Edit (its " "
 // and "-" lines the old text, its " " and "+" lines the new), an "*** Add File:" a Write of its "+" lines.
 // A file to delete is not done here: { error } says so, unless the patch adds it again (then it is one Write).
+// A word as the shell takes it: plain when it is plain, else in single quotes. A shell sign on its own (&&, |, >)
+// stays a sign: a model that sends ["npm", "test", "&&", "ls"] means it.
+const SHELL_SIGN = /^(?:&&|\|\||\||;|>|>>|<|2>&1|&>|2>|2>>)$/;
+export const shellWord = (w) => (SHELL_SIGN.test(w) || /^[A-Za-z0-9_\-./=:@%+,~^]+$/.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`);
+export function asText(v) {
+  if (v === null || v === undefined) return '';
+  if (Array.isArray(v)) return v.map((x) => (typeof x === 'string' ? x : x && typeof x === 'object' ? JSON.stringify(x) : String(x))).join('\n');
+  if (typeof v === 'object') return JSON.stringify(v, null, 2);
+  return String(v);
+}
+
 export function patchOps(text) {
   const ops = [];
   let file = null, mode = null, hunk = null, added = null;
@@ -122,8 +133,11 @@ export function normalizeArgs(name, raw, way = 'model') {
     const list = out.command;
     const steps = list.some((x) => x && typeof x === 'object');
     const several = steps || (raw.commands !== undefined && raw.command === undefined && raw.cmd === undefined);
+    // One command in pieces (["rm", "-rf", "build dir"]) keeps each piece whole: quoted, as the shell would get it
+    // from an argv (18 Nov 2026, the audit: joined bare it ran rm -rf build dir, two folders, neither the one meant).
     out.command = !steps && /^(ba|z)?sh$/.test(list[0]) && /^-l?c$/.test(list[1] ?? '') ? String(list.slice(2).join(' '))
-      : list.map((x) => (x && typeof x === 'object' ? x.command ?? x.cmd ?? '' : x)).filter((x) => String(x).trim()).join(several ? ' && ' : ' ');
+      : several ? list.map((x) => (x && typeof x === 'object' ? x.command ?? x.cmd ?? '' : x)).filter((x) => String(x).trim()).join(' && ')
+      : list.filter((x) => String(x ?? '').length).map((x) => shellWord(String(x))).join(' ');
   }
   // A step's words under another name ({"value": "…", "complete": false}, Qwen3.6 on the service, 8 Oct 2026:
   // six steps shown as empty boxes), else its first other words; done as a flag counts too.
@@ -196,7 +210,9 @@ export function parseArgs(name, json, way = 'app') {
   }
   for (const [k, v] of Object.entries(args)) {
     const want = def.parameters.properties[k]?.type;
-    if (want === 'string' && typeof v !== 'string') args[k] = String(v);
+    // Text sent as something else: an object as its JSON, a list one item a line (18 Nov 2026, the audit: String()
+    // wrote "[object Object]", and a file's lines sent as a list came out joined by commas).
+    if (want === 'string' && typeof v !== 'string') args[k] = asText(v);
     if (want === 'integer' && typeof v !== 'number') { const n = Number(v); if (Number.isFinite(n)) args[k] = Math.round(n); else delete args[k]; }
     if (want === 'array' && !Array.isArray(v)) return { error: `${name}: "${k}" must be a list.` };
     if (want === 'boolean' && typeof v !== 'boolean') args[k] = v === 'true' || v === 1 || v === '1';
