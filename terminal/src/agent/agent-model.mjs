@@ -11,6 +11,11 @@ import { replyTiming } from './timing.mjs';
 import { COOL_MS } from './profile-spill.mjs';
 import { CALL_STOPS, CALL_UNREADABLE, STEP_DOWN_CAP, STUCK_WORD, auto, beforeCall, isLooping, kTok, leakedThinking, replyRoom, tokensOf, toolCallInText } from './agent-said.mjs';
 
+// What a server says when the conversation is longer than the model's memory: llama.cpp, Ollama, OpenAI-style and
+// Claude's words for it. Not any error with "context" in it (18 Nov 2026, the audit: "context canceled" from a Go
+// service started a summary that lost the conversation).
+export const CONTEXT_FULL = /context[ _-]?(?:length|window|size|limit|overflow)|maximum context|exceeds? (?:the )?(?:available |max(?:imum)? )?(?:context|token)|prompt is too long|too many tokens|n_ctx|input (?:is )?too long|exceed_context/i;
+
 export class ModelPart {
   // The next message's start, read while the user reads the answer (28 Oct 2026). An Ollama service drops an
   // answer's thinking once a message comes after it (its qwen3.5 renderer, as Qwen's own template does), so the
@@ -340,7 +345,7 @@ export class ModelPart {
       // already waited for and asked again (busy.mjs); summarizing would only lose the conversation.
       // Nor a model with no room on the service's GPU (its error ends "a smaller Context": 2 Oct 2026,
       // a CUDA out-of-memory summarized the conversation away and failed again).
-      } else if (retry && !e.busy && !isBusy(e) && !e.noRoom && /context|exceed/i.test(e.message)) {
+      } else if (retry && !e.busy && !isBusy(e) && !e.noRoom && CONTEXT_FULL.test(e.message)) {
         this.emit('note', { text: 'The conversation outgrew the model’s memory; summarizing it and trying again…', tone: 'warn' });
         await this.compact(signal);
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap, focus });

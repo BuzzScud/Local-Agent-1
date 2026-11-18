@@ -141,3 +141,24 @@ test('a tool call written as text runs only when it ends the reply', async () =>
   for (const n of ['WebFetch', 'WebSearch', 'Mcp', 'mcp__shop__get']) expect(OUTSIDE_RESULTS.test(n)).toBe(true);
   for (const n of ['Read', 'Bash', 'Edit']) expect(OUTSIDE_RESULTS.test(n)).toBe(false);
 });
+
+test('a server that sends nothing is given up on; "context canceled" is not a full context', async () => {
+  const { watched } = await import('../src/agent/client.mjs');
+  const { CONTEXT_FULL } = await import('../src/agent/agent-model.mjs');
+  process.env.AGENTIC_FIRST_WORD_SECS = '0.2';
+  async function* silent(signal) { await new Promise((_, no) => signal.addEventListener('abort', () => no(signal.reason))); yield 1; }
+  let err = null;
+  try { for await (const _ of watched(silent, null, 'The test server')) {} } catch (e) { err = e; }
+  delete process.env.AGENTIC_FIRST_WORD_SECS;
+  expect(err?.stalled).toBe(true);
+  expect(err.message).toContain('The test server sent nothing');
+  // esc still stops it as before
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(new Error('esc')), 30);
+  let e2 = null;
+  try { for await (const _ of watched(silent, ac.signal, 'x')) {} } catch (e) { e2 = e; }
+  expect(e2?.stalled).toBeUndefined();
+  for (const m of ['the request exceeds the available context size', 'prompt is too long: 210000 tokens > 200000 maximum', "This model's maximum context length is 32768 tokens", 'input is too long for requested model', 'context length exceeded'])
+    expect([m, CONTEXT_FULL.test(m)]).toEqual([m, true]);
+  for (const m of ['context canceled', 'context deadline exceeded', 'rate limit exceeded']) expect([m, CONTEXT_FULL.test(m)]).toEqual([m, false]);
+});

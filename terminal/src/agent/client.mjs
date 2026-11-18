@@ -156,13 +156,42 @@ async function* spilling(args, sp) {
   yield* streamChat({ ...args, url: to.url, use: to.use, model: to.model ?? args.model, profile: to.name, spill: null, spilled: true });
 }
 
+// A server that keeps the connection open and sends nothing (18 Nov 2026, the audit: requests had no time limit,
+// so coding -p, a helper or a side call waited for ever on a stalled server). Reading a long conversation again
+// can take minutes before the first word, so the first wait is long; after it, a quiet stretch is a stall.
+// AGENTIC_FIRST_WORD_SECS and AGENTIC_QUIET_SECS change them.
+const secsEnv = (name, d) => { const n = Number(process.env[name]); return (Number.isFinite(n) && n > 0 ? n : d) * 1000; };
+export async function* watched(make, signal, what) {
+  const ac = new AbortController();
+  const onAbort = () => ac.abort(signal.reason);
+  if (signal?.aborted) ac.abort(signal.reason); else signal?.addEventListener('abort', onAbort, { once: true });
+  let timer = null;
+  let fired = null;
+  const arm = (ms) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { fired = `${what} sent nothing for ${ms >= 120_000 ? `${Math.round(ms / 60_000)} minutes` : `${Math.round(ms / 1000)} s`}, so the request was stopped`; ac.abort(new Error(fired)); }, ms);
+    timer.unref?.();
+  };
+  arm(secsEnv('AGENTIC_FIRST_WORD_SECS', 1200));
+  try {
+    for await (const ev of make(ac.signal)) { arm(secsEnv('AGENTIC_QUIET_SECS', 300)); yield ev; }
+  } catch (e) {
+    if (fired && !signal?.aborted) throw Object.assign(new Error(fired), { stalled: true });
+    throw e;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
 async function* streamOne(args) {
   const ep = endpointFor(args.url, args.use);
-  const once = () => {
+  const once = () => watched((sig) => {
+    const a = { ...args, signal: sig };
     const tags = args.model?.thinkTags;
-    if (!tags?.length || ep?.kind === 'claude') return streamRaw(args);
-    return splitThink(streamRaw(args), tags, { thinking: Boolean(args.thinking) });
-  };
+    if (!tags?.length || ep?.kind === 'claude') return streamRaw(a);
+    return splitThink(streamRaw(a), tags, { thinking: Boolean(args.thinking) });
+  }, args.signal, ep?.label ?? 'The model server');
   if (!ep?.remote) { yield* once(); return; }
   // Each answer's cost goes on the meter (spend.mjs), whoever asked: the conversation, a flow, a side job.
   for await (const ev of withBusyRetry(once, { key: ep.label ?? args.url, signal: args.signal })) {
