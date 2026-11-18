@@ -124,6 +124,18 @@ test('the question for a commit has no "don\'t ask again"', async () => {
 
 // ---- /permissions: a new line is another command, saved rules, protected files ----
 
+test('readers with a flag that writes or runs a program do not count as reading (the audit of 18 Nov)', () => {
+  const cwd = homedir();
+  const writes = ['rg --pre rm x .', 'sort -o src/app.js /dev/null', 'sort --output=a.txt b', 'git diff --output=src/app.js', 'git log --output=x',
+    "sed -I '' s/a/b/ f", "sed -n 'w out' in", "sed 's/a/b/w out' in", "sed -n '1e rm x' f", 'git branch -D main', 'git branch -m old new', 'git branch newname',
+    'tree -o x', 'uniq in.txt out.txt', 'xxd -r dump bin', 'echo $ANTHROPIC_API_KEY', 'printf %s "${AGENTIC_REMOTE_KEY}"', 'git diff --ext-diff', 'sort --compress-program=sh x'];
+  for (const c of writes) expect([c, isReadOnly(c)]).toEqual([c, false]);
+  for (const c of writes) expect([c, decide('Bash', { command: c }, { mode: 'plan', cwd }).decision]).not.toEqual([c, 'allow']);
+  const reads = ['rg -n foo src', 'sort -n a.txt', 'git diff HEAD~1', 'git branch', 'git branch -a', 'git branch --list "feat/*"', 'git branch -vv',
+    'git branch --contains HEAD', "sed -n '24p' f", "sed -n '/x/p' f", "sed 's/a/b/g' f", 'tree -L 2', 'uniq -c a.txt', 'xxd f | head', 'echo $HOME', 'echo hi'];
+  for (const c of reads) expect([c, isReadOnly(c)]).toEqual([c, true]);
+});
+
 test('a new line starts another command: "ls⏎rm notes.txt" asks, it no longer counts as reading', () => {
   const cwd = homedir();
   for (const c of ['ls\nrm notes.txt', 'cat a.txt\ntouch b.txt', 'echo hi\nnode evil.js', 'pwd\n\nrm x', 'ls\r\nrm x'.replace('\r', '')])

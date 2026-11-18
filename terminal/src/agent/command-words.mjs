@@ -241,16 +241,52 @@ export function splitCommand(command) {
   return out;
 }
 
+// The flags that make a reader write a file or run another program (18 Nov 2026, the audit: each of these
+// counted as reading, so it ran without asking in Manual and was allowed in Plan): rg --pre rm runs rm on
+// every file it searches, sort -o and git diff --output write over a file, tree -o writes one, git branch -D
+// deletes a branch, uniq in out and xxd -r write their second file, sort --compress-program runs a program.
+const READER_WRITES = [
+  [/^rg\b/, /\s--pre(?:-glob)?\b/],
+  [/^sort\b/, /\s(?:-[A-Za-z]*o|--output\b|--compress-program\b)/],
+  [/^tree\b/, /\s-[A-Za-z]*o\b/],
+  [/^file\b/, /\s-[A-Za-z]*C\b/],
+  [/^xxd\b/, /\s-[A-Za-z]*r\b|\s-revert\b/],
+  [/^git\s/, /\s--(?:output|ext-diff)\b/],
+];
+// git branch only lists: no name (that makes a branch) and only the listing flags.
+const BRANCH_LISTS = /^(?:-a|-r|-v|-vv|-l|--all|--remotes|--list|--show-current|--verbose|--no-color|--color(?:=\w+)?|--column(?:=\w+)?|--sort=\S+|--format=\S+|--contains|--no-contains|--merged|--no-merged|--points-at|--abbrev=\d+)$/;
+function branchOnlyLists(p) {
+  const words = p.split(/\s+/).slice(2);
+  if (!words.length) return true;
+  // --list, --contains and the like take a pattern or a commit after them; anything else that is not a flag names a new branch.
+  const takesValue = /^(?:-l|--list|--contains|--no-contains|--merged|--no-merged|--points-at)$/;
+  for (let i = 0; i < words.length; i++) {
+    if (!BRANCH_LISTS.test(words[i])) return false;
+    if (takesValue.test(words[i]) && words[i + 1] && !words[i + 1].startsWith('-')) i++;
+  }
+  return true;
+}
+// Two names for a file that only reads one: uniq in out writes out.
+const twoFiles = (p) => p.split(/\s+/).slice(1).filter((w) => !w.startsWith('-')).length >= 2;
+// A secret named in the command ($ANTHROPIC_API_KEY): reading it is not "only reading", it shows the key.
+const NAMES_SECRET = /\$\{?[A-Za-z_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL)S?\b/i;
+// sed's own writes and runs: the w/W commands, s///w file, and e (runs a command) in its program.
+const SED_WRITES = /(?:^|[\s;{}'"/!0-9$])[wWe](?:\s|'|"|$)|\/[gpiImMe0-9]*w\s/;
+
 // One part that only reads.
 export function readerPart(part) {
   const p = part.trim();
-  if (/^sed\s+-n\s+'?\d+(,\d+)?p'?(\s|$)/.test(p) && !/\s-i\b/.test(p)) return true; // sed -n '24p' file
-  // A filter in a pipeline reads: sed without -i (-Ei, --in-place), jq, and awk unless its program
-  // could write a file (>), run a command (system, a | inside it) or edit in place (gawk -i inplace).
-  if (/^sed\b/.test(p) && !/\s-[A-Za-z]*i\b|--in-place/.test(p)) return true;
+  if (NAMES_SECRET.test(p)) return false;
+  // A filter in a pipeline reads: sed without -i/-I (-Ei, --in-place) and without a w or e in its program,
+  // jq, and awk unless its program could write a file (>), run a command (system, a | inside it) or edit in
+  // place (gawk -i inplace).
+  if (/^sed\b/.test(p)) return !/\s-[A-Za-z]*[iI]\b|--in-place/.test(p) && !SED_WRITES.test(p.replace(/^sed\s+/, ''));
   if (/^jq\b/.test(p)) return true;
   if (/^g?awk\b/.test(p) && !/[>|]|system|\s-i\b|--in-?place/.test(p)) return true;
   if (!READERS.test(p)) return false;
+  if (READER_WRITES.some(([cmd, flag]) => cmd.test(p) && flag.test(p))) return false;
+  if (/^git\s+branch\b/.test(p) && !branchOnlyLists(p)) return false;
+  if (/^uniq\b/.test(p) && twoFiles(p)) return false;
   return !(/^find\b/.test(p) && /\s-(exec|execdir|ok|okdir|delete|fprint|fprintf|fls)\b/.test(p));
 }
 
