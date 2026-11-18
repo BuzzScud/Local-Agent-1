@@ -79,24 +79,46 @@ test('coding serve: a new key readable by you only, the form’s values printed,
   expect((await fetch(`${url}/health`).then((x) => x.status, () => 'gone'))).toBe('gone');
 }, T);
 
-test('coding serve on the network: it listens on every address, says where others reach it and that macOS may ask; --new-key replaces the key', async () => {
+test('coding serve on every network only when asked: it listens on every address, warns, says where others reach it and that macOS may ask; --new-key replaces the key', async () => {
   const { serveHome, proj } = homes();
   const port = await freePort();
   const args = join(serveHome, 'args.jsonl');
-  const first = await startServe(['--port', String(port), '--ctx', '8k'], { cwd: proj, env: { AGENTIC_HOME: serveHome, FAKE_LLAMA_ARGS: args } });
+  const first = await startServe(['--port', String(port), '--ctx', '8k'], { cwd: proj, env: { AGENTIC_HOME: serveHome, FAKE_LLAMA_ARGS: args, AGENTIC_SERVE_HOST: '0.0.0.0' } });
   const k1 = readFileSync(join(serveHome, 'serve.key'), 'utf8').trim();
   expect(first.out()).toContain('Reach by  Home network (http)');
   expect(first.out()).toContain('macOS may ask whether llama-server may accept incoming connections');
+  expect(first.out()).toContain('! Open on every network this machine is on, not only Tailscale');
   expect(first.out()).toContain('Plain http is for a home network or Tailscale');
   await first.stop();
   const started = JSON.parse(readFileSync(args, 'utf8').trim().split('\n')[0]);
   expect(started[started.indexOf('--host') + 1]).toBe('0.0.0.0');
   expect(started[started.indexOf('--api-key-file') + 1]).toBe(join(serveHome, 'serve.key'));
-  const again = await startServe(['--port', String(port), '--new-key'], { cwd: proj, env: { AGENTIC_HOME: serveHome } });
+  const again = await startServe(['--port', String(port), '--new-key', '--local'], { cwd: proj, env: { AGENTIC_HOME: serveHome } });
   const k2 = readFileSync(join(serveHome, 'serve.key'), 'utf8').trim();
   await again.stop();
   expect(k2).not.toBe(k1);
+  expect(again.out()).toContain(`API key   ${k2}`); // a new key is shown once
+  // started again with the same key: it is not printed
+  const third = await startServe(['--port', String(port), '--local'], { cwd: proj, env: { AGENTIC_HOME: serveHome } });
+  await third.stop();
+  expect(third.out()).not.toContain(k2);
+  expect(third.out()).toContain('API key   the first line of');
   const bad = await run(['serve', '--wat'], { cwd: proj, env: { AGENTIC_HOME: serveHome } });
   expect(bad.code).toBe(2);
   expect(bad.out).toContain('--local           this machine only: reach it with an SSH tunnel');
+}, T);
+
+test('coding serve at an address of this Mac: the model listens on this Mac only, and that address passes its connections on to it', async () => {
+  const { serveHome, proj } = homes();
+  const port = await freePort();
+  const args = join(serveHome, 'args.jsonl');
+  const s = await startServe(['--port', String(port), '--ctx', '8k'], { cwd: proj, env: { AGENTIC_HOME: serveHome, FAKE_LLAMA_ARGS: args, AGENTIC_SERVE_HOST: '::1' } });
+  try {
+    const started = JSON.parse(readFileSync(args, 'utf8').trim().split('\n')[0]);
+    expect(started[started.indexOf('--host') + 1]).toBe('127.0.0.1');
+    expect(s.out()).toContain('Address   ::1');
+    expect(s.out()).not.toContain('Open on every network');
+    expect((await fetch(`http://[::1]:${port}/health`)).status).toBe(200); // through the relay
+    expect((await fetch(`http://[::1]:${port}/props`)).status).toBe(401); // the key still guards it
+  } finally { await s.stop(); }
 }, T);
