@@ -127,7 +127,7 @@ export async function serve({ modelId = DEFAULT_MODEL, port = SERVE_PORT, local 
   if (port !== SERVE_PORT) say(`  ${pad('Port')}${port}   (behind More)`);
   say('');
   say(`The key ${made ? 'was made now and ' : ''}is kept in ${SERVE_KEY_FILE.replace(process.env.HOME ?? '', '~')} (coding serve --new-key makes another).`);
-  if (!local && !plan.relays.length && !plan.wide) say('Tailscale is not on here, so only this machine (and an SSH tunnel) can reach it. Turn Tailscale on and start it again, or open it to every network on purpose: AGENTIC_SERVE_HOST=0.0.0.0 coding serve');
+  if (!local && !plan.relays.length && !plan.wide) say('Tailscale is not on here, so only this machine (and an SSH tunnel) can reach it. Turn Tailscale on and start it again, or open it to every network on purpose: coding serve --host 0.0.0.0');
   if (plan.relays.length) say('The first time, macOS may ask whether Agentic Coder may accept incoming connections: allow it.');
   if (plan.wide) say('The first time, macOS may ask whether llama-server may accept incoming connections: allow it.');
   if (plan.wide) say('! Open on every network this machine is on, not only Tailscale (asked for with 0.0.0.0): anyone there can try the key.');

@@ -21,7 +21,10 @@ fn js_string(s: &str) -> String {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let url = args.iter().position(|a| a == "--url").and_then(|i| args.get(i + 1)).cloned();
+    // The page's address (with its key) from AGENTIC_WINDOW_URL, which no other account can see, else --url
+    // (18 Nov 2026, the audit: on the command line the key showed in ps).
+    let url = std::env::var("AGENTIC_WINDOW_URL").ok().filter(|u| !u.is_empty())
+        .or_else(|| args.iter().position(|a| a == "--url").and_then(|i| args.get(i + 1)).cloned());
     let title = args.iter().position(|a| a == "--title").and_then(|i| args.get(i + 1)).cloned().unwrap_or_else(|| "Agentic Coder".into());
     tauri::Builder::default()
         .setup(move |app| {

@@ -253,11 +253,11 @@ if (process.argv[2] === 'serve') {
   const at = (f) => a.indexOf(f);
   const val = (f) => (at(f) >= 0 ? a[at(f) + 1] : undefined);
   // How many values each switch takes; anything else is a word it does not know.
-  const TAKES = { '--port': 1, '--ctx': 1, '--model': 1, '--https': 2, '--local': 0, '--new-key': 0 };
+  const TAKES = { '--port': 1, '--ctx': 1, '--model': 1, '--https': 2, '--local': 0, '--new-key': 0, '--host': 1, '--key': 0 };
   const odd = [];
   for (let i = 0; i < a.length; i++) { if (a[i] in TAKES) i += TAKES[a[i]]; else if (a[i] !== '-h' && a[i] !== '--help') odd.push(a[i]); }
   if (odd.length || a.includes('-h') || a.includes('--help')) {
-    process.stdout.write(`coding serve: this machine's model for /remote on another machine.\n  --port N          where it listens (${SERVE_PORT})\n  --local           this machine only: reach it with an SSH tunnel\n  --ctx 32k         the context (else what fits in memory)\n  --model ${Object.keys(MODELS).join('|')}\n  --https cert.pem key.pem   https with your certificate (tailscale cert makes one)\n  --new-key         make a new API key (the old one stops working)\n`);
+    process.stdout.write(`coding serve: this machine's model for /remote on another machine.\n  --port N          where it listens (${SERVE_PORT})\n  --local           this machine only: reach it with an SSH tunnel\n  --ctx 32k         the context (else what fits in memory)\n  --model ${Object.keys(MODELS).join('|')}\n  --https cert.pem key.pem   https with your certificate (tailscale cert makes one)\n  --new-key         make a new API key (the old one stops working)\n\n  --host ADDR       where it listens: this Mac and its Tailscale address by default; 0.0.0.0 opens it to every network (plain http: only on a network you trust)\n  --key             show the API key again`);
     process.exit(odd.length ? 2 : 0);
   }
   const ctxText = val('--ctx');
@@ -270,7 +270,7 @@ if (process.argv[2] === 'serve') {
   process.on('SIGTERM', stop);
   process.on('SIGHUP', stop);
   try {
-    s = await serve({ modelId: val('--model') ?? modelById(loadSettings(process.cwd()).model)?.base ?? modelById(loadSettings(process.cwd()).model)?.id ?? DEFAULT_MODEL, port, local: a.includes('--local'), ctx, cert: val('--https'), certKey: at('--https') >= 0 ? a[at('--https') + 2] : undefined, newKey: a.includes('--new-key') });
+    s = await serve({ modelId: val('--model') ?? modelById(loadSettings(process.cwd()).model)?.base ?? modelById(loadSettings(process.cwd()).model)?.id ?? DEFAULT_MODEL, port, local: a.includes('--local'), ctx, cert: val('--https'), certKey: at('--https') >= 0 ? a[at('--https') + 2] : undefined, newKey: a.includes('--new-key') , ...(val('--host') ? { host: val('--host') } : {}), showKey: a.includes('--key') });
     s.server.on('crash', ({ code, signal }) => { process.stderr.write(`coding serve: the model stopped (code ${code ?? signal}); see ~/.agentic-coder/logs/server.log\n`); process.exit(1); });
   } catch (e) { process.stderr.write(`coding serve: ${e.message}\n`); await s?.stop().catch(() => {}); process.exit(1); }
   await new Promise(() => {});

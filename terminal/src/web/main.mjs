@@ -5,7 +5,7 @@
 //   coding web reset <name>                                  a one-time password-reset link
 // The addresses of your AI services and calculator come from the web settings (Admin → Settings),
 // filled the first time from AGENTIC_AI_URLS and AGENTIC_CALC_URL.
-import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -87,7 +87,10 @@ export async function webCommand(argv, { out = (s) => process.stdout.write(`${s}
     const app = join(homedir(), '.agentic-coder', 'app', 'agentic-coder');
     if (!existsSync(app)) { process.stderr.write('coding web on needs the installed app (bun run install-cli first)\n'); process.exit(1); }
     mkdirSync(join(homedir(), 'Library', 'LaunchAgents'), { recursive: true });
-    mkdirSync(join(logFile(), '..'), { recursive: true });
+    // The log can hold an invite link: yours alone (18 Nov 2026, the audit: it was readable by every account on the Mac).
+    mkdirSync(join(logFile(), '..'), { recursive: true, mode: 0o700 });
+    writeFileSync(logFile(), '', { flag: 'a', mode: 0o600 });
+    chmodSync(logFile(), 0o600);
     writeFileSync(plistPath(), launchPlist({ program: [app], port: o.port }));
     const r = spawnSync('launchctl', ['bootstrap', `gui/${uid}`, plistPath()], { encoding: 'utf8' });
     out(r.status === 0 ? `Agentic Coder Web starts with this Mac now, on port ${o.port}. Log: ${logFile()}` : `launchctl said: ${(r.stderr || r.stdout).trim()}`);
