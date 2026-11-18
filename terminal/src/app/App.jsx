@@ -30,7 +30,7 @@ import { startMemory, sayMemory } from './memory-start.mjs';
 import { claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, saveModeOf } from './autosave.mjs';
-import { loadSettings, saveSettings, newSessionId, loadHistory, firstMode, keepsLastMode } from './store.mjs';
+import { loadSettings, saveSettings, newSessionId, loadHistory, firstMode, keepsLastMode, settingsProblem, onSettingsRefused } from './store.mjs';
 import { readRecord as sessionRecord } from './sessions.mjs';
 import { runReader } from './loops-board.mjs';
 import { drawBoard as drawLoops } from './loops-draw.mjs';
@@ -158,7 +158,9 @@ export function App({ opts, win, onRestart }) {
   const [menuClosedFor, setMenuClosedFor] = useState(null);
   // Where Agentic Coder works; it can move into a project named from the home folder.
   const [cwd, setCwd] = useState(opts.cwd);
-  const settings = useRef(loadSettings(opts.cwd)).current;
+  // Read once, as the window opens (a useState initializer: an argument to useRef would be worked out again at every
+  // render, every streamed token). The object is the window's own and changes in place.
+  const [settings] = useState(() => loadSettings(opts.cwd));
   // /remote on (and no --url or --local): the model on another machine. Until
   // it answers, `model` is a stand-in named after it.
   const remoteAtStart = !opts.url && !opts.local && Boolean(settings.remote?.use);
@@ -376,7 +378,8 @@ export function App({ opts, win, onRestart }) {
   // model that can: the one to load again once that reply is over.
   const switchBackRef = useRef(null);
   const abortRef = useRef(null);
-  const historyRef = useRef(loadHistory(cwd));
+  const historyRef = useRef(null);
+  if (historyRef.current === null) historyRef.current = loadHistory(cwd); // read once, not at every render
   const histIdx = useRef(null);
   const draftRef = useRef('');
   const pendingContext = useRef([]);
@@ -506,6 +509,14 @@ export function App({ opts, win, onRestart }) {
   const setMode = useCallback(setModeFn, [agent]);
   // The mode the window is left in is the next window's (store.mjs firstMode): kept in settings.json
   // as it changes, so a quit, a closed window or /update's restart all keep it.
+  // settings.json that cannot be read is left as it is (store.mjs saveSettings): said as the window opens, before the
+  // first save below, and again when a save is refused for a newer broken version of it.
+  useEffect(() => {
+    onSettingsRefused((text) => push({ type: 'note', text, tone: 'warn' }));
+    const bad = settingsProblem();
+    if (bad) push({ type: 'note', text: bad, tone: 'warn' });
+    return () => onSettingsRefused(null);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const keptMode = useRef(settings.lastMode ?? null);
   useEffect(() => {
     if (!keepsLastMode() || mode === keptMode.current) return;

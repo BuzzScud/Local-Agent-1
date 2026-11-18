@@ -1,6 +1,6 @@
 // Settings, saved sessions and prompt history, all under ~/.agentic-coder.
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync, statSync, openSync, readSync, fstatSync, closeSync, renameSync, copyFileSync, rmSync, unlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { HOME, DEFAULT_MODEL, sourceOf } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
@@ -35,9 +35,42 @@ function folderSettings(cwd) {
   return out;
 }
 
+// settings.json as it is on disk: { data, broken } (as perm-store.mjs readState): its content, or {} and why it
+// could not be read. No file, or an empty one, is not broken. A file that cannot be read is never written over
+// (saveSettings): a typo in it must not wipe your services, keys and limits with the defaults.
+export function readSettingsFile() {
+  let raw;
+  try { raw = readFileSync(SETTINGS, 'utf8'); } catch (e) { return { data: {}, broken: e.code === 'ENOENT' ? null : e.message }; }
+  if (!raw.trim()) return { data: {}, broken: null };
+  try {
+    const d = JSON.parse(raw);
+    return d && typeof d === 'object' && !Array.isArray(d) ? { data: d, broken: null } : { data: {}, broken: 'it is not a JSON object' };
+  } catch (e) { return { data: {}, broken: e.message }; }
+}
+// An unreadable settings.json is copied aside once a version (backups/settings: one copy each, not one a save, which
+// would push your good copies out). true when this version is new. tell: said when a save is refused for a new one.
+let refusedCopy = null;
+let refusedOf = null;
+let tell = null;
+export const onSettingsRefused = (fn) => { tell = fn; };
+function keepBroken() {
+  let mark = null;
+  try { const st = statSync(SETTINGS); mark = `${st.size}:${st.mtimeMs}`; } catch { return false; }
+  if (mark === refusedOf) return false;
+  refusedOf = mark;
+  refusedCopy = keepCopy(SETTINGS, 'settings');
+  return true;
+}
+// What to tell you when settings.json cannot be read (the window says it as it opens; its copy is kept then), else null.
+export function settingsProblem() {
+  const { broken } = readSettingsFile();
+  if (!broken) return null;
+  keepBroken();
+  return `${SETTINGS.replace(homedir(), '~')} cannot be read (${broken}), so this window uses the defaults and saves nothing to it: fix or delete it, then start again.${refusedCopy ? ` A copy is kept in ${refusedCopy.replace(homedir(), '~')}.` : ''}`;
+}
+
 export function loadSettings(cwd) {
-  let global;
-  try { global = { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { global = { ...DEFAULTS }; }
+  const global = { ...DEFAULTS, ...readSettingsFile().data };
   // The start-up mode saved with /permissions (its folder's, else everywhere's)
   // wins over the older settings files; modeFrom says which it was.
   const saved = cwd ? startModeFor(cwd) : null;
@@ -61,13 +94,21 @@ export function firstMode(asked, settings = {}) {
 // a short lock and written whole through a file beside it, so two windows saving together never lose one's change
 // and a window reading it never sees half of it (12 Oct 2026, the owner's ask: "i keep having to add the other
 // service address and the claude api in"). When your services change, the file before is kept (`keepCopy`).
+// A file that cannot be read (readSettingsFile) is left as it is: a copy is kept aside and nothing is written; the
+// change holds for this window only (the answer is what it would have saved), and the window says so (settingsProblem
+// as it opens, `tell` when a save is refused for a version it has not said).
 export function saveSettings(patch) {
   mkdirSync(HOME, { recursive: true });
   return withLock(SETTINGS, () => {
+    const file = readSettingsFile();
     const now = loadSettings();
     const next = { ...now, ...(typeof patch === 'function' ? patch(now) : patch) };
     delete next.fromFolder;
     delete next.modeFrom;
+    if (file.broken) {
+      if (keepBroken()) { try { tell?.(settingsProblem()); } catch {} }
+      return next;
+    }
     if (existsSync(SETTINGS) && servicesOf(now) !== servicesOf(next)) keepCopy(SETTINGS, 'settings');
     writeWhole(SETTINGS, `${JSON.stringify(next, null, 2)}\n`);
     return next;
