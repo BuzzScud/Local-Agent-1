@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { SESSION_MARK } from '../agent/prompt.mjs';
 import { terminalApp } from '../tools/screen.mjs';
-import { battleHold, runningServer, ModelServer, freeWithHandBack, stopServer, chooseContext, availableBytes, scanServers, contextCheck, hasDraft, searchBytes, LINGER_SECS, warmUp, stopIdleServers, remoteLabel, thinkingLevel, serverBinOf, modelPath, onDiskBytes, engineOf, visionPath, needBytes, DEFAULT_REMOTE, keyStore, remoteRisk, HOME, endpointOf, ollamaLoaded } from '../../../models/index.mjs';
+import { battleHold, runningServer, ModelServer, freeWithHandBack, stopServer, chooseContext, availableBytes, scanServers, contextCheck, hasDraft, searchBytes, LINGER_SECS, warmUp, stopIdleServers, remoteLabel, thinkingLevel, serverBinOf, modelPath, onDiskBytes, engineOf, visionPath, needBytes, DEFAULT_REMOTE, keyStore, remoteRisk, HOME, endpointOf, ollamaLoaded, localAuth } from '../../../models/index.mjs';
 import { shownHelpers, withHelper } from './helpers-panel.mjs';
 import { windowSpend } from '../agent/spend.mjs';
 import { updateWindow } from './copies.mjs';
@@ -406,7 +406,7 @@ export function runPart(self) {
       if (self.opts.url) {
         self.setStarting(false);
         // A llama.cpp server given by hand says whether it has its vision add-on.
-        try { const p = await (await fetch(`${self.opts.url.replace(/\/+$/, '')}/props`, { signal: AbortSignal.timeout(3000) })).json(); self.agent.canSee = Boolean(p?.modalities?.vision); } catch { self.agent.canSee = false; }
+        try { const p = await (await fetch(`${self.opts.url.replace(/\/+$/, '')}/props`, { headers: localAuth(self.opts.url), signal: AbortSignal.timeout(3000) })).json(); self.agent.canSee = Boolean(p?.modalities?.vision); } catch { self.agent.canSee = false; }
         // A server given by hand: what the last window's second look would
         // save is still asked about (no model needed); the first-use reading waits for a start of its own.
         setTimeout(() => { if (self.aliveRef.current) self.autoRef.current.askPending().catch(() => {}); }, 3000).unref?.();

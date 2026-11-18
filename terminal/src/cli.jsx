@@ -5,7 +5,7 @@ import { render, renderToString } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS, CLEAR } from './app/window.mjs';
-import { HOME, MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath, thinkingLevel } from '../../models/index.mjs';
+import { HOME, MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath, thinkingLevel, localAuth } from '../../models/index.mjs';
 import { readLimits, modelWithLimits, OWN_ROWS, ownOf } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
@@ -490,7 +490,7 @@ if (opts.print) {
     }
   }
   // A llama.cpp server given with --url says whether it can look at pictures.
-  if (url && !remote && images.length) { try { canSee = Boolean((await (await fetch(`${url.replace(/\/+$/, '')}/props`, { signal: AbortSignal.timeout(3000) })).json())?.modalities?.vision); } catch { canSee = false; } }
+  if (url && !remote && images.length) { try { canSee = Boolean((await (await fetch(`${url.replace(/\/+$/, '')}/props`, { headers: localAuth(url), signal: AbortSignal.timeout(3000) })).json())?.modalities?.vision); } catch { canSee = false; } }
   if (!url) {
     const thinkOn = opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true;
     const c = chooseContext(model, { effort: thinkOn ? opts.effort ?? settings.effort : undefined });

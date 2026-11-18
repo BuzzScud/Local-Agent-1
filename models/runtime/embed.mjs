@@ -2,6 +2,7 @@
 // can be compared (models/bge-m3). It runs in the same llama-server as the
 // 27B, in its embedding mode, as a server of its own: started at the first
 // use, shared between windows and kept loaded like the 27B's (server.mjs).
+import { localAuth } from './local-key.mjs';
 import { existsSync } from 'node:fs';
 import { serverBinOf, EMBEDDERS, DEFAULT_EMBEDDER, modelPath } from '../registry.mjs';
 import { ModelServer, LINGER_SECS, scanServers } from './server.mjs';
@@ -51,7 +52,7 @@ export class Embedder {
     if (want.length) await this.start();
     for (let i = 0; i < want.length; i += 16) {
       const batch = want.slice(i, i + 16);
-      const res = await fetch(`${this.url}/v1/embeddings`, { method: 'POST', headers: { 'content-type': 'application/json' }, signal, body: JSON.stringify({ model: this.model.id, input: batch }) });
+      const res = await fetch(`${this.url}/v1/embeddings`, { method: 'POST', headers: { 'content-type': 'application/json', ...localAuth(this.url) }, signal, body: JSON.stringify({ model: this.model.id, input: batch }) });
       if (!res.ok) throw new Error(`the embedder answered ${res.status}`);
       const rows = (await res.json()).data.sort((a, b) => a.index - b.index);
       rows.forEach((r, k) => {

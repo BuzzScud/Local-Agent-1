@@ -267,3 +267,20 @@ test('the server log: under the limit kept whole; over it, cut in place to its n
   // 44 bytes start in the middle of "line 44": that part line is left out, the five whole ones kept.
   expect(out.mid.split('\n').slice(1).filter(Boolean)).toEqual(['line 45', 'line 46', 'line 47', 'line 48', 'line 49']);
 });
+
+// The audit of 18 Nov 2026: llama-server answered any program and any web page that reached its port.
+test('this Mac\'s model servers start with a key of their own, sent with every request to this Mac only', async () => {
+  const { serverArgs } = await import('../runtime/server.mjs');
+  const { localAuth, localKeyFile } = await import('../runtime/local-key.mjs');
+  const { statSync } = await import('node:fs');
+  const { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER } = await import('../registry.mjs');
+  const args = serverArgs(MODELS[DEFAULT_MODEL], { ctx: 32768, port: 17600 });
+  expect(args[args.indexOf('--api-key-file') + 1]).toBe(localKeyFile());
+  expect(serverArgs(EMBEDDERS[DEFAULT_EMBEDDER], { port: 17700 })).toContain('--api-key-file');
+  expect(serverArgs(MODELS[DEFAULT_MODEL], { ctx: 32768, port: 8080, key: false })).not.toContain('--api-key-file');
+  expect(statSync(localKeyFile()).mode & 0o777).toBe(0o600);
+  expect(localAuth('http://127.0.0.1:17600').authorization).toMatch(/^Bearer [0-9a-f]{48}$/);
+  expect(localAuth('http://localhost:17601/v1').authorization).toBeTruthy();
+  expect(localAuth('https://api.example.com')).toEqual({});
+  expect(localAuth('http://192.168.1.4:8080')).toEqual({});
+});

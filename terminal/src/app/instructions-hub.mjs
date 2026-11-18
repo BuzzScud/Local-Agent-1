@@ -9,7 +9,7 @@ import { toolSchemas } from '../agent/tools.mjs';
 import { wayPrompt } from '../agent/way.mjs';
 import { TOP, recall, recallNotes, looksLikeEvent } from '../agent/recall.mjs';
 import { memoryDirs, readFacts } from '../agent/facts.mjs';
-import { MODELS, DEFAULT_MODEL, thinkingKwargs, Embedder, embedderReady, EMBEDDERS, DEFAULT_EMBEDDER, Reranker, rerankerReady, RERANKERS } from '../../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, thinkingKwargs, Embedder, embedderReady, EMBEDDERS, DEFAULT_EMBEDDER, Reranker, rerankerReady, RERANKERS, localAuth } from '../../../models/index.mjs';
 import { loadSettings, saveSettings } from './store.mjs';
 import { readLimits } from './limits.mjs';
 import { howChosen } from '../agent/search.mjs';
@@ -112,6 +112,8 @@ export const tokenHooks = {
     // `coding serve` running here asks for its key (models/runtime/serve.mjs).
     let auth = {};
     try { if (server.serve?.keyFile) auth = { authorization: `Bearer ${readFileSync(server.serve.keyFile, 'utf8').split('\n')[0].trim()}` }; } catch {}
+    // Else this Mac's own key for its servers (models/runtime/local-key.mjs).
+    if (!auth.authorization) auth = localAuth(`http://127.0.0.1:${server.port}`);
     const post = async (path, body) => (await fetch(`http://127.0.0.1:${server.port}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...auth }, body: JSON.stringify(body), signal })).json();
     try {
       const counts = await Promise.all(texts.map(async (content) => (await post('/tokenize', { content })).tokens.length));

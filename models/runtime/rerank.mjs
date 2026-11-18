@@ -4,6 +4,7 @@
 // mode, as a server of its own: started at its first use, shared between
 // windows and kept loaded like the embedder (embed.mjs). /effort's Reranker
 // row turns it on; off, nothing here runs.
+import { localAuth } from './local-key.mjs';
 import { existsSync } from 'node:fs';
 import { serverBinOf, RERANKERS, DEFAULT_RERANKER, modelPath } from '../registry.mjs';
 import { ModelServer, LINGER_SECS, scanServers, liveUsers } from './server.mjs';
@@ -50,7 +51,7 @@ export class Reranker {
     const documents = texts.map((t) => String(t).slice(0, this.model.chars ?? 700));
     let res;
     try {
-      res = await fetch(`${this.url}/v1/rerank`, { method: 'POST', headers: { 'content-type': 'application/json' }, signal, body: JSON.stringify({ model: this.model.id, query: String(query).slice(0, 2000), documents, top_n: documents.length }) });
+      res = await fetch(`${this.url}/v1/rerank`, { method: 'POST', headers: { 'content-type': 'application/json', ...localAuth(this.url) }, signal, body: JSON.stringify({ model: this.model.id, query: String(query).slice(0, 2000), documents, top_n: documents.length }) });
     } catch (e) {
       // The server is gone (stopped by the window that started it, or its
       // watcher): the next search starts one again, or shares another's.

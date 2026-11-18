@@ -1,6 +1,7 @@
 // Starts and looks after llama-server for one model (on the model's engine): picks a free
 // port, waits until it is healthy, restarts it once if it crashes, and stops
 // it when Agentic Coder exits.
+import { localKeyFile } from './local-key.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, openSync, closeSync, appendFileSync, statSync, readSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
@@ -130,12 +131,14 @@ export function mlxServerScript() {
 export const hasDraft = (model) => Boolean(model?.draft && process.env.AGENTIC_HELPER !== 'off' && existsSync(draftPath(model)));
 
 // host: where it listens ('127.0.0.1', this Mac only; `coding serve` opens it wider, serve.mjs).
-export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1' }) {
+// key: this Mac's own key for the server (local-key.mjs); `coding serve` passes its own instead.
+export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1', key = true }) {
+  const keyArgs = key ? ['--api-key-file', localKeyFile()] : [];
   // A model that only compares meanings: the engine's embedding mode, one
   // slot, room for a few short texts at once.
   if (model.kind === 'embedding') {
     return ['-m', modelPath(model), '--host', '127.0.0.1', '--port', String(port), '--embedding', '--pooling', model.pooling ?? 'cls',
-      '-c', String(ctx ?? model.ctx ?? 2048), '-ub', String(ctx ?? model.ctx ?? 2048), '-ngl', '99', '-np', '1', '--no-webui'];
+      '-c', String(ctx ?? model.ctx ?? 2048), '-ub', String(ctx ?? model.ctx ?? 2048), '-ngl', '99', '-np', '1', '--no-webui', ...keyArgs];
   }
   // A model that reads a request with each piece and scores the pair: the
   // engine's reranking mode (its own template and scoring head), one slot,
@@ -143,7 +146,7 @@ export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1'
   if (model.kind === 'rerank') {
     const c = String(ctx ?? model.ctx ?? 8192);
     return ['-m', modelPath(model), '--host', '127.0.0.1', '--port', String(port), '--rerank',
-      '-c', c, '-ub', c, '-b', c, '-ngl', '99', '-np', '1', '--no-webui'];
+      '-c', c, '-ub', c, '-b', c, '-ngl', '99', '-np', '1', '--no-webui', ...keyArgs];
   }
   // A model on the MLX engine: its own server, which answers the same API (mlx/mlx-server.py). It keeps
   // the conversation's state and checkpoint itself, so none of the cache, slot and helper flags apply.
@@ -153,7 +156,7 @@ export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1'
   }
   return [
     '-m', modelPath(model),
-    '--host', host, '--port', String(port),
+    '--host', host, '--port', String(port), ...keyArgs,
     '-c', String(ctx), '-ngl', '99', '-fa', 'on',
     '-ctk', 'q8_0', '-ctv', 'q8_0',
     '-np', String(model.slots ?? 1), ...(model.slots > 1 ? ['-kvu'] : []), '--no-webui',
@@ -279,7 +282,7 @@ export class ModelServer extends EventEmitter {
     // The log is the server's own output file (not a pipe through this
     // process), so a server that stays loaded keeps writing after we exit.
     const logFd = openSync(logPath, 'a');
-    const args = listen ? [...serverArgs(this.model, { ctx, port, draft, host: listen.host }), ...listen.args] : serverArgs(this.model, { ctx, port, draft });
+    const args = listen ? [...serverArgs(this.model, { ctx, port, draft, host: listen.host, key: !listen.args?.includes('--api-key-file') }), ...listen.args] : serverArgs(this.model, { ctx, port, draft });
     const child = spawn(bin, args, { stdio: ['ignore', logFd, logFd], detached: lingerSecs > 0 });
     closeSync(logFd);
     this.child = child;

@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'n
 import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
 import { HOME, MODELS, isRealHome } from '../registry.mjs';
+import { localAuth } from './local-key.mjs';
 import { CLAUDE_HOST, CLAUDE_CTX, CLAUDE_MODELS, claudeProbe } from './claude.mjs';
 import { ollamaModel, ollamaPs, ollamaCtx, floorCtx, isOutOfMemory, OPEN_KEEP } from './ollama.mjs';
 
@@ -145,7 +146,7 @@ export function dropEndpoint(url) { ENDPOINTS.delete(norm(url)); }
 export const endpointOf = (url) => (url ? ENDPOINTS.get(norm(url)) ?? null : null);
 export function authHeaders(url) {
   const key = endpointOf(url)?.key;
-  return key ? { authorization: `Bearer ${key}` } : {};
+  return key ? { authorization: `Bearer ${key}` } : localAuth(url);
 }
 // A call to a model server with its key, when it has one.
 export function modelFetch(url, path, init = {}) {
