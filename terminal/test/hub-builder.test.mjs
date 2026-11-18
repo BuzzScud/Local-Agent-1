@@ -6,11 +6,13 @@ import { test, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdtempSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
+import { createServer } from 'node:net';
 
 // A throwaway home, set before the hub (and the models part) load.
 const HOME = mkdtempSync(join(tmpdir(), 'agentic-hub-builder-'));
 process.env.AGENTIC_HOME = HOME;
-process.env.AGENTIC_BATTLE_PORT = String(20000 + Math.floor(Math.random() * 20000));
+// A port nothing listens on (18 Nov 2026: a random number could be one in use, and the hub then talked to that).
+process.env.AGENTIC_BATTLE_PORT = String(await new Promise((ok) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => ok(port)); }); }));
 const { startWeightsServer } = await import('../src/app/weights.mjs');
 const { builderRoute } = await import('../src/app/builder-hub.mjs');
 const REPO = join(import.meta.dir, '..', '..');

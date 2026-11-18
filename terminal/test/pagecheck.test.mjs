@@ -3,7 +3,7 @@
 // scripted model with a real browser.
 import { test, expect } from 'bun:test';
 import { needs } from './needs.mjs';
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -107,7 +107,20 @@ test('both scripts are valid JavaScript', () => {
 // The whole path needs a real browser: Playwright from a project on this Mac,
 // copied into the test project (the fence lets a command read its own
 // project, not another one's node_modules).
-const PW = [join(homedir(), 'Desktop', 'MAIN2026', 'node_modules')].find((d) => existsSync(join(d, 'playwright', 'package.json')) && existsSync(join(d, 'playwright-core', 'package.json')));
+// Where Playwright is (18 Nov 2026: only one project of the owner's was looked in, so any other Mac skipped these):
+// AGENTIC_PLAYWRIGHT names a node_modules folder that holds it; else this repo's own, npm's global one and that
+// project. Its two browsers (pagecheck.mjs ENGINES) must be downloaded too (PLAYWRIGHT_BROWSERS_PATH, else
+// ~/Library/Caches/ms-playwright), or the tests are skipped by name ("no Playwright") instead of failing in the browser.
+function findPlaywright() {
+  const global = spawnSync('npm', ['root', '-g'], { encoding: 'utf8', timeout: 10_000 }).stdout?.trim();
+  const dirs = [process.env.AGENTIC_PLAYWRIGHT, join(import.meta.dir, '..', '..', 'node_modules'), global, join(homedir(), 'Desktop', 'MAIN2026', 'node_modules')].filter(Boolean);
+  const mods = dirs.find((d) => existsSync(join(d, 'playwright', 'package.json')) && existsSync(join(d, 'playwright-core', 'package.json')));
+  const browsers = process.env.PLAYWRIGHT_BROWSERS_PATH || join(homedir(), 'Library', 'Caches', 'ms-playwright');
+  let have = false;
+  try { const names = readdirSync(browsers); have = ['webkit', 'chromium'].every((e) => names.some((n) => n.startsWith(`${e}-`))); } catch { /* no browsers downloaded */ }
+  return mods && have ? mods : null;
+}
+const PW = findPlaywright();
 function pageProject() {
   const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-page-')), 'project');
   cpSync(join(import.meta.dir, 'fixture-page'), cwd, { recursive: true });
