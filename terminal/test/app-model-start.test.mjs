@@ -3,12 +3,12 @@
 // waits, /start loads the model and sends it, /stop unloads it and gives the memory back,
 // /autostart on loads it as the next window opens, and quitting leaves nothing loaded.
 import { test, expect } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty, emulate } from './pty.mjs';
 import { ASK_CURSOR } from '../src/app/mouse.mjs';
 import { setup, quit } from './app-setup.mjs';
-import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+import { ENGINE, MODELS, DEFAULT_MODEL, engineOf } from '../../models/index.mjs';
 
 const D = MODELS[DEFAULT_MODEL]; // the stand-in plays the default model
 function withStandInModel() {
@@ -217,3 +217,27 @@ test('the / menu under the live start page: the 18 of this Mac (with /jumptomac,
     expect(r.snapshots.ready.match(/Or start something new/g)).toHaveLength(1); // changed in place, not printed again
   }
 }, 200_000);
+
+// The audit of 18 Nov 2026: a /model switch that failed had stopped the old server, yet the footer still said the model
+// was on (modelOff stayed false), and a message then went to a server that was gone. Now it is off, as after a failed /start.
+test('a /model switch that fails leaves the model off, as a /start that failed does: the footer says so', async () => {
+  const { cwd, env, home } = withStandInModel();
+  // K2 Horizon's file is here, and its own engine (IFM's llama.cpp) is a program that ends at once: its server cannot start
+  writeFileSync(join(home, 'models', MODELS.k2.file), 'stand-in');
+  const bin = join(home, 'engine', engineOf(MODELS.k2).tag, 'llama-server');
+  mkdirSync(join(bin, '..'), { recursive: true });
+  writeFileSync(bin, '#!/bin/sh\necho "this engine is broken" >&2\nexit 1\n');
+  chmodSync(bin, 0o755);
+  const r = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 90_000, steps: [
+    { wait: '○ model off · ctrl+t start' },
+    { key: '\x14' }, { wait: `● ${D.name}`, ms: 45_000 }, { wait: 'GB · ctrl+t stop', ms: 15_000 },
+    { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { wait: MODELS.k2.name }, { sleep: 300 },
+    { key: 'down' }, { sleep: 200 }, { key: 'enter' },
+    { wait: 'Could not switch', ms: 30_000 }, { wait: '○ model off · ctrl+t start', ms: 10_000 }, { snapshot: 'after' },
+    ...quit,
+  ] });
+  expect(r.snapshots.after).toMatch(/\/start\s+loads/);
+  expect(r.snapshots.after).not.toMatch(/● (K2|Qwen)/);
+  expect(r.text).not.toContain('restarting it'); // a server that never came up is not started again (and again)
+  expect(servers(home)).toEqual([]);
+}, 100_000);

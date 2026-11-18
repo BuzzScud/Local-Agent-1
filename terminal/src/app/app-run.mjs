@@ -389,7 +389,11 @@ export function runPart(self) {
     self.timeLoad(self.model, !running);
     const srv = new ModelServer(modelWithLimits(self.model, self.limitsRef.current));
     self.serverRef.current = srv;
+    // A server that stopped once it was up is started again; one that stopped while it loaded is this start's own failure
+    // (said below): restarting that loaded the model again up to three times, behind a window that said it was off.
+    let up = false;
     srv.on('crash', ({ code, signal }) => {
+      if (!up) return;
       if (srv.restarts >= 3) { self.push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
       self.push({ type: 'note', text: `The model server stopped (code ${code ?? signal}); restarting it.`, tone: 'warn' });
       self.restartRef.current = srv.restart().then(() => { self.push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => self.push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { self.restartRef.current = null; });
@@ -397,6 +401,7 @@ export function runPart(self) {
     let st;
     try {
       st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
+      up = true;
       if (!stillOn()) return;
       self.timeLoaded(st);
       const want = !self.opts.ctx && self.limitsRef.current.context;
