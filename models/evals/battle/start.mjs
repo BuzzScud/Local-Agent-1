@@ -30,8 +30,16 @@ function jsRunner() {
   return existsSync(bun) ? bun : 'node';
 }
 
+// A runner answers with its pid, and each runner writes that pid into its home's battle folder (runner.mjs): the
+// one at the address is this home's only when the two are the same. A hub on another home (a test's, a preview's)
+// never joins it, so its tests and records stay apart (18 Nov 2026, the audit); it says so instead, since the
+// address is taken. AGENTIC_BATTLE_PORT gives that home a runner of its own.
+const otherHome = (up) => Number(up?.pid) > 0 && Number(up.pid) !== runnerPid();
+const OTHER_HOME = () => `the Arena's address (port ${BATTLE_PORT}) is taken by the runner of another Agentic Coder home, so this one does not join it: set AGENTIC_BATTLE_PORT to give this home its own`;
+
 export async function startBattle({ env = process.env } = {}) {
   const up = await pingInfo();
+  if (up?.arena && otherHome(up)) throw new Error(OTHER_HOME());
   if (up?.arena) return { url: battleUrl(), started: false };
   if (up && !(await stopOld())) throw new Error('the runner running now is from before the Arena, and something is running in it: open the Arena again when that ends');
   const script = join(repoDir(), 'models', 'evals', 'battle', 'runner.mjs');
@@ -44,7 +52,9 @@ export async function startBattle({ env = process.env } = {}) {
   child.unref();
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 150));
-    if (await ping()) return { url: battleUrl(), started: true };
+    const now = await pingInfo();
+    if (now && otherHome(now)) throw new Error(OTHER_HOME()); // another home's took the address first
+    if (now) return { url: battleUrl(), started: true };
   }
   throw new Error(`the arena did not start (see ${P.log.replace(homedir(), '~')})`);
 }

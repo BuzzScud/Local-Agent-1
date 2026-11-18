@@ -99,3 +99,16 @@ test('the record page has no Run tab: a ▶ in its grid sends that test to the A
   expect(html).toContain("parent.postMessage({ agentic: 'arena-pick', test: g.dataset.run, model: g.dataset.model }, '*')");
   expect(html).toContain('/?tab=arena&run=1&test=');
 });
+
+test('a runner of another home at the Arena\'s address is never joined: the tab says why, and this home\'s own is joined again once it is its own', async () => {
+  const pidFile = join(HOME, 'battle', 'runner.pid');
+  const ours = readFileSync(pidFile, 'utf8');
+  // This home's battle folder now names another live process: the runner at the address is no longer this home's.
+  writeFileSync(pidFile, String(process.pid));
+  try {
+    const r = await hubGet('/arena');
+    expect(r.status).toBe(200);
+    expect(await r.text()).toContain('taken by the runner of another Agentic Coder home, so this one does not join it');
+  } finally { writeFileSync(pidFile, ours); }
+  expect((await hubGet('/arena')).status).toBe(302);
+}, 60_000);
