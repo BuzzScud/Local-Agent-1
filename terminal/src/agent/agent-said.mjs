@@ -429,6 +429,13 @@ export function leakedCall(text, before = '') {
   return i < 0 ? null : { line: i + 1, text: lines[i].trim() };
 }
 
+// A call found in the text runs only when it ends the reply: one quoted in the middle of an answer (a fetched page's
+// text the model repeats) is words, not a step (18 Nov 2026, the audit). Closing tags after it are fine.
+const tail = (after) => (after ? { after } : {});
+export const endsReply = (found) => Boolean(found) && (!found.after || /^(?:<\/?[\w|=-]+>\s*)*$/.test(found.after));
+// Tools whose results come from outside the Mac's own files: a page, a search, an MCP server.
+export const OUTSIDE_RESULTS = /^(?:WebFetch|WebSearch|Mcp|mcp__.+)$/;
+
 // A tool call written as text instead of a real call: <tool_call>{...}</tool_call>
 export function toolCallInText(text) {
   // The 27B's own format: <tool_call><function=Name><parameter=key>value</parameter>…</function></tool_call>
@@ -436,7 +443,7 @@ export function toolCallInText(text) {
   if (x) {
     const args = {};
     for (const p of x[2].matchAll(/<parameter=([^>\s]+)>\n?([\s\S]*?)\n?<\/parameter>/g)) args[p[1]] = paramValue(p[2]);
-    return { name: x[1], args: JSON.stringify(args), before: text.slice(0, x.index).trim() };
+    return { name: x[1], args: JSON.stringify(args), before: text.slice(0, x.index).trim(), ...tail(text.slice(x.index + x[0].length).trim()) };
   }
   // The same with its tag cut short: <Name> for <function=Name>, and no <tool_call> round it (Qwen3.6 on a
   // service, 8 Oct 2026: "<Search>\n<parameter=pattern>\nfile-card\n</parameter>\n</function>", every step
@@ -446,7 +453,7 @@ export function toolCallInText(text) {
   if (y) {
     const args = {};
     for (const p of y[2].matchAll(/<parameter=([^>\s]+)>\n?([\s\S]*?)\n?<\/parameter>/g)) args[p[1]] = paramValue(p[2]);
-    return { name: y[1], args: JSON.stringify(args), before: text.slice(0, y.index).trim() };
+    return { name: y[1], args: JSON.stringify(args), before: text.slice(0, y.index).trim(), ...tail(text.slice(y.index + y[0].length).trim()) };
   }
   // K2 Horizon's (its chat template): inside <ifm|tool_calls>, each call is
   //   <ifm|tool_call>Name\n<ifm|arg_key>k</ifm|arg_key>\n[<ifm|arg_type>t</ifm|arg_type>\n]<ifm|arg_value>v</ifm|arg_value>\n…</ifm|tool_call>
@@ -456,11 +463,12 @@ export function toolCallInText(text) {
   if (k) {
     const at = /<ifm\|tool_calls>/.exec(text);
     const before = text.slice(0, at && at.index < k.index ? at.index : k.index).trim();
+    const after = text.slice(k.index + k[0].length).replace(/^\s*<\/ifm\|tool_calls>/, '').trim();
     const body = k[1].trim();
     if (body.startsWith('{')) {
       try {
         const j = JSON.parse(body);
-        if (typeof j.name === 'string') return { name: j.name, args: typeof j.arguments === 'string' ? j.arguments : JSON.stringify(j.arguments ?? {}), before };
+        if (typeof j.name === 'string') return { name: j.name, args: typeof j.arguments === 'string' ? j.arguments : JSON.stringify(j.arguments ?? {}), before, ...tail(after) };
       } catch {}
       return null;
     }
@@ -472,7 +480,7 @@ export function toolCallInText(text) {
       const type = p[2]?.trim();
       args[p[1].trim()] = type === 'string' ? p[3] : paramValue(p[3]);
     }
-    return { name, args: JSON.stringify(args), before };
+    return { name, args: JSON.stringify(args), before, ...tail(after) };
   }
   // JSON inside the tags, as other Qwen-style models write it.
   const m = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/.exec(text);
@@ -480,7 +488,7 @@ export function toolCallInText(text) {
   try {
     const j = JSON.parse(m[1]);
     if (typeof j.name !== 'string') return null;
-    return { name: j.name, args: typeof j.arguments === 'string' ? j.arguments : JSON.stringify(j.arguments ?? {}), before: text.slice(0, m.index).trim() };
+    return { name: j.name, args: typeof j.arguments === 'string' ? j.arguments : JSON.stringify(j.arguments ?? {}), before: text.slice(0, m.index).trim(), ...tail(text.slice(m.index + m[0].length).trim()) };
   } catch { return null; }
 }
 

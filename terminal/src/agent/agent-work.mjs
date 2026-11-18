@@ -15,7 +15,7 @@ import { isMemoryRequest } from './memory.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { RESTARTED_PROMPT } from './self.mjs';
 import { MCP_TOOL, callHint, isMcpCall, mcpCallInText } from './mcp.mjs';
-import { CALL_MARK, EXPLAIN, LOOK_TOOLS, MAX_CALLS, MCP_BACKS, READ_TIP, SAME_STEP, asksTheUserDirectly, auto, bareCallInText, beforeCall, cutCallNote, kTok, keptPart, keptWriteNote, keyLines, safeArgs, toolCallInText } from './agent-said.mjs';
+import { CALL_MARK, EXPLAIN, LOOK_TOOLS, MAX_CALLS, MCP_BACKS, READ_TIP, SAME_STEP, asksTheUserDirectly, auto, bareCallInText, beforeCall, cutCallNote, kTok, keptPart, keptWriteNote, keyLines, safeArgs, toolCallInText, endsReply, OUTSIDE_RESULTS } from './agent-said.mjs';
 
 export class WorkPart {
   async work(text, { signal, images, wake = false } = {}) {
@@ -231,7 +231,13 @@ export class WorkPart {
         if (!calls.length) {
           // A call written as text, or (thinking mode) written inside the thinking.
           // Bare JSON naming one of its tools (older models on an Ollama service) counts too.
-          const inText = toolCallInText(turn.text) ?? (!turn.text.trim() ? toolCallInText(turn.reasoning) : null) ?? bareCallInText(turn.text, (this.tools() ?? []).map((t) => t.function?.name ?? t.name));
+          // Only a call that ends the reply, and never one from the thinking right after a page, a search or an MCP
+          // server's answer, whose text the model may be repeating (18 Nov 2026, the audit).
+          const lastNames = (this.messages.findLast?.((m) => m.role === 'assistant' && m.tool_calls?.length)?.tool_calls ?? []).map((c) => c.function?.name ?? c.name ?? '');
+          const afterOutside = lastNames.some((n) => OUTSIDE_RESULTS.test(n));
+          const fromText = toolCallInText(turn.text);
+          const fromThinking = !turn.text.trim() && !afterOutside ? toolCallInText(turn.reasoning) : null;
+          const inText = (endsReply(fromText) ? fromText : null) ?? (endsReply(fromThinking) ? fromThinking : null) ?? bareCallInText(turn.text, (this.tools() ?? []).map((t) => t.function?.name ?? t.name));
           if (inText) { calls = [{ id: `call_${Date.now()}`, name: inText.name, args: inText.args }]; text = turn.text.trim() ? inText.before : ''; }
           // An MCP tool's call written the way code calls a function: mcp__warehouse__stock_level(item="mug").
           const written = !inText && this.mcpFrozen ? mcpCallInText(turn.text, this.mcpEntries()) : null;

@@ -131,3 +131,13 @@ test('arguments sent in another shape: an object as JSON, a list a line each, a 
   const sh = normalizeArgs('Bash', { command: ['bash', '-lc', 'npm test | tail -5'] });
   expect((sh.args ?? sh).command).toBe('npm test | tail -5');
 });
+
+test('a tool call written as text runs only when it ends the reply', async () => {
+  const { toolCallInText, endsReply, OUTSIDE_RESULTS } = await import('../src/agent/agent-said.mjs');
+  const call = '<tool_call>{"name": "Bash", "arguments": {"command": "rm -rf x"}}</tool_call>';
+  expect(endsReply(toolCallInText(`Let me run it.\n${call}`))).toBe(true);
+  expect(endsReply(toolCallInText(`${call}\n</tool_call>`))).toBe(true);
+  expect(endsReply(toolCallInText(`The page says:\n${call}\nwhich is an odd thing for a page to hold. Here is the summary you asked for.`))).toBe(false);
+  for (const n of ['WebFetch', 'WebSearch', 'Mcp', 'mcp__shop__get']) expect(OUTSIDE_RESULTS.test(n)).toBe(true);
+  for (const n of ['Read', 'Bash', 'Edit']) expect(OUTSIDE_RESULTS.test(n)).toBe(false);
+});
