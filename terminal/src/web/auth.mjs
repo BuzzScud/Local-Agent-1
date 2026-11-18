@@ -7,7 +7,9 @@
 //     with one shared name (8 Oct 2026, the owner's "the admin acct doesnt work").
 //   - Sign-in: a random token in an HttpOnly, SameSite=Strict cookie (Secure behind https), kept
 //     as its sha256, 30 days from the last use. 5 wrong tries a minute for one name from one
-//     address, and sign-in waits a minute.
+//     address, or 20 from one address whatever the names, and sign-in waits a minute. At most 4
+//     passwords are checked at once (each check is argon2id: memory and time); the tries kept are
+//     only the last minute's, 10,000 at most (18 Nov 2026, the audit).
 //   - A change made with the cookie must come from the page itself (Origin = this server).
 //   - API keys: acw_ + 32 letters, shown once, kept as sha256; Authorization: Bearer acw_….
 //   - The first account: with nobody yet, the server prints a one-time setup link (an admin invite).
@@ -16,7 +18,10 @@ import { createHash, randomBytes } from 'node:crypto';
 const cookieName = (id) => `acw_${String(id ?? 'session').replace(/[^A-Za-z0-9]/g, '')}`;
 const SESSION_DAYS = 30;
 const TRIES = 5;
+const IP_TRIES = 20;
 const LOCK_MS = 60_000;
+export const CHECKS_AT_ONCE = 4;
+export const TRIES_KEPT = 10_000;
 export const MIN_PASSWORD = 10;
 
 export const sha = (s) => createHash('sha256').update(String(s)).digest('hex');
@@ -39,6 +44,9 @@ export class Auth {
     this.db = db;
     this.cookie = cookieName(id);
     this.fails = new Map(); // `${ip}|${name}` → [times]
+    this.ipFails = new Map(); // ip → [times], whatever the names
+    this.checking = 0; // password checks running now
+    this.pruned = 0;
     this.runs = new Map(); // run token → { user, run, laguna }
   }
 
@@ -48,22 +56,37 @@ export class Auth {
   users() { return this.db.query('select id, name, role, created, seen from users order by name').all(); }
 
   // ---- sign-in ----
+  // The last minute's tries only: older ones go, and past TRIES_KEPT the oldest go first.
+  prune(now = Date.now()) {
+    for (const m of [this.fails, this.ipFails]) {
+      for (const [k, times] of m) { const recent = times.filter((t) => now - t < LOCK_MS); if (recent.length) m.set(k, recent); else m.delete(k); }
+      for (const k of m.keys()) { if (m.size <= TRIES_KEPT) break; m.delete(k); }
+    }
+    this.pruned = now;
+  }
   locked(ip, name) {
     const k = `${ip}|${String(name).toLowerCase()}`;
     const now = Date.now();
+    if (now - this.pruned > LOCK_MS || this.fails.size > TRIES_KEPT || this.ipFails.size > TRIES_KEPT) this.prune(now);
     const recent = (this.fails.get(k) ?? []).filter((t) => now - t < LOCK_MS);
-    this.fails.set(k, recent);
-    return recent.length >= TRIES;
+    if (recent.length) this.fails.set(k, recent); else this.fails.delete(k);
+    const fromThere = (this.ipFails.get(ip) ?? []).filter((t) => now - t < LOCK_MS);
+    return recent.length >= TRIES || fromThere.length >= IP_TRIES;
   }
   async signIn(name, password, ip) {
     if (this.locked(ip, name)) return { ok: false, error: 'Too many wrong tries: sign-in waits a minute.', locked: true };
+    if (this.checking >= CHECKS_AT_ONCE) return { ok: false, error: 'Many sign-ins at once: try again in a moment.', locked: true };
     const row = this.db.query('select id, pass from users where name = ?1').get(String(name ?? ''));
     // A name that does not exist costs the same time as a wrong password.
     this.dummy ??= hashPassword(randomWord(16));
-    const good = row ? await checkPassword(password, row.pass) : (await checkPassword(password, await this.dummy), false);
+    this.checking++;
+    let good;
+    try { good = row ? await checkPassword(password, row.pass) : (await checkPassword(password, await this.dummy), false); } finally { this.checking--; }
     if (!good) {
       const k = `${ip}|${String(name).toLowerCase()}`;
-      this.fails.set(k, [...(this.fails.get(k) ?? []), Date.now()]);
+      const t = Date.now();
+      this.fails.set(k, [...(this.fails.get(k) ?? []), t]);
+      this.ipFails.set(ip, [...(this.ipFails.get(ip) ?? []).filter((x) => t - x < LOCK_MS), t]);
       return { ok: false, error: 'That username and password do not match.' };
     }
     this.fails.delete(`${ip}|${String(name).toLowerCase()}`);
