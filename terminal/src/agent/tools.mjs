@@ -25,6 +25,7 @@ import { missing, notThere, resolvePath, settlePath } from './tools-paths.mjs';
 import { cut, webFetch, webSearch } from './tools-web.mjs';
 // The biggest file Read and List read into memory (18 Nov 2026, the audit).
 export const READ_WHOLE_MAX = 50_000_000;
+import { writeWhole } from './write-whole.mjs';
 export { arrivedNote, display, needsText, normalizeArgs, parseArgs, patchOps, sentArgs } from './tools-args.mjs';
 export { AGENT_TOOL_DEF, agentToolDef, APP_NOT, APP_TOOL_DEF, EXPLORE_TOOLS, MODEL_TOOL_DEFS, oldSteps, TOOL_DEFS, toolDefs, toolNameOf, toolSchemas, WHOLE_MAX } from './tools-defs.mjs';
 export { findEdit, pageScriptError, stripLineNumbers, syntaxError } from './tools-edit.mjs';
@@ -38,7 +39,7 @@ export function prepare(name, args, env) {
     // SKILLS/<name>: a skill saved in the app's home for every project (skill-write.mjs); SKILLS.md's stay read-only.
     const skill = prepareSkill(name, args, env);
     if (skill) return skill;
-    const p = resolvePath(env.cwd, args.path);
+    const p = resolvePath(env.cwd, args.path, { write: true });
     // outsideOk: the agent's one opening outside the fence, a file asked for on the Desktop (desktopOpen).
     if (!p.inside && !env.outsideOk?.(name, p.abs)) return { error: `${args.path} is outside the project folder, which is not allowed.` };
     if (p.shelf) return { error: `${p.rel} is in ${p.shelf.what}, which are read-only here. Read them; never change them.` };
@@ -373,8 +374,15 @@ export async function execute(name, args, prepared, env) {
         writeSkillFile(prepared.skill.slug, prepared.after, dirname(prepared.abs));
         return { text: savedSkillLine(prepared, env.home ?? homedir()), view: { kind: 'diff', path: prepared.rel, created: prepared.created, hunk: prepared.hunk, additions: prepared.additions, removals: prepared.removals, lines: prepared.after.split('\n').length } };
       }
+      // The change was worked out before the question; a file that changed while it waited (you saved it in your
+      // editor, a formatter ran) is not written over with the older copy (18 Nov 2026, the audit).
+      const now = (() => { try { return readFileSync(prepared.abs, 'utf8'); } catch { return null; } })();
+      if (prepared.created ? now !== null : now !== prepared.before) {
+        const why = prepared.created ? 'was made by something else while it waited' : 'changed while it waited (saved in an editor, or by another program)';
+        return { text: `${prepared.rel} ${why}, so nothing was written. Read it again, then make the change on what it holds now.`, error: true, view: { kind: 'error', message: `${prepared.rel} changed: nothing written` } };
+      }
       mkdirSync(dirname(prepared.abs), { recursive: true });
-      writeFileSync(prepared.abs, prepared.after);
+      writeWhole(prepared.abs, prepared.after);
       const verb = prepared.created ? 'Created' : 'Updated';
       // A file outside the project is named to the model by its full path ("~/Desktop/x.html"), not as a climb
       // out of the folder ("../Shared/Desktop/x.html" was read as a guess at where it went, 5 Oct 2026).

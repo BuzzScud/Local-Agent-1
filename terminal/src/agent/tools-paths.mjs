@@ -71,7 +71,27 @@ const realOf = (p) => {
 // open: Bypass permissions, where any folder may be listed or searched, so a parent of the project
 // named in full is that folder, not a retyped project path (18 Oct 2026: a List of ~/Desktop by its
 // full path, from a project on the Desktop, gave the project's files and the model took them for the Desktop's).
-export function resolvePath(cwd, p, { open = false } = {}) {
+// The folder a mistyped full path names is this project's folder: the same name, or one a letter or two away.
+// (18 Nov 2026, the audit: /tmp/README.md was taken for the project's README.md and a Write meant for /tmp replaced it.)
+const plain = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function nearName(a, b) {
+  a = plain(a); b = plain(b);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 2 || b.length < 4) return false;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length] <= 2;
+}
+
+// write: the path is for Edit or Write. A full path that is not there is moved onto a file of the project only when
+// the folder it named before that file's path is the project's own name (a retyped project path); a read may still
+// be moved by the path's end alone.
+export function resolvePath(cwd, p, { open = false, write = false } = {}) {
   // "~" and "~/…" mean the home folder, as in the shell: a Write to
   // "~/Desktop/notes.html" once made a folder named "~" in the home folder,
   // and Bash's "ls ~/Desktop/notes.html" then could not find the page.
@@ -127,7 +147,7 @@ export function resolvePath(cwd, p, { open = false } = {}) {
       let found = false;
       for (let i = 1; i < parts.length; i++) {
         const candidate = resolve(cwd, parts.slice(i).join(sep));
-        if (existsSync(candidate)) { abs = candidate; found = true; break; }
+        if (existsSync(candidate) && (!write || nearName(parts[i - 1], basename(cwd)))) { abs = candidate; found = true; break; }
       }
       // A new file at a made-up place (6 Oct 2026: Qwen3.6 on the service wrote
       // /home/logan/AI_Projects/calculator/handlers/validate.mjs, refused as outside, three steps lost):
@@ -160,10 +180,12 @@ export function resolvePath(cwd, p, { open = false } = {}) {
   // realRel: where a link inside the project really points (notes.md → .env),
   // so a protected file is still protected under another name (permissions.mjs).
   let realRel;
-  if (inside && existsSync(abs)) {
+  // A new file is judged by the real place of the nearest folder of it that exists (18 Nov 2026, the audit: a folder
+  // in the project linking outside let Write make files out there with no question).
+  if (inside) {
     try {
       const rc = realpathSync(cwd);
-      const ra = realpathSync(abs);
+      const ra = existsSync(abs) ? realpathSync(abs) : realOf(abs);
       inside = within(rc, ra);
       if (inside && relative(rc, ra) !== rel) realRel = relative(rc, ra);
     } catch {}

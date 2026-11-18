@@ -1,6 +1,7 @@
 // The Agent's safety net (agent.mjs): errors kept, files kept as they were, a failed message's changes
 // put back (or kept when it got closer), and a check run aside.
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
+import { writeWhole } from './write-whole.mjs';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Scratch } from '../flows/scratch.mjs';
@@ -70,7 +71,7 @@ export class UndoPart {
       try { now = readFileSync(abs, 'utf8'); } catch {}
       if (now !== t.wrote.get(rel)) { left.push(rel); continue; }
       if (before === null) rmSync(abs, { force: true });
-      else writeFileSync(abs, before);
+      else writeWhole(abs, before);
       back.push(rel);
     }
     t.originals = new Map();

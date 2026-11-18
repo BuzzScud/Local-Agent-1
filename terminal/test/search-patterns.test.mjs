@@ -67,3 +67,35 @@ test('a command the model runs gets no keys; its output is kept to its ends, dec
   const big = await runCommand(`printf '%s' "$(printf 'é%.0s' $(seq 1 5000))"`, { cwd: d, sandbox: false });
   expect(big.lines.join('').includes('�')).toBe(false);
 });
+
+test('an Edit worked out before the question is not written over a file saved meanwhile; links and guessed paths', async () => {
+  const { prepare, execute, resolvePath } = await import('../src/agent/tools.mjs');
+  const { symlinkSync } = await import('node:fs');
+  const d = mkdtempSync(join(tmpdir(), 'agentic-stale-'));
+  writeFileSync(join(d, 'a.txt'), 'one\ntwo\n');
+  const env = { cwd: d };
+  const args = { path: 'a.txt', old_text: 'two', new_text: 'TWO' };
+  const prepared = prepare('Edit', args, env);
+  expect(prepared.after).toBe('one\nTWO\n');
+  // the owner saves the file in their editor while the question waits
+  writeFileSync(join(d, 'a.txt'), 'one\ntwo\nthree (mine)\n');
+  const r = await execute('Edit', args, prepared, env);
+  expect(r.error).toBe(true);
+  expect((await import('node:fs')).readFileSync(join(d, 'a.txt'), 'utf8')).toBe('one\ntwo\nthree (mine)\n');
+  // unchanged: written, whole
+  const p2 = prepare('Edit', { path: 'a.txt', old_text: 'three (mine)', new_text: 'three' }, env);
+  const r2 = await execute('Edit', { path: 'a.txt', old_text: 'three (mine)', new_text: 'three' }, p2, env);
+  expect(r2.error).toBeUndefined();
+  expect((await import('node:fs')).readFileSync(join(d, 'a.txt'), 'utf8')).toBe('one\ntwo\nthree\n');
+  // a new file under a folder that links outside the project is outside
+  const out = mkdtempSync(join(tmpdir(), 'agentic-out-'));
+  symlinkSync(out, join(d, 'linked'));
+  expect(resolvePath(d, 'linked/new.txt').inside).toBe(false);
+  // a full path somewhere else is not moved onto the project's file of the same name for a write
+  writeFileSync(join(d, 'README.md'), '# mine\n');
+  expect(resolvePath(d, '/nowhere-x/README.md', { write: true }).inside).toBe(false);
+  // a retyped project path still is (one letter off in the project's own name)
+  const name = d.split('/').pop();
+  const typo = `/Users/someone/${name.slice(0, -1)}X/README.md`;
+  expect(resolvePath(d, typo, { write: true }).abs).toBe(join(d, 'README.md'));
+});

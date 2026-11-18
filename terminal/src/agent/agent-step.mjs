@@ -520,7 +520,7 @@ export class StepPart {
         return { text: note.text, error: true };
       }
     }
-    const at = args.path ? resolvePath(this.cwd, args.path, { open: this.mode === 'bypass' && (call.name === 'List' || call.name === 'Search') }) : null;
+    const at = args.path ? resolvePath(this.cwd, args.path, { open: this.mode === 'bypass' && (call.name === 'List' || call.name === 'Search'), write: call.name === 'Edit' || call.name === 'Write' }) : null;
     // A folder it looks at outside the project (Bypass, the Desktop, a file you dropped in): a file of
     // that folder it then names is not made up (missingFiles; 18 Oct 2026, ~/Desktop listed in Bypass).
     if (this.turn) for (const p of at && !at.inside ? [at.abs] : call.name === 'Bash' ? outsidePaths(args.command, this.cwd).map((w) => resolvePath(this.cwd, w, { open: true }).abs) : []) {
