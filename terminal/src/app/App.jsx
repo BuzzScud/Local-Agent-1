@@ -831,7 +831,9 @@ export function App({ opts, win, onRestart }) {
   // it, a line and a gap each: the mode the last window left, and on a remote where it runs, its
   // Big-model mode and its load. Once printed it keeps the room it was shown with, until the window
   // changes size.
-  const underRows = heldRows(items, measure.current) + (menu ? menuHeight({ ...menu, index: menuIdx }, width) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
+  // Only while the page is held: heldRows walks every item, and once the page has gone nothing reads it (every render
+  // walked the whole conversation for it before, the audit of 18 Nov 2026).
+  const underRows = holdRef.current ? heldRows(items, measure.current) + (menu ? menuHeight({ ...menu, index: menuIdx }, width) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0) : 0;
   const heldRoom = (rows ?? 40) - 7 - underRows;
   if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRoom >= START_MIN)) holdRef.current = false;
   if (holdRef.current) pageRoomRef.current = { room: heldRoom, rows: rows ?? 40 };
@@ -847,9 +849,11 @@ export function App({ opts, win, onRestart }) {
   // On a service of its own (/remote's "Just this window"): "this window" too.
   const profileTag = model.remote && agent.router?.active() ? ((agent.pinned && agent.pinned.model === agent.modelName()) || agent.router.own ? 'this window' : agent.routeName ?? null) : null;
   const modelState = opts.url ? null : model.remote ? { remote: true, state: remoteState ?? 'connecting', name: remoteName, where: model.remote.label, gb: remoteGb, profile: profileTag } : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
+  // The start notes' item as drawn (sayStart), looked for once a list of items, not at every render.
+  const startSaidNow = useMemo(() => items.find((x) => x.type === 'startnotes')?.said ?? null, [items]);
   // What primeRows needs to measure items as they are printed. The tip (startTip) is on the page while
   // it has room for its Try rows, else on the footer.
-  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, svc: modelState, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running, said: items.find((x) => x.type === 'startnotes')?.said ?? null, modeId: mode };
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]), room: pageRoom, look: homeLook, mode: modeWord(mode), local: !model.remote && !opts.url, svc: modelState, tip, news: opts.start?.news, places: opts.start?.places, folders: opts.start?.folders, memory: opts.start?.memory, running: opts.start?.running, said: startSaidNow, modeId: mode };
   const tipOnPage = homeLook === 'launcher' && Boolean(tip) && pageRoom - 2 >= START_BIG; // the Menu leaves it on the footer
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, view: stepsView };
   itemsRef.current = items;

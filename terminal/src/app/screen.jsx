@@ -57,7 +57,20 @@ const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}${it.type === 'welcome' ? `
 // foldSteps); while a turn works, a run still open at the end is held for the live area. view (/steps,
 // App.jsx): grouped, the model's lines and their steps as task rows (task-rows.jsx; open: the ones you
 // opened; the task row under way held); words, only what the model says; open (or none), every step as before.
+// Worked out once for each list of items, working or not and view (the audit of 18 Nov 2026: every render, every streamed
+// token, walked the whole conversation, here and again in the window's bridge). The list is new whenever an item comes
+// (setItems), and view is App.jsx's stepsView, new when /steps or an opened row changes; nothing else goes in.
+const printedMemo = new WeakMap(); // items → [{ working, view, out }]
 export function printedOf(items, working = false, view = null) {
+  if (!items || typeof items !== 'object') return printedNow(items, working, view);
+  const seen = printedMemo.get(items);
+  const hit = seen?.find((m) => m.working === working && m.view === view);
+  if (hit) return hit.out;
+  const out = printedNow(items, working, view);
+  if (seen) { seen.push({ working, view, out }); if (seen.length > 4) seen.shift(); } else printedMemo.set(items, [{ working, view, out }]);
+  return out;
+}
+function printedNow(items, working, view) {
   if (!view || view.steps === 'open') return foldSteps(items, working);
   const g = groupWork(foldSteps(items).printed, { working });
   if (view.steps === 'words') return { printed: g.printed.filter((it) => it.type !== 'group'), held: g.held };
