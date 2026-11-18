@@ -12,7 +12,8 @@ if [ ! -x "$cargo" ]; then
   exit 1
 fi
 cd "$here"
-CARGO_TARGET_DIR="$target" "$cargo" build --release -j "${AGENTIC_WINDOW_JOBS:-4}"
+# --locked: the crates Cargo.lock names, never newer ones picked at build time (18 Nov 2026, the audit).
+CARGO_TARGET_DIR="$target" "$cargo" build --release --locked -j "${AGENTIC_WINDOW_JOBS:-4}"
 app="$home/app/Agentic Coder Window.app"
 new="$app.new"
 rm -rf "$new"
@@ -34,6 +35,12 @@ cat > "$new/Contents/Info.plist" <<'PLIST'
   <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+# A window whose main.rs reads its page's address from AGENTIC_WINDOW_URL says so here, and the window server then
+# passes the address (with its key) that way instead of on the command line, which ps shows to every account
+# (terminal/src/window/server.mjs urlFromEnv). An older main.rs still takes --url.
+if grep -q AGENTIC_WINDOW_URL "$here/src/main.rs"; then
+  /usr/libexec/PlistBuddy -c 'Add :AgenticURLFromEnv bool true' "$new/Contents/Info.plist" >/dev/null
+fi
 codesign --force --deep --sign - "$new" >/dev/null 2>&1 || true
 rm -rf "$app"
 mv "$new" "$app"

@@ -15,6 +15,8 @@
 #   AGENTIC_BUILD_ONLY=1 coding  builds and installs as a start does, then ends (bun run install-cli).
 #   AGENTIC_ON_OPEN=1 coding     what a Terminal opening runs (the lines on_open_hook puts in ~/.zshrc): asks GitHub and
 #                                builds as a start does, at most once every 10 minutes, without starting the app.
+#   AGENTIC_INSTALL=1            bun run install-cli: this file, run from the repo, installs itself as ~/.local/bin/coding
+#                                for that folder (install_cli below), then builds.
 REPO="${AGENTIC_REPO:-__REPO__}"
 APP="$HOME/.agentic-coder/app/agentic-coder"
 SRC="$HOME/.agentic-coder/build/main"
@@ -28,6 +30,27 @@ WIN="$WHOME/app/Agentic Coder Window.app"
 dim() { printf '\033[2m%s\033[0m\n' "$1" >&2; }
 warn() { printf '\033[33m%s\033[0m\n' "$1" >&2; }
 tilde() { echo "$1" | sed "s|^$HOME|~|"; }
+
+# The app's home is yours alone (18 Nov 2026, the audit: it was open to every account on the Mac, and logs/web.log
+# holds an invite link): the folder 700, and what is in its logs for you only. The default home always; another
+# home (AGENTIC_HOME) only when it is a folder of yours.
+private_home() {
+  for h in "$HOME/.agentic-coder" "$WHOME"; do
+    [ -d "$h" ] && [ ! -L "$h" ] && [ -O "$h" ] || continue
+    chmod 700 "$h" 2>/dev/null
+    [ -d "$h/logs" ] && chmod -R go-rwx "$h/logs" 2>/dev/null
+  done
+  return 0
+}
+
+# A folder whose path holds a quote, a $, a backquote, a backslash, a } or a new line cannot go in the REPO line at the
+# top of this file: in its "${…:-…}" those end the quotes or the default, or run as code (18 Nov 2026, the audit).
+unsafe_path() {
+  case "$1" in *[\"\'\$\`\\}]*) return 0 ;; esac
+  case "$1" in *'
+'*) return 0 ;; esac
+  return 1
+}
 
 # git with no terminal to ask on (a password or host key prompt fails instead of
 # waiting), as update.mjs runs it.
@@ -82,6 +105,7 @@ fetch_main() {
 # The folder, for your own work in it (bun run start): fast-forwarded to GitHub's main, only on main, only a
 # fast-forward. Git refuses, and nothing changes, when a file you changed is in the way or the folder's main has
 # commits GitHub does not; the app runs GitHub's main either way.
+# $1 = noinstall: a Terminal opening, which runs nothing in the folder (18 Nov 2026): the next start installs.
 pull() {
   [ "$fetched" = 1 ] || return 0
   [ "$(g symbolic-ref --short -q HEAD)" = main ] || return 0
@@ -99,8 +123,10 @@ pull() {
     return 0
   fi
   if [ "$n" = 1 ]; then dim "↻ Pulled 1 update from GitHub"; else dim "↻ Pulled $n updates from GitHub"; fi
-  # Packages for the folder's own runs (bun run start), as bun install does after a pull that changed them.
-  if [ -n "$(g diff --name-only "$old" "$new" -- package.json bun.lock patches)" ] && [ -x "$BUN" ]; then
+  # Packages for the folder's own runs (bun run start), as bun install does after a pull that changed them: only when
+  # that pull changed a package file, so a start does not run an install where other sessions work for nothing.
+  [ "${1:-}" = noinstall ] && return 0
+  if [ -n "$(g diff --name-only "$old" "$new" -- package.json package-lock.json bun.lock patches)" ] && [ -x "$BUN" ]; then
     dim "↻ Installing the packages Agentic Coder now needs…"
     (cd "$REPO" && "$BUN" install) >"$LOG.install" 2>&1 || warn "! bun install failed (see $(tilde "$LOG.install"))"
   fi
@@ -152,6 +178,13 @@ rebuild() {
   # that Bun adds (background sessions need 1.3.5 or later).
   BUNV="$("$BUN" --version 2>/dev/null)"
   built="$(cat "$APP.commit" 2>/dev/null)"
+  # Only a main that carries on from the one this Mac built last (18 Nov 2026, the audit): a main that was rewritten
+  # or force-pushed, or that this repo does not hold the last build's commit for, is not built, and the app you have
+  # stays. If that main is yours on purpose, bun run install-cli in the folder builds it (it forgets the last build).
+  if [ -n "$built" ] && [ "$built" != "$want" ] && [ -x "$APP" ] && ! g merge-base --is-ancestor "$built" "$want" 2>/dev/null; then
+    warn "! GitHub's main ($(printf '%s' "$want" | cut -c1-7)) does not carry on from the main this Mac built ($(printf '%s' "$built" | cut -c1-7)): it was rewritten or force-pushed, so it is not built. The app stays as it was. If that main is meant, run bun run install-cli in $(tilde "$REPO")."
+    return 0
+  fi
   build=1
   if [ -x "$APP" ] && [ "$(cat "$APP.bun" 2>/dev/null)" = "$BUNV" ] && [ -d "$SRC" ] && [ -n "$built" ] && g cat-file -e "$built^{commit}" 2>/dev/null; then
     [ "$built" = "$want" ] && return 0
@@ -162,7 +195,8 @@ rebuild() {
   new="$SRC.new.$$"
   rm -rf "$new" "$new.tar" && mkdir -p "$new"
   paths=""
-  for p in terminal/src terminal/rules terminal/app models package.json bun.lock bunfig.toml patches; do
+  # terminal/test/test-tmp.mjs: the tests' sweep, which a Terminal opening runs from this copy (on_open).
+  for p in terminal/src terminal/rules terminal/app models package.json bun.lock bunfig.toml patches terminal/test/test-tmp.mjs; do
     g cat-file -e "$want:$p" 2>/dev/null && paths="$paths $p"
   done
   # shellcheck disable=SC2086 # git's own names, no spaces
@@ -292,13 +326,14 @@ on_open() {
   echo "$now_s" > "$stamp"
   was="$(cat "$APP.commit" 2>/dev/null)"
   fetch_main
-  pull
-  # What earlier test runs left running (a run cut off, one inside Agentic Coder's sandbox, which cannot stop
-  # another's): stopped by the tests' own sweep, from the folder (the build copy has no tests). Outside any sandbox.
-  if [ -f "$REPO/terminal/test/test-tmp.mjs" ] && [ -x "$BUN" ]; then
-    "$BUN" "$REPO/terminal/test/test-tmp.mjs" --sweep >"$WHOME/logs/on-open.sweep" 2>&1
-  fi
+  pull noinstall
   rebuild
+  # What earlier test runs left running (a run cut off, one inside Agentic Coder's sandbox, which cannot stop
+  # another's): stopped by the tests' own sweep. Run from the clean copy of the main built just now, never from the
+  # folder, whose files anyone working in it may have changed (18 Nov 2026, the audit). Outside any sandbox.
+  if [ -f "$SRC/terminal/test/test-tmp.mjs" ] && [ "$(cat "$APP.commit" 2>/dev/null)" = "$(main_ref)" ] && [ -x "$BUN" ]; then
+    "$BUN" "$SRC/terminal/test/test-tmp.mjs" --sweep >"$WHOME/logs/on-open.sweep" 2>&1
+  fi
   window_shell
   now="$(cat "$APP.commit" 2>/dev/null)"
   if [ -n "$now" ] && [ "$now" != "$was" ]; then
@@ -308,12 +343,21 @@ on_open() {
 }
 # The lines in ~/.zshrc that start it, put there once by a start or bun run install-cli (the note on-open.hook says they
 # were, so lines you take out stay out). Only for zsh, the Mac's own shell; never with AGENTIC_ON_OPEN_HOOK=off (the
-# tests). A launchd service has no SHELL: the account's own shell is asked then.
+# tests). A launchd service has no SHELL: the account's own shell is asked then. Asked first (18 Nov 2026, the audit:
+# they were added without a word asked): AGENTIC_ON_OPEN_HOOK=on is a yes given already (install.sh asks, AGENTIC_YES=1
+# says yes); unset, a start in a terminal asks once, and a no is kept in the note too; with no terminal, nothing yet.
 on_open_hook() {
-  [ "${AGENTIC_ON_OPEN_HOOK:-on}" = off ] && return 0
+  [ "${AGENTIC_ON_OPEN_HOOK:-}" = off ] && return 0
   [ -e "$WHOME/on-open.hook" ] && return 0
   sh_="${SHELL:-$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null | awk '{print $2}')}"
   case "$sh_" in *zsh) ;; *) return 0 ;; esac
+  if [ "${AGENTIC_ON_OPEN_HOOK:-}" != on ]; then
+    # Only you at a terminal: not the window's or a session's own run of this script (their terminal is the app's).
+    [ -t 0 ] && [ -t 2 ] && [ -z "${AGENTIC_IN_HOST:-}" ] && [ -z "${AGENTIC_WINDOW_CHILD:-}" ] || return 0
+    printf 'Update Agentic Coder from GitHub whenever a Terminal opens? It adds a few lines to %s [Y/n] ' "$(tilde "${ZDOTDIR:-$HOME}/.zshrc")" >&2
+    read -r yes_ || yes_=n
+    case "$yes_" in [nN]*) mkdir -p "$WHOME" && echo "declined $(date)" > "$WHOME/on-open.hook"; dim "Not added: coding updates itself when you start it."; return 0 ;; esac
+  fi
   rc="${ZDOTDIR:-$HOME}/.zshrc"
   if ! grep -qF '>>> Agentic Coder: update when a Terminal opens' "$rc" 2>/dev/null; then
     cat >> "$rc" <<'ZSHRC' || return 0
@@ -331,10 +375,29 @@ ZSHRC
   mkdir -p "$WHOME" && date > "$WHOME/on-open.hook"
 }
 
+# bun run install-cli (AGENTIC_INSTALL=1, run from the repo with AGENTIC_REPO set to it): this file becomes
+# ~/.local/bin/coding with the folder in its REPO line (put in by awk from the environment, word for word, never
+# through sed or a shell's quotes), then that coding builds and installs main and ends (AGENTIC_BUILD_ONLY).
+install_cli() {
+  if [ -z "${AGENTIC_REPO:-}" ] || unsafe_path "$REPO"; then
+    printf 'bun run install-cli: the folder %s has a quote, $, backquote, backslash, } or new line in its path, which the coding command cannot hold. Move or rename it, then run this again.\n' "$(tilde "$REPO")" >&2
+    exit 1
+  fi
+  bin="$HOME/.local/bin"
+  mkdir -p "$bin" "$HOME/.agentic-coder/app" && private_home && rm -f "$APP.commit" || exit 1
+  REPO_PATH="$REPO" awk -v mark="__RE""PO__" 'BEGIN { repo = ENVIRON["REPO_PATH"] } !done && (i = index($0, mark)) { $0 = substr($0, 1, i - 1) repo substr($0, i + length(mark)); done = 1 } { print }' "$0" > "$bin/coding.new" \
+    && chmod +x "$bin/coding.new" && mv -f "$bin/coding.new" "$bin/coding" || exit 1
+  AGENTIC_INSTALL= AGENTIC_REPO="$REPO" AGENTIC_BUILD_ONLY=1 "$bin/coding" || exit $?
+  printf "installed ~/.local/bin/coding: it runs GitHub's main, built again from %s's git when main's code changes\n" "$(tilde "$REPO")"
+  exit 0
+}
+
 # The app learns where the repo (and its DOCS folder) is, and where to leave
 # the arguments for a restart. This script waits while it runs (it reads no
 # keys), so the app has the terminal to itself.
+if [ "${AGENTIC_INSTALL:-0}" = 1 ]; then install_cli; fi
 mkdir -p "$(dirname "$RESTART")"
+private_home
 if [ "${AGENTIC_ON_OPEN:-0}" = 1 ]; then on_open; exit 0; fi
 fetch_main
 pull

@@ -22,7 +22,15 @@ const run = makeRunFolder();
 // a folder is its own before it deletes in it. (The models part also refuses the real home in a test
 // run: models/registry.mjs.)
 process.env.AGENTIC_TEST_HOME = mkdtempSync(join(tmpdir(), 'agentic-test-home-'));
-process.env.AGENTIC_HOME ??= process.env.AGENTIC_TEST_HOME;
+// Always this throwaway, even when the shell that ran the tests has an AGENTIC_HOME of its own (18 Nov 2026,
+// the audit: `AGENTIC_HOME ??=` ran the whole suite against whatever home that shell named). Only
+// AGENTIC_TEST_USE_HOME, a name nothing but a test run reads, points the tests at another folder on purpose.
+process.env.AGENTIC_HOME = process.env.AGENTIC_TEST_USE_HOME || process.env.AGENTIC_TEST_HOME;
+// Colours as the tests were written against: no FORCE_COLOR from the shell (FORCE_COLOR=3 changed what the
+// colour library draws in every file, and beside NO_COLOR node warns on stderr in each process a test starts).
+// A FORCE_COLOR that asked for no colour (0, false) stays that wish, as NO_COLOR.
+if (/^(0|false)$/i.test(process.env.FORCE_COLOR ?? '')) process.env.NO_COLOR ??= '1';
+delete process.env.FORCE_COLOR;
 // This process's run folder, its home inside it, goes when its tests are over, with every program still
 // running from it. A preload's afterAll runs once, after the last file's tests; under bun test the
 // process's 'exit' never fires. (A process that ends without it is cleaned by `bun run test`'s sweep.)

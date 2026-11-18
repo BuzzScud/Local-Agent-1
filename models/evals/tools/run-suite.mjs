@@ -10,7 +10,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSy
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cpus } from 'node:os';
-import { recordTest, codeLabel, recordFile, skipsIn, skipWords } from '../record.mjs';
+import { recordTest, codeLabel, recordFile, skipsIn, skipWords, addFlaky } from '../record.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const extra = process.argv.slice(2);
@@ -40,8 +40,12 @@ function failedIn(text) {
 function record({ pass, fail, files, code, failed = [], why = {}, flaky = [] }) {
   if (extra.length || process.env.CI || process.env.AGENTIC_NO_RECORD || pass == null) return;
   const words = skipWords(why);
-  recordTest({ kind: 'suite', name: 'Unit tests, both parts', code: codeLabel(root), passed: pass, total: pass + fail, secs: (Date.now() - t0) / 1000,
+  const label = codeLabel(root);
+  recordTest({ kind: 'suite', name: 'Unit tests, both parts', code: label, passed: pass, total: pass + fail, secs: (Date.now() - t0) / 1000,
     result: code === 0 && fail === 0 ? 'pass' : 'fail', note: [files ? `${files} files` : '', words ? `skipped: ${words}` : '', flaky.length ? `flaky: ${flaky.length} passed on a second run` : '', code !== 0 && fail === 0 ? `bun test ended with code ${code}` : ''].filter(Boolean).join(' · '), raw: '', failed, skipped: why, flaky });
+  // A flaky test still lets the run pass (a busy Mac fails a different app test in many full runs), but each one is
+  // kept with its day in flaky.jsonl, beside the record, and `bun run check` names the recent ones (18 Nov 2026).
+  addFlaky(flaky, { code: label });
 }
 
 // One `bun test` over the given paths. Live: its output goes straight to the
@@ -127,8 +131,8 @@ await Promise.all(Array.from({ length: Math.min(jobs, files.length) }, worker));
 // The second run, one file at a time on a quiet Mac. Six files at once while other sessions load the
 // Mac failed one or two app-driving tests in 40 of 137 full runs from 1 Oct to 15 Oct 2026, a
 // different one almost every time. A file that passes now counts as passed, and the tests that
-// failed the first time are kept as flaky (the record's line names them); one that fails again
-// counts as failed, with its second run's counts.
+// failed the first time are kept as flaky (the record's line names them, and flaky.jsonl keeps each with its day);
+// one that fails again counts as failed, with its second run's counts.
 for (const { file, first } of again) {
   process.stdout.write(`(again) ${file.slice(2)}: failed in the busy run (${first.failed.length ? first.failed.join('; ') : 'no result could be read'}); running it once more, alone\n`);
   const r = readRun(await bunTest([file], { live: false }));

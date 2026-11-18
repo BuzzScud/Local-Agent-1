@@ -3,10 +3,11 @@
 // file nothing uses. The samples are put together while the test runs, so
 // this file holds nothing the check itself would find.
 import { test, expect } from 'bun:test';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff, suiteEnv, namedModelFiles, bigFiles, unusedCode, READ_LINES, READ_TOKENS, HAND_RUN } from '../evals/tools/check.mjs';
+import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff, suiteEnv, namedModelFiles, bigFiles, unusedCode, READ_LINES, READ_TOKENS, HAND_RUN, flakyTests, FLAKY_DAYS } from '../evals/tools/check.mjs';
 
 const real = 'Zk3vQ9xT7mB2nL5cR8wY1dF6hJ4s';
 const what = (text) => findSecrets(text).map((s) => s.what);
@@ -23,6 +24,12 @@ test('real-looking keys are found, each with its line; the finding never shows t
   expect(what(['-----BEGIN RSA PRIV', 'ATE KEY-----\n', real, real].join(''))).toEqual(['a private key']);
   expect(what(['PROJECT', 'X_API_KEY=1'].join(''))).toEqual(['a broker setting']);
   expect(what(['pass', `word: "${real}"`].join(''))).toEqual(['a password or key written out']);
+  // Agentic Coder's own keys, made as the app makes them (door.mjs, serve.mjs, web/auth.mjs)
+  const b64 = randomBytes(24).toString('base64url');
+  const letters = (n) => Array.from(randomBytes(n), (x) => 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'[x % 57]).join('');
+  for (const key of [['ac', 'd-', b64], ['a', 'c-', b64], ['ac', 'w_', letters(32)], ['ac', 'r_', letters(40)]].map((p) => p.join(''))) expect([key.slice(0, 4), what(`const k = "${key}";`)]).toEqual([key.slice(0, 4), ['an Agentic Coder key']]);
+  // a word that only starts the same, a cookie's name (acw_ and a copy's 10-letter id) and a made-up one are not
+  expect(what(`an ac-${'adapter'}-holder · ${['ac', 'w_'].join('')}${letters(10)} · ${['ac', 'd-'].join('')}${'abcdefghijklmnopqrstuvwxyz012345'}`)).toEqual([]);
 });
 
 test('a made-up sample in a test is not a secret', () => {
@@ -182,4 +189,18 @@ test('code nothing uses, by whole words: an export only its file uses, a name us
   expect(unusedCode(dir, files).exports).toEqual(['terminal/src/a.mjs: mine']);
   // A script run by hand is left alone on purpose.
   expect(HAND_RUN).toContain('models/evals/tools/long-task-page.mjs');
+});
+
+test('the tests that were flaky in the last days are a look line, most often first; none, or only older ones, is fine', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'agentic-flaky-')), 'flaky.jsonl');
+  const now = Date.parse('2026-11-18T12:00:00.000Z');
+  expect(flakyTests({ now, file })).toMatchObject({ mark: 'fine', text: `no test was flaky in the last ${FLAKY_DAYS} days` });
+  const line = (test, at) => `${JSON.stringify({ at, test, code: 'abc1234' })}\n`;
+  writeFileSync(file, line('old.test.mjs › long ago', '2026-11-01T10:00:00.000Z'));
+  expect(flakyTests({ now, file }).mark).toBe('fine');
+  writeFileSync(file, [line('old.test.mjs › long ago', '2026-11-01T10:00:00.000Z'), line('app-settings.test.mjs › /settings', '2026-11-16T10:00:00.000Z'), line('app-effort.test.mjs › /effort', '2026-11-17T10:00:00.000Z'), line('app-settings.test.mjs › /settings', '2026-11-18T09:00:00.000Z'), 'not json\n'].join(''));
+  const r = flakyTests({ now, file });
+  expect(r.mark).toBe('look');
+  expect(r.text).toBe(`2 tests failed in a full run and passed alone in the last ${FLAKY_DAYS} days (the runs passed)`);
+  expect(r.more).toEqual(['app-settings.test.mjs › /settings  2 times, last 2026-11-18', 'app-effort.test.mjs › /effort  once, last 2026-11-17']);
 });

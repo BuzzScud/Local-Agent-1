@@ -4,13 +4,15 @@ import { test, expect } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
-import { runInPty } from './pty.mjs';
+import { runInPty, rowChanged } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
 import { COMMANDS, SETTINGS, IN_SETTINGS, TYPED_ONLY, WHEN_ROOM, REMOTE_ONLY, matchCommands } from '../src/app/commands.mjs';
 import { helpData, cliHelpText, setupModels } from '../src/app/help.mjs';
 
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
-const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 60 }]).flat();
+// Each ↓ waits for the menu's ❯ to move (pty.mjs `until`), not a fixed 60 ms: on a busy Mac two keys that close
+// together reached the app as one, and the menu stopped a row short of Stats (18 Nov 2026).
+const down = (n) => Array.from({ length: n }, () => ({ key: 'down', until: rowChanged }));
 
 test('coding setup --model names every other model in /model, from the model list: none is left out when one is added', () => {
   const all = { a: { id: 'a', name: 'Alpha 9B' }, q: { id: 'q', name: 'Qwen 9B' }, k: { id: 'k', name: 'K 7B' }, b: { id: 'b', name: 'B 27B' } };
@@ -89,9 +91,9 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' },
     { type: '/se' }, { wait: 'Everything else in one menu' }, { key: 'enter' }, { wait: 'enter opens it' }, { sleep: 200 }, { snapshot: 'menu' },
-    ...down(14), { sleep: 150 }, { snapshot: 'stats' }, { key: 'enter' }, { wait: 'writing speed' },
-    { type: '/settings' }, { key: 'enter' }, { wait: 'enter opens it' }, { sleep: 150 }, { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Kept for next time' }, { sleep: 150 }, { snapshot: 'meters' }, { key: 'esc' }, { wait: 'Kept the status bar as off' },
-    { type: '/settings' }, { key: 'enter' }, { wait: 'enter opens it' }, { sleep: 150 }, { key: 'up' }, { sleep: 100 }, { snapshot: 'wrapped' }, { key: 'esc' }, { sleep: 300 }, { snapshot: 'closed' },
+    ...down(13), { key: 'down', until: /❯ Stats\s/ }, { snapshot: 'stats' }, { key: 'enter' }, { wait: 'writing speed' },
+    { type: '/settings' }, { key: 'enter' }, { wait: 'enter opens it' }, { sleep: 150 }, { key: 'down', until: rowChanged }, { key: 'enter' }, { wait: 'Kept for next time' }, { sleep: 150 }, { snapshot: 'meters' }, { key: 'esc' }, { wait: 'Kept the status bar as off' },
+    { type: '/settings' }, { key: 'enter' }, { wait: 'enter opens it' }, { sleep: 150 }, { key: 'up', until: /❯ Update\s/ }, { snapshot: 'wrapped' }, { key: 'esc' }, { sleep: 300 }, { snapshot: 'closed' },
     { type: '/doctor' }, { sleep: 250 }, { snapshot: 'typed' }, { key: 'enter' }, { wait: 'free memory' },
     { type: '/do' }, { key: 'enter' }, { wait: 'Unknown command /do' },
     ...quitTyped,

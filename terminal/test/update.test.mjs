@@ -634,9 +634,37 @@ test('bun run install-cli builds and installs from main, and starts nothing (AGE
   expect(c.builtFrom()).toBe('export const a = 1;');
   expect(readFileSync(`${c.app}.commit`, 'utf8')).toBe(git(local, 'rev-parse', 'main'));
   const pkg = JSON.parse(readFileSync(join(import.meta.dir, '..', '..', 'package.json'), 'utf8')).scripts['install-cli'];
-  expect(pkg).toContain('AGENTIC_BUILD_ONLY=1 ~/.local/bin/coding');
-  expect(pkg).toContain('rm -f ~/.agentic-coder/app/agentic-coder.commit');
-  expect(pkg).not.toContain('bun run build');
+  expect(pkg).toBe('AGENTIC_INSTALL=1 AGENTIC_REPO="$PWD" sh terminal/app/agentic-coder-launcher.sh');
+});
+
+// 18 Nov 2026, the audit: install-cli pasted the folder's path into a line of shell with sed, so a path with a quote,
+// $( or a backquote broke it or ran as code. The launcher installs itself now, the path put in by awk from the
+// environment, and a path its REPO line cannot hold is refused.
+test('bun run install-cli: the launcher installs itself for the folder, forgets the last build and builds main; a path it cannot hold is refused', () => {
+  const { local } = github();
+  const c = launcherOn(local);
+  const src = join(dirname(c.launcher), 'agentic-coder-launcher.sh');
+  writeFileSync(src, LAUNCHER);
+  const install = (repo) => {
+    const r = Bun.spawnSync(['/bin/sh', src], { cwd: dirname(src), env: { ...process.env, PATH: `${c.bin}:${process.env.PATH}`, HOME: c.user, AGENTIC_HOME: '', AGENTIC_INSTALL: '1', AGENTIC_REPO: repo } });
+    return { code: r.exitCode, out: `${r.stdout}${r.stderr}` };
+  };
+  const coding = join(c.user, '.local', 'bin', 'coding');
+  const r = install(local);
+  expect(r.code).toBe(0);
+  expect(r.out).toContain(`Agentic Coder updated to main (${git(local, 'rev-parse', 'main').slice(0, 7)})`); // its stamp was forgotten: built again
+  expect(r.out).toContain("installed ~/.local/bin/coding: it runs GitHub's main");
+  expect(r.out).not.toContain('APP RAN');
+  expect(readFileSync(coding, 'utf8')).toBe(LAUNCHER.replace('__REPO__', local));
+  expect(statSync(coding).mode & 0o111).toBeTruthy();
+  expect(statSync(join(c.user, '.agentic-coder')).mode & 0o777).toBe(0o700);
+  for (const bad of [`${local}"; touch /tmp/x; "`, `${local}$(id)`, `${local}\`id\``, `${local}'s`, `${local}}x`]) {
+    rmSync(coding, { force: true });
+    const no = install(bad);
+    expect([bad, no.code]).toEqual([bad, 1]);
+    expect(no.out).toContain('which the coding command cannot hold');
+    expect(existsSync(coding)).toBe(false);
+  }
 });
 
 test("the build uses the folder's packages when main's package files are the folder's, else installs its own", () => {
@@ -859,7 +887,69 @@ test('a Terminal opening also sweeps what earlier test runs left running, with t
   commit(other, { 'terminal/test/test-tmp.mjs': '// the sweep\n' }, 'the tests\' clean-up');
   git(other, 'push', '-q', 'origin', 'main');
   c.run({ AGENTIC_ON_OPEN: '1', AGENTIC_ON_OPEN_EVERY: '0' });
-  expect(c.bunDid()).toContain(`sweep --sweep with ${join(local, 'terminal/test/test-tmp.mjs')}`);
+  // from the clean copy of main the app was built from, never the folder (18 Nov 2026, the audit)
+  expect(c.bunDid()).toContain(`sweep --sweep with ${join(c.user, '.agentic-coder', 'build', 'main', 'terminal/test/test-tmp.mjs')}`);
+  expect(c.bunDid()).not.toContain(`with ${join(local, 'terminal/test/test-tmp.mjs')}`);
+});
+
+// 18 Nov 2026, the audit: GitHub's main is built only when it carries on from the main this Mac built last. One that
+// was rewritten or force-pushed is not built (the app stays); bun run install-cli builds it when it is meant.
+test('a main that was rewritten or force-pushed is not built: the app stays and it says why; one that carries on is built', () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  const was = readFileSync(`${c.app}.commit`, 'utf8');
+  git(other, 'checkout', '-q', '--orphan', 'rewritten');
+  const forced = commit(other, { 'terminal/src/cli.jsx': '// app\n', 'terminal/src/app/a.mjs': 'export const a = "rewritten";\n' }, 'history rewritten');
+  git(other, 'push', '-q', '-f', 'origin', 'rewritten:main');
+  const r = c.run();
+  expect(r.out).toContain(`GitHub's main (${forced.slice(0, 7)}) does not carry on from the main this Mac built (${was.slice(0, 7)}): it was rewritten or force-pushed, so it is not built.`);
+  expect(r.out).toContain('APP RAN x');
+  expect(c.builtFrom()).toBe('export const a = 1;');
+  expect(readFileSync(`${c.app}.commit`, 'utf8')).toBe(was);
+  // A Terminal opening does not build it either.
+  c.run({ AGENTIC_ON_OPEN: '1', AGENTIC_ON_OPEN_EVERY: '0' });
+  expect(c.builtFrom()).toBe('export const a = 1;');
+  // Back on a main that carries on from the built one: built as before.
+  git(other, 'push', '-q', '-f', 'origin', `${was}:main`);
+  git(other, 'checkout', '-q', '-B', 'main', was);
+  const next = commit(other, { 'terminal/src/app/a.mjs': 'export const a = 2;\n' }, 'carries on');
+  git(other, 'push', '-q', 'origin', 'main');
+  expect(c.run().out).toContain(`Agentic Coder updated to main (${next.slice(0, 7)})`);
+  expect(c.builtFrom()).toBe('export const a = 2;');
+});
+
+// 18 Nov 2026, the audit: the folder's packages are installed only when a pull changed a package file, and never by
+// a Terminal opening (it runs nothing in the folder).
+test('a pull installs the folder\'s packages only when it changed a package file, and a Terminal opening never does', () => {
+  const { local, other } = github();
+  const c = launcherOn(local);
+  commit(other, { 'docs/note.html': '<p>new</p>' }, 'no packages');
+  git(other, 'push', '-q', 'origin', 'main');
+  c.run();
+  expect(c.bunDid()).not.toContain(`install in ${local}`);
+  commit(other, { 'package.json': '{ "name": "x", "dependencies": { "y": "1" } }\n' }, 'a new package');
+  git(other, 'push', '-q', 'origin', 'main');
+  c.run({ AGENTIC_ON_OPEN: '1', AGENTIC_ON_OPEN_EVERY: '0' });
+  expect(readFileSync(join(local, 'package.json'), 'utf8')).toContain('"y"'); // pulled
+  expect(c.bunDid()).not.toContain(`install in ${local}`);
+  commit(other, { 'package-lock.json': '{ "lockfileVersion": 3 }\n' }, 'the lock moved');
+  git(other, 'push', '-q', 'origin', 'main');
+  c.run();
+  expect(c.bunDid()).toContain(`install in ${local}`);
+});
+
+test('the app\'s home is yours alone at each start: the folder 700, its logs for you only', () => {
+  const { local } = github();
+  const c = launcherOn(local);
+  const home = join(c.user, '.agentic-coder');
+  mkdirSync(join(home, 'logs'), { recursive: true });
+  writeFileSync(join(home, 'logs', 'web.log'), 'an invite link\n', { mode: 0o644 });
+  chmodSync(join(home, 'logs', 'web.log'), 0o644);
+  chmodSync(home, 0o755);
+  expect(c.run().out).toContain('APP RAN x');
+  expect(statSync(home).mode & 0o777).toBe(0o700);
+  expect(statSync(join(home, 'logs', 'web.log')).mode & 0o777).toBe(0o600);
+  expect(statSync(join(home, 'logs')).mode & 0o077).toBe(0);
 });
 
 test('a start puts the lines in ~/.zshrc once and says so; lines taken out stay out; not for another shell or with the switch off', () => {
@@ -882,8 +972,8 @@ test('a start puts the lines in ~/.zshrc once and says so; lines taken out stay 
   writeFileSync(rc, 'export PATH="/opt/x:$PATH"\n');
   c.run(zsh);
   expect(readFileSync(rc, 'utf8')).toBe('export PATH="/opt/x:$PATH"\n');
-  // bash, or the switch off: no lines.
-  for (const env of [{ ...zsh, SHELL: '/bin/bash' }, { ...zsh, AGENTIC_ON_OPEN_HOOK: 'off' }]) {
+  // bash, the switch off, or no yes given and no terminal to ask on (18 Nov 2026: asked first now): no lines.
+  for (const env of [{ ...zsh, SHELL: '/bin/bash' }, { ...zsh, AGENTIC_ON_OPEN_HOOK: 'off' }, { ...zsh, AGENTIC_ON_OPEN_HOOK: '' }]) {
     const d = launcherOn(local);
     d.run(env);
     expect(existsSync(join(d.user, '.zshrc'))).toBe(false);

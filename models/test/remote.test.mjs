@@ -13,6 +13,7 @@ import { createServer } from 'node:http';
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-remote-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
 const { parseAddress, isPrivateHost, directUrl, remoteLabel, remoteProblem, remoteRisk, sshArgs, openTunnel, probe, pickRemoteModel, connectRemote, endpointOf, authHeaders, remoteModel, GENERIC_REMOTE, validSshDest, validKey, keyEnd, warmUp, serveArgs, lanAddresses, serverArgs, MODELS, HOME } = await import('../index.mjs');
+const { serveHosts, relayTo } = await import('../runtime/serve.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // A stand-in remote: /health open, the rest behind `key` (as llama-server
@@ -276,14 +277,33 @@ test('the warm-up on a remote llama.cpp reads the instructions into its memory a
   await fake.close();
 });
 
-test('coding serve: open to the network behind its key (or this Mac only), https with a certificate; the addresses others use', () => {
-  expect(serveArgs({ keyFile: '/k' })).toEqual({ host: '0.0.0.0', keyFile: '/k', https: false, args: ['--api-key-file', '/k'] });
+test('coding serve: this Mac and its Tailscale address behind its key (every address only when asked), https with a certificate; the addresses others use', () => {
+  // llama-server itself listens on this Mac only; another address passes its connections on (serveHosts, relayTo)
+  expect(serveArgs({ keyFile: '/k' })).toEqual({ host: '127.0.0.1', keyFile: '/k', https: false, args: ['--api-key-file', '/k'] });
+  expect(serveArgs({ keyFile: '/k', host: '0.0.0.0' }).host).toBe('0.0.0.0');
   expect(serveArgs({ local: true, keyFile: '/k', cert: '/c.pem', certKey: '/k.pem' })).toEqual({ host: '127.0.0.1', keyFile: '/k', https: true, args: ['--api-key-file', '/k', '--ssl-cert-file', '/c.pem', '--ssl-key-file', '/k.pem'] });
   const a = serverArgs(MODELS.qwen, { ctx: 32768, port: 8080, host: '0.0.0.0' });
   expect(a[a.indexOf('--host') + 1]).toBe('0.0.0.0');
   expect(serverArgs(MODELS.qwen, { ctx: 32768, port: 17600 })[serverArgs(MODELS.qwen, { ctx: 32768, port: 17600 }).indexOf('--host') + 1]).toBe('127.0.0.1');
   const ifaces = { lo0: [{ address: '127.0.0.1', family: 'IPv4', internal: true }], en0: [{ address: '192.168.1.40', family: 'IPv4', internal: false }, { address: 'fe80::1', family: 'IPv6', internal: false }], utun4: [{ address: '100.101.12.7', family: 'IPv4', internal: false }], en5: [{ address: '169.254.3.3', family: 'IPv4', internal: false }] };
   expect(lanAddresses(ifaces)).toEqual([{ address: '192.168.1.40', where: 'en0, this network' }, { address: '100.101.12.7', where: 'Tailscale' }]);
+  // where it listens: Tailscale's address and this Mac, never the home network unless asked
+  expect(serveHosts({ ifaces })).toEqual({ llama: '127.0.0.1', relays: ['100.101.12.7'], wide: false });
+  expect(serveHosts({ ifaces: { en0: ifaces.en0 } })).toEqual({ llama: '127.0.0.1', relays: [], wide: false }); // no Tailscale: this Mac only
+  expect(serveHosts({ ifaces, local: true })).toEqual({ llama: '127.0.0.1', relays: [], wide: false });
+  expect(serveHosts({ ifaces, host: '0.0.0.0' })).toEqual({ llama: '0.0.0.0', relays: [], wide: true });
+  expect(serveHosts({ ifaces, host: '192.168.1.40' })).toEqual({ llama: '127.0.0.1', relays: ['192.168.1.40'], wide: false });
+});
+
+test('coding serve passes another address\'s connections on to the model on this Mac, byte for byte', async () => {
+  const { createServer } = await import('node:http');
+  const inner = createServer((q, s) => s.end(`seen ${q.url}`));
+  await new Promise((r) => inner.listen(0, '127.0.0.1', r));
+  const port = inner.address().port;
+  const relay = await relayTo('::1', port); // the same port on another address of this Mac
+  try {
+    expect(await (await fetch(`http://[::1]:${port}/health`)).text()).toBe('seen /health');
+  } finally { relay.close(); inner.close(); }
 });
 
 test('coding serve’s key: made once, readable by you only, kept across starts; --new-key replaces it', () => {

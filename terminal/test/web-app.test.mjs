@@ -16,7 +16,7 @@ const base = mkdtempSync(join(tmpdir(), 'agentic-web-'));
 process.env.AGENTIC_WEB_HOME = join(base, 'web');
 const { calculate, formulasClient, fixExpression } = await import('../src/tools/calculator.mjs');
 const { FairQueue } = await import('../src/web/queue.mjs');
-const { Auth, sha } = await import('../src/web/auth.mjs');
+const { Auth, sha, CHECKS_AT_ONCE, TRIES_KEPT } = await import('../src/web/auth.mjs');
 const { openDb } = await import('../src/web/db.mjs');
 const { startWeb } = await import('../src/web/server.mjs');
 const { saveSettings } = await import('../src/web/config.mjs');
@@ -148,6 +148,26 @@ test('the line: one run a person, two at once, and nobody\'s second run starts b
 });
 
 // ---- accounts ---------------------------------------------------------------------------------
+
+test('sign-in: twenty wrong tries from one address lock it whatever the names; four password checks at once at most; only the last minute\'s tries are kept', async () => {
+  const a = new Auth(openDb(':memory:'));
+  await a.acceptInvite(a.setupLink().token, { name: 'boss', password: 'a long password' });
+  for (let i = 0; i < 20; i++) expect((await a.signIn(`name${i}`, 'wrong one', '198.51.100.7')).locked).toBeUndefined();
+  expect(await a.signIn('boss', 'a long password', '198.51.100.7')).toMatchObject({ ok: false, locked: true });
+  expect((await a.signIn('boss', 'a long password', '198.51.100.8')).ok).toBe(true);
+  // each check is argon2id: past four at once the rest are asked to wait, not queued
+  const many = await Promise.all(Array.from({ length: CHECKS_AT_ONCE + 3 }, (_, i) => a.signIn('boss', 'wrong one', `192.0.2.${i}`)));
+  expect(many.filter((r) => r.locked && /at once/.test(r.error)).length).toBe(3);
+  expect(a.checking).toBe(0);
+  // what is kept: the last minute's tries, and no more than TRIES_KEPT of them
+  a.fails.set('x|y', [Date.now() - 120_000]);
+  a.ipFails.set('x', [Date.now() - 120_000]);
+  a.prune();
+  expect([a.fails.has('x|y'), a.ipFails.has('x')]).toEqual([false, false]);
+  for (let i = 0; i < TRIES_KEPT + 50; i++) a.fails.set(`10.9.${i}|n`, [Date.now()]);
+  a.prune();
+  expect(a.fails.size).toBe(TRIES_KEPT);
+});
 
 test('accounts: the first admin from the setup link, sign-in, five wrong tries wait a minute, invites once, a reset ends other sign-ins, keys', async () => {
   const db = openDb(':memory:');

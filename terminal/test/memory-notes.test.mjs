@@ -114,12 +114,13 @@ test('a save that keeps nothing still says the answer was noted, "no new facts"'
     const save = new AutoSave({ agent, say: (t) => said.push(t) });
     const l = lesson({ outcome: 'done', files: [], request: 'ssh root@the-server' });
     agent.lessons.push(l);
+    const day0 = notes.localDay(); // the day it is noted on: a run across midnight reads that day's file too
     save.settled(l);
     for (let i = 0; i < 40 && !said.length; i++) await wait(50);
     await save.running;
     out.said = said;
     const { join } = await import('node:path');
-    out.note = notes.readNote(join(notes.notesFolder(dirs), notes.localDay() + '.md'));
+    out.note = [day0, notes.localDay()].map((d) => notes.readNote(join(notes.notesFolder(dirs), d + '.md'))).join('');
     await fake.close();
   `);
   expect(o.said).toEqual(['Memory: noted "ssh root@the-server" · no new facts']);

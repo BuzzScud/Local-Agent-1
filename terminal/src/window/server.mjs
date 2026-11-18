@@ -4,8 +4,8 @@
 // this user can open), and serves the window's page (ui.html) on this Mac only, at an address with a key nobody
 // else has. The window (terminal/app/window/, a Tauri shell) opens that page. Keys and clicks come back the same
 // way. Closing the window ends the app as closing its terminal did (it saves first); the app ending closes it.
-import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync, chmodSync, openSync, closeSync } from 'node:fs';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { existsSync, mkdirSync, rmSync, chmodSync, openSync, closeSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
@@ -27,6 +27,14 @@ const APP_NAME = 'Agentic Coder Window.app';
 export function windowApp(env = process.env) {
   const tries = [env.AGENTIC_WINDOW_APP, join(HOME, 'app', APP_NAME, 'Contents', 'MacOS', 'agentic-coder-window'), join(HOME, 'build', 'window-target', 'release', 'agentic-coder-window')];
   return tries.find((p) => p && existsSync(p)) ?? null;
+}
+// A key compared in the same time whatever it holds (18 Nov 2026: `!==` stops at the first letter that differs).
+export const sameKey = (a, b) => typeof a === 'string' && typeof b === 'string' && timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
+// A window that reads its page's address (with the key) from AGENTIC_WINDOW_URL, which no other account sees, instead
+// of --url, which `ps` shows to every account on the Mac: build.sh marks it in its Info.plist (AgenticURLFromEnv) when
+// main.rs reads it. An older window still gets --url.
+export function urlFromEnv(exe) {
+  try { return /<key>AgenticURLFromEnv<\/key>\s*<true\/>/.test(readFileSync(join(exe, '..', '..', 'Info.plist'), 'utf8')); } catch { return false; }
 }
 // `coding` in a terminal opens the window, unless: --terminal, -p, --bg, AGENTIC_WINDOW=off, over SSH or in tmux
 // (no window to open there), not a Mac, the tests, or no window built.
@@ -106,7 +114,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
           const l = s.data.inbox.slice(0, i); s.data.inbox = s.data.inbox.slice(i + 1);
           if (s.data.app) { if (s === appSock) onLine(l); continue; }
           let m; try { m = JSON.parse(l); } catch { m = null; }
-          if (m?.t !== 'hi' || m.key !== appKey) { s.end(); return; }
+          if (m?.t !== 'hi' || !sameKey(m.key, appKey)) { s.end(); return; }
           s.data.app = true; appSock = s; st.items = {}; st.order = []; st.steps = {}; st.last = null; sendAll({ t: 'reset' });
         }
       },
@@ -140,7 +148,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
     hostname: '127.0.0.1', port,
     fetch(req, srv) {
       const u = new URL(req.url);
-      if (u.searchParams.get('t') !== key) return new Response('Not here.', { status: 403 });
+      if (!sameKey(u.searchParams.get('t'), key)) return new Response('Not here.', { status: 403 });
       if (u.pathname === '/ws') return srv.upgrade(req, { data: { screen: false } }) ? undefined : new Response('Not here.', { status: 400 });
       if (u.pathname === '/') return new Response(UI, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (u.pathname === '/sessions') { let list = []; try { list = listSessions(folder).slice(0, 200); } catch {} return Response.json(list); }
@@ -181,7 +189,8 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
   let win = null;
   if (open) {
     const exe = windowApp(env);
-    if (exe) win = Bun.spawn([exe, '--url', url, '--title', `Agentic Coder — ${tilde(folder)}`], { stdio: ['ignore', 'ignore', 'ignore'] });
+    const title = ['--title', `Agentic Coder — ${tilde(folder)}`];
+    if (exe) win = urlFromEnv(exe) ? Bun.spawn([exe, ...title], { env: { ...process.env, AGENTIC_WINDOW_URL: url }, stdio: ['ignore', 'ignore', 'ignore'] }) : Bun.spawn([exe, '--url', url, ...title], { stdio: ['ignore', 'ignore', 'ignore'] });
     else execFile('open', [url]);
     say(`Agentic Coder is open in its own window (${tilde(folder)}). Closing it quits. \`coding --terminal\` runs it here instead.\n`);
   }

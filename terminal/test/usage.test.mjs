@@ -205,10 +205,12 @@ test('on the stand-in Claude API: each reply’s limits are kept for every windo
   const drain = async (it) => { const out = []; for await (const ev of it) out.push(ev); return out; };
   const ask = () => drain(streamChat({ url: fake.url, messages: [{ role: 'user', content: 'hi' }], model: GENERIC_REMOTE, maxTokens: 200 }));
   try {
+    const t0 = Date.now();
     await ask();
     const u = usageNow({ model: OPUS });
     expect(u).toMatchObject({ cap: 500, tier: 'Start', limits: { requests: { limit: 1000, remaining: 997 }, input: { remaining: 1_996_000 } } });
-    expect(u.today.usd).toBeGreaterThan(0); // the reply's cost, on the Claude API's line
+    // the reply's cost, on the Claude API's line: on the day it was asked, or the next when the run crossed midnight
+    expect(Math.max(...[t0, Date.now()].map((now) => usageNow({ model: OPUS, now }).today.usd))).toBeGreaterThan(0);
     const posts = () => fake.seen.filter((s) => s.path.startsWith('/v1/messages')).length;
     const before = posts();
     let err = null;

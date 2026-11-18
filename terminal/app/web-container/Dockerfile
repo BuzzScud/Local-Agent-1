@@ -3,7 +3,11 @@
 #   docker compose -f terminal/app/web-container/compose.yml up -d --build
 FROM oven/bun:1.4.2-slim
 WORKDIR /app
-COPY package.json bun.lock bunfig.toml ./
+# package-lock.json is the lockfile git keeps (bun.lock stays on each Mac): bun reads it and installs exactly those
+# versions (checked 18 Nov 2026 with bun 1.4.2: --frozen-lockfile holds with it). patches/ is Ink's patch, applied
+# by the install (patchedDependencies); without it the install stops.
+COPY package.json package-lock.json bunfig.toml ./
+COPY patches ./patches
 COPY terminal ./terminal
 COPY models ./models
 RUN bun install --production --frozen-lockfile --ignore-scripts

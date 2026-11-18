@@ -60,3 +60,22 @@ test('a test run takes its own throwaway home away with it when it ends', () => 
   expect(readdirSync(tmp).filter((n) => n.startsWith('agentic-test-home-'))).toEqual([]);
 }, 90_000);
 
+
+test('a shell with AGENTIC_HOME and FORCE_COLOR set still runs the tests in a throwaway home, without FORCE_COLOR', () => {
+  const shellHome = mkdtempSync(join(tmpdir(), 'agentic-shell-home-'));
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-preload-'));
+  const file = join(dir, 'env.test.mjs');
+  writeFileSync(file, `import { test, expect } from 'bun:test';
+test('env', () => {
+  expect(process.env.AGENTIC_HOME).toBe(process.env.AGENTIC_TEST_HOME);
+  expect(process.env.AGENTIC_HOME).not.toBe(${JSON.stringify(shellHome)});
+  expect(process.env.FORCE_COLOR).toBeUndefined();
+});
+`);
+  const env = { ...process.env, AGENTIC_HOME: shellHome, FORCE_COLOR: '3', NO_COLOR: '1' };
+  delete env.AGENTIC_TEST_USE_HOME;
+  const r = spawnSync('bun', ['test', file], { cwd: REPO, env, encoding: 'utf8', timeout: 60_000 });
+  const out = `${r.stdout}${r.stderr}`.replace(/\x1b\[[0-9;]*m/g, ''); // bun's own lines are in colour: it read FORCE_COLOR first
+  expect(out).toMatch(/^\s*1 pass$/m);
+  expect(readdirSync(shellHome)).toEqual([]); // nothing was written in the shell's home
+}, 90_000);

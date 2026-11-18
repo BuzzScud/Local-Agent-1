@@ -41,6 +41,10 @@ const isControl = (k) => typeof k === 'string' && k.length === 1 && k.charCodeAt
 
 // The last lines of a screen that hold something, for a failure's message.
 const screenEnd = (text, n = 10) => text.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim()).slice(-n).map((l) => `  | ${l.slice(0, 150)}`).join('\n');
+// For a step's `until`: the ❯ row of a menu or panel is another row, or reads otherwise, than before the key
+// (↑↓ moved it, ←→ changed its value).
+const marked = (s) => s.split('\n').filter((l) => l.includes('❯')).join('\n');
+export const rowChanged = (before, now) => marked(before) !== marked(now);
 
 export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = [], env = {}, timeoutMs = 30_000, bin = process.env.AGENTIC_BIN }) {
   const out = join(cwd, '..', `pty-${Date.now()}.log`);
@@ -158,8 +162,23 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
       }
       // Typing waits for that too (7 Oct 2026): a "/" typed on a busy Mac the moment the prompt box was drawn
       // never reached the app, and the / menu test timed out with an empty box on screen.
+      // until: after the step's typing or key, wait for the screen to show it (a text, a pattern, or a function of the
+      // screen before and now, such as `rowChanged`), not a fixed sleep: on a busy Mac 80 ms was sometimes too little, and
+      // two keys then reached the app as one (18 Nov 2026, app-effort and app-settings in a loaded run).
+      // Looked for on the window as it shows now (its last rows), never in the scrollback: a panel opened again
+      // must not be taken for the one before it.
+      const shown = (t) => t.split('\n').slice(-rows).join('\n');
+      const before = s.until ? shown(await screenNow()) : '';
       if (s.type) { await readsKeys(); for (const ch of s.type) { stdin.write(ch); await new Promise((r) => setTimeout(r, 8)); } }
       if (s.key) { const k = KEYS[s.key] ?? s.key; if (isControl(k)) await readsKeys(); stdin.write(k); }
+      if (s.until) {
+        const t0 = Date.now();
+        const hit = (now) => (typeof s.until === 'function' ? s.until(before, now) : typeof s.until === 'string' ? now.includes(s.until) : s.until.test(now));
+        while (!hit(shown(await screenNow()))) {
+          if (Date.now() - t0 > (s.ms ?? 15_000)) throw new Error(`timed out waiting after ${s.key ? `the key ${s.key}` : `typing "${s.type}"`} for ${typeof s.until === 'function' ? 'the screen to change' : `"${s.until}"`}; the screen ended with:\n${screenEnd(await screenNow())}`);
+          await new Promise((r) => setTimeout(r, 40));
+        }
+      }
     }
   } finally {
     // The fifo closes first: cat sees its end and lets the pipeline finish,

@@ -2,7 +2,8 @@
 // server (llama.cpp built from source on the model's engine, see
 // models/runtime/engine), the model, its guessing helper and the memory's
 // matcher — and checks the files' SHA-256. Safe to run again: finished parts are skipped.
-import { createWriteStream, existsSync, mkdirSync, renameSync, statSync, readdirSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, renameSync, statSync, readdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import { createHash } from 'node:crypto';
 import { HOME, ENGINE, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, MODELS_DIR, visionPath, engineOf, serverBinOf, modelPath, draftPath } from '../registry.mjs';
 import { spawnSync } from 'node:child_process';
@@ -12,20 +13,50 @@ import { buildEngine } from './engine/build.mjs';
 
 export const RUNTIME = ENGINE;
 
-async function download(url, file, say) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`download failed (${res.status}) for ${url}`);
-  const total = Number(res.headers.get('content-length') ?? 0);
+// Downloads url into file through file.part (18 Nov 2026, the audit: the write had no error handler, so a full
+// disk ended the process; it took no notice of a slow disk, could wait for ever, and a cut started from nothing).
+// Written with a pipeline, so the disk sets the pace and an error ends the download with a plain reason; no byte
+// for idleMs ends it too. A .part left by a cut is carried on from where it stopped (a Range request); a server that
+// sends the whole file instead starts it again. The file is checked (SHA-256) after, as before. bytes: its size,
+// when known, so a .part already whole is not asked for again.
+export async function download(url, file, say, { idleMs = 60_000, bytes = 0, fetchFn = fetch } = {}) {
   const part = `${file}.part`;
-  const out = createWriteStream(part);
-  let got = 0;
-  let last = 0;
-  for await (const chunk of res.body) {
-    out.write(chunk);
-    got += chunk.length;
-    if (Date.now() - last > 500) { last = Date.now(); say(`  ${(got / 1e9).toFixed(2)} of ${(total / 1e9).toFixed(2)} GB`, true); }
-  }
-  await new Promise((r) => out.end(r));
+  let have = 0;
+  try { have = statSync(part).size; } catch { /* nothing yet */ }
+  if (bytes && have === bytes) { renameSync(part, file); say(`  ${(have / 1e9).toFixed(2)} GB done`); return; }
+  if (bytes && have > bytes) have = 0;
+  const stop = new AbortController();
+  let timer = null;
+  const awake = () => { clearTimeout(timer); timer = setTimeout(() => stop.abort(), idleMs); };
+  const stalled = () => new Error(`the download stopped: nothing came for ${Math.round(idleMs / 1000)} s from ${new URL(url).host}. Run coding setup again to carry on from ${(got / 1e9).toFixed(2)} GB`);
+  let got = have;
+  awake();
+  try {
+    let res;
+    try { res = await fetchFn(url, { signal: stop.signal, headers: have ? { range: `bytes=${have}-` } : {} }); } catch (e) { throw stop.signal.aborted ? stalled() : e; }
+    if (res.status === 416 && have) { try { unlinkSync(part); } catch {} return download(url, file, say, { idleMs, bytes, fetchFn }); }
+    if (!res.ok) throw new Error(`download failed (${res.status}) for ${url}`);
+    const resumed = res.status === 206 && have > 0;
+    if (!resumed) got = 0;
+    const total = (resumed ? have : 0) + Number(res.headers.get('content-length') ?? 0);
+    if (resumed) say(`  carrying on from ${(have / 1e9).toFixed(2)} GB`);
+    let last = 0;
+    const count = async function* (body) {
+      for await (const chunk of body) {
+        awake();
+        got += chunk.length;
+        if (Date.now() - last > 500) { last = Date.now(); say(`  ${(got / 1e9).toFixed(2)} of ${(total / 1e9).toFixed(2)} GB`, true); }
+        yield chunk;
+      }
+    };
+    try {
+      await pipeline(res.body, count, createWriteStream(part, { flags: resumed ? 'a' : 'w' }));
+    } catch (e) {
+      if (stop.signal.aborted) throw stalled();
+      if (e.code === 'ENOSPC') throw new Error(`the disk is full: ${(got / 1e9).toFixed(2)} GB of ${(total / 1e9).toFixed(2)} GB came. Make room, then run coding setup again to carry on`);
+      throw new Error(`the download stopped (${e.code ?? e.message}). Run coding setup again to carry on from ${(got / 1e9).toFixed(2)} GB`);
+    }
+  } finally { clearTimeout(timer); }
   renameSync(part, file);
   say(`  ${(got / 1e9).toFixed(2)} GB done`);
 }
@@ -42,7 +73,7 @@ async function fetchChecked({ name, url, file, bytes, sha }, say) {
   if (existsSync(file) && statSync(file).size === bytes) say(`✓ ${name} already here`);
   else {
     say(`Downloading ${name} (${(bytes / 1e9).toFixed(2)} GB)…`);
-    await download(url, file, say);
+    await download(url, file, say, { bytes });
   }
   say(`Checking ${name}…`);
   const sum = await sha256(file);

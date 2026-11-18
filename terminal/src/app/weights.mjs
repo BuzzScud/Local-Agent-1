@@ -107,6 +107,10 @@ export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 87
 // window uses it from its next page request).
 // cwd: the folder whose memory the Memory tab shows.
 // The Weights tab reads GGUF files: an MLX model's pack (format 'mlx', Bonsai 2 27B ConstantKV) is not one, so it is left out.
+// What a tab says when a request from another page is turned away (the words each tab's own check said).
+const refusedWords = (path) => (path.startsWith('/memory/') ? 'only the hub page may change the memory' : path.startsWith('/builder') ? 'Open the Test builder from this local hub.'
+  : path.startsWith('/instructions') ? 'Open the editor from this local hub.' : path.startsWith('/profiles/') ? 'not from this hub' : 'only the hub page may do this');
+
 export function startWeightsServer({ path, models = Object.values(MODELS).filter((m) => m.format !== 'mlx'), docsDir = findDocsDir(), port = HUB_PORT, onEdits, onDesign, cwd = process.cwd(), instructionsHome }) {
   // Help and docs work before the model is downloaded; only Weights needs it.
   const missing = !path || !existsSync(path);
@@ -140,8 +144,18 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
   };
   const serve = (p) => Bun.serve({
     hostname: '127.0.0.1', port: p,
-    async fetch(req) {
+    async fetch(req, srv) {
+      // Only this Mac's own pages, before any route (18 Nov 2026, the audit): a request must name this hub by its own
+      // address (another name that resolves here is DNS rebinding: its pages would count as this hub's own origin),
+      // and a request a page of another address sends here, with its Origin, is turned away whatever its method. The
+      // Arena tab starts a runner, so a link to it from another site is turned away too.
       const url = new URL(req.url);
+      const host = String(req.headers.get('host') ?? '').toLowerCase();
+      const origin = req.headers.get('origin');
+      const away = host !== `127.0.0.1:${srv.port}` && host !== `localhost:${srv.port}`;
+      if (away || (origin && origin.toLowerCase() !== `http://${host}`) || (req.headers.get('sec-fetch-site') === 'cross-site' && /^\/(arena|battle)$/.test(url.pathname))) {
+        return Response.json({ error: away ? 'Open the hub at its own address on this Mac.' : refusedWords(url.pathname) }, { status: 403, headers: { 'cache-control': 'no-store' } });
+      }
       if (url.pathname.startsWith('/edits')) {
         const bad = (m, code = 400) => Response.json({ error: m }, { status: code, headers: { 'cache-control': 'no-store' } });
         if (url.pathname === '/edits.json' && req.method === 'GET') return Response.json({ saved: readEdited(DEFAULT_MODEL), all: readEditedAll() }, { headers: noStore });

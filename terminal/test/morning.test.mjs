@@ -60,7 +60,10 @@ test('the day drawn: after noon today, before noon yesterday, or a given date', 
 
 test('gather reads a repo: the day\'s own commits, uncommitted files (venv noise left out), worktrees', async () => {
   const dir = tmp();
-  const g = makeRepo(join(dir, 'proj'), ['2026-09-26T09:15:00Z', '2026-09-26T13:40:00Z', '2026-09-25T23:00:00Z'] /* bun test runs in UTC; git reads the Z */);
+  // Local times, as the day is drawn in the time zone the test runs in (bun test runs in UTC unless TZ is set; a shell
+  // with TZ set moved 23:00 UTC into the 26th): git reads each as the same moment, written with its Z.
+  const at = (d, h, m) => new Date(2026, 8, d, h, m).toISOString();
+  const g = makeRepo(join(dir, 'proj'), [at(26, 9, 15), at(26, 13, 40), at(25, 23, 0)]);
   writeFileSync(join(dir, 'proj', 'f0.txt'), 'changed\n');
   mkdirSync(join(dir, 'proj', '.venv'));
   writeFileSync(join(dir, 'proj', '.venv', 'x'), '');

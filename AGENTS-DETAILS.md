@@ -84,8 +84,9 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   probe, a one-off check) adds its line with `recordTest()` from `models/evals/record.mjs`:
   what was tested, the code it ran on, the result, the seconds, where the raw results are,
   and its results page in the DOCS folder if one was made. `bun run test:record` adds runs
-  that are on the Mac but not yet in the record. A saved copy of the record page is written to
-  `docs/tests/agentic-coder-test-record.html` (the main folder's), so it goes out with the next commit of pages.
+  that are on the Mac but not yet in the record. `bun run docs` writes a saved copy of the record page to
+  `docs/tests/agentic-coder-test-record.html` (the main folder's, from the real record), so it goes out with the next
+  commit of pages; a test run no longer rewrites that page (18 Nov 2026: 740 KB of tracked page changed by every run).
 
 - **A tool a test needs that the Mac lacks is a named skip** (3 Oct 2026, the owner's pick; one Mac had no pytest and
   could not build the picture helper, so about 25 tests always failed there and two new failures went unseen).

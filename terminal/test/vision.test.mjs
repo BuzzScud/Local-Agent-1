@@ -7,6 +7,7 @@ import { needs } from './needs.mjs';
 import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 // A throwaway home before the models part is loaded (it reads AGENTIC_HOME once): the helper is built in it.
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-vision-home-'));
@@ -47,17 +48,22 @@ test.skipIf(needs('pictures', media.mediaTool))('the test clipboard stands in fo
 });
 
 test.skipIf(needs('pictures', media.mediaTool))('a file dragged into the window: its path with escaped spaces and brackets, the screenshot’s narrow space, in quotes, from ~; not a file that is not there', () => {
-  const home = mkdtempSync(join(homedir(), '.agentic-vision-test-'));
-  try {
-    const name = 'Screenshot 2026-09-30 at 3.57.51 PM (2).png';
-    copyFileSync(shot, join(home, name));
-    copyFileSync(pdf, join(home, 'a doc.pdf'));
-    const escaped = join(home, name).replace(/([ ()])/g, '\\$1');
-    const tilde = `~${join(home, 'a doc.pdf').slice(homedir().length)}`.replace(/ /g, '\\ ');
-    const found = droppedFiles(`what is this ${escaped} and this '${join(home, 'a doc.pdf')}' and ${tilde} and /nope/x.png`, dir);
-    expect(found.map((f) => [f.kind, f.path])).toEqual([['image', join(home, name)], ['pdf', join(home, 'a doc.pdf')], ['pdf', join(home, 'a doc.pdf')]]);
-    expect(found[0].raw).toBe(escaped);
-  } finally { Bun.spawnSync(['rm', '-rf', home]); }
+  // ~ is a home of the test's own: the drop is read in a child whose HOME it is (18 Nov 2026: this test made its
+  // folder in the real home folder, and Bun keeps the home it started with).
+  const home = mkdtempSync(join(tmpdir(), 'agentic-vision-tilde-'));
+  const pics = join(home, 'Pictures');
+  mkdirSync(pics);
+  const name = 'Screenshot 2026-09-30 at 3.57.51 PM (2).png';
+  copyFileSync(shot, join(pics, name));
+  copyFileSync(pdf, join(pics, 'a doc.pdf'));
+  const escaped = join(pics, name).replace(/([ ()])/g, '\\$1');
+  const tilde = '~/Pictures/a doc.pdf'.replace(/ /g, '\\ ');
+  const text = `what is this ${escaped} and this '${join(pics, 'a doc.pdf')}' and ${tilde} and /nope/x.png`;
+  const code = `const { droppedFiles } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'agent', 'images.mjs'))}); console.log(JSON.stringify(droppedFiles(process.env.DROP_TEXT, process.env.DROP_DIR).map((f) => ({ kind: f.kind, path: f.path, raw: f.raw }))));`;
+  const r = spawnSync(process.execPath, ['-e', code], { env: { ...process.env, HOME: home, DROP_TEXT: text, DROP_DIR: dir }, encoding: 'utf8', timeout: 30_000 });
+  const found = JSON.parse(r.stdout.trim().split('\n').pop() || '[]');
+  expect(found.map((f) => [f.kind, f.path])).toEqual([['image', join(pics, name)], ['pdf', join(pics, 'a doc.pdf')], ['pdf', join(pics, 'a doc.pdf')]]);
+  expect(found[0].raw).toBe(escaped);
 });
 
 const pic = (n) => ({ path: `p${n}.png`, mime: 'image/jpeg', data: `DATA${n}`, w: 10, h: 10 });

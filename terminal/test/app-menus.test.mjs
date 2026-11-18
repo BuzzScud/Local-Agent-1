@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
-import { runInPty } from './pty.mjs';
+import { runInPty, rowChanged } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 
@@ -43,11 +43,11 @@ test('/effort alone opens the Effort and limits panel: ←→ moves Effort, ente
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/effort' }, { key: 'enter' },
     { wait: 'moves a row' }, { sleep: 200 }, { snapshot: 'menu' },
-    { key: 'right' }, { sleep: 100 }, { snapshot: 'moved' }, { key: 'enter' }, { wait: 'Effort is high' },
+    { key: 'right', until: /❯ Effort\s+◀ High/ }, { snapshot: 'moved' }, { key: 'enter' }, { wait: 'Effort is high' },
     { type: '/effort' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 200 }, { snapshot: 'again' },
-    { key: 'left' }, { sleep: 100 }, { key: 'esc' }, { wait: 'kept as they were' }, { sleep: 200 }, { snapshot: 'back' },
-    { type: '/eff' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 200 }, { snapshot: 'kept' }, { key: 'left' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Effort is low' },
-    { type: '/eff' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 200 }, { key: 'right' }, { sleep: 100 }, { key: 'enter' }, { sleep: 300 },
+    { key: 'left', until: rowChanged }, { key: 'esc' }, { wait: 'kept as they were' }, { sleep: 200 }, { snapshot: 'back' },
+    { type: '/eff' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 200 }, { snapshot: 'kept' }, { key: 'left', until: /❯ Effort\s+◀ Low/ }, { key: 'enter' }, { wait: 'Effort is low' },
+    { type: '/eff' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 200 }, { key: 'right', until: /❯ Effort\s+◀ High/ }, { key: 'enter' }, { sleep: 300 },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
     ...quit,
   ] });
@@ -73,7 +73,7 @@ test('/mode and /meters alone open the same kind of menu: the one in use marked,
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/mode' }, { key: 'enter' }, // the start page is drawn before the app takes keys
     { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode' },
-    { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Mode is accept edits' }, { wait: '⏵⏵ accept edits │' },
+    { key: 'down', until: rowChanged }, { key: 'enter' }, { wait: 'Mode is accept edits' }, { wait: '⏵⏵ accept edits │' },
     { type: '/mo' }, { key: 'enter' }, { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode2' }, { key: 'esc' }, { wait: 'Kept mode as accept edits' },
     { type: '/meters' }, { key: 'enter' }, { wait: 'on one line under the prompt' }, { sleep: 200 }, { snapshot: 'meters' },
     { type: '1' }, { wait: 'Status bar on' },
@@ -149,10 +149,10 @@ test('/model: the Effort row is the highlighted model\'s own (K2 Horizon has Med
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/model' }, { key: 'enter' }, { wait: 'Pick the model and its effort' }, { sleep: 200 },
     // the model list: Qwen (in use), K2 Horizon
-    { key: 'down' }, { sleep: 300 }, { snapshot: 'k2' },
-    { key: 'right' }, { sleep: 300 }, { snapshot: 'medium' },
-    { key: 'up' }, { sleep: 300 }, { snapshot: 'qwen' },
-    { key: 'down' }, { sleep: 300 }, { snapshot: 'back' },
+    { key: 'down', until: /❯ K2 Horizon 7B/ }, { snapshot: 'k2' },
+    { key: 'right', until: /Medium: thinks in its faster mode first/ }, { snapshot: 'medium' },
+    { key: 'up', until: rowChanged }, { snapshot: 'qwen' },
+    { key: 'down', until: /❯ K2 Horizon 7B/ }, { snapshot: 'back' },
     { key: 'enter' }, { wait: 'not ready on this Mac yet' }, { sleep: 300 },
     ...quit,
   ] });

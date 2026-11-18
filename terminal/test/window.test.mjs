@@ -3,13 +3,13 @@
 // (bridge.mjs) and the window server end to end with a stand-in app (server.mjs): its key, the state passed on,
 // keys passed back, the app's end; and the pill beside the model (bridge.mjs usageOf, meterOf).
 import { test, expect } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import net from 'node:net';
 import { VtScreen } from '../src/window/vt.mjs';
 import { viewItem, heldView, stepView, ansiRows, cellRows, xterm } from '../src/window/view.mjs';
-import { windowWanted, runWindow, dropText, openWindowFree } from '../src/window/server.mjs';
+import { windowWanted, runWindow, dropText, openWindowFree, sameKey, urlFromEnv } from '../src/window/server.mjs';
 import { droppedFiles, pathsOnly } from '../src/agent/images.mjs';
 import { makeBridge, usageOf, meterOf, modelNowOf, effortWords } from '../src/window/bridge.mjs';
 import { printedOf } from '../src/app/screen.jsx';
@@ -324,6 +324,7 @@ test('the window server: its page only with its key, the state passed on, keys p
   const base = url.split('?')[0];
   expect((await fetch(base)).status).toBe(403);
   expect((await fetch(`${base}?t=wrong`)).status).toBe(403);
+  expect((await fetch(`${base}?t=${'0'.repeat(new URL(url).searchParams.get('t').length)}`)).status).toBe(403); // as long as the key
   const page = await fetch(url);
   expect(page.status).toBe(200);
   expect(await page.text()).toContain('data-tauri-drag-region');
@@ -359,4 +360,18 @@ test('the window server: its page only with its key, the state passed on, keys p
   for (let i = 0; i < 40 && !got.some((m) => m.t === 'exit'); i++) await Bun.sleep(25);
   expect(got.at(-1)).toMatchObject({ t: 'exit', code: 3 });
   ws.close();
+});
+
+test('the window\'s keys are compared in the same time whatever they hold, and its address goes by the environment to a window that reads it there', () => {
+  expect(sameKey('abc', 'abc')).toBe(true);
+  expect([sameKey('abc', 'abd'), sameKey('abc', 'abcd'), sameKey(null, 'abc'), sameKey(undefined, undefined)]).toEqual([false, false, false, false]);
+  const app = join(mkdtempSync(join(tmpdir(), 'window-app-')), 'Agentic Coder Window.app');
+  mkdirSync(join(app, 'Contents', 'MacOS'), { recursive: true });
+  const exe = join(app, 'Contents', 'MacOS', 'agentic-coder-window');
+  writeFileSync(exe, '');
+  expect(urlFromEnv(exe)).toBe(false); // no Info.plist: an older window, which takes --url
+  writeFileSync(join(app, 'Contents', 'Info.plist'), '<plist><dict><key>CFBundleName</key><string>Agentic Coder</string></dict></plist>');
+  expect(urlFromEnv(exe)).toBe(false);
+  writeFileSync(join(app, 'Contents', 'Info.plist'), '<plist><dict><key>AgenticURLFromEnv</key>\n\t<true/></dict></plist>');
+  expect(urlFromEnv(exe)).toBe(true);
 });
