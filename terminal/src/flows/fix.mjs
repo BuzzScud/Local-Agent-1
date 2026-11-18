@@ -9,7 +9,7 @@ import { excerpts, linkedFiles, searchTerms } from './excerpts.mjs';
 import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, functionNames, functionAtLine, findFunction, isWholeFile, splice, langFor } from './units.mjs';
 import { tryUntilPass } from './tries.mjs';
 import { fence, complete } from './llm.mjs';
-import { applyChange } from './apply.mjs';
+import { applyChange, notApplied } from './apply.mjs';
 import { BLOCKS_FORMAT, parseBlocks, applyBlocks, guardChange } from './blocks.mjs';
 import { existsSync } from 'node:fs';
 import { sortBug, kindText } from '../agent/rules.mjs';
@@ -221,7 +221,7 @@ export async function fixFlow(ctx, task) {
       ? [...texts].map(([rel, after]) => ({ rel, before: existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null, after })).filter((c) => c.before !== c.after)
       : [{ rel: target, before: original, after: merge(result.code) }];
     const applied = await applyChange(ctx, changes);
-    if (!applied.ok) return { handled: true, done: false, declined: true, summary: applied.feedback ? `Nothing was changed. You said: ${applied.feedback}` : 'You said no to the fix; nothing was changed.' };
+    if (!applied.ok) return { handled: true, done: false, declined: true, summary: applied.feedback ? `Nothing was changed. You said: ${applied.feedback}` : notApplied(applied, 'You said no to the fix; nothing was changed.') };
     const final = await ctx.runReal(testCmd);
     plan.done();
     const first = changes[0] ?? { rel: target, before: original, after: original };

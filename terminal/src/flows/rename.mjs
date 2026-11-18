@@ -5,7 +5,8 @@
 // imported from a package keeps its real name and gets an alias
 // (import { test as check } from 'node:test'). Text files (README, JSON, …)
 // are left alone. What was left alone is counted and shown.
-import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
+import { writeWhole } from '../agent/write-whole.mjs';
+import { readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { walk } from '../tools/fs.mjs';
 
@@ -176,6 +177,12 @@ export function leftAloneNote(plan) {
   return parts.length ? `Left alone: ${parts.join('; ')}.` : '';
 }
 
+// Only when every file still holds what the plan was made from (18 Nov 2026, the audit): else nothing is written and
+// the files that changed are named. → { ok, stale }
 export function applyRename(plan) {
-  for (const f of plan.files) writeFileSync(f.abs, f.after);
+  const now = (abs) => { try { return readFileSync(abs, 'utf8'); } catch { return null; } };
+  const stale = plan.files.filter((f) => now(f.abs) !== f.before).map((f) => f.rel);
+  if (stale.length) return { ok: false, stale };
+  for (const f of plan.files) writeWhole(f.abs, f.after);
+  return { ok: true, stale: [] };
 }

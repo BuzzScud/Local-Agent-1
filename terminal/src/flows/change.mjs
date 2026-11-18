@@ -13,7 +13,7 @@ import { complete, fence, SETUP_THINK_CAP } from './llm.mjs';
 import { mergeTest } from './testfile.mjs';
 import { testWriter, CODE_SYSTEM, stem } from './testfirst.mjs';
 import { rescueTests } from './rescue.mjs';
-import { applyChange } from './apply.mjs';
+import { applyChange, notApplied } from './apply.mjs';
 import { guardChange } from './blocks.mjs';
 import { diffLines } from '../tools/edit.mjs';
 
@@ -252,7 +252,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     const changes = [{ rel: target, before: original, after }];
     if (rescue?.ok) for (const [rel, text] of rescue.texts) changes.push({ rel, before: existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null, after: text });
     const applied = await applyChange(ctx, changes);
-    if (!applied.ok) return { handled: true, done: false, declined: true, summary: 'You said no to the change; nothing was changed.' };
+    if (!applied.ok) return { handled: true, done: false, declined: true, summary: notApplied(applied) };
     if (!tp.throwaway && !rescue?.texts?.has(tp.rel)) {
       // Already approved as the test; written without asking again. (A rescued
       // tp.rel was already written by applyChange, with your OK on the diff.)

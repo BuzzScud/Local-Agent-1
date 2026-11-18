@@ -539,3 +539,30 @@ test('the step-down: past half a request\'s time for thinking the chat thinks at
   const off = await run(copy('fixture-fix'), 'What does stats.mjs do?', [{ text: 'It works out averages.' }], { thinking: false, more: { flows: false, ...soon } });
   expect([chat(off.fake)[0].chat_template_kwargs.enable_thinking, chat(off.fake)[0].thinking_budget_tokens, halfNotes(off.events).length]).toEqual([false, undefined, 0]);
 });
+
+// The audit of 18 Nov 2026: a fix or change read the file, spent minutes on tries or on the question, then wrote
+// over what was saved in the meantime.
+test('a finished change is not written over a file that changed while it worked; a rename the same', async () => {
+  const { applyChange, notApplied } = await import('../src/flows/apply.mjs');
+  const { applyRename } = await import('../src/flows/rename.mjs');
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-apply-'));
+  writeFileSync(join(cwd, 'a.js'), 'const x = 1;\n');
+  const shown = [];
+  const ctx = { cwd, mode: () => 'ask', ask: async () => { writeFileSync(join(cwd, 'a.js'), 'const x = 1; // mine\n'); return { choice: 'yes' }; }, tool: (...a) => shown.push(a), setMode() {} };
+  const r = await applyChange(ctx, [{ rel: 'a.js', before: 'const x = 1;\n', after: 'const x = 2;\n' }]);
+  expect(r).toEqual({ ok: false, stale: ['a.js'] });
+  expect(readFileSync(join(cwd, 'a.js'), 'utf8')).toBe('const x = 1; // mine\n');
+  expect(notApplied(r)).toContain('a.js changed while it worked');
+  // unchanged: written
+  const ok = await applyChange({ ...ctx, ask: async () => ({ choice: 'yes' }) }, [{ rel: 'a.js', before: 'const x = 1; // mine\n', after: 'const x = 3;\n' }]);
+  expect(ok.ok).toBe(true);
+  expect(readFileSync(join(cwd, 'a.js'), 'utf8')).toBe('const x = 3;\n');
+  // a rename
+  const plan = { files: [{ rel: 'a.js', abs: join(cwd, 'a.js'), before: 'const x = 3;\n', after: 'const y = 3;\n' }] };
+  writeFileSync(join(cwd, 'a.js'), 'const x = 4;\n');
+  expect(applyRename(plan)).toEqual({ ok: false, stale: ['a.js'] });
+  expect(readFileSync(join(cwd, 'a.js'), 'utf8')).toBe('const x = 4;\n');
+});

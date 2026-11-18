@@ -15,7 +15,7 @@ import { mergeTest } from './testfile.mjs';
 import { testWriter, CODE_SYSTEM } from './testfirst.mjs';
 import { rescueTests } from './rescue.mjs';
 import { testPlan, distrustTests, newTestNames, newTestPassed } from './change.mjs';
-import { applyChange } from './apply.mjs';
+import { applyChange, notApplied } from './apply.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { BLOCKS_FORMAT, parseBlocks, applyBlocks, guardChange } from './blocks.mjs';
 
@@ -209,7 +209,7 @@ export async function multiFlow(ctx, task, targets) {
     if (rescue?.ok) for (const [rel, text] of rescue.texts) texts.set(rel, text);
     const changes = [...texts].map(([rel, after]) => ({ rel, before: existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null, after })).filter((c) => c.before !== c.after);
     const applied = await applyChange(ctx, changes);
-    if (!applied.ok) return { handled: true, done: false, declined: true, summary: 'You said no to the change; nothing was changed.' };
+    if (!applied.ok) return { handled: true, done: false, declined: true, summary: notApplied(applied) };
     if (!tp.throwaway && !rescue?.texts?.has(tp.rel)) {
       mkdirSync(dirname(join(cwd, tp.rel)), { recursive: true });
       writeFileSync(join(cwd, tp.rel), testText);

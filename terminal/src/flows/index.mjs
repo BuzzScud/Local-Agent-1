@@ -209,7 +209,11 @@ export async function renameFlow(ctx, from, to) {
     if (answer.choice === 'no') { ctx.tool('Rename', `${from} → ${to}`, { kind: 'declined', feedback: answer.feedback }, true); return { handled: true, done: false, declined: true, summary: 'You said no to the rename; nothing was changed.' }; }
     if (answer.choice === 'always' && !guard) ctx.setMode('edits');
   }
-  applyRename(plan);
+  const done = applyRename(plan);
+  if (!done.ok) {
+    for (const rel of done.stale) ctx.tool('Update', rel, { kind: 'error', message: `${rel} changed while it asked: nothing written` }, true);
+    return { handled: true, done: false, declined: true, summary: `${done.stale.join(', ')} changed while it asked (saved in an editor, or by another program), so nothing was renamed. Ask again to rename on what the files hold now.` };
+  }
   for (const f of plan.files) {
     const adds = f.hunk.filter((l) => l.type === '+').length;
     ctx.tool('Update', f.rel, { kind: 'diff', path: f.rel, hunk: f.hunk.filter((l) => !l.gap), additions: adds, removals: adds, lines: f.after.split('\n').length });
