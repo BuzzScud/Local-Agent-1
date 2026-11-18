@@ -198,9 +198,26 @@ export const newSessionId = () => new Date().toISOString().replace(/[:.]/g, '-')
 // Written whole (a file beside it, renamed over it): it is saved while a reply works too (app-run.mjs stepSave), and a
 // crash in the middle of a write must not leave half a conversation that /resume cannot read.
 export function saveSession(cwd, id, data) {
-  const dir = join(SESSIONS, slug(cwd));
-  mkdirSync(dir, { recursive: true });
-  writeWhole(join(dir, `${id}.json`), JSON.stringify({ ...data, cwd, id, updated: new Date().toISOString() }));
+  try {
+    const dir = join(SESSIONS, slug(cwd));
+    mkdirSync(dir, { recursive: true });
+    writeWhole(join(dir, `${id}.json`), JSON.stringify({ ...data, cwd, id, updated: new Date().toISOString() }));
+    lastSave = null;
+  } catch (e) { lastSave = e?.message ?? String(e); throw e; }
+}
+// How the last save of a conversation in this process went: null when it worked (or none was tried), else why not.
+// cli.jsx says it as the window ends, in place of "Saved." (the audit of 18 Nov 2026: a failed save said Saved).
+let lastSave = null;
+export const lastSessionSave = () => lastSave;
+export const noteSessionSave = (why) => { lastSave = why ?? null; };
+
+// What went wrong where nobody waited for it (cli.jsx: a promise that failed with no catch, which would end a Bun
+// program and the window with it): a line in <home>/logs/app-errors.log, nothing on the screen.
+export function logAppError(what, e) {
+  try {
+    mkdirSync(join(HOME, 'logs'), { recursive: true });
+    appendFileSync(join(HOME, 'logs', 'app-errors.log'), `${new Date().toISOString()} ${what}: ${String(e?.stack ?? e?.message ?? e).slice(0, 4000)}\n`);
+  } catch { /* nowhere to write it */ }
 }
 
 export function listSessions(cwd) {
