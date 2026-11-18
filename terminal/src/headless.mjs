@@ -154,7 +154,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     const run = new AgentsRun({ request: prompt, driver: agentDriver(agent) });
     let told = 0;
     run.on('state', (s) => {
-      while (told < s.log.length) { const e = s.log[told++]; onEvent('note', { text: `/agents · ${e.who}: ${e.text}`, tone: e.tone === 'bad' || e.tone === 'warn' ? 'warn' : 'dim' }); }
+      // By each entry's place in the whole run: the list keeps its last 200, and a count of it stopped there (the audit, 18 Nov 2026).
+      for (const e of s.log) { const n = e.n ?? 0; if (n <= told) continue; told = n; onEvent('note', { text: `/agents · ${e.who}: ${e.text}`, tone: e.tone === 'bad' || e.tone === 'warn' ? 'warn' : 'dim' }); }
       const g = s.gate;
       if (!g || g.seen) return;
       g.seen = true;

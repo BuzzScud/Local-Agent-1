@@ -133,7 +133,9 @@ export class AgentsRun extends EventEmitter {
     try { this.d.save?.(this.s); } catch { /* the run goes on without its file */ }
   }
   log(who, text, tone = '') {
-    this.s.log.push({ t: this.now(), s: this.s.stage, who, text: String(text), tone });
+    // n: its place in the whole run, so a reader of the trimmed list knows what is new (coding -p --agents).
+    this.s.logN = (this.s.logN ?? this.s.log.length) + 1;
+    this.s.log.push({ t: this.now(), s: this.s.stage, who, text: String(text), tone, n: this.s.logN });
     if (this.s.log.length > 200) this.s.log.splice(0, this.s.log.length - 200);
     this.changed();
   }

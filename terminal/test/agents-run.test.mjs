@@ -383,3 +383,15 @@ test('"Allow it this once" is once; Verify, Review and Ship ask before a command
   expect(p.writes.size).toBe(0);
   expect(p.calls).toHaveLength(0);
 });
+
+test('the run numbers its log, so a reader of the last 200 lines knows what is new (coding -p --agents)', async () => {
+  const { AgentsRun } = await import('../src/agent/agents-run.mjs');
+  const run = Object.create(AgentsRun.prototype);
+  run.s = { log: [], stage: 0 };
+  run.now = () => 0;
+  run.changed = () => {};
+  for (let i = 0; i < 250; i++) run.log('main', `line ${i}`);
+  expect(run.s.log).toHaveLength(200);
+  expect(run.s.log.at(-1).n).toBe(250);
+  expect(run.s.log[0].n).toBe(51);
+});
