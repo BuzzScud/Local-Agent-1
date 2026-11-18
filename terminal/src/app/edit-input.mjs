@@ -8,6 +8,26 @@ import stringWidth from 'string-width';
 
 const wordLeft = (v, c) => { let i = c; while (i > 0 && /\s/.test(v[i - 1])) i--; while (i > 0 && !/\s/.test(v[i - 1])) i--; return i; };
 const wordRight = (v, c) => { let i = c; while (i < v.length && /\s/.test(v[i])) i++; while (i < v.length && !/\s/.test(v[i])) i++; return i; };
+// One letter as you see it (a grapheme: an emoji with its skin tone or its joined family, a flag, a letter and its
+// accent), so ← → and delete never split one into halves the terminal draws as boxes (the audit of 18 Nov 2026: they
+// moved by UTF-16 unit). Looked for in the few code units around the cursor: no letter is longer than that.
+const SPAN = 64;
+const graphemes = typeof Intl?.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+const isLow = (v, i) => { const u = v.charCodeAt(i); return u >= 0xdc00 && u <= 0xdfff; };
+export function prevStop(v, c) {
+  if (c <= 0) return 0;
+  if (!graphemes) return c - (c >= 2 && isLow(v, c - 1) ? 2 : 1);
+  const from = Math.max(0, c - SPAN);
+  let last = from;
+  for (const { index } of graphemes.segment(v.slice(from, c))) last = from + index;
+  return last;
+}
+export function nextStop(v, c) {
+  if (c >= v.length) return v.length;
+  if (!graphemes) return c + (isLow(v, c + 1) ? 2 : 1);
+  for (const { segment } of graphemes.segment(v.slice(c, c + SPAN))) return c + segment.length;
+  return c + 1;
+}
 const lineStart = (v, c) => v.lastIndexOf('\n', c - 1) + 1;
 const lineEnd = (v, c) => { const i = v.indexOf('\n', c); return i < 0 ? v.length : i; };
 
@@ -146,8 +166,8 @@ export function editInput(s, input, key, opts) {
   if (key.shift && (key.leftArrow || key.rightArrow || key.upArrow || key.downArrow || key.home || key.end)) {
     const { value: v, cursor: c } = s;
     if (key.upArrow || key.downArrow) return { value: v, ...rowMove(s, key.upArrow ? -1 : 1, opts), anchor: s.anchor ?? c };
-    const to = key.leftArrow ? (key.meta ? wordLeft(v, c) : Math.max(0, c - 1))
-      : key.rightArrow ? (key.meta ? wordRight(v, c) : Math.min(v.length, c + 1))
+    const to = key.leftArrow ? (key.meta ? wordLeft(v, c) : prevStop(v, c))
+      : key.rightArrow ? (key.meta ? wordRight(v, c) : nextStop(v, c))
       : key.home ? lineStart(v, c) : lineEnd(v, c);
     return { value: v, cursor: to, anchor: s.anchor ?? c };
   }
@@ -161,8 +181,8 @@ export function editInput(s, input, key, opts) {
   // anything else works as usual and drops the selection
   const { value: v, cursor: c } = s;
   if (s.anchor != null) s = { value: v, cursor: c };
-  if (key.leftArrow) return { value: v, cursor: key.meta ? wordLeft(v, c) : Math.max(0, c - 1) };
-  if (key.rightArrow) return { value: v, cursor: key.meta ? wordRight(v, c) : Math.min(v.length, c + 1) };
+  if (key.leftArrow) return { value: v, cursor: key.meta ? wordLeft(v, c) : prevStop(v, c) };
+  if (key.rightArrow) return { value: v, cursor: key.meta ? wordRight(v, c) : nextStop(v, c) };
   // ↑ ↓ move a row (the app takes the first and last row for earlier prompts)
   if ((key.upArrow || key.downArrow) && !key.ctrl && !key.meta) { const m = rowMove(s, key.upArrow ? -1 : 1, opts); return { value: v, ...m }; }
   // ⌥A selects everything; ctrl+a goes to the start of the line, and pressed again right away, it does too
@@ -180,7 +200,8 @@ export function editInput(s, input, key, opts) {
     // an attachment's chip ([Image #1], [PDF #2], [File #3], [Folder #4]: app/attach.mjs) goes in one piece
     const chip = /\[(?:Image|PDF|File|Folder) #\d+\]$/.exec(v.slice(0, c));
     if (chip) return { value: v.slice(0, chip.index) + v.slice(c), cursor: chip.index };
-    return { value: v.slice(0, c - 1) + v.slice(c), cursor: c - 1 };
+    const at = prevStop(v, c); // a whole letter as you see it
+    return { value: v.slice(0, at) + v.slice(c), cursor: at };
   }
   if (key.ctrl || key.meta || key.escape || key.tab || key.return || key.upArrow || key.downArrow || key.pageUp || key.pageDown) return s;
   if (!input) return s;
