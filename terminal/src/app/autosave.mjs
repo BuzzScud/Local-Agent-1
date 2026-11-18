@@ -23,10 +23,10 @@ import { homedir } from 'node:os';
 import { HOME, ModelServer, LINGER_SECS, stopIdleServers, runningServer, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord, connectRemote, endpointOf } from '../../../models/index.mjs';
 import { loadSettings } from './store.mjs';
 import { saveLessons, seedMemory, worthSaving, saveLine, proposeSave, applySave, shownOf, rememberDeclined } from '../agent/lessons.mjs';
-import { memoryDirs, countDay, readFacts } from '../agent/facts.mjs';
+// normText: one any-language matcher for facts (the audit, 18 Nov 2026: a-z only made every non-Latin fact the same).
+import { memoryDirs, countDay, readFacts, normText } from '../agent/facts.mjs';
 import { writeNote, dueNotes, readNote, foldNote } from '../agent/notes.mjs';
 
-const normText = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export const memoryOn = (settings = {}) => settings.memory !== false && process.env.AGENTIC_NO_MEMORY !== '1';
 // How a save is made: 'ask' (the default, the user's pick on 28 Sep 2026),

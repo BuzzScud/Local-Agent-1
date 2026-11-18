@@ -268,8 +268,9 @@ export function pickerKeysPart(self) {
     const pk = cur.picker;
     if (pk.stage === 'list') {
       const n = pk.items.length;
-      if (key.upArrow) self.setPicker({ ...pk, index: Math.max(0, pk.index - 1) });
-      else if (key.downArrow || key.tab) self.setPicker({ ...pk, index: Math.min(n - 1, pk.index + 1) });
+      // Round, as the / menu (the audit, 18 Nov 2026).
+      if (key.upArrow) self.setPicker({ ...pk, index: (pk.index + n - 1) % Math.max(1, n) });
+      else if (key.downArrow || key.tab) self.setPicker({ ...pk, index: (pk.index + 1) % Math.max(1, n) });
       else if (key.return) self.chooseRewind(pk);
       else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
       return;

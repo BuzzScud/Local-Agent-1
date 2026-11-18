@@ -61,8 +61,9 @@ export function profilesPart(self) {
     if (key.escape || (key.ctrl && ch === 'c')) { self.setPicker(null); return; }
     const rows = listRows(pk);
     const row = rows[pk.at];
-    if (key.upArrow) self.setPicker({ ...pk, at: Math.max(0, pk.at - 1) });
-    else if (key.downArrow) self.setPicker({ ...pk, at: Math.min(rows.length - 1, pk.at + 1) });
+    // Round, as the / menu (the audit, 18 Nov 2026).
+    if (key.upArrow) self.setPicker({ ...pk, at: (pk.at + rows.length - 1) % Math.max(1, rows.length) });
+    else if (key.downArrow) self.setPicker({ ...pk, at: (pk.at + 1) % Math.max(1, rows.length) });
     else if (key.tab) { const tab = (pk.tab + 1) % pk.groups.length; const first = rows.findIndex((r) => r.kind === 'use'); self.setPicker({ ...pk, tab, at: pk.at >= first ? first : pk.at }); }
     else if ((key.leftArrow || key.rightArrow) && row?.kind === 'use') keep(pk, stepUse(pk, row.row.key, key.leftArrow ? -1 : 1));
     else if ((key.leftArrow || key.rightArrow) && row?.kind === 'profile') keep(pk, stepModel(pk, row.name, key.leftArrow ? -1 : 1));

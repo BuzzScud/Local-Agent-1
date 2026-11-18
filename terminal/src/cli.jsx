@@ -64,7 +64,7 @@ async function ensureTrusted(cwd) {
   const page = (i) => `\n${renderToString(<TrustPage width={width} cwd={shown} model={model} selected={i} />, { columns: width })}\n\n`;
   // A menu like the ones inside the app: arrows move ❯, enter picks, 1 or 2 pick at once.
   const pick = await pickOnTerminal(TRUST_OPTIONS, { page });
-  if (pick === 0) { saveTrust(cwd); return true; }
+  if (pick === 0) { if (saveTrust(cwd) === false) process.stderr.write('\x1b[2mtrust.json cannot be read, so this yes holds for this start only.\x1b[0m\n'); return true; }
   process.stderr.write('\x1b[2mNothing was read here. Start coding in a folder you trust.\x1b[0m\n');
   return false;
 }
