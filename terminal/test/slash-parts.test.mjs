@@ -54,3 +54,18 @@ test("onKey's panel keys are one function each", async () => {
   const k = pickerKeysPart({});
   expect(Object.keys(k)).toEqual(['permKeys', 'btwKeys', 'serviceKeys', 'modelKeys', 'formKeys', 'limitsKeys', 'choiceKeys', 'rewindKeys']);
 });
+
+// The audit of 18 Nov 2026: a command that threw was a rejected promise nobody waited for (the prompt, the / menu,
+// /settings, ctrl+p), and an unhandled rejection ends a Bun program, the window with it. Now it is said.
+test('a command that fails is said as a note, never a rejection; busy is the one gate\'s', async () => {
+  const { slashPart } = await import(join(app, 'app-slash.mjs'));
+  const said = [];
+  const self = { agent: { busy: false }, push: (m) => said.push([m.text, m.tone]), openSettings: () => { throw new Error('the panel broke'); } };
+  await expect(slashPart(self).runSlashFn('/settings')).resolves.toBeUndefined();
+  expect(said).toEqual([['/settings stopped on an error: the panel broke', 'error']]);
+  // a ! line or /compact running (the gate says busy, though no reply is): /clear waits
+  const flashed = [];
+  const gated = { agent: { busy: false }, busyNote: () => 'Wait for Agentic Coder to finish, or press esc first', flash: (t) => flashed.push(t), push: () => {} };
+  await slashPart(gated).runSlashFn('/clear');
+  expect(flashed).toEqual(['Wait for Agentic Coder to finish, or press esc first']);
+});

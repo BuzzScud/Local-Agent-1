@@ -35,7 +35,7 @@ export function slashPart(self) {
     const [cmd, ...rest] = line.slice(1).trim().split(/\s+/);
     const arg = rest.join(' ').trim();
     // Busy as the one gate says (app-run.mjs busyNote): a reply, a ! line, /compact or /morning, an /agents run.
-    const busy = Boolean(self.busyNote());
+    const busy = self.busyNote ? Boolean(self.busyNote()) : self.agent.busy;
     // Each group of commands has its own file (slash-*.mjs); a command none has is a server's prompt, or unknown.
     const part = parts.find((p) => p.commands.includes(cmd));
     if (part) return part.run(cmd, arg, busy, line);

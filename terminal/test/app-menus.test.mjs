@@ -284,3 +284,25 @@ test('the @ menu lists the files again when it opens (not while you type in it),
   write(join(other, 'elsewhere.md'), '3');
   expect(names(menuFor('see @', other))).toEqual(['elsewhere.md']); // "Work in …?" moved the window
 });
+
+// The UI audit of 18 Nov 2026: the / menu, /settings and the choice menus go round from the last row to the first; /resume
+// and ctrl+o's list stopped at the ends. One way for every list now: round (/model's list still stops, on purpose: app-hub).
+test('/resume\'s list goes round: ↑ from the first is the last, ↓ from the last is the first', async () => {
+  const { cwd, env } = setup();
+  const dir = join(env.AGENTIC_HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100));
+  mkdirSync(dir, { recursive: true });
+  for (const [id, title, updated] of [['a', 'the newer one', '2026-11-18T10:00:00.000Z'], ['b', 'the older one', '2026-11-17T10:00:00.000Z']]) {
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify({ title, messages: [{ role: 'system', content: 'x' }, { role: 'user', content: title }], items: [], cwd, id, updated }));
+  }
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' },
+    { type: '/resume' }, { key: 'enter' }, { wait: 'Resume a conversation' }, { sleep: 200 },
+    { key: 'up' }, { wait: '❯ the older one' }, { snapshot: 'up' },
+    { key: 'down' }, { wait: '❯ the newer one' }, { snapshot: 'down' },
+    { key: 'esc' }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.up).toContain('❯ the older one');
+  expect(r.snapshots.down).toContain('❯ the newer one');
+}, T);
