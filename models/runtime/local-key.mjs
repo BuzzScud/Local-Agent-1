@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { HOME } from '../registry.mjs';
 
-export const LOCAL_KEY_FILE = () => join(HOME, 'local-model.key');
+const LOCAL_KEY_FILE = () => join(HOME, 'local-model.key');
 let cached = null;
 
 // The file, made when there is none yet.
@@ -22,7 +22,7 @@ export function localKeyFile() {
   return f;
 }
 
-export function localKey() {
+function localKey() {
   const f = LOCAL_KEY_FILE();
   if (cached?.file === f) return cached.key;
   let key = null;

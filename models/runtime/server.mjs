@@ -82,7 +82,7 @@ export const portFree = async (port) => !(await answers(port)) && (await canList
 
 // A process number that still belongs to a model server: after a restart a saved number may be another program's
 // (18 Nov 2026, the audit: it was stopped by the number alone). A test's stand-in counts by its name too.
-export function isModelServer(pid) {
+function isModelServer(pid) {
   if (!pid || !alive(pid)) return false;
   return SERVER_PROCESS.test(spawnSyncText('/bin/ps', ['-p', String(pid), '-o', 'command=']).trim());
 }

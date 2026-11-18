@@ -8,7 +8,7 @@ import { defOf, oldSteps, toolDefs } from './tools-defs.mjs';
 // A word as the shell takes it: plain when it is plain, else in single quotes. A shell sign on its own (&&, |, >)
 // stays a sign: a model that sends ["npm", "test", "&&", "ls"] means it.
 const SHELL_SIGN = /^(?:&&|\|\||\||;|>|>>|<|2>&1|&>|2>|2>>)$/;
-export const shellWord = (w) => (SHELL_SIGN.test(w) || /^[A-Za-z0-9_\-./=:@%+,~^]+$/.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`);
+const shellWord = (w) => (SHELL_SIGN.test(w) || /^[A-Za-z0-9_\-./=:@%+,~^]+$/.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`);
 export function asText(v) {
   if (v === null || v === undefined) return '';
   if (Array.isArray(v)) return v.map((x) => (typeof x === 'string' ? x : x && typeof x === 'object' ? JSON.stringify(x) : String(x))).join('\n');

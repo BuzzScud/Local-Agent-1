@@ -24,7 +24,7 @@ import { findEdit, stripLineNumbers, syntaxError } from './tools-edit.mjs';
 import { missing, notThere, resolvePath, settlePath } from './tools-paths.mjs';
 import { cut, webFetch, webSearch } from './tools-web.mjs';
 // The biggest file Read and List read into memory (18 Nov 2026, the audit).
-export const READ_WHOLE_MAX = 50_000_000;
+const READ_WHOLE_MAX = 50_000_000;
 import { writeWhole } from './write-whole.mjs';
 export { arrivedNote, display, needsText, normalizeArgs, parseArgs, patchOps, sentArgs } from './tools-args.mjs';
 export { AGENT_TOOL_DEF, agentToolDef, APP_NOT, APP_TOOL_DEF, EXPLORE_TOOLS, MODEL_TOOL_DEFS, oldSteps, TOOL_DEFS, toolDefs, toolNameOf, toolSchemas, WHOLE_MAX } from './tools-defs.mjs';

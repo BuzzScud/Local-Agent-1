@@ -11,7 +11,7 @@ import { changesSaid } from '../agent/questions.mjs';
 // The files of a change that are no longer what the change was worked out on (18 Nov 2026, the audit: a fix read
 // the file, spent minutes on tries or on your yes, and wrote over what you had saved meanwhile).
 const nowText = (abs) => { try { return readFileSync(abs, 'utf8'); } catch { return null; } };
-export function changedSince(cwd, changes) {
+function changedSince(cwd, changes) {
   return changes.filter((c) => nowText(join(cwd, c.rel)) !== (c.before ?? null)).map((c) => c.rel);
 }
 // What a flow says when its change was not applied.

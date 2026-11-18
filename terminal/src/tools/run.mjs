@@ -98,7 +98,7 @@ export function signalCommand(child, mark, sig, seen = []) {
 }
 
 // The first and last OUT_KEEP characters of a stream, with a line for what was left out between them.
-export const OUT_KEEP = 2_500_000;
+const OUT_KEEP = 2_500_000;
 export function keepEnds(keep = OUT_KEEP) {
   let head = '';
   let tail = '';

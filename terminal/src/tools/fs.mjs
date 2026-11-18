@@ -79,7 +79,7 @@ export function listFiles(root, { path = '.', pattern, max = 200 } = {}) {
 // A walk of a very big folder (the home folder in Bypass) stops after WALK_FILES entries or WALK_SECS
 // seconds and says so, instead of freezing the window where esc cannot reach it (18 Nov 2026, the audit).
 export const WALK_FILES = 200_000;
-export const WALK_SECS = 15;
+const WALK_SECS = 15;
 function walkLimit({ files = WALK_FILES, secs = WALK_SECS } = {}) {
   const t0 = Date.now();
   let n = 0;
