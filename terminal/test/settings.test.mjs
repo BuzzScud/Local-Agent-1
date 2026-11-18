@@ -94,3 +94,20 @@ test('the App tool never reaches past settings.json: __proto__, constructor and 
     expect(readFileSync(SETTINGS_FILE, 'utf8')).toBe('{ nope');
   } finally { rmSync(SETTINGS_FILE, { force: true }); }
 });
+
+// The audit of 18 Nov 2026: a save that failed was swallowed and the window still ended with "Saved." (cli.jsx).
+test('a conversation save that fails is kept as the reason (cli.jsx says it in place of Saved); the next good save clears it', async () => {
+  const { saveSession, lastSessionSave, logAppError } = await import('../src/app/store.mjs');
+  const { HOME } = await import('../../models/index.mjs');
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-settings-save-'));
+  const slug = cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100);
+  mkdirSync(join(HOME, 'sessions'), { recursive: true });
+  writeFileSync(join(HOME, 'sessions', slug), 'a file where its folder goes');
+  expect(() => saveSession(cwd, 'one', { title: 't', messages: [] })).toThrow();
+  expect(lastSessionSave()).toMatch(/\S/);
+  rmSync(join(HOME, 'sessions', slug));
+  saveSession(cwd, 'one', { title: 't', messages: [] });
+  expect(lastSessionSave()).toBeNull();
+  logAppError('unhandled rejection', new Error('nobody waited'));
+  expect(readFileSync(join(HOME, 'logs', 'app-errors.log'), 'utf8')).toMatch(/unhandled rejection: Error: nobody waited/);
+});
