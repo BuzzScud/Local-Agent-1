@@ -3,6 +3,7 @@
 // Moved from tools.mjs word for word.
 import { isAbsolute, dirname, join, basename } from 'node:path';
 import { existsSync, readFileSync, statSync } from 'node:fs';
+import { lookup } from 'node:dns/promises';
 import { webUrl, fetchPage, searchWeb, PROVIDER_NAMES } from '../tools/web.mjs';
 import { resolvePath, wallLine } from './tools-paths.mjs';
 
@@ -169,9 +170,32 @@ const PAGES = new Map();
 const PAGE_TTL = 15 * 60_000;
 const PAGE_WHOLE = 300;
 const PAGE_PART = 250;
+// An address on this Mac or a private network (the model server, Ollama, the hub, a router's page): WebFetch runs
+// in the app, outside the sandbox, so it reaches what commands may not. Read only when your request names it
+// (18 Nov 2026, the audit); a site's name that leads to such an address counts too. AGENTIC_FETCH_LOCAL=on: always.
+export function privateIp(ip) {
+  const h = String(ip ?? '').toLowerCase().replace(/^\[|\]$/g, '').replace(/^::ffff:/, '');
+  if (h === '::1' || h === '::' || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h)) return true;
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 127 || a === 10 || a === 0 || (a === 169 && b === 254) || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 100 && b >= 64 && b <= 127);
+}
+export async function localTarget(href) {
+  const u = new URL(href);
+  const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') || privateIp(h)) return true;
+  try { return (await lookup(h, { all: true })).some((a) => privateIp(a.address)); } catch { return false; }
+}
+const namedIn = (request, u) => { const r = String(request ?? '').toLowerCase(); return r.includes(u.host.toLowerCase()) || (u.hostname.length > 3 && r.includes(u.hostname.toLowerCase().replace(/^\[|\]$/g, ''))); };
+
 export async function webFetch(args, env, max) {
   let url;
   try { url = webUrl(args.url).href; } catch (e) { return { text: `WebFetch: ${e.message}.`, error: true, view: { kind: 'error', message: e.message } }; }
+  if (!['on', '1', 'true'].includes(String(process.env.AGENTIC_FETCH_LOCAL ?? '').toLowerCase()) && !namedIn(env.request, new URL(url)) && await localTarget(url)) {
+    const why = `${new URL(url).host} is on this Mac or a private network, and your request did not name it`;
+    return { text: `WebFetch: ${why}, so it was not read. Ask the user if they want it read.`, error: true, view: { kind: 'error', message: why } };
+  }
   let page = PAGES.get(url);
   if (!page || Date.now() - page.at > PAGE_TTL) {
     try { page = { at: Date.now(), ...(await fetchPage(url, { signal: env.signal })) }; } catch (e) {

@@ -125,6 +125,24 @@ test('searchWeb: Brave’s and Tavily’s forms give the same results; a wrong k
 });
 
 const { execute, toolDefs, parseArgs, display } = await import('../src/agent/tools.mjs');
+// The stand-in site runs on this Mac, which WebFetch reads only when the request names it (the audit, 18 Nov 2026):
+// these tests are about reading a page, so it may (the guard has its own test below).
+process.env.AGENTIC_FETCH_LOCAL = 'on';
+
+test('WebFetch reads an address on this Mac or a private network only when the request names it', async () => {
+  const { localTarget, privateIp } = await import('../src/agent/tools-web.mjs');
+  for (const ip of ['127.0.0.1', '10.0.0.5', '192.168.1.1', '172.20.0.1', '169.254.1.1', '100.100.1.1', '::1', 'fd7a:115c:a1e0::1', '::ffff:127.0.0.1']) expect([ip, privateIp(ip)]).toEqual([ip, true]);
+  for (const ip of ['8.8.8.8', '172.32.0.1', '100.128.0.1']) expect([ip, privateIp(ip)]).toEqual([ip, false]);
+  expect(await localTarget('http://localhost:3000/')).toBe(true);
+  delete process.env.AGENTIC_FETCH_LOCAL;
+  try {
+    const refused = await execute('WebFetch', { url: `${base}/page` }, {}, { cwd: dir, request: 'what do the release notes say?' });
+    expect(refused.error).toBe(true);
+    expect(refused.text).toContain('did not name it');
+    const named = await execute('WebFetch', { url: `${base}/page` }, {}, { cwd: dir, request: `read ${base}/page please` });
+    expect(named.error).toBeUndefined();
+  } finally { process.env.AGENTIC_FETCH_LOCAL = 'on'; }
+});
 const { judge, checkRule, siteOf } = await import('../src/agent/permissions.mjs');
 
 test('the web tools join the model’s tools only when /web has them on: WebSearch with a search service, WebFetch with reading pages', () => {

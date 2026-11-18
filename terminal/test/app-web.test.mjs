@@ -33,7 +33,7 @@ const told = (fake, word) => fake.requests.some((q) => JSON.stringify(q.messages
 test('the model reads a page: it asks first (the site and the address shown); “don’t ask again” holds for that site; the page’s text goes back', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ tool: { name: 'WebFetch', args: { url: `${siteUrl}/notes` } } }, { tool: { name: 'WebFetch', args: { url: `${siteUrl}/other` } } }, { text: 'The number is 8812.' }]);
-  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_FETCH_LOCAL: 'on' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: 'what is the magic number on the notes page' }, { key: 'enter' },
     { wait: 'Read a web page' }, { sleep: 200 }, { snapshot: 'ask' }, { key: '2' },
     { wait: 'The number is 8812.' }, { sleep: 200 }, { snapshot: 'done' }, ...quit,
@@ -57,7 +57,7 @@ test('/web: pick Brave Search, paste its key, Test with it, Save; then the model
   const { cwd, env, base } = setup();
   const home = join(base, 'home');
   const fake = await startFakeServer([{ text: 'Ready.' }, { tool: { name: 'WebSearch', args: { query: 'thing 4.2 notes' } } }, { text: 'Found the notes.' }]);
-  const r = await runInPty({ cwd, env: { ...env, AGENTIC_SEARCH_URL: siteUrl, AGENTIC_REMOTE_KEYSTORE: 'file' }, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_FETCH_LOCAL: 'on', AGENTIC_SEARCH_URL: siteUrl, AGENTIC_REMOTE_KEYSTORE: 'file' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/web' }, { key: 'enter' }, { wait: 'What the model may do on the web' },
     { key: 'right' }, { wait: 'Brave’s own web index' }, { key: 'down' }, { sleep: 200 }, { type: 'test-brave-key-123456' }, { sleep: 300 }, { key: 'enter' }, { wait: '••••3456' },
     { key: 'down' }, { sleep: 100 }, { key: 'down' }, { sleep: 100 }, { key: 'down' }, { sleep: 200 }, { key: 'enter' }, { wait: '✔ it works' }, { sleep: 200 }, { snapshot: 'tested' },
@@ -82,7 +82,7 @@ test('/web: pick Brave Search, paste its key, Test with it, Save; then the model
 test('a web address in the request comes with a line saying to read it with WebFetch; a Read of a web address is read as the page (asked about first)', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ tool: { name: 'Read', args: { path: `${siteUrl}/notes` } } }, { text: 'It says 8812.' }]);
-  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_FETCH_LOCAL: 'on' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: `what is the magic number on ${siteUrl}/notes please` }, { key: 'enter' },
     { wait: 'Read a web page' }, { key: '1' }, { wait: 'It says 8812.' }, ...quit,
   ] });
