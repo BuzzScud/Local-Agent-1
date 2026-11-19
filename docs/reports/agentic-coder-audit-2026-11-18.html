@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Coder audit</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1f; --dim: #6e6e73; --line: #e3e3e0; --soft: #f0f0ed;
+  --hi: #c4291c; --hi-bg: #fdecea; --med: #a15c00; --med-bg: #fff3df; --low: #5a6270; --low-bg: #eef0f3;
+  --ok: #1f7a3d; --ok-bg: #e6f4ea; --accent: #2457c5; --accent-bg: #e8eefc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618; --panel: #1f1f22; --ink: #ececee; --dim: #9a9aa2; --line: #313136; --soft: #26262a;
+    --hi: #ff7a6b; --hi-bg: #3a1f1c; --med: #f0b35a; --med-bg: #36290f; --low: #aab2c0; --low-bg: #2a2d33;
+    --ok: #6fd28f; --ok-bg: #173323; --accent: #8fb0ff; --accent-bg: #1f2a44;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; display: flex; flex-direction: column; }
+header { padding: 14px 24px 0; max-width: 1480px; width: 100%; margin: 0 auto; }
+h1 { font-size: 21px; margin: 0; }
+.dateline { color: var(--dim); font-size: 13px; margin-top: 2px; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 24px 10px; max-width: 1480px; width: 100%; margin: 0 auto; }
+nav button { font: inherit; font-size: 13.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+nav button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { flex: 1; min-height: 0; max-width: 1480px; width: 100%; margin: 0 auto; padding: 0 24px 16px; }
+section { display: none; height: 100%; }
+section.on { display: flex; flex-direction: column; gap: 12px; }
+.lead { font-size: 15.5px; max-width: 1100px; margin: 0; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.card b { display: block; font-size: 24px; line-height: 1.15; }
+.card span { color: var(--dim); font-size: 13px; }
+.two { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; min-height: 0; flex: 1; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; min-height: 0; overflow: auto; }
+.box h2 { font-size: 15px; margin: 0 0 8px; }
+ol.tight, ul.tight { margin: 0; padding-left: 20px; }
+ol.tight li, ul.tight li { margin: 3px 0; font-size: 14px; }
+.pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.H { color: var(--hi); background: var(--hi-bg); }
+.M { color: var(--med); background: var(--med-bg); }
+.L { color: var(--low); background: var(--low-bg); }
+.ok { color: var(--ok); background: var(--ok-bg); }
+.pick { color: var(--accent); background: var(--accent-bg); }
+.summary { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.summary p { margin: 0; max-width: 1100px; }
+.tablewrap { flex: 1; min-height: 0; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th { position: sticky; top: 0; background: var(--soft); text-align: left; font-weight: 600; font-size: 12.5px; color: var(--dim); padding: 7px 10px; border-bottom: 1px solid var(--line); z-index: 1; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.t b { display: block; }
+td.t span { color: var(--dim); }
+td.w { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dim); word-break: break-word; width: 210px; }
+td.n { width: 54px; } td.e { width: 46px; text-align: center; } td.p { width: 92px; font-size: 12px; color: var(--dim); }
+td.f { width: 30%; }
+.tiers td, .tiers th { font-size: 13.5px; }
+.note { color: var(--dim); font-size: 13px; margin: 0; }
+code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--soft); padding: 0 4px; border-radius: 4px; }
+@media (max-width: 900px) {
+  body { height: auto; display: block; }
+  header, nav, main { padding-left: 16px; padding-right: 16px; }
+  section.on { height: auto; }
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .two { grid-template-columns: 1fr; }
+  .tablewrap, .box { overflow: visible; }
+  table, thead, tbody, tr, td { display: block; width: 100% !important; }
+  thead tr { display: none; }
+  tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  td { border: 0; padding: 3px 10px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Agentic Coder audit</h1>
+  <div class="dateline">18 Nov 2026 · GitHub main 59ad9ed (last change 28 Oct) · the full test run + 5 helpers reading every part · nothing changed yet</div>
+</header>
+<nav role="tablist" id="tabs"></nav>
+<main id="main"></main>
+<script>
+// Each finding: s = H/M/L, t = what goes wrong (plain), d = one more line, f = the fix, w = where, e = size (S under 1 h, M hours, L a day+), p = how it was shown.
+const AREAS = [
+{ id: 'engine', name: 'Engine & tools', blurb: 'The loop that talks to the model and runs its tools (read, write, edit, search, commands), the permission modes, the sandbox and the model servers. It explains failures back to the model well, but its “is this safe?” layer leans on word lists and path guessing that are weaker than they look.', rows: [
+ ['H','“Read-only” commands that are not','git branch -D main, sort -o file, git diff --output=file and rg --pre rm all count as read-only: they run without asking in Manual mode and are allowed in Plan mode.','Refuse the writing flags; allow git branch only with no arguments.','agent/command-words.mjs:213','S','ran it (me)'],
+ ['H','Search misses matches','A pattern with \\w, \\d or \\s says “No matches” in any git project: it is checked as a JavaScript pattern but run by git grep -E, which does not know them.','Use git grep -P, or the app’s own search when git finds nothing.','tools/fs.mjs:93','S','ran it (me)'],
+ ['H','No limit on command output','A command that prints a lot (a big log, a long test run) keeps all of it in memory, next to a 7 GB model; characters split between chunks turn into �.','Keep the start and the end (about 5 MB), decode as UTF-8.','tools/run.mjs:107','S','read (me)'],
+ ['H','Your edit can be overwritten','The change is worked out before the “allow this edit?” question. Save the file in your editor while it asks, say yes, and your save is gone; /rewind cannot bring it back.','Read the file again on yes; if it changed, refuse and tell the model.','agent/agent-step.mjs:515 → tools.mjs:367','S','read'],
+ ['M','Numbers stripped from written files','Writing a table whose first column is numbers drops that column; a file of “1 2 3 4 5” lines comes out empty.','Strip only the exact line numbers Read adds.','agent/tools-edit.mjs:147','S','ran it'],
+ ['M','A new file through a linked folder lands outside the project','A folder in the project that links elsewhere lets Write create files outside it with no question.','Check the real place of the nearest folder that exists.','agent/tools-paths.mjs:159','S','ran it'],
+ ['M','A wrong path can overwrite a different file','A path that does not exist is moved onto a project file with the same ending: /tmp/README.md becomes the project’s README.md.','Only guess for new files, never onto one that exists; say so.','agent/tools-paths.mjs:124','S','ran it'],
+ ['M','Commands can see your API keys','Every command and hook gets the whole environment, Claude and service keys included; echo $ANTHROPIC_API_KEY even counts as read-only.','Remove keys and tokens from what commands get.','tools/run.mjs:45 · user-hooks.mjs:148','S','ran it'],
+ ['M','Bypass mode can read the door key','cat ~/.agentic-coder/door.key is refused, but door.* is allowed; ~/.aws is readable. That key lets another Mac in.','Block those files in the sandbox itself, not by words.','permissions.mjs:179 · sandbox.mjs:102','S','ran it'],
+ ['M','The sandbox lets commands write to system folders','The normal sandbox only blocks writes in your home folder; /opt/homebrew/bin, /usr/local and /tmp are open.','Block all writes, then allow the project and the caches.','tools/sandbox.mjs:95','M','read'],
+ ['M','A tool call quoted from a web page can run','Tool-call text anywhere in the answer, or in its thinking, is run as a real call.','Only take a call that ends the answer; never from thinking.','agent-work.mjs:234 · agent-said.mjs:433','S','read'],
+ ['M','Odd arguments write wrong content','Content sent as an object is saved as “[object Object]”; a list is saved comma-joined.','Write objects as JSON, join lists with new lines.','agent/tools-args.mjs:199','S','ran it'],
+ ['M','Command lists lose their quoting','["rm","-rf","build dir"] runs rm -rf build dir: two folders, neither the right one.','Quote each part.','agent/tools-args.mjs:121','S','ran it'],
+ ['M','Edit says “already done” when it is not','If the new text happens to be in the file somewhere, a near-miss edit reports done and changes nothing.','Run that check after the tolerant matches, not before.','agent/tools-edit.mjs:85','S','ran it'],
+ ['M','Stopping a model server can hit another program','After a restart, old process numbers are stopped without checking they are still the model server.','Check the program name first.','models/runtime/server.mjs:98','S','read'],
+ ['M','A stalled model server hangs forever','Model requests have no time limit; a server that stops sending leaves coding -p and side calls waiting until esc.','Give up after N minutes with nothing received.','agent/client.mjs:211','S','likely'],
+ ['M','Files are written in place','A full disk mid-write leaves your file cut off.','Write a copy beside it, then swap.','tools.mjs:367 · agent-undo.mjs:73','S','likely'],
+ ['M','The “another copy is loaded” message names the wrong program','It calls the other program “a coding -p run” when any parent process mentions “agentic” and has a “-p” anywhere (even mkdir -p). This is 2 of today’s 4 failing tests.','Look only at each process’s own program name.','models/runtime/server.mjs:411','S','ran it'],
+ ['L','Search of a huge folder freezes the window','The fallback search walks every file with no limit, and esc cannot reach it.','Cap files and time.','tools/fs.mjs:66','M','read'],
+ ['L','Windows line endings get mixed','A tolerant edit in a CRLF file writes LF lines.','Reuse the file’s own line ending.','agent/tools-edit.mjs:99','S','ran it'],
+ ['L','WebFetch can reach local servers','It runs outside the sandbox and accepts localhost and home-network addresses.','Refuse those unless named by you.','tools/web.mjs:32','S','read'],
+ ['L','“Context full” detection too broad','Any error with “context” in it starts a summarise-and-retry.','Match the real “too long” messages.','agent/agent-model.mjs:343','S','likely'],
+ ['L','Read and List load whole files','A multi-GB file is read into memory just to count its lines.','Check the size first.','agent/tools.mjs:250','S','read'],
+]},
+{ id: 'app', name: 'App', blurb: 'What runs in the window: keys, slash commands, sessions, saving, /resume, /rewind, quitting. Saving sessions and settings is mostly careful (locks, whole-file writes), but the safety checks are added one command at a time, so several paths reach a reply that is still running; and the main screen does too much work on every redraw.', rows: [
+ ['H','One typo in settings.json wipes all your settings','A file that does not parse is read as defaults, and the next save writes defaults over it: your services, keys, limits and start folder are gone, with no copy kept.','Never save over a file that did not parse; keep a copy first.','app/store.mjs:40 · :64 · App.jsx:513','S','ran it + read (me)'],
+ ['H','/resume during a reply mixes two conversations','/resume has no “busy” check: the running reply keeps adding to the conversation you switched to, and it is saved that way.','The same busy check the window already has.','app/slash-panels.mjs:41 · app-run.mjs:507','S','read'],
+ ['M','A ! command during a reply hides the reply','It replaces the live state: the reply and spinner vanish for the rest of the turn. Esc cannot stop it, and quitting waits up to 2 minutes.','Refuse ! while busy, or give it its own state and a stop.','app/app-keys.mjs:48 · app-run.mjs:678','S','read'],
+ ['M','A second queued message replaces the first','Type two messages while it works: only the last one is sent.','Keep a list.','app/app-keys.mjs:61','S','read'],
+ ['M','/update memory during a reply breaks esc','Esc then cancels the queued message, not the running reply.','Busy check.','app/slash-window.mjs:59','S','read'],
+ ['M','Quit can run twice','A second ctrl+d or ctrl+c while it closes runs your end hooks twice and starts two memory saves.','A “quitting” flag.','app/app-run.mjs:558','S','likely'],
+ ['M','A slip in a command closes the whole window','Nothing catches errors from slash commands, and Bun ends the app on an uncaught one.','One catch in the command and send paths; log the rest.','app/app-keys.mjs:47 · cli.jsx','S','likely'],
+ ['M','Settings and history files are read on every word','Two lines re-read settings.json, trust, permissions and the whole history file on every redraw: every streamed word.','Read once (lazy start values).','app/App.jsx:161 · :379','S','measured'],
+ ['M','Long sessions get slower','Every redraw walks the whole conversation; in the Mac window every item is re-encoded 30 times a second.','Remember results until the conversation changes.','screen.jsx:196 · App.jsx:815 · window/bridge.mjs:90','M','read'],
+ ['M','A setting name can poison the app','The App tool’s setting("__proto__.x") changes every object in the running app.','Refuse those names.','app/app-self.mjs:15','S','ran it'],
+ ['L','Backspace splits emoji','Backspace and the arrows move by half an emoji, leaving broken characters.','Step by whole characters.','app/edit-input.mjs:164','S','ran it'],
+ ['L','A failed /model switch shows the model as on','The old model is stopped, the new one failed, the footer says on.','Same path as a failed load.','app/app-model.mjs:347','S','likely'],
+ ['L','The @ file list never refreshes','New files, or a window that moved folders, are missing from @.','Rebuild on open.','app/app-menu.mjs:40','S','read'],
+ ['L','After a folder move, auto-save looks in the old folder','The “first use” reading checks the folder the window opened in.','Follow the move.','app/App.jsx:495','S','read'],
+ ['L','One bad job file stops the saved-work report forever','A file that does not parse ends the loop and is never removed.','Skip and remove it.','app/autosave.mjs:394','S','read'],
+ ['L','Trusted folders can all be lost','An unreadable trust.json is read as empty and the next save keeps it empty; rewind points can tear.','Whole-file writes; leave unreadable files alone.','app/trust.mjs:43 · rewind.mjs:151','S','read'],
+ ['L','“Saved.” even when it was not','A failed session save (disk full) is hidden and the window still says “Continue with coding -c”.','Say it failed.','panels-machine.mjs:61 · cli.jsx:736','S','read'],
+ ['L','A loops-board crash leaves the terminal broken','No catch around its timer; raw mode and the alternate screen stay on.','Catch and restore the terminal.','app/loops-board.mjs:652','S','suspicion'],
+]},
+{ id: 'ui', name: 'Clickable UI', blurb: 'Every hub tab, the web chat page and the Mac window’s page clicked through for real in WebKit and Chromium (your window size and a phone, light and dark, keyboard, reload), with every save blocked; the terminal’s menus through 5 of its own test files (all pass). No console errors anywhere; the problems are layout, keyboard and each page doing tabs, pop-ups and save errors its own way.', rows: [
+ ['H','Instructions hides Save on laptop-height windows','The page never scrolls: at your 1803×890 the button row loses 10 px; at 1440×800 Save, Reload and Undo are gone; at 1280×720 tabs 07–09 too. Only ⌘S still saves.','Let the editor scroll and pin the button row.','app/instructions.html:9','S','clicked'],
+ ['M','Reloading the hub loses the open sub-tab','Instructions, Memory, Harness, Help, Flow and Weights keep their sub-tab where the hub never looks, so a reload (or “open in its own tab”) goes back to the first one. Your “refresh = same view” rule.','Copy the page’s sub-tab into the hub’s address and back.','app/hub.html:191 · instructions.html:476','S','clicked'],
+ ['M','A failed save on Profiles looks saved','The dropdown keeps the new value, nothing is said, and with the hub stopped an error lands every 5 s.','Catch it, say so, redraw from what is saved.','app/profiles.html:75','S','clicked'],
+ ['M','The Mac window’s title-bar buttons type into a question','With a permission question or a list up, New, Help and the model pill still send /clear, /help, /model: nothing happens, or the letters land in the list.','“Answer the question first” instead.','window/ui.html:299','S','clicked'],
+ ['M','On a phone the hub’s selected tab is off-screen','The tab row hides its scroll bar and never scrolls to the tab you are on.','Scroll it into view; fade the edge.','app/hub.html:183','S','clicked'],
+ ['M','Loop Library: ↑↓ jump to the wrong card','Under 120 columns it draws 3 cards a row but moves as if there were 4.','One cards-per-row number for both.','app/loops-library.mjs:191','S','ran it'],
+ ['M','All docs rows cannot be opened by keyboard','Each row is a clickable box Tab never reaches.','Make them links.','app/hub.html:202','S','clicked'],
+ ['M','Tab escapes the Test builder window','Focus goes to the hub tabs behind it; Enter there switches tabs under the open window.','Make the background inert.','app/hub.html:97 · :160','S','clicked'],
+ ['M','On the web chat page Esc closes nothing','New key, Invite, Your chats and the account menu close only on an outside click.','Esc closes; focus moves in.','web/page.html:1017','S','clicked'],
+ ['M','Opening the Arena tab starts a program that stays','A runner on fixed port 8758 starts just from opening the tab and outlives the hub; a hub on another home would join your real one.','Start it from a button; check its home.','app/weights.mjs:183 · battle/start.mjs:42','S','read'],
+ ['L','Profiles breaks on a phone','The page is wider than the screen; 19 dropdowns have no label.','Let them shrink; label them.','app/profiles.html','S','clicked'],
+ ['L','The Mac window’s conversation has no scroll bar','You cannot see where you are or drag; the wheel and “Jump to the latest” work.','A thin bar on hover.','window/ui.html:88','S','clicked'],
+ ['L','The Mac window’s Chats side bar stays open','Search, the folder menu and the usage card close on an outside click; it does not.','Close it the same way.','window/ui.html:873','S','clicked'],
+ ['L','Memory facts cannot be reached with Tab','Rows are clickable boxes (the arrow keys work); on a phone it still says “Pick something on the left”.','Focusable rows; phone wording.','app/memory.html:208 · :269','S','clicked'],
+ ['L','Bonsai cards cut their text on a phone','“~4,068 t…”, “0 of 2 j…”.','Let the cards wrap.','app/bonsai.html','S','clicked'],
+ ['L','The hub’s tabs are not real tabs','No tab roles, ←→ do nothing (Instructions, Remote, Tests and Weights do have them).','The same tab markup as those.','app/hub.html:84','S','clicked'],
+ ['L','All docs rows break on odd file names','A name with " or < breaks its row (your own folder, so low risk).','Escape names and titles.','app/hub.html:202','S','read'],
+ ['L','The plain pick list leaves copies of itself','A choice wider than the terminal wraps, and each ↑↓ leaves a stale copy above (coding -p questions, the safety check).','Count wrapped rows.','app/pick.mjs:25','S','read'],
+ ['L','Lists end differently','The / menu, /settings and questions wrap round; /resume, ctrl+o and the Library stop at the ends.','Pick one.','app/app-keys.mjs:405 · :521','S','read'],
+]},
+{ id: 'memory', name: 'Memory & helpers', blurb: 'The memory (facts about you and each project), the helpers and sub-agents, /agents, the fix/change/rename paths and coding -p. The store is careful (locks, a log, undo), but the rules for “the same fact”, “a used fact” and “what undo takes back” go wrong outside the usual path, and the fix paths write from copies read minutes earlier.', rows: [
+ ['H','Facts about you expire after 30 days','A fact counts as used only when a request picks it. Standing preferences (“explain things simply”) are shown at every start but rarely picked, so the tidy retires them. In your real memory, one fact about you from 9 Oct is next (it goes to retired/, so it can be brought back).','Never retire facts about you for not being used; show what a tidy retires.','agent/facts.mjs:469','S','ran it'],
+ ['H','Non-English facts count as duplicates','Chinese, Japanese, Arabic… all become the same empty key: a new fact is refused as “saved already”, and the tidy merges unrelated ones. The same check is copied in 5 files.','One shared, any-language version.','agent/facts.mjs:52 (+4 copies)','S','ran it'],
+ ['M','Facts about you go to outside services','“Memory sent: only my own Macs” is honoured at the start, but each request still adds the matching facts about you, to Claude or any service.','Apply the setting to each request too.','agent-memory.mjs:43 · recall.mjs:92','S','read (me)'],
+ ['M','/memory undo undoes the wrong thing','It takes back the newest batch of any kind, which is often the daily tidy, not the save you just saw.','Undo the save’s own batch.','agent/facts.mjs:188','S','ran it'],
+ ['M','A leftover lock freezes the app','A lock left by a stopped process whose number is reused is never cleared: every memory step waits 5 s with the screen frozen, 10–25 s per message.','A lock older than 10 s is stale, whoever holds it.','agent/facts.mjs:133 · :147','S','ran it'],
+ ['M','Fix, change and rename overwrite your newer edits','They write from copies taken before minutes of tries or before your yes.','Read again before writing; stop if it changed.','flows/fix.mjs:96 · change.mjs:252 · apply.mjs:44 · rename.mjs:180','M','likely'],
+ ['M','coding -p saves memory without asking','It ignores Memory save = ask / off, and makes that model call before printing the answer.','Follow the setting; print first.','cli.jsx:562 · headless.mjs:185','S','read'],
+ ['M','/agents safety checks miss tolerant edits','The guard previews an edit with an exact match; the real edit is tolerant. So “a test’s expected value changed” and “a big change” can slip past.','Give the guard the real result.','agent/agents-guards.mjs:100','S','likely'],
+ ['M','An empty review counts as “looks good”','A reviewer that runs out of words while thinking, or answers in prose, passes the change.','Empty = failed; prose = not a pass.','agent/helper-models.mjs:139','S','ran it'],
+ ['M','Side calls never time out','The memory save and /agents calls wait forever on a stalled service; no more saves happen in that window.','A default deadline in the shared call.','flows/llm.mjs:36','S','likely'],
+ ['M','A held save for a moved project is lost','It makes an empty memory folder at the old place and deletes the held save.','Skip until the project is found; keep it.','agent/memory-home.mjs:134','S','ran it'],
+ ['L','Fact files are written in place','A crash mid-write leaves a cut-off fact that is then silently dropped.','Write beside, then swap.','agent/facts.mjs:182','S','suspicion'],
+ ['L','The tidy can bring back a fact it just retired','Merging duplicates writes the retired one back.','Merge before retiring.','agent/facts.mjs:457','S','ran it'],
+ ['L','Held and pending saves disappear quietly','After 14 days, or if a reader catches one half-written.','Say so; never delete a file still being written.','memory-home.mjs:117 · autosave.mjs:291','S','likely'],
+ ['L','“Node.js” is taken for a file name','A fact naming Node.js or Next.js is never recalled and is retired as “the file it names is gone”.','Know the common .js names.','agent/facts.mjs:408','S','ran it'],
+ ['L','coding -p --agents stops printing after 200 lines','The log is trimmed but the count keeps going.','Count from the trimmed log.','agents-run.mjs:136 · headless.mjs:157','S','read'],
+ ['L','A page screenshot freezes the window','Chrome or Quick Look runs while the screen waits, up to 30 s.','Run it in the background.','agent/helper-models.mjs:166','S','read'],
+]},
+{ id: 'install', name: 'Install, servers & tests', blurb: 'Install and the self-update, every server the app opens, the repo check and the test suite. The network code is better than most (keys compared safely, wrong-key lockout, a careful web sign-in), but GitHub’s main runs on every Mac with no signing, and the local page and model servers accept requests from websites.', rows: [
+ ['H','Every Terminal open runs GitHub’s main','At most every 10 minutes, opening Terminal fetches main, moves your folder to it and runs scripts from it, with no signing, CI or check. A leaked GitHub token would run code on every Mac you own before you type coding. The hook is added to .zshrc without asking.','Run only from the clean build copy; check a signed commit or tag; add CI.','app/agentic-coder-launcher.sh:280','M','read'],
+ ['M','Any website can change your model files through the hub','The hub’s weight-edit routes have no origin check: a page you visit can make the hub copy the 7 GB model and write its edits, or remove them.','One Host + Origin check for the whole hub.','app/weights.mjs:145','S','read (me)'],
+ ['M','Websites may read your memory through the hub','The other hub routes compare the origin with a name the visitor controls (DNS rebinding): memory.json and docs/private pages could be read, and a rule added to every prompt.','Same: only 127.0.0.1 / localhost as the Host.','memory-hub.mjs:37 · profiles-hub.mjs:20','S','likely'],
+ ['M','The local model server has no key','Any web page in your browser may use the model, and read its saved slots.','A key per start; turn the slots page off.','models/runtime/server.mjs:129','S','likely'],
+ ['M','The door key goes out in the clear','The client sends the raw key to whatever the Mac’s name points to, and /status does it for every saved Mac by itself.','Only send to Tailscale addresses; challenge instead of the key.','app/door.mjs:501','M','read'],
+ ['M','The door key is a full shell, printed on every status','Any device on your Tailscale that your rules allow can try it; coding door prints it each time.','Only your own devices; never print it after the first time.','app/door.mjs:275','M','read'],
+ ['M','coding serve listens on every network, in plain http','It prints its key at every start; on café Wi-Fi the key and your code can be read.','Tailscale or this Mac only, unless asked.','models/runtime/serve.mjs:46','S','read'],
+ ['M','The web sign-in can be flooded','Each try is a slow password check, the limit is per name, and the list of tries never shrinks.','A per-address limit and a cap on checks at once.','web/auth.mjs:51','S','likely'],
+ ['M','The web container cannot be built from a fresh copy','It needs bun.lock, which git ignores; the Ink patch is pinned to 7.1.1 while any 7.x may install.','Commit bun.lock; pin Ink.','web-container/Dockerfile:6','S','read (me)'],
+ ['M','The model download can crash or hang','No error handler (disk full = crash), no time limit, no resume of an 8 GB download.','The standard stream pipe, a timeout, resume.','models/runtime/setup.mjs:15','S','read'],
+ ['M','Each start moves your working folder','Every start fast-forwards the shared folder and runs bun install in it while other sessions work there.','Leave the folder alone; the build already uses a clean copy.','app/agentic-coder-launcher.sh:85','S','read'],
+ ['M','The repo check is always red','“The installed app is not what main builds” even when it is the same commit; a gate that is always red gets skipped.','Make it a “look at” line.','models/evals/tools/check.mjs:483','M','ran it (me)'],
+ ['M','A failed test that passes alone counts as a pass','Real races hide; the run still exits OK.','Report it as flaky and keep a list.','models/evals/tools/run-suite.mjs:122','S','read'],
+ ['M','Every test run edits a tracked 740 KB page','The test record page in docs/ is rewritten by every run (it is modified right now) and was committed 90 times.','Write it outside git, or only in bun run docs.','models/evals/record.mjs:306','S','seen'],
+ ['L','~/.agentic-coder is readable by other accounts','Sessions, settings and a log holding an invite link.','Make it private at start.','~/.agentic-coder (0755)','S','seen'],
+ ['L','A cut-off install download runs half a script','install.sh is not wrapped in a function.','Wrap it.','install.sh:16','S','read'],
+ ['L','A folder name with quotes breaks the launcher','The repo path is pasted into the script unescaped.','Escape it.','package.json:32','S','read'],
+ ['L','The window key shows in ps','It is passed on the command line and compared the quick way.','Pass it privately; compare safely.','window/server.mjs:143','S','read'],
+ ['L','Unsigned connections can each hold 8 MB','No cap on how many before the key.','4 KB before the key; cap connections.','app/sessions.mjs:55','S','read'],
+ ['L','The secret scan misses the app’s own key shapes','acd-, ac-, acw_, acr_ keys would not be caught (none are committed).','Add them.','models/evals/tools/check.mjs:24','S','read'],
+ ['L','An old server address is in public history','In old page contents, not only one commit message.','Make sure that service needs a key or is firewalled.','commits 0fe9666 · 415a344','S','read'],
+ ['L','The window build is not locked','cargo build without --locked.','Add it.','app/window/build.sh:15','S','read'],
+ ['M','Two tests are date time bombs','One hard-codes “Oct”; the other’s sample fact is dated 9 Oct and is now retired by the 30-day rule. 2 of today’s 4 failures.','Pass the date in.','terminal/test/memory-home.test.mjs:99 · :125','S','ran it (me)'],
+ ['M','Test results depend on who runs them','The suite keeps any AGENTIC_HOME already set (it could test against a real home); FORCE_COLOR breaks 9 tests; the “another copy” label depends on the shell.','Always set a throwaway home; clear FORCE_COLOR.','terminal/test/test-env.mjs:25','S','read'],
+ ['M','Two tests write into your real home folder','vision and open-items.','Point them at the throwaway home.','vision.test.mjs:50 · open-items.test.mjs:76','S','read'],
+ ['M','Tests wait by the clock, not by the screen','886 fixed waits in the screen tests (329 s); keys 80 ms apart. This is why tests fail under load and pass alone.','Wait for the row or text to change.','app-remote (149) · app-effort (61) · app-menus (40)','L','counted'],
+ ['L','Tests that can fail around 7–8 pm','Two read “today” from the clock in UTC.','Pass the date in.','memory-notes.test.mjs:122 · usage.test.mjs:209','S','read'],
+ ['L','The slowest test needs another project','pagecheck uses MAIN2026’s Playwright and quietly skips elsewhere.','Find Playwright properly, or say it skipped.','pagecheck.test.mjs:109','S','read'],
+]},
+];
+
+const TOP = [
+ ['H','One typo in settings.json wipes all your settings, with no copy kept.','app'],
+ ['H','“Read-only” commands that are not: git branch -D main runs without asking.','engine'],
+ ['H','Facts about you expire after 30 days unused: one of yours is next.','memory'],
+ ['H','Your edit made during the “allow?” question is overwritten.','engine'],
+ ['H','/resume during a reply mixes two conversations.','app'],
+ ['H','Every Terminal open runs GitHub’s main, unsigned.','install'],
+ ['H','Search says “No matches” for \\w and \\d patterns.','engine'],
+ ['M','Any website can reach the hub and the local model server.','install'],
+ ['M','Commands see your API keys; Bypass can read the door key.','engine'],
+ ['M','Facts about you go to outside services despite “Memory sent”.','memory'],
+ ['M','Fix/change/rename write from stale copies.','memory'],
+ ['M','A slip in any slash command closes the window.','app'],
+ ['H','The hub’s Instructions tab hides Save on laptop-height windows.','ui'],
+];
+
+const TIERS = [
+ ['1 · Everything + rebuild','Every finding fixed, plus the big rebuilds: split the 500-line functions and the 930-line App, one busy gate, signed releases + CI, the screen tests made to wait for the screen.','About 5–7 days','Biggest change; touches nearly every file.'],
+ ['2 · Fix by theme','Every high and medium finding, fixed through about 8 shared fixes (one safe-write helper, one busy gate, one deadline for model calls, one Host/Origin guard, one any-language matcher…), each with a test that fails before. Low items where they share a fix. No big rebuilds.','About 2–3 days','My pick: most of the value, small reviewable rounds.'],
+ ['3 · The top 15','Only the high findings and the proven data-loss and safety ones, each a small patch with a test.','About 1 day','Leaves the slow-session, test-flake and server items.'],
+ ['4 · Stop the bleeding','Five small fixes today: settings wipe, read-only list, facts about you, hub origin check, the two test time bombs.','2–3 hours','Everything else waits.'],
+];
+const ROUNDS = [
+ ['Safety','Read-only list, keys out of commands, sandbox blocks secret files and system folders, path guard (links, guesses), quoted tool calls, one Host/Origin check for the hub, a key on the local model server.'],
+ ['Lost work','Settings, trust and rewind never written over when unreadable; every file write is “write beside, then swap”; Edit/Write and the fix paths read again before writing.'],
+ ['Memory','Facts about you kept; one any-language matcher; undo the right batch; stale locks; Memory sent on every request; coding -p follows Memory save.'],
+ ['Hangs & limits','Command output cap, a deadline on every model call, the download, big-folder search.'],
+ ['App flow','One busy gate for /resume, !, /update memory; a queue that keeps every message; quit once; errors caught instead of closing the window.'],
+ ['Clickable UI','Instructions scrolls, refresh keeps the sub-tab, Profiles says a failed save, the window’s title bar waits for a question, one way to do tabs, pop-ups (Esc) and keyboard reach on every page, phone layouts.'],
+ ['Speed','Settings and history read once; long sessions keep their speed.'],
+ ['Tests & gate','The 4 failures, a throwaway home always, flaky reported as flaky, the record page out of git, the repo check green when it should be.'],
+];
+
+const tabs = [
+ { id: 'verdict', name: 'Verdict' },
+ { id: 'plan', name: 'Fix plan' },
+ ...AREAS.map((a) => ({ id: a.id, name: a.name })),
+];
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const count = (rows, s) => rows.filter((r) => r[0] === s).length;
+const all = AREAS.flatMap((a) => a.rows);
+const word = { H: 'High', M: 'Medium', L: 'Low' };
+
+function verdict() {
+  const n = all.length, h = count(all, 'H'), m = count(all, 'M'), l = count(all, 'L');
+  const small = all.filter((r) => r[5] === 'S').length;
+  const ran = all.filter((r) => /ran it|measured|seen|counted/.test(r[6])).length;
+  return `<p class="lead"><b>It works day to day, but it can lose your things and it trusts too easily.</b> Today’s full test run passed 2,122 of 2,126; the 4 failures are test mistakes (dates, and a wrong label), not broken features. The real problems are at the edges: a broken settings file wiped, edits overwritten while it waits for your yes, facts about you quietly retired, commands it thinks only read but that write, and local servers any website can reach. Almost all of it is small to fix.</p>
+  <div class="cards">
+    <div class="card"><b>2,122 / 2,126</b><span>tests pass · 4 fail, all test mistakes · 2 flaky under load</span></div>
+    <div class="card"><b>${n} findings</b><span>${h} high · ${m} medium · ${l} low</span></div>
+    <div class="card"><b>${ran} proven</b><span>shown by running it, measuring or seeing it; the rest read in the code</span></div>
+    <div class="card"><b>${small} of ${n}</b><span>are small fixes (under an hour each)</span></div>
+  </div>
+  <div class="two">
+    <div class="box"><h2>The 13 that matter most</h2><ol class="tight">${[...TOP].sort((x, y) => (x[0] === 'H' ? 0 : 1) - (y[0] === 'H' ? 0 : 1)).map((t) => `<li><span class="pill ${t[0]}">${word[t[0]]}</span> ${esc(t[1])}</li>`).join('')}</ol></div>
+    <div class="box"><h2>What is already good</h2><ul class="tight">
+      <li>Sessions and settings are saved under a lock, written whole.</li>
+      <li>Failures go back to the model as an explanation, not a crash.</li>
+      <li>The door compares keys safely and locks out wrong guesses.</li>
+      <li>The web copy’s sign-in is strong (slow password hashing, strict cookies, origin checks, folder fence).</li>
+      <li>/agents loops are bounded (3 tries, 2 ship fixes).</li>
+      <li>Memory has a log, undo and held saves.</li>
+      <li>Every code file stays under 1,000 lines.</li>
+    </ul>
+    <h2 style="margin-top:12px">How it was checked</h2><ul class="tight">
+      <li>The full test run (384 s) and the repo’s own check.</li>
+      <li>Five helpers, each reading one part: engine & tools, app, memory & helpers, clickable UI, install & servers & tests.</li>
+      <li>The worst claims run again by me (marked “(me)”).</li>
+      <li>Read only: nothing in the repo or ~/.agentic-coder was changed.</li>
+    </ul></div>
+  </div>`;
+}
+function plan() {
+  return `<p class="lead">Four ways to go, most complete first. Each fix comes with a test that fails before it and passes after, and the full run at the end.</p>
+  <div class="tablewrap" style="flex:0 0 auto"><table class="tiers"><thead><tr><th>Option</th><th>What it covers</th><th>Time</th><th>Note</th></tr></thead><tbody>
+  ${TIERS.map((t, i) => `<tr><td><b>${esc(t[0])}</b>${i === 1 ? ' <span class="pill pick">my pick</span>' : ''}</td><td>${esc(t[1])}</td><td>${esc(t[2])}</td><td>${esc(t[3])}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div class="box" style="flex:1"><h2>Option 2, round by round (each round: fixes → its tests → the full run → one commit)</h2><ol class="tight">${ROUNDS.map((r) => `<li><b>${esc(r[0])}.</b> ${esc(r[1])}</li>`).join('')}</ol>
+  <p class="note" style="margin-top:8px">Built in a worktree, so your folder and other sessions are not touched; pushed only when you say.</p></div>`;
+}
+function area(a) {
+  if (!a.rows.length) return `<p class="lead">${esc(a.blurb)}</p>`;
+  const order = { H: 0, M: 1, L: 2 };
+  const rows = [...a.rows].sort((x, y) => order[x[0]] - order[y[0]]);
+  return `<div class="summary"><p>${esc(a.blurb)}</p><span class="pill H">${count(rows, 'H')} high</span><span class="pill M">${count(rows, 'M')} medium</span><span class="pill L">${count(rows, 'L')} low</span></div>
+  <div class="tablewrap"><table><thead><tr><th>Level</th><th>What goes wrong</th><th>Fix</th><th>Where</th><th>Size</th><th>Shown by</th></tr></thead><tbody>
+  ${rows.map((r) => `<tr><td class="n"><span class="pill ${r[0]}">${word[r[0]]}</span></td><td class="t"><b>${esc(r[1])}</b><span>${esc(r[2])}</span></td><td class="f">${esc(r[3])}</td><td class="w">${esc(r[4])}</td><td class="e">${r[5]}</td><td class="p">${esc(r[6])}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+const nav = document.getElementById('tabs');
+const main = document.getElementById('main');
+tabs.forEach((t, i) => {
+  const b = document.createElement('button');
+  b.setAttribute('role', 'tab'); b.id = `tab-${t.id}`; b.textContent = `${i + 1} · ${t.name}`;
+  b.addEventListener('click', () => show(t.id));
+  nav.appendChild(b);
+  const s = document.createElement('section');
+  s.id = t.id; s.setAttribute('role', 'tabpanel'); s.setAttribute('aria-labelledby', b.id);
+  s.innerHTML = t.id === 'verdict' ? verdict() : t.id === 'plan' ? plan() : area(AREAS.find((a) => a.id === t.id));
+  main.appendChild(s);
+});
+function show(id, push = true) {
+  if (!tabs.some((t) => t.id === id)) id = 'verdict';
+  for (const s of main.children) s.classList.toggle('on', s.id === id);
+  for (const b of nav.children) b.setAttribute('aria-selected', String(b.id === `tab-${id}`));
+  if (push && location.hash !== `#${id}`) history.replaceState(null, '', `#${id}`);
+}
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const i = tabs.findIndex((t) => main.querySelector(`#${t.id}`).classList.contains('on'));
+  if (/^[1-9]$/.test(e.key) && tabs[+e.key - 1]) show(tabs[+e.key - 1].id);
+  else if (e.key === 'ArrowRight') show(tabs[(i + 1) % tabs.length].id);
+  else if (e.key === 'ArrowLeft') show(tabs[(i - 1 + tabs.length) % tabs.length].id);
+});
+window.addEventListener('hashchange', () => show(location.hash.slice(1), false));
+show(location.hash.slice(1) || 'verdict', false);
+</script>
+</body>
+</html>
