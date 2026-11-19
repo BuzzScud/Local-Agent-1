@@ -9,7 +9,7 @@
 // floating screenshot can be a file that goes away); a folder, and a file over COPY_MAX, stay
 // where they are. A click on one (/mouse on) or ctrl+f opens it full size in Quick Look. A chip
 // deleted takes its card out of the tray; ctrl+z brings both back.
-import { appendFileSync, copyFileSync, cpSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { appendFileSync, copyFileSync, cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { basename, extname, join } from 'node:path';
 import stringWidth from 'string-width';
@@ -33,6 +33,18 @@ const WORD = { image: 'Image', pdf: 'PDF', file: 'File', folder: 'Folder' };
 const KIND = { Image: 'image', PDF: 'pdf', File: 'file', Folder: 'folder' };
 export const chipOf = (kind, n) => `[${WORD[kind] ?? 'File'} #${n}]`;
 const tried = (fn) => { try { return fn(); } catch { return undefined; } };
+
+// The next attachment's number: past the window's own and past every copy this conversation already
+// has in `dir` (19 Nov 2026, the owner: "when i drag in a screenshot, it doesnt upload the one i just
+// had, its old". A conversation picked up again after a restart counted from 1 again, so a new
+// screenshot took the name of one sent before it and wrote over it, and the window, which keeps a
+// picture by its name, still showed the old one).
+function nextN(pasted, dir, id) {
+  const pre = `${id}-`;
+  let n = pasted.n;
+  for (const f of tried(() => readdirSync(dir)) ?? []) if (f.startsWith(pre)) n = Math.max(n, parseInt(f.slice(pre.length), 10) || 0);
+  return n + 1;
+}
 
 // What the tray keeps of an attachment, its thumbnail made now (a picture macOS cannot open throws;
 // any other file without a thumbnail is a card without one). A file's card says what it holds:
@@ -67,7 +79,7 @@ export function attachDropped(text, { cwd, pasted, dir, id }) {
   const failed = [];
   let out = text;
   for (const d of found) {
-    const n = pasted.n + 1;
+    const n = nextN(pasted, dir, id);
     const st = statSync(d.path);
     // A folder stays where it is (the model reads in it there), and so does a file too big to copy.
     const stays = d.kind === 'folder' || (st.isFile() && st.size > COPY_MAX);
@@ -92,7 +104,7 @@ export function attachDropped(text, { cwd, pasted, dir, id }) {
 // The clipboard's picture (ctrl+v) as the next attachment: { n, token, … }, or null when there is none.
 export function attachClipboard({ pasted, dir, id }) {
   mkdirSync(dir, { recursive: true });
-  const n = pasted.n + 1;
+  const n = nextN(pasted, dir, id);
   const file = join(dir, `${id}-${n}.png`);
   const got = clipboardImage(file);
   if (!got) return null;

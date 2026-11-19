@@ -48,6 +48,24 @@ test.skipIf(needs('pictures', media.mediaTool))('a dropped screenshot (its path 
   expect(pasted.info.get(1).bytes).toBe(readFileSync(copy).length);
 });
 
+test.skipIf(needs('pictures', media.mediaTool))('a conversation picked up again in a new window (counting from 0) gets a new number: a new screenshot never writes over one sent before', () => {
+  const one = join(dir, 'Screenshot one.png');
+  const two = join(dir, 'Screenshot two.png');
+  media.textImage(one, 'FIRST', { w: 300, h: 100 });
+  media.textImage(two, 'SECOND', { w: 500, h: 200 });
+  const before = A.attachDropped(`${one.replace(/ /g, '\\ ')} `, { ...to('s9'), pasted: fresh() });
+  expect(before.text).toBe('[Image #1] ');
+  const firstCopy = readFileSync(join(dir, 'att', 's9-1.png'));
+  const pasted = fresh(); // the app restarted: the window's count is 0 again, the conversation the same
+  const r = A.attachDropped(`${two.replace(/ /g, '\\ ')} `, { ...to('s9'), pasted });
+  expect(r.text).toBe('[Image #2] ');
+  expect(pasted.files.get(2)).toBe(join(dir, 'att', 's9-2.png'));
+  expect([r.added[0].srcW, r.added[0].srcH]).toEqual([500, 200]);
+  expect(readFileSync(join(dir, 'att', 's9-1.png')).equals(firstCopy)).toBe(true);
+  const clip = A.attachClipboard({ pasted: fresh(), dir: join(dir, 'att'), id: 's9' });
+  if (clip) expect(clip.n).toBe(3); // whatever the clipboard holds, it takes the next free number too
+});
+
 test.skipIf(needs('pictures', media.mediaTool))('a dropped PDF is [PDF #n] with its first page as the thumbnail; among words a text file keeps its path (a drop of only paths: attach-files.test.mjs), and so do a missing one and a broken picture, which uses no number', () => {
   const pdf = join(dir, 'invoice.pdf');
   media.textPdf(pdf, ['Invoice 7731\nTotal due: 1,240 dollars', 'Page two']);

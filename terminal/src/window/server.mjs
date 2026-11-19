@@ -170,7 +170,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
         const f = u.searchParams.get('f') ?? '';
         const named = (st.last?.tray ?? []).some((x) => x.file === f) || Object.values(st.items).some((v) => v?.pics?.some((p) => p.file === f));
         if (!named || !existsSync(f)) return new Response('Not here.', { status: 404 });
-        return new Response(Bun.file(f), { headers: { 'content-type': PIC_TYPE[extname(f).toLowerCase()] ?? 'application/octet-stream', 'cache-control': 'private, max-age=3600' } });
+        return new Response(Bun.file(f), { headers: { 'content-type': PIC_TYPE[extname(f).toLowerCase()] ?? 'application/octet-stream', 'cache-control': 'no-store' } }); // a copy's name can come back after the week's clean-up: never an old picture
       }
       if (u.pathname === '/reveal') { execFile('open', [folder]); return Response.json({ ok: true }); }
       if (u.pathname === '/other-folder') {
