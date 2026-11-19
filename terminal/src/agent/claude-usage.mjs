@@ -28,7 +28,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { HOME, CLAUDE_MODELS, claudeName, claudeClient, claudeCaps, readKey, saveKey, removeKey } from '../../../models/index.mjs';
-import { daySpend, dayOf, windowSpend, recordSpend, claudeSince, dayCache } from './spend.mjs';
+import { daySpend, dayByOrg, dayOf, windowSpend, recordSpend, claudeSince, dayCache } from './spend.mjs';
 
 export const usageEvents = new EventEmitter();
 export const usageDir = () => join(process.env.AGENTIC_HOME ?? HOME, 'usage');
@@ -76,6 +76,26 @@ export function accountOf(key) {
   if (!tag) return { org: all.org ?? null, pending: false };
   const org = all.keys?.[tag];
   return { org: org || null, pending: org == null };
+}
+// This month's Claude dollars on this Mac by account, every window's: { <org>: usd } (the key list's months).
+export function monthByOrg(now = Date.now()) {
+  const d = new Date(now), out = {};
+  for (let n = 1; n <= d.getDate(); n++) for (const [org, usd] of Object.entries(dayByOrg(dayOf(new Date(d.getFullYear(), d.getMonth(), n))))) out[org] = (out[org] ?? 0) + usd;
+  return out;
+}
+// A key's account by its mark alone (the key list keeps the mark, so no key is read to show the list).
+export const accountOfTag = (tag) => (tag ? readAll().keys?.[tag] || null : null);
+// A key added (/key add): Anthropic takes it, and the account it belongs to, from the model list, which costs nothing.
+// { ok, org } or { ok: false, error } in plain words.
+export async function checkKey({ url, key }) {
+  try {
+    const client = await claudeClient(url, key);
+    const { response } = await client.models.list({ limit: 1 }, { timeout: 15_000, maxRetries: 1 }).withResponse();
+    return { ok: true, org: noteAccount(response.headers, key, true) };
+  } catch (e) {
+    const s = e?.status;
+    return { ok: false, error: s === 401 || s === 403 ? 'Anthropic did not accept that key' : s ? `Anthropic answered ${s}: ${String(e.message ?? '').slice(0, 120)}` : `Anthropic could not be reached (${String(e.message ?? e).slice(0, 120)})` };
+  }
 }
 // A key not seen yet: its account from the model list, which costs nothing (one at a time, each key once a
 // minute at most, so a key that fails is not asked over and over).

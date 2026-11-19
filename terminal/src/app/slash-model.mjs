@@ -6,7 +6,7 @@ import { showLimit } from './limits.mjs';
 import { openTune, saveTuneNotes, startTuneTest } from './tune-cmd.mjs';
 import { useHelperModel } from './subagents-cmd.mjs';
 
-export const MODEL_COMMANDS = ['start', 'stop', 'autostart', 'model', 'tune', 'profiles', 'subagents', 'usage', 'stats', 'doctor'];
+export const MODEL_COMMANDS = ['start', 'stop', 'autostart', 'model', 'tune', 'profiles', 'subagents', 'usage', 'key', 'stats', 'doctor'];
 
 export function slashModel(self) {
   return async (cmd, arg, busy, line) => {
@@ -57,6 +57,10 @@ export function slashModel(self) {
         self.setPicker({ kind: 'usage', asking: false });
         break;
       }
+      // /key (19 Nov 2026): your Claude API keys, by name (app-claude-keys.mjs).
+      case 'key':
+        self.keyCommand(arg);
+        break;
       case 'stats':
         self.push({ type: 'panel', title: 'Stats', pad: 20, rows: [
           ['model', `${self.model.name}${self.model.edited ? ` · ${self.model.edited.edits.length} edit${self.model.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(self.model.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`],

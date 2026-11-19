@@ -252,6 +252,8 @@ export function pickerKeysPart(self) {
       if (pk.id === 'memory-save') { self.applyChoice('memory-save', 'skip'); return; }
       if (pk.id === 'remote-saved') { self.applyChoice('remote-saved', 'later'); return; }
       if (pk.id === 'remote-scope') { self.applyChoice('remote-scope', 'later'); return; }
+      if (pk.id === 'key-scope') { self.applyChoice('key-scope', 'later'); return; }
+      if (pk.id === 'key-remove') { self.applyChoice('key-remove', 'keep'); return; }
       if (pk.id === 'start-where') { self.applyChoice('start-where', 'main'); return; }
       // The message with the picture was not sent: it goes back into the prompt.
       if (pk.id === 'vision-switch') {

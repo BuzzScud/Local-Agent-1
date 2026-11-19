@@ -17,7 +17,8 @@ const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const WORD = { claude: 'Claude API', openai: 'other service', machine: 'other computer' };
 
 // What a window follows of the file, and what it keeps of the service it uses: the model it runs and whether it is on.
-const FOLLOWED = ['remotes', 'memoryToRemote', 'remoteCleanAt'];
+// claudeKeys (19 Nov 2026): the Claude API keys' list, names and all (claude-keys.mjs).
+const FOLLOWED = ['remotes', 'memoryToRemote', 'remoteCleanAt', 'claudeKeys'];
 export function followSaved(mine, file = loadSettings()) {
   let changed = false;
   for (const k of FOLLOWED) {

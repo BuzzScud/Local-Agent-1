@@ -57,8 +57,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   // calculator link that day). /bot, then /steps (9 Oct 2026).
   // /tune (27 Oct 2026) after /jumptomac, on an Ollama service only (tune.test.mjs).
   // /skills (28 Oct 2026) after /status.
-  // /plugins (19 Nov 2026) last of them.
-  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'skills', 'bot', 'steps', 'plugins']);
+  // /plugins (19 Nov 2026) after /steps; /key (19 Nov 2026) last, on the Claude API only (claude-keys.test.mjs).
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'skills', 'bot', 'steps', 'plugins', 'key']);
   expect(matchCommands('/pl').map((c) => c.name)).toEqual(['plugins']);
   expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'mcp', 'test', 'settings', 'exit']);
   expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('mcp');

@@ -4,8 +4,9 @@
 // the moment a function uses them (app-common.mjs liveView); the state and refs these use stay in App.jsx.
 import { mkdirSync, watch } from 'node:fs';
 import { endpointOf } from '../../../models/index.mjs';
+import { newKeyProblem } from './claude-keys.mjs';
 import { spendEvents, spendLabel, windowSpend, spendDir } from '../agent/spend.mjs';
-import { usageNow, usageEvents, askLimits, usageDir, saveAdminKey, fetchBill, setOwn as setUsageOwn, dollarsOf, monthOf, clearBill, learnAccount, accountOf } from '../agent/claude-usage.mjs';
+import { usageNow, usageEvents, askLimits, usageDir, saveAdminKey, fetchBill, setOwn as setUsageOwn, dollarsOf, monthOf, clearBill, learnAccount, accountOf, monthByOrg } from '../agent/claude-usage.mjs';
 
 export function usagePart(self) {
   // The cost meter (/remote, spend.mjs): the footer's words, after each answer and every 15 s
@@ -37,7 +38,13 @@ export function usagePart(self) {
       keyShown = k;
       const u = usageNow({ model: claudeModel, admin: self.hasAdmin(), key: k });
       if (u.account?.pending && k) learnAccount({ url: self.agent.url, key: k }).catch(() => {});
-      const key = JSON.stringify([u.spent.toFixed(2), u.left, u.cap, u.tierCap, u.capped, u.low, u.pace.beforeReset, u.pace.runsOut, u.today, u.window.toFixed(2), u.source, u.balance, u.limits?.at, u.admin, u.account, u.tier]);
+      // Your keys by name (app-claude-keys.mjs): the one in use names the account (the footer, the window's account
+      // box), and the others' months are this Mac's for their accounts; the one in use's is the month shown.
+      const keys = self.keysNow({ byOrg: monthByOrg(), pending: Boolean(u.account?.pending), key: k ?? null });
+      for (const r of keys.rows) if (r.inUse && !r.checking) r.month = u.spent;
+      u.keys = keys.rows;
+      u.account = { ...(u.account ?? {}), name: keys.name, own: keys.own };
+      const key = JSON.stringify([u.spent.toFixed(2), u.left, u.cap, u.tierCap, u.capped, u.low, u.pace.beforeReset, u.pace.runsOut, u.today, u.window.toFixed(2), u.source, u.balance, u.limits?.at, u.admin, u.account, u.tier, u.keys.map((r) => [r.id, r.name, r.end, r.orgEnd, r.inUse, r.checking, r.month?.toFixed(2)])]);
       if (key !== shown) { shown = key; self.setUsage(u); }
     };
     const bill = () => { if (self.hasAdmin()) fetchBill().catch(() => {}); };
@@ -55,7 +62,12 @@ export function usagePart(self) {
     t.unref?.();
     // A key changed (/remote key, the card's Change API key): the window's connection carries the new one; within a
     // second its account counts, not the old key's (a look at memory only, no file read unless it changed).
-    const keyLook = setInterval(() => { if (apiKey() !== keyShown) show(); }, 1000);
+    // The keys' list too (a key added, named or removed here or in another window: settings.json, followed every 2 s).
+    let listShown = JSON.stringify(self.settings.claudeKeys ?? null);
+    const keyLook = setInterval(() => {
+      const l = JSON.stringify(self.settings.claudeKeys ?? null);
+      if (apiKey() !== keyShown || l !== listShown) { listShown = l; show(); }
+    }, 1000);
     keyLook.unref?.();
     return () => { usageEvents.off('change', show); spendEvents.off('change', show); clearInterval(t); clearInterval(keyLook); clearTimeout(soon); for (const w of watches) { try { w.close(); } catch {} } };
   };
@@ -74,6 +86,14 @@ export function usagePart(self) {
   const saveUsageEdit = (e) => {
     const said = (text, tone = 'dim') => { self.setPicker((p) => (p?.kind === 'usage' ? { ...p, editing: null } : p)); self.push({ type: 'note', text, tone }); return text; };
     const v = e.value.trim();
+    // /key add <name>: a Claude API key pasted in the last row (app-claude-keys.mjs checks it, keeps it, then asks).
+    if (e.id === 'newkey') {
+      const bad = newKeyProblem(v);
+      if (bad) { self.flash(bad, 4000); return null; }
+      self.setPicker(null);
+      self.addPasted(v, e.name ?? '').catch((err) => self.push({ type: 'note', text: `Not added: ${err.message}`, tone: 'error' }));
+      return 'checking';
+    }
     if (e.id === 'key') {
       if (v && !/^sk-ant-admin/.test(v)) { self.flash('An Admin key starts sk-ant-admin… (Console → Settings → Admin keys)', 4000); return null; }
       try { saveAdminKey(v || null); } catch (err) { self.flash(`could not keep it: ${String(err.message ?? err).slice(0, 120)}`, 4000); return null; }

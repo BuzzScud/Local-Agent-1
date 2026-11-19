@@ -36,6 +36,8 @@ export const COMMANDS = [
   { name: 'subagents', desc: 'The helper models, one per job (pictures, side jobs, code search, a second opinion, UI design): opens /profiles on its AIs group; /subagents <model> runs the helpers the Agent tool starts on that model', arg: '[model]' },
   // On the Claude API only (8 Oct 2026): what is left of the month's spend cap, today, and the limits each minute.
   { name: 'usage', desc: 'What the Claude API has left: your balance or limit, this month, today’s dollars, and the limits each minute (b types your balance, l your limit, s the Console’s figure, k an Admin key)' },
+  // /key (19 Nov 2026): several Claude API keys by name; the window's account box runs it too.
+  { name: 'key', desc: 'Your Claude API keys by name: list them, switch (this window or every window), add one, name or remove one', arg: '[use|add|name|remove] [name]' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
   { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone: a box of your saved Macs, online or not)', arg: '[mac]', picker: true },
   { name: 'loop', desc: 'A message sent again by itself, every so often or until its job is done. Alone: your loops, or a page to set one up; with words: /loop run the tests every 10 min until 6pm', arg: '[what it should do, how often, when it stops]' },
@@ -106,7 +108,7 @@ export const TYPED_ONLY = new Set(['morning', 'subagents', 'home']);
 const REMOTE_MENU = new Set(['profiles']);
 // On the Claude API only (8 Oct 2026): /usage reads what Anthropic sends with its replies; typed in full
 // on another model it says so.
-const CLAUDE_MENU = new Set(['usage']);
+const CLAUDE_MENU = new Set(['usage', 'key']);
 // On an Ollama service only (27 Oct 2026): /tune's own rows are a service model's; anywhere else, typed in full,
 // it opens /effort and says so.
 const SERVICE_MENU = new Set(['tune', 'bonsai']);
@@ -124,8 +126,9 @@ const SERVICE_MENU = new Set(['tune', 'bonsai']);
 // /steps (9 Oct 2026): how a reply's steps show (task-rows.jsx); after /bot.
 // /tune (27 Oct 2026): after /jumptomac, so the 18 of an 80 × 24 window stay as they were; /tu finds it in any window.
 // /skills (28 Oct 2026): after /status, so the rows before it keep their places; /sk finds it in any window.
-// /plugins (19 Nov 2026): last, so every row before it keeps its place; /pl finds it in any window.
-export const WHEN_ROOM = new Set(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'skills', 'bot', 'steps', 'plugins']);
+// /plugins (19 Nov 2026): after /steps, so every row before it keeps its place; /pl finds it in any window.
+// /key (19 Nov 2026): on the Claude API, last, so it is the first to go; /ke finds it in any window there.
+export const WHEN_ROOM = new Set(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'skills', 'bot', 'steps', 'plugins', 'key']);
 const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On

@@ -53,6 +53,7 @@ import { slashPart } from './app-slash.mjs';
 import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
 import { usagePart } from './app-usage.mjs';
+import { claudeKeysPart } from './app-claude-keys.mjs';
 import { watchPart } from './app-watch.mjs';
 import { promptMenu } from './app-menu.mjs';
 import { windowBridge } from '../window/bridge.mjs';
@@ -91,7 +92,7 @@ export function App({ opts, win, onRestart }) {
     openHub: () => openHub, openJumpBox: () => openJumpBox, openLoops: () => openLoops,
     openMcpPicker: () => openMcpPicker, openModelPicker: () => openModelPicker, openOwnSettings: () => openOwnSettings,
     openPermissions: () => openPermissions, openRemoteForm: () => openRemoteForm, openRewind: () => openRewind,
-    openSettings: () => openSettings, askUsage: () => askUsage, saveUsageEdit: () => saveUsageEdit, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, mainToRemote: () => mainToRemote, windowToRemote: () => windowToRemote, mainMoves: () => mainMoves, mainNow: () => mainNow, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
+    openSettings: () => openSettings, askUsage: () => askUsage, saveUsageEdit: () => saveUsageEdit, keyCommand: () => keyCommand, keyChoice: () => keyChoice, applyKeyChoice: () => applyKeyChoice, addPasted: () => addPasted, followKey: () => followKey, keysNow: () => keysNow, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, mainToRemote: () => mainToRemote, windowToRemote: () => windowToRemote, mainMoves: () => mainMoves, mainNow: () => mainNow, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
     pendingContext: () => pendingContext, pendingSaveRef: () => pendingSaveRef, pickHere: () => pickHere,
     pickLevel: () => pickLevel, pickLevels: () => pickLevels, pre: () => pre, preloadRemote: () => preloadRemote,
@@ -332,6 +333,8 @@ export function App({ opts, win, onRestart }) {
   // The cost meter, "$ left" and /usage (app-usage.mjs): the footer's words after each answer and every 15 s, and the
   // Claude API's usage worked out again whenever anything spends; read at once, for the first frame.
   const { spendWatch, usageWatch, askUsage, saveUsageEdit } = usagePart(self);
+  // Several Claude API keys by name (app-claude-keys.mjs): /key, the window's account box, every window following.
+  const { keyCommand, keyChoice, applyKeyChoice, addPasted, followKey, keysNow } = claudeKeysPart(self);
   useEffect(spendWatch, []); // eslint-disable-line react-hooks/exhaustive-deps
   const claudeModel = model.remote?.kind === 'claude' ? model.remote.model : null;
   const adminRef = useRef(null); // an Admin key is kept (the Keychain is read once, and again after k in /usage)

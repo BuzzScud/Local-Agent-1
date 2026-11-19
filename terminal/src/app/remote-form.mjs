@@ -317,6 +317,10 @@ export function rowChanged(form, id) {
   return (cur(form)[id] ?? null) !== (before[id] ?? null);
 }
 
+// The Keychain id a key typed in the form goes under: the service's own; on the Claude API, the key in use's
+// (claude, claude-2…: claude-keys.mjs), so a new key replaces the one in use and no other key of the list is lost.
+const typedKeyId = (source, old) => (source === 'claude' && old?.key && /^claude(-\d+)?$/.test(old.keyId ?? '') ? old.keyId : source);
+
 // A service's set-up as settings.json keeps it (the key itself goes to the Keychain).
 // contexts: an Ollama service's context by model, set in /effort, kept as it was.
 export function toProfile(form, source = form.source) {
@@ -328,7 +332,7 @@ export function toProfile(form, source = form.source) {
     connect: v.kind === 'claude' && v.connect === 'ssh' ? 'https' : v.connect, kind: v.kind,
     model: String(v.model ?? '').trim(), context: v.context ?? 0,
     key: hasKey, keyEnd: k === null ? (hasKey ? v.keyEnd ?? '' : '') : keyEnd(k),
-    keyId: k || !hasKey ? source : keyIdOf(v),
+    keyId: k ? typedKeyId(source, form.saved?.[source]) : !hasKey ? source : keyIdOf(v),
     ...(v.contexts ? { contexts: v.contexts } : {}),
   };
 }
@@ -381,8 +385,9 @@ export function savePlan(form, settings, { connect = false } = {}) {
     remotes[s] = base && opened ? { ...base, ...Object.fromEntries(Object.entries(mine).filter(([f, v]) => !same(v, opened[f]))) } : { ...(base ?? {}), ...mine };
     const old = form.saved[s];
     if (k) {
-      keys.push({ op: 'save', id: s, key: k, source: s });
-      if (old?.key && keyIdOf(old) !== s) keys.push({ op: 'remove', id: keyIdOf(old) });
+      const id = typedKeyId(s, old);
+      keys.push({ op: 'save', id, key: k, source: s });
+      if (old?.key && keyIdOf(old) !== id) keys.push({ op: 'remove', id: keyIdOf(old) });
     } else if (k === '' && old?.key) keys.push({ op: 'remove', id: keyIdOf(old) });
   }
   const before = settings?.remote ?? null;

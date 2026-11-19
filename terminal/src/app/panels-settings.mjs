@@ -121,6 +121,7 @@ export function panelsSettings(self, own) {
       else self.remoteTo(a.source);
       return;
     }
+    if (id === 'key-scope' || id === 'key-remove') { self.applyKeyChoice(id, value); return; }
     if (id === 'remote-scope') {
       const r = self.remoteRef.current.pendingScope;
       self.remoteRef.current.pendingScope = null;

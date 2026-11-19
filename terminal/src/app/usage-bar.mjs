@@ -93,13 +93,15 @@ const thinMeter = (w, frac) => fuelLine(w, frac, 0);
 // the month runs out before the 1st at its pace, red under a tenth of the cap left, "paused" at the cap;
 // "$138.32 this month" with no cap known. The footer puts it after the model's name (screen.jsx).
 // A figure typed days ago adds "(3 d old)" in amber: /usage, then s (b for a balance), types it again.
+// The key in use's name first, when it has one (/key name: "Work · $1.66 this month").
 export function usageChip(u) {
-  if (u.capped) return [S('paused', C.bad, null, true)];
+  const who = u.account?.name ? [S(u.account.name, C.text), S(' · ', C.dim)] : [];
+  if (u.capped) return [...who, S('paused', C.bad, null, true)];
   const typed = u.balance ?? u.source;
   const old = typed?.stale ? [S(` (${typed.days} d old)`, C.warn)] : [];
-  if (u.cap == null) return [S(money(u.spent), C.value, null, true), S(' this month', C.dim), ...old];
+  if (u.cap == null) return [...who, S(money(u.spent), C.value, null, true), S(' this month', C.dim), ...old];
   const tone = u.low ? C.bad : u.pace.beforeReset ? C.warn : null;
-  return [S(money(u.left), tone ?? C.value, null, true), S(' left', tone ?? C.dim), ...old];
+  return [...who, S(money(u.left), tone ?? C.value, null, true), S(' left', tone ?? C.dim), ...old];
 }
 
 // Where the month's spend comes from, in words (the card's last row). since: this Mac's answers after it.
@@ -117,7 +119,8 @@ export function accountWords(u, wide = true) {
   const a = u.account;
   if (a?.pending) return [wide ? 'account: checking which account the new key belongs to · nothing counted until it answers' : 'account: checking the new key…'];
   if (!a?.orgEnd) return [];
-  const out = [wide ? `account: organization …${a.orgEnd}, the key in use’s · only its dollars count` : `account …${a.orgEnd} · its dollars only`];
+  const who = a.name ? `${a.name}, ` : '';
+  const out = [wide ? `account: ${who}organization …${a.orgEnd}, the key in use’s · only its dollars count${u.keys?.length > 1 ? ' · /key switches' : ''}` : `account ${who}…${a.orgEnd} · its dollars only`];
   if (a.earlier > 0.005) out.push(wide ? `${money(a.earlier)} earlier this month came before keys were told apart: not counted` : `${money(a.earlier)} earlier: not counted`);
   return out;
 }
@@ -151,6 +154,9 @@ const USAGE_EDITS = {
   spent: 'Spent this month, as the Console’s Cost page shows it ($)',
   key: 'Admin key (sk-ant-admin…, Console → Settings → Admin keys; empty takes it out)',
 };
+// /key add <name> (19 Nov 2026): another Claude API key, pasted in the last row, hidden but its last four.
+const newKeyWords = (name, wide) => (wide ? `Another Claude API key${name ? ` for ${name}` : ''} (sk-ant-…, console.anthropic.com → API keys): enter checks it with Anthropic, then keeps it in the Keychain`
+  : `Another Claude API key${name ? ` for ${name}` : ''} (sk-ant-…): enter checks and keeps it`);
 export function usagePanel(u, width, { now = Date.now(), live = false, asking = false, edit = null } = {}) {
   const inner = width - 4;
   const B = u.capped ? C.bad : C.border;
@@ -203,9 +209,10 @@ export function usagePanel(u, width, { now = Date.now(), live = false, asking = 
   line([S(wide ? `limits from Anthropic’s last reply${u.limits ? `, ${ago(now - u.limits.at)}` : ''}` : `limits: last reply${u.limits ? `, ${ago(now - u.limits.at)}` : ''}`, C.sep)]);
   if (edit) {
     // The value being typed: a key shows its last four only.
-    const shown = edit.id === 'key' ? (edit.value ? `${'•'.repeat(Math.min(12, edit.value.length))}${edit.value.length >= 12 ? edit.value.slice(-4) : ''}` : '') : edit.value;
+    const secret = edit.id === 'key' || edit.id === 'newkey';
+    const shown = secret ? (edit.value ? `${'•'.repeat(Math.min(12, edit.value.length))}${edit.value.length >= 12 ? edit.value.slice(-4) : ''}` : '') : edit.value;
     blank();
-    line([S(USAGE_EDITS[edit.id], C.text)]);
+    line([S(edit.id === 'newkey' ? newKeyWords(edit.name, wide) : USAGE_EDITS[edit.id], C.text)]);
     line([S('› ', C.ok), S(shown, C.value, null, true), S('▌', C.ok)]);
   }
   rows.push([S('╰', B), S('─'.repeat(width - 2), B), S('╯', B)]);

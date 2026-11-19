@@ -5,7 +5,7 @@
 import { hostname, homedir } from 'node:os';
 import { existsSync } from 'node:fs';
 import { SESSION_MARK } from '../agent/prompt.mjs';
-import { remoteModel, remoteRisk, connectRemote, remoteLabel, warmUp, modelById, MODELS, DEFAULT_MODEL, DEFAULT_REMOTE, saveKey, removeKey, sourceOf, ollamaCatalog, unloadOllama, authHeaders, OPEN_KEEP, isOutOfMemory, setEndpoint, endpointOf, preloadOllama, ollamaModel, floorCtx, modelPath, thinkingLevel, editedModels } from '../../../models/index.mjs';
+import { remoteModel, remoteRisk, connectRemote, remoteLabel, warmUp, modelById, MODELS, DEFAULT_MODEL, DEFAULT_REMOTE, saveKey, removeKey, sourceOf, keyIdOf, ollamaCatalog, unloadOllama, authHeaders, OPEN_KEEP, isOutOfMemory, setEndpoint, endpointOf, preloadOllama, ollamaModel, floorCtx, modelPath, thinkingLevel, editedModels } from '../../../models/index.mjs';
 import { windowSpend } from '../agent/spend.mjs';
 import { modelsInUseOn, updateWindow } from './copies.mjs';
 import { kindWord, openForm, startEdit, rowsOf as remoteRows, savePlan, formWarning, sourceWord, testForm, withTest, connectionChanged, openModelPick, readyRemote, remotesOf, remoteChoices } from './remote-form.mjs';
@@ -66,6 +66,10 @@ export function remotePart(self) {
     }
     self.remoteRef.current.conn = conn;
     self.remoteRef.current.why = null;
+    // The Claude API key this connection sends (app-claude-keys.mjs): a window's own key stays its own only while
+    // it is the one connected with.
+    self.remoteRef.current.keyIn = r.kind === 'claude' && r.key ? keyIdOf(r) : null;
+    if (self.remoteRef.current.ownKey !== self.remoteRef.current.keyIn) self.remoteRef.current.ownKey = null;
     self.lendConn(r, conn);
     // The service this window connected with (never its key): its memory save after you close it goes
     // there too, not to whichever service another window saved since (autosave.mjs).
@@ -294,7 +298,7 @@ export function remotePart(self) {
       if (!plan) return;
       self.setPicker(null);
       const r = self.settings.remote;
-      if (!self.remoteRef.current.on || !self.remoteRef.current.conn || connectionChanged(before, r, plan.keys.some((k) => k.op === 'save' && k.id === done.source))) { useRemote(r); return; }
+      if (!self.remoteRef.current.on || !self.remoteRef.current.conn || connectionChanged(before, r, plan.keys.some((k) => k.op === 'save' && k.source === done.source))) { useRemote(r); return; }
       self.push({ type: 'note', text: `${sourceWord(done.source)} saved and still in use (${remoteLabel(r)}).`, tone: 'dim' });
     });
   };
@@ -543,8 +547,10 @@ export function remotePart(self) {
     self.lendConn(r, conn);
     self.agent.remoteConf = remoteConfOf(r);
     const src = sourceOf(r);
-    const saved = saveService(src, (p) => ({ ...p, model: id }), { remote: r });
-    self.settings.remote = saved.remote;
+    // A Claude API key of this window's own (app-claude-keys.mjs) stays this window's: the next start is on the saved one.
+    const own = self.remoteRef.current.ownKey && r.kind === 'claude' && self.settings.remotes?.claude;
+    const saved = saveService(src, (p) => ({ ...p, model: id }), { remote: own ? { ...r, keyId: own.keyId, keyEnd: own.keyEnd } : r });
+    self.settings.remote = own ? { ...saved.remote, keyId: r.keyId, keyEnd: r.keyEnd } : saved.remote;
     self.settings.remotes = saved.remotes;
     const m = conn.model;
     self.setModel(m);

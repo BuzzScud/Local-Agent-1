@@ -57,7 +57,8 @@ export function watchPart(self) {
     const tick = savedWatch(self.settings);
     const say = (lines, tone) => { for (const text of lines) self.push({ type: 'note', text, tone }); };
     // Then the model in use's own settings, which the hub's Remote › Tune may have changed (followOwn above).
-    const t = setInterval(() => { say(tick(), 'warn'); followOwn(); }, 2000);
+    // And the Claude API key another window saved for every window (app-claude-keys.mjs followKey).
+    const t = setInterval(() => { say(tick(), 'warn'); followOwn(); self.followKey(); }, 2000);
     t.unref?.();
     const first = setTimeout(() => {
       say(repairNow(), 'warn');

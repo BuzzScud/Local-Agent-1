@@ -211,6 +211,9 @@ export function modelPart(self) {
         { id: 'later', label: 'Not now', note: `it stays saved: /remote ${self.remoteWord(a.source)} connects it any time` },
       ] };
     }
+    // A Claude API key switched to (/key use, the window's account box): this window only, or every window; a key
+    // to remove, yes or no (app-claude-keys.mjs).
+    if (id === 'key-scope' || id === 'key-remove') return self.keyChoice(id);
     // A connect that would move Main (9 Oct 2026, the owner's pick): this window only, or every window.
     if (id === 'remote-scope') {
       const r = self.remoteRef.current.pendingScope ?? {};

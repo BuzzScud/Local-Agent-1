@@ -137,6 +137,16 @@ export function daySpend(day, { kind = null, service = kind === 'claude' ? CLAUD
   }
   return kind === 'claude' ? { usd, windows, untagged } : { usd, windows };
 }
+// A day's Claude dollars by account, over every window (the key list's months, /key): { <org>: usd }.
+export function dayByOrg(day, { dir = spendDir() } = {}) {
+  const out = {};
+  let files = [];
+  try { files = readdirSync(join(dir, day)).filter((f) => f.endsWith('.json')); } catch {}
+  for (const f of files) {
+    try { for (const [org, usd] of Object.entries(JSON.parse(readFileSync(join(dir, day, f), 'utf8')).claudeByOrg ?? {})) out[org] = (out[org] ?? 0) + (Number(usd) || 0); } catch {}
+  }
+  return out;
+}
 
 // The prompt cache over one day's windows, of one kind of service: { sent, hit, wrote, saved } (zeros when
 // nothing was kept: before 13 Oct 2026, or no answer that day).

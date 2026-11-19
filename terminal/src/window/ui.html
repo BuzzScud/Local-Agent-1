@@ -32,6 +32,16 @@ button { font: inherit; color: inherit; }
 /* the model's pill stays in the middle; the usage pill sits to its right, so nothing moves when it comes or goes */
 .tb .c { position: relative; overflow: visible; }
 #uslot { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 6px; display: flex; }
+/* the account box, left of the model (19 Nov 2026): whose Claude API key is in use; a click lists your keys */
+#aslot { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 6px; display: flex; }
+.abox { height: 28px; border-radius: 14px; border: 1px solid var(--hair2); background: var(--raise); color: var(--dim); padding: 0 10px 0 12px; display: inline-flex; align-items: center; gap: 6px; font: 12.5px var(--sans); white-space: nowrap; cursor: pointer; }
+.abox:hover, .abox.open { border-color: rgba(255,255,255,.24); color: var(--text); }
+.abox .nm { color: var(--text); font-weight: 500; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.abox .id { color: var(--faint); font: 11.5px var(--mono); } .abox .cv { color: var(--faint); font-size: 10px; }
+.abox.checking { color: var(--warn); border-color: rgba(255,175,95,.4); background: rgba(255,175,95,.07); } .abox.checking .nm { color: var(--warn); }
+.abox .wdot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); animation: apulse 1.2s ease-in-out infinite; }
+@keyframes apulse { 50% { opacity: .35; } }
+.tb.f3 .abox .id { display: none; } .tb.f4 .abox .nm { max-width: 64px; }
 /* a narrow window: the buttons' words go before anything overlaps (fitBar), then the pills get shorter */
 .tb.f1 .seg .tx, .tb.f1 .bb .k { display: none; } .tb.f1 .seg button { padding: 0 9px; }
 .tb.f2 .l .tx { display: none; } .tb.f2 .l .bb { padding: 0 9px; }
@@ -214,6 +224,18 @@ button { font: inherit; color: inherit; }
 .mpop .it .n { color: #5d5d64; font: 11px var(--mono); } .mpop .it .l { color: var(--text); font-size: 13px; } .mpop .it .d { grid-column: 2; color: var(--faint); font-size: 11.5px; line-height: 1.4; }
 .mpop .it .c { grid-row: 1; grid-column: 3; color: var(--accent); font-size: 12px; } .mpop .it.bypass .l, .mpop .it.bypass .c { color: var(--bad); }
 .mpop .sep { height: 1px; background: var(--hair); margin: 4px 8px; } .mpop .ft { color: #6d6d74; font-size: 11px; padding: 6px 10px 4px; }
+/* the keys under the account box (the mode menu's look): one row a key, its account and month; ✓ the one in use */
+.kpop { width: 380px; max-width: calc(100vw - 28px); }
+.kpop .it { grid-template-columns: 16px minmax(0, 1fr) auto; }
+.kpop .it .l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .kpop .it .l.un { color: var(--dim); font-style: italic; }
+.kpop .it .c { grid-column: 1; }
+.kpop .it .m { grid-row: 1; grid-column: 3; text-align: right; color: var(--text); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.kpop .it .d { grid-column: 2 / 4; display: flex; gap: 10px; flex-wrap: wrap; font: 11.5px var(--mono); }
+.kpop .it .d .acts { margin-left: auto; font-family: var(--sans); display: flex; gap: 10px; }
+.kpop .lk { background: none; border: 0; padding: 0; color: var(--accent); font: 11.5px var(--sans); cursor: pointer; } .kpop .lk.del { color: var(--dim); } .kpop .lk.del:hover { color: var(--bad); }
+.kpop .add { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; background: none; color: var(--accent); font: 13px var(--sans); border-radius: 8px; cursor: pointer; text-align: left; } .kpop .add:hover { background: var(--accent-bg); }
+.kpop input.rn { height: 24px; border-radius: 6px; border: 1px solid var(--accent-line); background: var(--win); color: var(--text); padding: 0 8px; font: 13px var(--sans); width: 100%; min-width: 0; }
+.kpop .ft { line-height: 1.45; }
 /* a question: a card in the prompt's place */
 .perm { border: 1px solid var(--accent-line); border-radius: 12px; background: #1b1d22; padding: 14px 16px; margin: 8px 0 10px; }
 .perm .h { font: 600 13px var(--sans); color: #afafff; margin-bottom: 8px; }
@@ -295,7 +317,7 @@ button:focus-visible, .row:focus-visible, .card:focus-visible { outline: 2px sol
     <button class="bb" data-act="newwin" title="New chat in a new window, this one keeps going ⌘N">ICON_PLUS<span class="tx">New</span></button>
     <div class="seg"><button data-run="/remote" title="Remote">ICON_REMOTE<span class="tx">Remote</span></button><button data-run="/loop" title="Loops">ICON_LOOP<span class="tx">Loops</span></button><button data-run="/help" title="Help">ICON_HELP<span class="tx">Help</span></button></div>
   </div>
-  <div class="c" data-tauri-drag-region><span class="pill" id="pill" data-run="/model"><span class="dot" id="pilldot"></span><span id="pillname">Agentic Coder</span></span><span id="uslot"></span></div>
+  <div class="c" data-tauri-drag-region><span id="aslot"></span><span class="pill" id="pill" data-run="/model"><span class="dot" id="pilldot"></span><span id="pillname">Agentic Coder</span></span><span id="uslot"></span></div>
   <div class="r" data-tauri-drag-region>
     <button class="bb sq" data-run="/settings" title="Settings">ICON_GEAR</button>
     <button class="bb sq" data-act="folder" id="folderbtn" title="">ICON_FOLDER</button>
@@ -737,8 +759,69 @@ function renderUsage(st) {
   const slot = document.getElementById('uslot');
   const u = st?.usage, m = st?.meter;
   const h = u ? usagePill(u, st.live?.phase === 'working') : m ? meterPill(m) : '';
-  if (slot.dataset.h !== h) { slot.dataset.h = h; slot.innerHTML = h; fitBar(); }
+  // The account box left of the model: on the Claude API with a key of the list (bridge.mjs usageOf keys).
+  const aslot = document.getElementById('aslot'), ah = u ? accountBoxHtml(u) : '';
+  let moved = false;
+  if (aslot.dataset.h !== ah) { aslot.dataset.h = ah; aslot.innerHTML = ah; moved = true; }
+  if (slot.dataset.h !== h) { slot.dataset.h = h; slot.innerHTML = h; moved = true; }
+  if (moved) fitBar();
   if (!h && S.usageCard) { S.usageCard = false; renderDrops(); }
+  if (!ah && S.keyMenu) { S.keyMenu = false; S.keyRename = null; renderDrops(); }
+}
+// ---- the account box (19 Nov 2026, the owner: "add multiple api keys … a small info box to the left of the api to say
+// what acct name it is"): the key in use's name (yours, /key name) and the end of the account's ID Anthropic gives it;
+// amber while a new key is checked. A click lists your keys: a row switches (the app asks: this window or every
+// window), Name names it in place, Remove asks in the app, Add another key opens the app's row that hides the key.
+// The page never holds a key: the rows are names, the keys' last four and the accounts' ends.
+function accountBoxHtml(u) {
+  const k = (u.keys || []).find((x) => x.inUse);
+  if (!k) return '';
+  const a = u.account || {};
+  const attrs = ' role="button" tabindex="0" data-act="keys" aria-haspopup="menu" aria-expanded="' + (S.keyMenu ? 'true' : 'false') + '"';
+  const name = esc(k.name || 'Account');
+  if (a.pending || k.checking) return '<span class="abox checking' + (S.keyMenu ? ' open' : '') + '"' + attrs + ' title="Checking which account the key belongs to"><span class="wdot"></span><span class="nm">' + name + '</span><span class="id">checking…</span><span class="cv">▾</span></span>';
+  const org = a.orgEnd || k.orgEnd;
+  const title = (k.name || 'No name yet') + (org ? ' · account …' + org : '') + ' · key ••••' + k.end + (a.own ? ' · this window only' : '');
+  return '<span class="abox' + (S.keyMenu ? ' open' : '') + '"' + attrs + ' title="' + esc(title) + '"><span class="nm">' + name + '</span>' + (org ? '<span class="id">…' + esc(org) + '</span>' : '') + '<span class="cv">▾</span></span>';
+}
+function keyMenuHtml(u) {
+  const keys = u.keys || [];
+  const rows = keys.map((k) => {
+    const renaming = S.keyRename === k.id;
+    const label = renaming ? '<input class="rn" id="krn" maxlength="40" placeholder="A name, like Work" aria-label="Name for the key ending ' + esc(k.end) + '" value="' + esc(S.krnValue ?? k.name) + '">'
+      : '<span class="l' + (k.name ? '' : ' un') + '">' + esc(k.name || 'No name yet') + '</span>';
+    const month = k.checking ? '<span style="color:var(--warn)">checking</span>' : k.month != null ? money(k.month) : '<span style="color:var(--faint)">–</span>';
+    return '<div class="it' + (k.inUse ? ' cur' : '') + '" role="menuitemradio" tabindex="0" aria-checked="' + k.inUse + '" data-kuse="' + esc(k.id) + '"><span class="c">' + (k.inUse ? '✓' : '') + '</span>' + label + '<span class="m">' + month + '</span>'
+      + '<span class="d"><span>key ••••' + esc(k.end || '????') + '</span><span>' + (k.orgEnd ? 'account …' + esc(k.orgEnd) : 'account not known yet') + '</span>'
+      + '<span class="acts"><button class="lk" data-kname="' + esc(k.id) + '">' + (renaming ? 'Done' : 'Name') + '</button>' + (k.inUse ? '' : '<button class="lk del" data-kdel="' + esc(k.id) + '">Remove</button>') + '</span></span></div>';
+  }).join('');
+  const earlier = u.account?.earlier > 0.005 ? ' ' + money(u.account.earlier) + ' from earlier this month came before keys were told apart: not counted.' : '';
+  return '<div class="mpop kpop" id="kpop" role="menu"><div class="hd">API keys · Claude API<span>click one to switch</span></div>' + rows
+    + '<div class="sep"></div><button class="add" data-kadd="1">＋ Add another key</button>'
+    + '<div class="ft">Each key counts only its own account’s dollars, this month on this Mac. Switching asks: this window, or every window.' + earlier + '</div></div>';
+}
+// Under the box, its left edge with the box's, inside the window.
+function placeKeyMenu() {
+  const pop = document.getElementById('kpop'), b = document.querySelector('#aslot .abox');
+  if (!pop || !b) return;
+  const r = b.getBoundingClientRect();
+  pop.style.left = Math.max(14, Math.min(r.left, innerWidth - pop.offsetWidth - 14)) + 'px';
+  pop.style.top = (r.bottom + 6) + 'px';
+}
+function openKeyMenu(on) {
+  S.keyMenu = on;
+  S.keyRename = null; S.krnValue = null;
+  if (on) { S.find = false; S.folderMenu = false; S.usageCard = false; if (S.modeMenu) openModeMenu(false); }
+  renderUsage(S.last);
+  renderDrops();
+}
+// A key's name, as typed in its row: sent as /key name <id> <name> ("-" takes the name out).
+function saveKeyName() {
+  const id = S.keyRename, v = (document.getElementById('krn')?.value ?? S.krnValue ?? '').replace(/\s+/g, ' ').trim();
+  const k = (S.last?.usage?.keys || []).find((x) => x.id === id);
+  openKeyMenu(false);
+  if (!k || v === (k.name || '')) return;
+  run('/key name ' + id + ' ' + (v || '-'));
 }
 // The title bar at any width: the fewest steps (f1 … f4) that keep the left buttons, the pills and the right
 // buttons 8px apart.
@@ -747,7 +830,8 @@ function fitBar() {
   const apart = () => {
     const l = L.lastElementChild.getBoundingClientRect().right, r = R.firstElementChild.getBoundingClientRect().left;
     const p = document.getElementById('pill').getBoundingClientRect(), u = document.querySelector('#uslot .upill')?.getBoundingClientRect();
-    return l + 8 <= p.left && (u ? u.right : p.right) + 8 <= r;
+    const a = document.querySelector('#aslot .abox')?.getBoundingClientRect();
+    return l + 8 <= (a ? a.left : p.left) && (u ? u.right : p.right) + 8 <= r;
   };
   tb.classList.remove('f1', 'f2', 'f3', 'f4');
   for (const f of ['f1', 'f2', 'f3', 'f4']) { if (apart()) return; tb.classList.add(f); }
@@ -835,7 +919,7 @@ function render() {
   document.getElementById('pilldot').className = 'dot' + (dot ? ' ' + dot : '');
   document.getElementById('folderbtn').title = S.folder;
   renderUsage(st);
-  if (S.usageCard || S.find || S.modeMenu) renderDrops();
+  if (S.usageCard || S.find || S.modeMenu || S.keyMenu) renderDrops();
   if (S.side) renderSide();
   // Before the app draws as data (the folder question, the safety check): its own screen, as drawn.
   if (!st) return frameOf('screen', '<div class="screen">' + (S.screen ? runsHtml(S.screen.rows) : '<span style="color:var(--faint)">Starting Agentic Coder…</span>') + '</div>');
@@ -913,14 +997,19 @@ function renderDrops() {
   if (S.usageCard && S.last?.usage) h += usageCardHtml(S.last.usage, S.last.live?.phase === 'working');
   else if (S.usageCard && S.last?.meter) h += meterCardHtml(S.last.meter);
   if (S.modeMenu && S.last) h += modeMenuHtml();
+  if (S.keyMenu && S.last?.usage?.keys?.length) h += keyMenuHtml(S.last.usage);
   if (S.toast) h += '<div class="toast">' + esc(S.toast) + '</div>';
   if (h !== dropsHtml) {
     dropsHtml = h;
-    const opening = S.find && !document.getElementById('fq');
-    keepField('fq', () => { drops.innerHTML = h; }, opening);
+    // A key being named keeps its caret, as the search box does (the list is drawn again when the app's state changes).
+    const field = S.keyRename && S.keyMenu ? 'krn' : 'fq';
+    const opening = field === 'krn' ? S.krnOpening : S.find && !document.getElementById('fq');
+    S.krnOpening = false;
+    keepField(field, () => { drops.innerHTML = h; }, opening);
   }
   placeCard();
   placeModeMenu();
+  placeKeyMenu();
 }
 async function loadSessions() { try { S.sessions = await (await fetch('/sessions?t=' + T)).json(); } catch { S.sessions = []; } }
 // A saved conversation in the lists: a click picks it up here; ↗ (or ⌘Enter on the row) opens it in a window of its own.
@@ -958,6 +1047,16 @@ function keyBytes(e) {
 }
 addEventListener('keydown', (e) => {
   if (e.isComposing) return;
+  // The keys' list (keyMenuHtml): Enter saves a name being typed, esc drops it, then closes the list; Enter or space on a
+  // row switches to it, and on the box opens the list.
+  const fo = document.activeElement;
+  if (S.keyMenu && fo?.id === 'krn') {
+    if (e.key === 'Enter') { e.preventDefault(); saveKeyName(); }
+    else if (e.key === 'Escape') { e.preventDefault(); S.keyRename = null; S.krnValue = null; renderDrops(); }
+    return;
+  }
+  if (S.keyMenu && e.key === 'Escape') { e.preventDefault(); openKeyMenu(false); document.querySelector('#aslot .abox')?.focus(); return; }
+  if ((e.key === 'Enter' || e.key === ' ') && !e.metaKey && (fo?.dataset?.kuse || fo?.dataset?.act === 'keys')) { e.preventDefault(); fo.click(); return; }
   const inField = document.activeElement?.tagName === 'INPUT';
   if (e.metaKey && e.key.toLowerCase() === 'b') { e.preventDefault(); S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }
   if (e.metaKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newWindow(); return; }
@@ -1013,6 +1112,7 @@ window.agenticDropped = (paths) => {
 };
 document.addEventListener('input', (e) => {
   // Both keep the box's caret where it was (keepField).
+  if (e.target.id === 'krn') { S.krnValue = e.target.value; return; }
   if (e.target.id === 'fq' || e.target.id === 'sq') { S.q = e.target.value; if (e.target.id === 'fq') renderDrops(); else renderSide(); }
 });
 // The live part is drawn again as the reply streams, up to 30 times a second, so a row pressed there is mostly gone by
@@ -1032,6 +1132,14 @@ document.addEventListener('click', (e) => {
   if (S.modeMenu && !t.closest('#mpop') && !t.closest('[data-act="modes"]')) openModeMenu(false);
   if (t.closest('#picfull')) { closePicFull(); return; }
   const pic = t.closest('[data-pic]'); if (pic) { picFull(pic.dataset.pic); return; }
+  // The account box and its keys (accountBoxHtml): a click outside closes the list (a name being typed is dropped).
+  if (S.keyMenu && !t.closest('#kpop') && !t.closest('[data-act="keys"]')) openKeyMenu(false);
+  const kn = t.closest('[data-kname]'); if (kn) { if (S.keyRename === kn.dataset.kname) saveKeyName(); else { S.keyRename = kn.dataset.kname; S.krnValue = null; S.krnOpening = true; renderDrops(); } return; }
+  const kd = t.closest('[data-kdel]'); if (kd) { openKeyMenu(false); run('/key remove ' + kd.dataset.kdel); return; }
+  if (t.closest('[data-kadd]')) { openKeyMenu(false); run('/key add'); return; }
+  if (t.closest('#krn')) return;
+  const ku = t.closest('[data-kuse]'); if (ku) { const k = (S.last?.usage?.keys || []).find((x) => x.id === ku.dataset.kuse); openKeyMenu(false); if (k && !k.inUse) run('/key use ' + k.id); return; }
+  if (t.closest('[data-act="keys"]')) { openKeyMenu(!S.keyMenu); return; }
   const runBtn = t.closest('[data-run]'); if (runBtn) { if (S.usageCard) { S.usageCard = false; renderUsage(S.last); renderDrops(); } return run(runBtn.dataset.run); }
   const act = t.closest('[data-act]')?.dataset.act;
   if (act === 'side') { S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }

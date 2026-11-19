@@ -240,7 +240,9 @@ export function usageOf(u) {
     limits: u.limits ? { at: u.limits.at, requests: lim(u.limits.requests), input: lim(u.limits.input), output: lim(u.limits.output) } : null,
     // the account of the key in use (claude-usage.mjs): being checked (a new key), its id's end, and this month's
     // dollars from before accounts were kept, not counted
-    account: u.account ? { pending: Boolean(u.account.pending), orgEnd: u.account.orgEnd ?? null, earlier: u.account.earlier ?? 0 } : null,
+    account: u.account ? { pending: Boolean(u.account.pending), orgEnd: u.account.orgEnd ?? null, earlier: u.account.earlier ?? 0, name: u.account.name ?? '', own: Boolean(u.account.own) } : null,
+    // your keys by name (app-claude-keys.mjs), for the account box left of the model: never a key, only its last four
+    keys: (u.keys ?? []).map((k) => ({ n: k.n, id: k.id, name: k.name ?? '', end: k.end ?? '', orgEnd: k.orgEnd ?? null, month: k.month ?? null, inUse: Boolean(k.inUse), checking: Boolean(k.checking) })),
   };
 }
 

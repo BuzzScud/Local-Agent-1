@@ -313,6 +313,80 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a new API key switc
   } finally { await p.close(); }
 }, 60_000);
 
+// 19 Nov 2026, the owner: "can we add a feature to add multiple api keys? adding a small info box to the left of the api
+// to say what acct name it is?" The account box left of the model, its list of keys, and what each part sends.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the account box left of the model names the key in use; its list switches, names, adds and removes', async () => {
+  const p = await openPage();
+  try {
+    const keys = [
+      { n: 1, id: 'claude', name: 'Personal', end: 'FwAA', orgEnd: '284a', month: 1.66, inUse: true, checking: false },
+      { n: 2, id: 'claude-2', name: 'Work', end: '9Qk2', orgEnd: 'c0de', month: 0, inUse: false, checking: false },
+    ];
+    const usage = { spent: 1.66, cap: null, resetsOn: Date.UTC(2026, 11, 1), month: 'November', today: 1.66, window: 0, last14: Array(14).fill(0), modelName: 'Opus 5.5', account: { pending: false, orgEnd: '284a', earlier: 60.01, name: 'Personal', own: false }, keys };
+    const sent = () => p.got().filter((m) => m.from === 'keys').map((m) => m.data).join('');
+    await p.say({ ...base, usage });
+    // the box: left of the model's pill, the name and the account's end
+    expect(await p.js(`document.querySelector('#aslot .abox').textContent`)).toBe('Personal…284a▾');
+    const at = await p.js(`(() => { const a = document.querySelector('#aslot .abox').getBoundingClientRect(), m = document.getElementById('pill').getBoundingClientRect(); return { boxRight: a.right, pillLeft: m.left, top: Math.abs((a.top + a.bottom) / 2 - (m.top + m.bottom) / 2) }; })()`);
+    expect(at.boxRight).toBeLessThanOrEqual(at.pillLeft);
+    expect(at.top).toBeLessThan(1);
+    // its list: a row a key, the one in use ticked, never a key, the month of each account
+    await p.click('#aslot .abox');
+    expect(await p.js(`[...document.querySelectorAll('#kpop [data-kuse]')].map((r) => r.textContent)`)).toEqual(['✓Personal$1.66key ••••FwAAaccount …284aName', 'Work$0.00key ••••9Qk2account …c0deNameRemove']);
+    expect(await p.js(`document.getElementById('kpop').textContent`)).toContain('$60.01 from earlier this month came before keys were told apart: not counted.');
+    const pop = await p.js(`(() => { const k = document.getElementById('kpop').getBoundingClientRect(), a = document.querySelector('#aslot .abox').getBoundingClientRect(); return { left: k.left, boxLeft: a.left, top: k.top, boxBottom: a.bottom, right: k.right, w: innerWidth }; })()`);
+    expect(pop.left).toBe(pop.boxLeft);
+    expect(pop.top).toBeGreaterThan(pop.boxBottom);
+    expect(pop.right).toBeLessThanOrEqual(pop.w);
+    // a row switches (the app asks which windows); the one in use does nothing
+    await p.click('#kpop [data-kuse="claude"]');
+    expect(sent()).not.toContain('/key use');
+    await p.click('#aslot .abox');
+    await p.click('#kpop [data-kuse="claude-2"]');
+    expect(sent()).toContain('/key use claude-2\r');
+    expect(await p.js(`Boolean(document.getElementById('kpop'))`)).toBe(false);
+    // Name: typed in its row, enter sends it; esc leaves it as it was
+    await p.click('#aslot .abox');
+    await p.click('#kpop [data-kname="claude"]');
+    expect(await p.js(`document.activeElement.id`)).toBe('krn');
+    await p.js(`(() => { const i = document.getElementById('krn'); i.value = 'Home'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await p.say({ ...base, usage: { ...usage, today: 1.67 } }); // the app's state changes while it is typed: the name stays
+    expect(await p.js(`document.getElementById('krn')?.value`)).toBe('Home');
+    await p.press('Enter', 13);
+    expect(sent()).toContain('/key name claude Home\r');
+    // Add another key and Remove: the app's own row and question (the page never holds a key)
+    await p.click('#aslot .abox');
+    await p.click('#kpop [data-kadd]');
+    expect(sent()).toContain('/key add\r');
+    await p.click('#aslot .abox');
+    await p.click('#kpop [data-kdel="claude-2"]');
+    expect(sent()).toContain('/key remove claude-2\r');
+    // esc closes the list; a click outside too
+    await p.click('#aslot .abox');
+    await p.press('Escape', 27);
+    expect(await p.js(`Boolean(document.getElementById('kpop'))`)).toBe(false);
+    // a new key being checked: amber, "checking…"
+    await p.say({ ...base, usage: { ...usage, account: { ...usage.account, pending: true }, keys: [keys[0], { ...keys[1], inUse: true, checking: true }].map((k, i) => (i === 0 ? { ...k, inUse: false } : k)) } });
+    expect(await p.js(`document.querySelector('#aslot .abox').className`)).toContain('checking');
+    expect(await p.js(`document.querySelector('#aslot .abox').textContent`)).toBe('Workchecking…▾');
+    // down to the narrowest window (900 wide, main.rs): nothing overlaps, nothing scrolls sideways (the buttons' words
+    // go first, then the box's account end, then its name gets shorter)
+    await p.say({ ...base, usage });
+    for (const width of [1340, 1000, 900]) {
+      await p.on('Emulation.setDeviceMetricsOverride', { width, height: 860, deviceScaleFactor: 1, mobile: false });
+      await p.js(`fitBar()`);
+      await Bun.sleep(150);
+      const fit = await p.js(`(() => { const L = document.querySelector('.tb .l').lastElementChild.getBoundingClientRect(), R = document.querySelector('.tb .r').firstElementChild.getBoundingClientRect(), a = document.querySelector('#aslot .abox').getBoundingClientRect(), u = document.querySelector('#uslot .upill').getBoundingClientRect(); return { gapLeft: a.left - L.right, gapRight: R.left - u.right, sideways: document.documentElement.scrollWidth > innerWidth }; })()`);
+      expect({ width, ...fit, cls: await p.js(`document.getElementById('tb').className`) }).toEqual({ width, gapLeft: expect.any(Number), gapRight: expect.any(Number), sideways: false, cls: expect.any(String) });
+      expect([width, fit.gapLeft >= 8, fit.gapRight >= 8]).toEqual([width, true, true]);
+    }
+    // off the Claude API (no keys): no box
+    await p.say({ ...base, usage: null });
+    expect(await p.js(`document.getElementById('aslot').textContent`)).toBe('');
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
 // The window's first seconds on a model on the service (18 Oct 2026, the owner, from pictures of the real window taken
 // as it opened): it said Ready with a green dot for the ~12 s the model was still loading there, "ctx 17% of 32k" until
 // it jumped to "2% of 256k", and "on effort". The states are the bridge's own (meterOf, modelNowOf, effortWords with start.jsx knownOf).
