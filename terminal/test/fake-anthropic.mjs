@@ -17,7 +17,9 @@ export const FAKE_MODELS = [
   { type: 'model', id: 'claude-haiku-4-5', display_name: 'Claude Haiku 4.5', created_at: '2025-10-01T00:00:00Z', max_input_tokens: 200_000, max_tokens: 64_000 },
 ];
 
-export function startFakeAnthropic(replies, { key = 'test-anthropic-key-0123456789', limits = null, bill = null } = {}) {
+// orgs: { <key>: <organization id> }: more keys it takes, each answered with its account's anthropic-organization-id
+// header, as the real API names it on every response (claude-usage.mjs keeps the dollars by it).
+export function startFakeAnthropic(replies, { key = 'test-anthropic-key-0123456789', limits = null, bill = null, orgs = null } = {}) {
   const queue = [...replies];
   const seen = [];
   let n = 0;
@@ -29,7 +31,8 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
     seen.push(entry);
     res.on('finish', () => { entry.end = Date.now(); });
     const reset = new Date(Date.now() + 30_000).toISOString();
-    const rate = limits && req.url.startsWith('/v1/messages') ? Object.fromEntries(Object.entries({ requests: 'requests', input: 'input-tokens', output: 'output-tokens' }).filter(([k]) => limits[k]).flatMap(([k, h]) => [[`anthropic-ratelimit-${h}-limit`, String(limits[k][0])], [`anthropic-ratelimit-${h}-remaining`, String(limits[k][1])], [`anthropic-ratelimit-${h}-reset`, reset]])) : {};
+    const org = orgs?.[req.headers['x-api-key']] ?? null;
+    const rate = { ...(limits && req.url.startsWith('/v1/messages') ? Object.fromEntries(Object.entries({ requests: 'requests', input: 'input-tokens', output: 'output-tokens' }).filter(([k]) => limits[k]).flatMap(([k, h]) => [[`anthropic-ratelimit-${h}-limit`, String(limits[k][0])], [`anthropic-ratelimit-${h}-remaining`, String(limits[k][1])], [`anthropic-ratelimit-${h}-reset`, reset]])) : {}), ...(org ? { 'anthropic-organization-id': org } : {}) };
     const json = (status, obj) => { res.writeHead(status, { 'content-type': 'application/json', ...rate }); res.end(JSON.stringify(obj)); };
     const error = (status, type, message, details) => json(status, { type: 'error', error: { type, message, ...(details ? { details } : {}) } });
     if (req.method === 'GET' && req.url.startsWith('/v1/organizations/cost_report')) {
@@ -41,7 +44,7 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
       const more = from + 2 < bill.cents.length;
       return json(200, { data, has_more: more, next_page: more ? String(from + 2) : null });
     }
-    if (req.headers['x-api-key'] !== key) return error(401, 'authentication_error', 'invalid x-api-key');
+    if (req.headers['x-api-key'] !== key && !org) return error(401, 'authentication_error', 'invalid x-api-key');
     if (req.method === 'GET' && req.url.startsWith('/v1/models')) return json(200, { data: FAKE_MODELS, has_more: false, first_id: FAKE_MODELS[0].id, last_id: FAKE_MODELS.at(-1).id });
     if (req.method !== 'POST' || !req.url.startsWith('/v1/messages')) return error(404, 'not_found_error', `no ${req.url}`);
     const reply = queue.shift() ?? { text: 'Done.' };

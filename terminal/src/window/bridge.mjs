@@ -238,6 +238,9 @@ export function usageOf(u) {
     perDay: u.pace?.perDay ?? 0, runsOut: u.pace?.runsOut ?? null, beforeReset: Boolean(u.pace?.beforeReset),
     source: { kind: u.source?.kind ?? 'meter', usd: u.source?.usd ?? null, at: u.source?.at ?? null, since: u.source?.since ?? 0, days: u.source?.days ?? null, stale: Boolean(u.source?.stale) },
     limits: u.limits ? { at: u.limits.at, requests: lim(u.limits.requests), input: lim(u.limits.input), output: lim(u.limits.output) } : null,
+    // the account of the key in use (claude-usage.mjs): being checked (a new key), its id's end, and this month's
+    // dollars from before accounts were kept, not counted
+    account: u.account ? { pending: Boolean(u.account.pending), orgEnd: u.account.orgEnd ?? null, earlier: u.account.earlier ?? 0 } : null,
   };
 }
 

@@ -111,6 +111,17 @@ export function sourceWords(u, now = Date.now(), wide = true) {
   return wide ? 'spent: this Mac’s meter only · s types the Console’s figure, k adds an Admin key for Anthropic’s bill' : 'spent: this Mac’s meter · s or k to match the Console';
 }
 
+// Whose dollars these are (19 Nov 2026): the account of the key in use, or a new key's being checked; and the
+// month's dollars from before accounts were kept, which no account counts. Its lines: none while no account is known.
+export function accountWords(u, wide = true) {
+  const a = u.account;
+  if (a?.pending) return [wide ? 'account: checking which account the new key belongs to · nothing counted until it answers' : 'account: checking the new key…'];
+  if (!a?.orgEnd) return [];
+  const out = [wide ? `account: organization …${a.orgEnd}, the key in use’s · only its dollars count` : `account …${a.orgEnd} · its dollars only`];
+  if (a.earlier > 0.005) out.push(wide ? `${money(a.earlier)} earlier this month came before keys were told apart: not counted` : `${money(a.earlier)} earlier: not counted`);
+  return out;
+}
+
 const SPARK = '▁▂▃▄▅▆▇█';
 function spark(values) {
   const max = Math.max(...values, 0.01);
@@ -183,6 +194,7 @@ export function usagePanel(u, width, { now = Date.now(), live = false, asking = 
   } else line([S(''.padEnd(LABEL_W)), S('nothing yet: a reply brings them, or r asks now (a fraction of a cent)', C.dim)]);
   blank();
   line([S(sourceWords(u, now, wide), C.sep)]);
+  for (const t of accountWords(u, wide)) line([S(t, u.account.pending ? C.warn : C.sep)]);
   if (u.balance) line([S(wide ? `balance: the ${money(u.balance.usd)} you typed ${ago(now - u.balance.at)}${u.balance.since > 0.005 ? ` − ${money(u.balance.since)} this Mac since` : ''} · other Macs not counted · b types it again` : `balance: ${money(u.balance.usd)} typed ${ago(now - u.balance.at)} · b again`, C.sep)]);
   if (u.balance?.stale) line([S('▲ ', C.warn), S(wide ? `the balance you typed is ${u.balance.days} days old: b types the Console’s figure again` : `balance typed ${u.balance.days} days ago · b to update`, C.warn)]);
   if (u.source?.stale) line([S('▲ ', C.warn), S(wide ? `the figure you typed is ${u.source.days} days old: s types the Console’s figure again` : `typed ${u.source.days} days ago · s to update`, C.warn)]);

@@ -76,11 +76,16 @@ export function recordSpend(ep, usage, { dir = spendDir(), pid = process.env.AGE
     // The prompt cache's tokens and savings by kind of service too (since 13 Oct 2026): /usage's CACHE row.
     const caches = { ...(kept.cacheByKind ?? {}) };
     if (ep.kind && cache) caches[ep.kind] = addCache(caches[ep.kind], cache);
+    // The Claude API's dollars by the account (organization) the reply named (since 19 Nov 2026, claude-usage.mjs):
+    // a key of another account starts its own month. What byKind.claude holds beyond these came before.
+    const org = ep.kind === 'claude' && usage.org ? String(usage.org) : null;
+    const orgs = { ...(kept.claudeByOrg ?? {}) };
+    if (org && usd) orgs[org] = (orgs[org] ?? 0) + usd;
     const next = {
       usd: (kept.usd ?? 0) + (usd ?? 0),
       tokensIn: (kept.tokensIn ?? 0) + (usd == null ? usage.prompt_tokens ?? 0 : 0),
       tokensOut: (kept.tokensOut ?? 0) + (usd == null ? usage.completion_tokens ?? 0 : 0),
-      service: label, byService: by, byKind: kinds, ...(Object.keys(caches).length ? { cacheByKind: caches } : {}), updated: now.toISOString(),
+      service: label, byService: by, byKind: kinds, ...(Object.keys(orgs).length ? { claudeByOrg: orgs } : {}), ...(Object.keys(caches).length ? { cacheByKind: caches } : {}), updated: now.toISOString(),
     };
     writeFileSync(`${file}.tmp`, JSON.stringify(next));
     renameSync(`${file}.tmp`, file);
@@ -88,7 +93,8 @@ export function recordSpend(ep, usage, { dir = spendDir(), pid = process.env.AGE
     // was spent after Anthropic's bill was read (or the month's total typed in) can be added to it
     // (claudeSince, claude-usage.mjs). Since 13 Oct 2026 the line goes on with the answer's tokens sent, read
     // from the cache and written to it ("<ms> <usd> <sent> <hit> <wrote>"), so each step's cache can be looked at.
-    if (ep.kind === 'claude' && usd) appendFileSync(join(day, `${pid}.claude`), `${now.getTime()} ${usd}${cache ? ` ${cache.sent} ${cache.hit} ${cache.wrote}` : ''}\n`);
+    // Since 19 Nov 2026 a line ends with its account, "org=<id>" (claudeSince counts one account's).
+    if (ep.kind === 'claude' && usd) appendFileSync(join(day, `${pid}.claude`), `${now.getTime()} ${usd}${cache ? ` ${cache.sent} ${cache.hit} ${cache.wrote}` : ''}${org ? ` org=${org}` : ''}\n`);
   } catch { /* the meter only shows less */ }
   spendEvents.emit('change', { usd });
   return usd;
@@ -113,18 +119,23 @@ export function todaySpend({ dir = spendDir(), now = new Date() } = {}) {
 // One day's dollars over every window: { usd, windows }, of one kind of service (byKind: 'claude') or one
 // service by its label. A file from before byKind and byService (7 Oct 2026) counts whole when its one
 // service is that one (the Claude API's: api.anthropic.com).
-export function daySpend(day, { kind = null, service = kind === 'claude' ? CLAUDE_HOST : null } = {}, { dir = spendDir() } = {}) {
-  let usd = 0, windows = 0;
+// org (the Claude API's only): that account's dollars alone; untagged: the Claude dollars of no account (from
+// before 19 Nov 2026), whatever org asks.
+export function daySpend(day, { kind = null, service = kind === 'claude' ? CLAUDE_HOST : null, org = null } = {}, { dir = spendDir() } = {}) {
+  let usd = 0, windows = 0, untagged = 0;
   let files = [];
   try { files = readdirSync(join(dir, day)).filter((f) => f.endsWith('.json')); } catch {}
   for (const f of files) {
     try {
       const j = JSON.parse(readFileSync(join(dir, day, f), 'utf8'));
       const v = kind && j.byKind ? j.byKind[kind] ?? 0 : !kind && j.byService ? j.byService[service] ?? 0 : j.service === service ? j.usd ?? 0 : 0;
-      if (v > 0) { usd += v; windows++; }
+      const tagged = kind === 'claude' ? Object.values(j.claudeByOrg ?? {}).reduce((a, b) => a + b, 0) : 0;
+      if (kind === 'claude') untagged += Math.max(0, v - tagged);
+      const mine = org && kind === 'claude' ? j.claudeByOrg?.[org] ?? 0 : v;
+      if (mine > 0) { usd += mine; windows++; }
     } catch {}
   }
-  return { usd, windows };
+  return kind === 'claude' ? { usd, windows, untagged } : { usd, windows };
 }
 
 // The prompt cache over one day's windows, of one kind of service: { sent, hit, wrote, saved } (zeros when
@@ -144,7 +155,8 @@ export function dayCache(day, { kind = 'claude' } = {}, { dir = spendDir() } = {
 
 // The Claude API's dollars of this Mac's windows answered after `ms` (to now): their lines in each day's
 // <pid>.claude since that day (recordSpend). Before 9 Oct 2026 there were none: nothing is counted then.
-export function claudeSince(ms, { dir = spendDir(), now = new Date() } = {}) {
+// org: that account's lines only (a line from before 19 Nov 2026 names none, and is not counted then).
+export function claudeSince(ms, { dir = spendDir(), now = new Date(), org = null } = {}) {
   let usd = 0;
   const from = new Date(ms);
   for (let d = new Date(from.getFullYear(), from.getMonth(), from.getDate()); d <= now; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
@@ -155,7 +167,9 @@ export function claudeSince(ms, { dir = spendDir(), now = new Date() } = {}) {
       let text = '';
       try { text = readFileSync(join(day, f), 'utf8'); } catch {}
       for (const line of text.split('\n')) {
-        const [t, v] = line.split(' ').map(Number);
+        const parts = line.split(' ');
+        const [t, v] = parts.map(Number);
+        if (org && parts.at(-1) !== `org=${org}`) continue;
         if (t > ms && Number.isFinite(v)) usd += v;
       }
     }

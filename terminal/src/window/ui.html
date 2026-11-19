@@ -689,6 +689,10 @@ function usageCardHtml(u, live) {
   const s = u.source || { kind: 'meter' };
   const plus = s.since > 0.005 ? ' + ' + money(s.since) + ' this Mac since' : ' + this Mac since';
   const src = s.kind === 'bill' ? 'spent: Anthropic’s bill, read ' + agoMs(now - s.at) + plus : s.kind === 'typed' ? 'spent: the ' + money(s.usd) + ' you typed ' + agoMs(now - s.at) + plus + ' · other Macs after it not counted' : 'spent: this Mac’s meter only · /usage, then s types the Console’s figure';
+  // Whose dollars these are (19 Nov 2026): the account of the key in use; a new key's while it is checked.
+  const a = u.account;
+  const acct = a?.pending ? '<br><span class="warn">account: checking which account the new key belongs to · nothing counted until it answers</span>'
+    : a?.orgEnd ? '<br>account: organization …' + esc(a.orgEnd) + ', the key in use’s · only its dollars count' + (a.earlier > 0.005 ? '<br>' + money(a.earlier) + ' earlier this month came before keys were told apart: not counted' : '') : '';
   const bal = u.balance ? '<br>balance: the ' + money(u.balance.usd) + ' you typed ' + agoMs(now - u.balance.at) + (u.balance.since > 0.005 ? ' − ' + money(u.balance.since) + ' this Mac since' : '') + ' · other Macs not counted' + (u.balance.stale ? '<br><span class="warn">▲ the balance you typed is ' + u.balance.days + ' days old: b in /usage types it again</span>' : '') : '';
   return '<div class="ucard" id="ucard"><div class="hd">Usage <span class="m">· Claude API · ' + esc(u.modelName || '') + '</span><span class="r">resets ' + dayOf(u.resetsOn, true) + ' (UTC)</span></div>'
     + '<div class="ln"><span class="lbl">This month</span><span>' + esc(u.month) + '</span><span class="r">' + head + '</span></div>'
@@ -698,7 +702,7 @@ function usageCardHtml(u, live) {
     + '<div class="sec"><div class="ln"><span class="lbl">Today</span><span class="v">' + money(u.today) + '</span><span>on this Mac · this window ' + money(u.window) + '</span></div>'
     + '<div class="ln"><span class="lbl">14 days</span>' + bars + '<span class="r v">' + money(total) + '</span></div></div>'
     + '<div class="sec"><div class="ln"><span class="lbl">This minute</span><span>Anthropic’s limits · they refill all the time</span></div>' + minute + '</div>'
-    + '<div class="src">' + esc(src) + bal + (u.own && !u.balance && u.tierCap ? '<br>your limit is ' + capMoney(u.cap) + '; the ' + esc(u.tier) + ' tier allows ' + capMoney(u.tierCap) : '') + (u.limits ? '<br>limits from Anthropic’s last reply, ' + agoMs(now - u.limits.at) : '') + '</div>'
+    + '<div class="src">' + esc(src) + acct + bal + (u.own && !u.balance && u.tierCap ? '<br>your limit is ' + capMoney(u.cap) + '; the ' + esc(u.tier) + ' tier allows ' + capMoney(u.tierCap) : '') + (u.limits ? '<br>limits from Anthropic’s last reply, ' + agoMs(now - u.limits.at) : '') + '</div>'
     + '<div class="acts"><button class="bb" data-run="/usage">Open /usage</button><button class="bb" data-run="/remote key">Change API key</button><span class="k">r refresh · b your balance · l your limit · s the Console’s figure · k Admin key</span></div></div>';
 }
 function meterCardHtml(m) {
@@ -859,6 +863,9 @@ function render() {
 // the status line, not there at all while it is empty (the part under way says the rest)
 function putStatus(html) { put('status', html); const el = document.getElementById('status'); if (el) el.hidden = !html; }
 setInterval(() => { if (S.last?.live?.phase === 'working' && frame === 'main') putStatus(statusHtml(S.last.live)); }, 250);
+// The usage card open while nothing else redraws: its ages ("read 6 s ago") and the limits refilling ("full in
+// 12s") go on each second (19 Nov 2026, the owner: "ensure that everything stays up to date"); only a change is drawn.
+setInterval(() => { if (S.usageCard && S.last?.usage) renderDrops(); }, 1000);
 
 // A search box drawn again keeps its caret (15 Oct 2026, the window audit: the box was made anew at each letter with its
 // caret at the start, so "tax" came out "xat" and found nothing). focus: put the caret in it even if it was elsewhere.

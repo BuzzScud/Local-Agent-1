@@ -84,6 +84,40 @@ test('on the Claude API: the month in the footer, /usage in the menu, its card, 
   expect(JSON.parse(readFileSync(join(base, 'home', 'usage', 'claude-own.json'), 'utf8'))).toMatchObject({ limit: 200, balance: { usd: 201 } });
 }, T * 2);
 
+// 19 Nov 2026, the owner: "i just changed the api key but my $ amount stayed the same". The key's account is asked for
+// at once (the model list, free), and the month is that account's: the dollars from before accounts were kept are named
+// in the card, not counted; a reply's dollars go to the account it names.
+test('on the Claude API with a key of its own account: the month counts that account only, learned at once, and the card says so', async () => {
+  const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
+  const { cwd, env, base } = setup();
+  const KEY = 'test-anthropic-key-0123456789';
+  const claude = await startFakeAnthropic([{ text: 'Hello from Claude.' }], { orgs: { [KEY]: 'org-test-1111' }, limits: { requests: [1000, 999], input: [2_000_000, 1_996_000], output: [400_000, 399_000] } });
+  const r0 = { source: 'claude', address: claude.url, port: null, connect: 'http', kind: 'claude', model: 'claude-opus-5-5', context: 0, key: true, keyEnd: '6789', keyId: 'claude' };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { claude: r0 } }));
+  // $9.85 today from before accounts were kept (another window's file, no account named)
+  const t = new Date();
+  const day = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
+  mkdirSync(join(base, 'home', 'spend', day), { recursive: true });
+  writeFileSync(join(base, 'home', 'spend', day, '1.json'), JSON.stringify({ usd: 9.85, service: 'api.anthropic.com', byService: { 'api.anthropic.com': 9.85 }, byKind: { claude: 9.85 } }));
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, TZ: 'UTC' }, args: ['--no-flows'], cols: 152, rows: 44, timeoutMs: 90_000, steps: [
+    { wait: ON_REMOTE, ms: 25_000 }, { wait: '$0.00 this month', ms: 10_000 }, { sleep: 300 }, { snapshot: 'start' },
+    { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.', ms: 20_000 }, { sleep: 800 }, { snapshot: 'after' },
+    { type: '/usage' }, { key: 'enter' }, { wait: 'THIS MONTH' }, { sleep: 300 }, { snapshot: 'card' },
+    { key: 'esc' }, { waitGone: 'THIS MONTH' }, { sleep: 200 },
+    ...quit,
+  ] });
+  await claude.close();
+  expect(lines(r.snapshots.start).at(-2)).toMatch(/ · \$0\.00 this month( · .+)? │$/);
+  expect(claude.seen.some((s) => s.method === 'GET' && s.path.startsWith('/v1/models?limit=1'))).toBe(true); // asked for free
+  expect(lines(r.snapshots.after).at(-2)).toMatch(/ · \$0\.0[1-9] this month │$/); // the reply's cents, not the $9.85
+  expect(r.snapshots.card).toContain('account: organization …1111, the key in use’s · only its dollars count');
+  expect(r.snapshots.card).toContain('$9.85 earlier this month came before keys were told apart: not counted');
+  expect(r.snapshots.card).toContain('999 of 1,000');
+  const kept = JSON.parse(readFileSync(join(base, 'home', 'usage', 'claude.json'), 'utf8'));
+  expect(kept.org).toBe('org-test-1111');
+  expect(JSON.stringify(kept)).not.toContain(KEY); // the key's mark only, never the key
+}, T * 2);
+
 test('on a model that is not the Claude API: no bar, no /usage in the menu, and typed in full it says where it works', async () => {
   const { cwd, env } = setup();
   const srv = await startFakeServer([]);

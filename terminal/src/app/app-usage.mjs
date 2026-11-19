@@ -5,7 +5,7 @@
 import { mkdirSync, watch } from 'node:fs';
 import { endpointOf } from '../../../models/index.mjs';
 import { spendEvents, spendLabel, windowSpend, spendDir } from '../agent/spend.mjs';
-import { usageNow, usageEvents, askLimits, usageDir, saveAdminKey, fetchBill, setOwn as setUsageOwn, dollarsOf, monthOf, clearBill } from '../agent/claude-usage.mjs';
+import { usageNow, usageEvents, askLimits, usageDir, saveAdminKey, fetchBill, setOwn as setUsageOwn, dollarsOf, monthOf, clearBill, learnAccount, accountOf } from '../agent/claude-usage.mjs';
 
 export function usagePart(self) {
   // The cost meter (/remote, spend.mjs): the footer's words, after each answer and every 15 s
@@ -27,9 +27,17 @@ export function usagePart(self) {
     const claudeModel = self.claudeModel;
     if (!claudeModel) { self.setUsage(null); return undefined; }
     let shown = '';
+    // The account of the key in use (19 Nov 2026, the owner: "i just changed the api key but my $ amount stayed the
+    // same"): read at each look, so a key changed in /remote counts its own account's dollars at once; a key not
+    // seen before is asked for its account for free (learnAccount), and its answer redraws (usageEvents).
+    const apiKey = () => { const ep = endpointOf(self.agent.url); return ep?.kind === 'claude' ? ep.key ?? null : undefined; };
+    let keyShown;
     const show = () => {
-      const u = usageNow({ model: claudeModel, admin: self.hasAdmin() });
-      const key = JSON.stringify([u.spent.toFixed(2), u.left, u.cap, u.tierCap, u.capped, u.low, u.pace.beforeReset, u.pace.runsOut, u.today, u.window.toFixed(2), u.source, u.balance, u.limits?.at, u.admin]);
+      const k = apiKey();
+      keyShown = k;
+      const u = usageNow({ model: claudeModel, admin: self.hasAdmin(), key: k });
+      if (u.account?.pending && k) learnAccount({ url: self.agent.url, key: k }).catch(() => {});
+      const key = JSON.stringify([u.spent.toFixed(2), u.left, u.cap, u.tierCap, u.capped, u.low, u.pace.beforeReset, u.pace.runsOut, u.today, u.window.toFixed(2), u.source, u.balance, u.limits?.at, u.admin, u.account, u.tier]);
       if (key !== shown) { shown = key; self.setUsage(u); }
     };
     const bill = () => { if (self.hasAdmin()) fetchBill().catch(() => {}); };
@@ -45,7 +53,11 @@ export function usagePart(self) {
     spendEvents.on('change', show);
     const t = setInterval(() => { show(); bill(); }, 15_000);
     t.unref?.();
-    return () => { usageEvents.off('change', show); spendEvents.off('change', show); clearInterval(t); clearTimeout(soon); for (const w of watches) { try { w.close(); } catch {} } };
+    // A key changed (/remote key, the card's Change API key): the window's connection carries the new one; within a
+    // second its account counts, not the old key's (a look at memory only, no file read unless it changed).
+    const keyLook = setInterval(() => { if (apiKey() !== keyShown) show(); }, 1000);
+    keyLook.unref?.();
+    return () => { usageEvents.off('change', show); spendEvents.off('change', show); clearInterval(t); clearInterval(keyLook); clearTimeout(soon); for (const w of watches) { try { w.close(); } catch {} } };
   };
   // r in /usage: one tiny request for the limits now, and Anthropic's bill with an Admin key.
   const askUsage = async () => {
@@ -73,15 +85,19 @@ export function usagePart(self) {
     const off = !v || /^(off|none|clear)$/i.test(v);
     const usd = off ? null : dollarsOf(v);
     if (!off && usd == null) { self.flash('Type dollars, like 200 or 112.40', 3000); return null; }
+    // Kept with the account of the key in use, so another account's key does not count from it (claude-usage.mjs).
+    const ep = endpointOf(self.agent.url);
+    const org = ep?.kind === 'claude' ? accountOf(ep.key ?? null).org : null;
+    const tag = org ? { org } : {};
     if (e.id === 'balance') {
-      setUsageOwn({ balance: usd > 0 ? { usd, at: Date.now() } : null });
+      setUsageOwn({ balance: usd > 0 ? { usd, at: Date.now(), ...tag } : null });
       return said(usd > 0 ? `/usage: your balance is $${usd.toFixed(2)} as of now. "$ left" counts down from it with each answer on this Mac.` : '/usage: your balance taken out; "$ left" counts from your limit, if you set one.');
     }
     if (e.id === 'limit') {
-      setUsageOwn({ limit: usd > 0 ? usd : null });
+      setUsageOwn({ limit: usd > 0 ? usd : null, limitOrg: usd > 0 ? org : null });
       return said(usd > 0 ? `/usage: your limit is $${usd.toFixed(2)} a month. "$ left" counts down from it.` : '/usage: your own limit taken out.');
     }
-    setUsageOwn({ spent: off ? null : { usd, at: Date.now(), month: monthOf() } });
+    setUsageOwn({ spent: off ? null : { usd, at: Date.now(), month: monthOf(), ...tag } });
     return said(off ? '/usage: the typed figure taken out; the month’s spend is this Mac’s meter again.' : `/usage: this month’s spend is $${usd.toFixed(2)} as of now; this Mac’s answers are added to it as they come.`);
   };
   return { spendWatch, usageWatch, askUsage, saveUsageEdit };

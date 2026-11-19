@@ -67,7 +67,7 @@ test('the cost meter keeps each service’s dollars and the Claude API’s at an
   recordSpend(proxy, { prompt_tokens: 500_000, completion_tokens: 0 }, { now, pid: 4 }); // the Claude API at another address
   spendFile(home, now, 2, { usd: 3, service: CLAUDE_HOST }); // before byService (7 Oct)
   spendFile(home, now, 3, { usd: 9, service: 'openrouter.ai' });
-  expect(daySpend(dayOf(now), { kind: 'claude' })).toEqual({ usd: 9, windows: 3 });
+  expect(daySpend(dayOf(now), { kind: 'claude' })).toEqual({ usd: 9, windows: 3, untagged: 9 }); // no account named: all from before 19 Nov 2026
   expect(daySpend(dayOf(now), { service: CLAUDE_HOST })).toEqual({ usd: 7, windows: 2 });
   expect(daySpend(dayOf(now), { service: 'openrouter.ai' })).toEqual({ usd: 10, windows: 2 });
 });
@@ -389,6 +389,105 @@ test('Anthropic’s bill: every page of the month added up, once a minute over e
     expect(readBill().error.message).toMatch(/Admin API/);
     expect(usageNow({ model: OPUS, now: now + 121_000, admin: true }).source.error).toMatchObject({ status: 401 });
   } finally { delete process.env.AGENTIC_ADMIN_URL; await fake.close(); }
+});
+
+// 19 Nov 2026, the owner: "i just changed the api key but my $ amount stayed the same".
+test('a key of another account counts its own month: dollars, today, limits, the cap and what you typed follow the account the key belongs to', () => {
+  const home = freshHome();
+  const A = 'test-stand-in-key-of-account-a', B = 'test-stand-in-key-of-account-b', A2 = 'test-another-key-of-account-a';
+  const claude = { remote: true, kind: 'claude', label: CLAUDE_HOST, price: { in: 4, out: 20 } };
+  const day = new Date(NOW - 3_600_000);
+  // $42.10 from before accounts were kept: no account named
+  spendFile(home, new Date(2026, 9, 7), 21, { usd: 12.4, service: CLAUDE_HOST, byService: { [CLAUDE_HOST]: 12.4 }, byKind: { claude: 12.4 } });
+  spendFile(home, day, 22, { usd: 29.7, service: CLAUDE_HOST, byService: { [CLAUDE_HOST]: 29.7 }, byKind: { claude: 29.7 } });
+  expect(usageNow({ model: OPUS, now: NOW }).spent).toBeCloseTo(42.1, 6); // no key named: every dollar, as before
+  // a key not seen yet: its account is being checked, and nothing is counted for it
+  let u = usageNow({ model: OPUS, now: NOW, key: A });
+  expect(u.account).toMatchObject({ pending: true, org: null });
+  expect(u.spent).toBe(0);
+  expect(u.today.usd).toBe(0);
+  noteLimits({ ...START, 'anthropic-organization-id': 'org-aaaa-1111' }, OPUS, NOW - 600_000, A);
+  u = usageNow({ model: OPUS, now: NOW, key: A });
+  expect(u.account).toMatchObject({ pending: false, org: 'org-aaaa-1111', orgEnd: '1111', earlier: 42.1 });
+  expect(u.limits.requests.limit).toBe(1000);
+  recordSpend(claude, { prompt_tokens: 1_000_000, completion_tokens: 0, org: 'org-aaaa-1111' }, { now: new Date(NOW - 60_000), pid: 22 }); // $4, in the window's file that holds the old $29.70
+  expect(readFileSync(join(home, 'spend', dayOf(new Date(NOW)), '22.claude'), 'utf8').trim()).toMatch(/ org=org-aaaa-1111$/);
+  u = usageNow({ model: OPUS, now: NOW, key: A });
+  expect(u.spent).toBeCloseTo(4, 6);
+  expect(u.today.usd).toBeCloseTo(4, 6);
+  expect(u.last14.at(-1)).toBeCloseTo(4, 6);
+  expect(u.account.earlier).toBeCloseTo(42.1, 6);
+  // another key of the same account: the same month, once a reply names it
+  noteLimits({ 'anthropic-organization-id': 'org-aaaa-1111' }, OPUS, NOW, A2);
+  expect(usageNow({ model: OPUS, now: NOW, key: A2 }).spent).toBeCloseTo(4, 6);
+  // a key of account B: its own month from $0, none of A's limits, A's balance not counted
+  setOwn({ balance: { usd: 201, at: NOW - 7_200_000, org: 'org-aaaa-1111' } });
+  noteLimits({ 'anthropic-organization-id': 'org-bbbb-2222' }, OPUS, NOW, B); // a free call: an account, no limits
+  u = usageNow({ model: OPUS, now: NOW, key: B });
+  expect(u).toMatchObject({ spent: 0, limits: null, tier: null, balance: null, cap: null, account: { pending: false, orgEnd: '2222' } });
+  recordSpend(claude, { prompt_tokens: 500_000, completion_tokens: 0, org: 'org-bbbb-2222' }, { now: new Date(NOW - 30_000), pid: 22 }); // $2
+  expect(usageNow({ model: OPUS, now: NOW, key: B }).spent).toBeCloseTo(2, 6);
+  // back to A: its $4 and its balance less A's answers since ($201 − $4), not B's
+  u = usageNow({ model: OPUS, now: NOW, key: A });
+  expect(u.spent).toBeCloseTo(4, 6);
+  expect(u.left).toBeCloseTo(197, 6);
+  // a cap reached under B does not pause A
+  noteCapped('tier', NOW, 'org-bbbb-2222');
+  expect(usageNow({ model: OPUS, now: NOW, key: B }).capped).toMatchObject({ kind: 'tier' });
+  expect(usageNow({ model: OPUS, now: NOW, key: A }).capped).toBeNull();
+  expect(usageNow({ model: OPUS, now: NOW }).spent).toBeCloseTo(48.1, 6); // no key named: every account's, as before
+  // a key whose answers name no account (a proxy that drops the header): every dollar counts for it, as before
+  const P = 'test-stand-in-key-behind-a-proxy';
+  noteLimits({ 'request-id': 'req_1' }, OPUS, NOW, P); // no limits either: not known to be an answer, still checking
+  expect(usageNow({ model: OPUS, now: NOW, key: P }).account.pending).toBe(true);
+  noteLimits(START, OPUS, NOW, P);
+  expect(usageNow({ model: OPUS, now: NOW, key: P })).toMatchObject({ account: { pending: false, org: null, earlier: 0 } });
+  expect(usageNow({ model: OPUS, now: NOW, key: P }).spent).toBeCloseTo(48.1, 6);
+});
+
+test('the card says whose dollars these are, at every width: a new key being checked, then its account and the older dollars not counted', () => {
+  const pending = { ...U, cap: null, left: null, spent: 0, account: { pending: true, org: null, orgEnd: null, earlier: 0 } };
+  const known = { ...U, account: { pending: false, org: 'org-bbbb-2222', orgEnd: '2222', earlier: 42.1 } };
+  for (const W of WIDTHS) {
+    for (const u of [pending, known]) for (const r of usagePanel(u, W, { now: NOW })) expect(widthOf(r)).toBe(W);
+  }
+  const wide = (u) => usagePanel(u, 152, { now: NOW }).map(textOf).join('\n');
+  expect(wide(pending)).toContain('account: checking which account the new key belongs to · nothing counted until it answers');
+  expect(wide(known)).toContain('account: organization …2222, the key in use’s · only its dollars count');
+  expect(wide(known)).toContain('$42.10 earlier this month came before keys were told apart: not counted');
+  expect(wide(U)).not.toContain('account');
+  expect(usagePanel(known, 60, { now: NOW }).map(textOf).join('\n')).toContain('account …2222 · its dollars only');
+});
+
+test('a new key in a running window: its account is learned for free from the model list, and each reply’s dollars go to the account it names', async () => {
+  freshHome();
+  const B = 'test-stand-in-key-of-account-b';
+  const fake = await startFakeAnthropic([{ text: 'Hi.' }, { text: 'Hi again.' }], { orgs: { 'test-anthropic-key-0123456789': 'org-aaaa-1111', [B]: 'org-bbbb-2222' }, limits: { requests: [1000, 999], input: [2_000_000, 1_999_000], output: [400_000, 400_000] } });
+  const { learnAccount } = await import('../src/agent/claude-usage.mjs');
+  const drain = async (it) => { for await (const _ of it); };
+  const ask = () => drain(streamChat({ url: fake.url, messages: [{ role: 'user', content: 'hi' }], model: GENERIC_REMOTE, maxTokens: 200 }));
+  try {
+    setEndpoint(fake.url, { remote: true, kind: 'claude', key: fake.key, model: OPUS, label: CLAUDE_HOST, price: { in: 4, out: 20 } });
+    await ask();
+    const a = usageNow({ model: OPUS, key: fake.key });
+    expect(a.account).toMatchObject({ pending: false, org: 'org-aaaa-1111' });
+    expect(a.spent).toBeGreaterThan(0);
+    expect(a.limits.requests.remaining).toBe(999);
+    // the key changed: nothing counted until its account is known, which costs no request to /v1/messages
+    expect(usageNow({ model: OPUS, key: B }).account.pending).toBe(true);
+    const posts = () => fake.seen.filter((x) => x.path.startsWith('/v1/messages')).length;
+    const before = posts();
+    expect(await learnAccount({ url: fake.url, key: B })).toBe('org-bbbb-2222');
+    expect(posts()).toBe(before);
+    expect(fake.seen.at(-1)).toMatchObject({ method: 'GET', key: B });
+    expect(usageNow({ model: OPUS, key: B })).toMatchObject({ spent: 0, limits: null, account: { pending: false, org: 'org-bbbb-2222' } });
+    setEndpoint(fake.url, { remote: true, kind: 'claude', key: B, model: OPUS, label: CLAUDE_HOST, price: { in: 4, out: 20 } });
+    await ask();
+    const b = usageNow({ model: OPUS, key: B });
+    expect(b.spent).toBeGreaterThan(0);
+    expect(b.limits.requests.limit).toBe(1000);
+    expect(usageNow({ model: OPUS, key: fake.key }).spent).toBeCloseTo(a.spent, 9); // A's month unchanged by B's reply
+  } finally { dropEndpoint(fake.url); await fake.close(); }
 });
 
 test('dollars typed: $, commas and cents; off takes a value out; words are not dollars', () => {

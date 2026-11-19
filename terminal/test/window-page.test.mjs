@@ -289,6 +289,30 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the Usage card’s 
   } finally { await p.close(); }
 }, 60_000);
 
+// 19 Nov 2026, the owner: "i just changed the api key but my $ amount stayed the same". The pill and the open card
+// follow the account of the key in use: a new key's is checked, then its own month shows, the older dollars named.
+test.skipIf(needs('chrome', findChrome))('in a real browser: a new API key switches the pill and the open Usage card to its own account', async () => {
+  const p = await openPage();
+  try {
+    const old = { spent: 42.1, cap: null, resetsOn: Date.UTC(2026, 11, 1), month: 'November', today: 29.7, window: 0, last14: Array(14).fill(0), modelName: 'Opus 5.5', account: null };
+    await p.say({ ...base, usage: old });
+    await p.click('[data-act="usage"]');
+    expect(await p.js(`document.querySelector('.upill').textContent`)).toContain('$42.10');
+    expect(await p.js(`document.getElementById('ucard').textContent`)).not.toContain('account:');
+    await p.say({ ...base, usage: { ...old, spent: 0, today: 0, account: { pending: true, orgEnd: null, earlier: 0 } } });
+    expect(await p.js(`document.querySelector('.upill').textContent`)).toContain('$0.00');
+    expect(await p.js(`document.getElementById('ucard').textContent`)).toContain('checking which account the new key belongs to');
+    await p.say({ ...base, usage: { ...old, spent: 1.25, today: 1.25, account: { pending: false, orgEnd: '2222', earlier: 42.1 } } });
+    const card = await p.js(`document.getElementById('ucard').textContent`);
+    expect(card).toContain('$1.25 spent');
+    expect(card).toContain('organization …2222');
+    expect(card).toContain('$42.10 earlier this month came before keys were told apart: not counted');
+    expect(await p.js(`document.querySelector('.upill').textContent`)).toContain('$1.25');
+    expect(await p.js(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
 // The window's first seconds on a model on the service (18 Oct 2026, the owner, from pictures of the real window taken
 // as it opened): it said Ready with a green dot for the ~12 s the model was still loading there, "ctx 17% of 32k" until
 // it jumped to "2% of 256k", and "on effort". The states are the bridge's own (meterOf, modelNowOf, effortWords with start.jsx knownOf).

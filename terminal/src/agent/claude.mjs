@@ -15,7 +15,7 @@
 import { claudeSdk, claudeClient, claudeCaps } from '../../../models/index.mjs';
 import { keptImages, imageLabel } from './images.mjs';
 import { retryAfterHeader } from './busy.mjs';
-import { noteLimits, capOf, noteCapped, resetOf } from './claude-usage.mjs';
+import { noteLimits, capOf, noteCapped, resetOf, orgOf } from './claude-usage.mjs';
 
 // A picture as Claude takes it (a still-kept one), or a line of text for an older one.
 const imageBlock = (img, kept) => (kept.has(img) ? { type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } } : { type: 'text', text: imageLabel(img) });
@@ -204,7 +204,7 @@ function friendly(e, Anthropic) {
   // plainly and not asked again (busy: false), and /usage and the bar say paused (claude-usage.mjs).
   const cap = e instanceof Anthropic.APIError ? capOf(e) : null;
   if (cap) {
-    noteCapped(cap.kind);
+    noteCapped(cap.kind, Date.now(), orgOf(e.headers));
     const back = new Date(resetOf()).toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     return Object.assign(new Error(cap.kind === 'tier' ? `the Claude API stopped: this month's spend cap is reached, and it answers again on ${back} (UTC) · /usage` : `the Claude API stopped: the spend limit you set in the Console is reached · raise it there, or wait for ${back} · /usage`), { status: e.status, busy: false });
   }
@@ -298,8 +298,10 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
         }
       }
       const final = await stream.finalMessage();
-      // The limits each reply carries: /usage and the bar under the footer (claude-usage.mjs).
-      noteLimits(stream.response?.headers, ep.model);
+      // The limits each reply carries: /usage and the bar under the footer (claude-usage.mjs), and the account
+      // (organization) it names, which the answer's dollars are kept under (spend.mjs).
+      noteLimits(stream.response?.headers, ep.model, Date.now(), ep.key);
+      const org = orgOf(stream.response?.headers);
       const u = final.usage ?? {};
       const inTok = (u.input_tokens ?? usageIn?.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
       // cached: the part of the input read from the prompt cache, which costs a tenth; written: the part
@@ -316,11 +318,11 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
       remember(replyKey(ids, text), thoughts);
       if (content.some((b) => SERVER_BLOCK.test(b.type))) remember(replyKey(ids, text), content, WHOLE);
       if (final.stop_reason === 'refusal' && !wrote) yield { type: 'text', text: `(Claude declined this request${final.stop_details?.category ? `: ${final.stop_details.category}` : ''}. Say it another way, or pick another model in /remote.)` };
-      yield { type: 'done', finish: FINISH[final.stop_reason ?? finish] ?? 'stop', usage: { prompt_tokens: usedTotal.in, completion_tokens: usedTotal.out, cached_tokens: usedTotal.cached ?? 0, cache_write_tokens: usedTotal.written ?? 0 }, timings: null };
+      yield { type: 'done', finish: FINISH[final.stop_reason ?? finish] ?? 'stop', usage: { prompt_tokens: usedTotal.in, completion_tokens: usedTotal.out, cached_tokens: usedTotal.cached ?? 0, cache_write_tokens: usedTotal.written ?? 0, ...(org ? { org } : {}) }, timings: null };
       return;
     } catch (e) {
       if (signal?.aborted) throw e;
-      if (e?.headers) noteLimits(e.headers, ep.model);
+      if (e?.headers) noteLimits(e.headers, ep.model, Date.now(), ep.key);
       const field = !started && tries < 4 && e instanceof Anthropic.BadRequestError ? refusedField(e.message, params) : null;
       if (field) { refused.add(field); REFUSED.set(ep.model, refused); continue; }
       throw friendly(e, Anthropic);
