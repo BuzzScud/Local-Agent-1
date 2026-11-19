@@ -59,8 +59,9 @@ test('one window: /key add pastes a key hidden, checked and kept; just this wind
   expect(flat(r.snapshots.list)).toMatch(/1 Personal\s.*••••6789 · account …1111/);
   expect(flat(r.snapshots.list)).toMatch(/✓ 2 Work\s.*••••9Qk2 · account …2222 · in use here/);
   expect(flat(r.snapshots.every)).toContain('Now on Personal (••••6789) · account …1111, in every window');
-  // the footer names the key in use
-  expect(lines(r.snapshots.after).at(-2)).toMatch(/· Personal · \$\d+\.\d\d this month │$/);
+  // the footer names the key in use, with no dollars after it (19 Nov 2026: no "$ left" or month in the footer)
+  expect(lines(r.snapshots.after).at(-2)).toMatch(/· Personal │$/);
+  expect(lines(r.snapshots.after).at(-2)).not.toContain('$');
   const s = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8'));
   expect(s.claudeKeys.map((k) => [k.id, k.name, k.end])).toEqual([['claude', 'Personal', '6789'], ['claude-2', 'Work', '9Qk2']]);
   expect(s.remotes.claude.keyId).toBe('claude');

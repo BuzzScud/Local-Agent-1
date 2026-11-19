@@ -34,8 +34,8 @@ export const COMMANDS = [
   { name: 'start', desc: "Load the model (ctrl+t too): it takes the Mac's memory until /stop or you quit" },
   { name: 'stop', desc: 'Unload the model and give its memory back to the Mac (ctrl+t too); /start loads it again' },
   { name: 'subagents', desc: 'The helper models, one per job (pictures, side jobs, code search, a second opinion, UI design): opens /profiles on its AIs group; /subagents <model> runs the helpers the Agent tool starts on that model', arg: '[model]' },
-  // On the Claude API only (8 Oct 2026): what is left of the month's spend cap, today, and the limits each minute.
-  { name: 'usage', desc: 'What the Claude API has left: your balance or limit, this month, today’s dollars, and the limits each minute (b types your balance, l your limit, s the Console’s figure, k an Admin key)' },
+  // On the Claude API only (8 Oct 2026): the month's dollars, today, and the limits each minute (no "left" since 19 Nov 2026).
+  { name: 'usage', desc: 'What the Claude API has cost: this month, today’s dollars, the prompt cache, and the limits each minute (s types the Console’s figure, k an Admin key)' },
   // /key (19 Nov 2026): several Claude API keys by name; the window's account box runs it too.
   { name: 'key', desc: 'Your Claude API keys by name: list them, switch (this window or every window), add one, name or remove one', arg: '[use|add|name|remove] [name]' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },

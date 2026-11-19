@@ -94,9 +94,10 @@ test('on the Claude API (this Mac\'s set-up): ←→ on Main in /profiles picks 
   expect(JSON.parse(readFileSync(join(base, 'home', 'profiles.json'), 'utf8')).profiles.Main.model).toBe('claude-sonnet-5-5');
   expect(asked.at(-2)).toBe('claude-opus-5-5');
   expect(asked.at(-1)).toBe('claude-sonnet-5-5');
-  // the footer, with what the Claude API has left after the model (usage-bar.mjs usageChip), inside the prompt box
+  // the footer, inside the prompt box: the model, and no dollars after it (19 Nov 2026: no "$ left", usageChip)
   const tail = r.snapshots.after.trimEnd().split('\n');
   expect(tail.at(-1)).toMatch(/^╰─+╯$/);
-  expect(tail.at(-2)).toMatch(/(Sonnet 5\.5|claude-sonnet-5-5) · \$[\d.]+ (left|this month) │$/); // the model, then the Claude API's money
+  expect(tail.at(-2)).toMatch(/(Sonnet 5\.5|claude-sonnet-5-5) │$/);
+  expect(tail.at(-2)).not.toContain('$');
   await claude.close();
 }, T * 2);

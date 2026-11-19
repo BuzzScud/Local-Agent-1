@@ -275,10 +275,11 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: what streams shows 
 
 // The Usage card on the Claude API (19 Nov 2026, the owner): a Change API key button runs /remote key, which opens
 // the form of the service in use typing in its key row.
+// Since 19 Nov 2026 (the owner: "remove the balance overall from the agentic coder") the pill shows only at the cap.
 test.skipIf(needs('chrome', findChrome))('in a real browser: the Usage card’s Change API key runs /remote key', async () => {
   const p = await openPage();
   try {
-    const usage = { spent: 27.68, cap: null, resetsOn: Date.UTC(2026, 11, 1), month: 'November', today: 15.28, window: 0.55, last14: Array(14).fill(0), modelName: 'Opus 5.5' };
+    const usage = { spent: 27.68, cap: null, resetsOn: Date.UTC(2026, 11, 1), month: 'November', today: 15.28, window: 0.55, last14: Array(14).fill(0), modelName: 'Opus 5.5', capped: true };
     await p.say({ ...base, usage });
     await p.click('[data-act="usage"]');
     expect(await p.js(`[...document.querySelectorAll('#ucard button')].map((b) => b.textContent)`)).toEqual(['Open /usage', 'Change API key']);
@@ -289,25 +290,29 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the Usage card’s 
   } finally { await p.close(); }
 }, 60_000);
 
-// 19 Nov 2026, the owner: "i just changed the api key but my $ amount stayed the same". The pill and the open card
-// follow the account of the key in use: a new key's is checked, then its own month shows, the older dollars named.
-test.skipIf(needs('chrome', findChrome))('in a real browser: a new API key switches the pill and the open Usage card to its own account', async () => {
+// 19 Nov 2026, the owner: "i just changed the api key but my $ amount stayed the same". The open card follows the
+// account of the key in use: a new key's is checked, then its own month shows, the older dollars named. And later that
+// day, on "$168.88 left of $200": "remove the balance overall": no dollars beside the model, only "paused" at the cap.
+test.skipIf(needs('chrome', findChrome))('in a real browser: no dollars beside the model; the open Usage card follows a new API key’s own account', async () => {
   const p = await openPage();
   try {
     const old = { spent: 42.1, cap: null, resetsOn: Date.UTC(2026, 11, 1), month: 'November', today: 29.7, window: 0, last14: Array(14).fill(0), modelName: 'Opus 5.5', account: null };
     await p.say({ ...base, usage: old });
+    expect(await p.js(`document.querySelector('.upill')`)).toBeNull(); // no pill, no dollars, below the cap
+    expect(await p.js(`document.querySelector('.tb').textContent`)).not.toMatch(/\$|left of/);
+    await p.say({ ...base, usage: { ...old, capped: true } });
+    expect(await p.js(`document.querySelector('.upill').textContent`)).toBe('paused');
     await p.click('[data-act="usage"]');
-    expect(await p.js(`document.querySelector('.upill').textContent`)).toContain('$42.10');
     expect(await p.js(`document.getElementById('ucard').textContent`)).not.toContain('account:');
-    await p.say({ ...base, usage: { ...old, spent: 0, today: 0, account: { pending: true, orgEnd: null, earlier: 0 } } });
-    expect(await p.js(`document.querySelector('.upill').textContent`)).toContain('$0.00');
+    await p.say({ ...base, usage: { ...old, capped: true, spent: 0, today: 0, account: { pending: true, orgEnd: null, earlier: 0 } } });
     expect(await p.js(`document.getElementById('ucard').textContent`)).toContain('checking which account the new key belongs to');
-    await p.say({ ...base, usage: { ...old, spent: 1.25, today: 1.25, account: { pending: false, orgEnd: '2222', earlier: 42.1 } } });
+    await p.say({ ...base, usage: { ...old, capped: true, spent: 1.25, today: 1.25, account: { pending: false, orgEnd: '2222', earlier: 42.1 } } });
     const card = await p.js(`document.getElementById('ucard').textContent`);
     expect(card).toContain('$1.25 spent');
     expect(card).toContain('organization …2222');
     expect(card).toContain('$42.10 earlier this month came before keys were told apart: not counted');
-    expect(await p.js(`document.querySelector('.upill').textContent`)).toContain('$1.25');
+    expect(card).not.toMatch(/ left of|balance|your limit/);
+    expect(await p.js(`document.querySelector('.upill').textContent`)).toBe('paused');
     expect(await p.js(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
@@ -376,7 +381,7 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the account box lef
       await p.on('Emulation.setDeviceMetricsOverride', { width, height: 860, deviceScaleFactor: 1, mobile: false });
       await p.js(`fitBar()`);
       await Bun.sleep(150);
-      const fit = await p.js(`(() => { const L = document.querySelector('.tb .l').lastElementChild.getBoundingClientRect(), R = document.querySelector('.tb .r').firstElementChild.getBoundingClientRect(), a = document.querySelector('#aslot .abox').getBoundingClientRect(), u = document.querySelector('#uslot .upill').getBoundingClientRect(); return { gapLeft: a.left - L.right, gapRight: R.left - u.right, sideways: document.documentElement.scrollWidth > innerWidth }; })()`);
+      const fit = await p.js(`(() => { const L = document.querySelector('.tb .l').lastElementChild.getBoundingClientRect(), R = document.querySelector('.tb .r').firstElementChild.getBoundingClientRect(), a = document.querySelector('#aslot .abox').getBoundingClientRect(), u = (document.querySelector('#uslot .upill') ?? document.getElementById('pill')).getBoundingClientRect(); return { gapLeft: a.left - L.right, gapRight: R.left - u.right, sideways: document.documentElement.scrollWidth > innerWidth }; })()`);
       expect({ width, ...fit, cls: await p.js(`document.getElementById('tb').className`) }).toEqual({ width, gapLeft: expect.any(Number), gapRight: expect.any(Number), sideways: false, cls: expect.any(String) });
       expect([width, fit.gapLeft >= 8, fit.gapRight >= 8]).toEqual([width, true, true]);
     }

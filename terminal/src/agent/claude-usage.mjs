@@ -4,11 +4,10 @@
 //   - The limits come with every reply (the anthropic-ratelimit-* headers; a free call such as a
 //     token count carries none). Each reply's are kept in <home>/usage/claude.json, by model, so
 //     every window shows the newest.
-//   - What is left: your credit balance as the Console's Billing page shows it, typed once (/usage balance 201,
-//     or b in the card; no API tells it), less this Mac's answers since; else the limit you set in the Console
-//     (/usage limit 200, or l; the Spend Limits API is Claude Enterprise's), less the month's spend. The tier,
-//     told from those limits (Start $500, Build $1,000, Scale $200,000 a month: Anthropic's rate-limit page,
-//     Oct 2026), is only named: its cap is a ceiling, not money you have (18 Nov 2026).
+//   - What is left: not shown since 19 Nov 2026 (the owner: "remove the balance overall"). No API tells the credit
+//     balance or a Console limit, and the typed balance and limit (18 Nov) went wrong; cap and left are always
+//     null. The tier, told from those limits (Start $500, Build $1,000, Scale $200,000 a month: Anthropic's
+//     rate-limit page, Oct 2026), is only named: its cap is a ceiling, not money you have.
 //   - The month's spend (9 Oct 2026, the owner: "ensure that the api $ left is updated in real time and is
 //     true"), the best there is: Anthropic's own bill (cost_report, with an Admin key; about 5 minutes
 //     behind, read once a minute) or the Console's figure typed once (/usage spent 112.40, or s), each with
@@ -246,9 +245,8 @@ export function tierOf(model, requestsLimit) {
 const TYPED_STALE_DAYS = 3;
 
 // Everything /usage and the footer show, as of `now`. model: the window's Claude model.
-//   cap: your typed balance, else your limit; left: the balance less this Mac since, else the limit less the month;
-//   null with neither (tierCap: the tier's monthly ceiling, only named)
-//   balance: { usd, at, since, days, stale } when you typed one (stale after TYPED_STALE_DAYS whole days)
+//   cap, left, balance, ownLimit: always null since 19 Nov 2026 (no "left" is shown; tierCap: the tier's monthly
+//   ceiling, only named)
 //   spent: the month's dollars, from source { kind: 'bill' | 'typed' | 'meter', at, usd, error }:
 //   Anthropic's bill or your typed figure, whichever is newer, plus this Mac's answers since; else the meter
 //   days: this Mac's dollars by day so far; last14: the last 14 days'; pace: dollars a day since
@@ -303,20 +301,11 @@ export function usageNow({ model, now = Date.now(), admin = false, key } = {}) {
   // (9 Oct 2026, the owner's pick "nudge me to re-type the figure"). The bill reads itself, so it never is.
   if (base?.kind === 'typed') { source.days = Math.floor((now - base.at) / 86_400_000); source.stale = source.days >= TYPED_STALE_DAYS; }
   if (bill.error && admin) source.error = bill.error;
-  // What is left (18 Nov 2026, the owner: "it says i have $500 available but i only have 201"; their pick "type it
-  // once, the app counts down"): no API tells the prepaid credit balance (only the Console's Billing page shows it),
-  // so it is your balance as you typed it, less this Mac's Claude answers since; else your own monthly limit, less
-  // the month's spend. The tier's cap is a ceiling on the month, not money you have, so it is shown, never "left".
+  // No "left" (19 Nov 2026, the owner, on "$168.88 left of $200": "the amount is wrong", then "remove the balance
+  // overall from the agentic coder"): no API tells the credit balance or a Console limit, and a figure typed by hand
+  // goes wrong, so nothing is counted down: no balance, no limit, no "left". The tier's cap is only named.
   const tierCap = tier?.cap ?? null;
-  const typedBalance = Number.isFinite(own.balance?.usd) && own.balance.usd > 0 && own.balance.at && theirs(own.balance) ? own.balance : null;
-  let balance = null;
-  if (typedBalance) {
-    const days = Math.floor((now - typedBalance.at) / 86_400_000);
-    balance = { usd: typedBalance.usd, at: typedBalance.at, since: claudeSince(typedBalance.at, { now: d, org }), days, stale: days >= TYPED_STALE_DAYS };
-  }
-  const ownLimit = own.limit > 0 && theirs({ org: own.limitOrg }) ? own.limit : null;
-  const cap = balance ? balance.usd : ownLimit;
-  const left = balance ? Math.max(0, balance.usd - balance.since) : cap == null ? null : Math.max(0, cap - spent);
+  const balance = null, ownLimit = null, cap = null, left = null;
   const perDay = spent > 0 ? spent / (today - (first || 1) + 1) : 0;
   const resetsOn = resetOf(now);
   const runsOut = left != null && perDay > 0 ? new Date(y, m, today + Math.ceil(left / perDay)).getTime() : null;

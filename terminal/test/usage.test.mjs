@@ -72,7 +72,7 @@ test('the cost meter keeps each service’s dollars and the Claude API’s at an
   expect(daySpend(dayOf(now), { service: 'openrouter.ai' })).toEqual({ usd: 10, windows: 2 });
 });
 
-test('the month: the Claude API’s dollars against a $500 limit, today, the pace and the day it runs out; the tier’s cap only named; nothing known before a reply', () => {
+test('the month: the Claude API’s dollars, today and the pace; no "left", even with a limit kept from before; the tier’s cap only named; nothing known before a reply', () => {
   const home = freshHome();
   spendFile(home, new Date(2026, 9, 7), 11, { usd: 9.85, service: CLAUDE_HOST });
   spendFile(home, new Date(2026, 9, 8), 12, { usd: 50, byService: { [CLAUDE_HOST]: 47.89, 'openrouter.ai': 2.11 }, byKind: { claude: 47.89, openai: 2.11 } });
@@ -83,18 +83,18 @@ test('the month: the Claude API’s dollars against a $500 limit, today, the pac
   noteLimits(new Headers(START), OPUS, NOW - 600_000);
   // the Start tier's $500 is a ceiling on the month, not money left (18 Nov 2026: it showed $500 with $201 in credit)
   expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ cap: null, left: null, tier: 'Start', tierCap: 500 });
-  setOwn({ limit: 500 });
+  // a limit and a balance typed before 19 Nov 2026 are still in the file: nothing counts down from them now
+  setOwn({ limit: 500, balance: { usd: 201, at: NOW - 3_600_000 } });
   const u = usageNow({ model: OPUS, now: NOW });
-  expect(u).toMatchObject({ cap: 500, tier: 'Start', monthName: 'October', modelName: 'Opus 5.5', today: { windows: 2 } });
-  expect(u.left).toBeCloseTo(433.44, 2);
+  expect(u).toMatchObject({ cap: null, left: null, balance: null, ownLimit: null, low: false, tier: 'Start', monthName: 'October', modelName: 'Opus 5.5', today: { windows: 2 } });
+  expect(u.spent).toBeCloseTo(66.56, 2);
   expect(u.today.usd).toBeCloseTo(56.71, 2);
   expect(u.pace.perDay).toBeCloseTo(33.28, 2);
-  expect(new Date(u.pace.runsOut).getDate()).toBe(22);
-  expect(u.pace.beforeReset).toBe(true);
+  expect(u.pace).toMatchObject({ runsOut: null, beforeReset: false });
   expect(u.last14.slice(-2).map((x) => +x.toFixed(2))).toEqual([9.85, 56.71]);
   expect(u.limits.requests).toMatchObject({ limit: 1000, remaining: 999 });
   // another model in the same window: the tier is still known from the last reading
-  expect(usageNow({ model: 'claude-sonnet-5-5', now: NOW })).toMatchObject({ cap: 500, limits: null });
+  expect(usageNow({ model: 'claude-sonnet-5-5', now: NOW })).toMatchObject({ tier: 'Start', cap: null, limits: null });
 });
 
 test('stopped at the cap: paused until the 1st (UTC); the next reply that comes clears it', () => {
@@ -111,33 +111,35 @@ test('stopped at the cap: paused until the 1st (UTC); the next reply that comes 
 const U = { model: OPUS, modelName: 'Opus 5.5', cap: 500, tier: 'Start', spent: 66.56, left: 433.44, monthName: 'October', days: [0, 0, 0, 0, 0, 0, 9.85, 56.71], last14: [...Array(12).fill(0), 9.85, 56.71], today: { usd: 56.71, windows: 2 }, window: 8.82, cache: { today: { sent: 2_000_000, hit: 1_720_000, wrote: 200_000, saved: 6.02 }, last14: { sent: 9_000_000, hit: 7_380_000, wrote: 900_000, saved: 25.75 } }, pace: { perDay: 33.28, runsOut: new Date(2026, 9, 22).getTime(), beforeReset: true }, limits: limitsFrom(startHeaders(new Date(NOW - 599_000).toISOString()), OPUS, NOW - 600_000), resetsOn: Date.parse('2026-11-01T00:00:00Z'), capped: null };
 const WIDTHS = [60, 72, 80, 100, 120, 152, 177];
 
-// "3 · One row" (9 Oct 2026): no row of its own; "$433.44 left" in the footer's right side, after the model.
-test('the footer’s words: what is left in cents, amber when it runs out before the 1st, red under a tenth, paused at the cap, the month without a cap', () => {
-  const chip = (u) => usageChip(u).map((x) => `${x.t}@${x.fg}`).join('|');
-  expect(textOf(usageChip(U))).toBe('$433.44 left');
-  expect(chip(U)).toBe('$433.44@215| left@215'); // U runs out on Oct 22: amber
-  expect(chip({ ...U, pace: { ...U.pace, beforeReset: false } })).toBe('$433.44@255| left@245');
-  expect(chip({ ...U, left: 14.99, low: true })).toBe('$14.99@203| left@203');
+// 19 Nov 2026, the owner on "$168.88 left of $200": "the amount is wrong", then "remove the balance overall from the
+// agentic coder": the footer has no dollars; only the key's name, and "paused" at the cap.
+test('the footer’s words: no dollars, ever; the key’s name when it has one; paused at the cap', () => {
+  expect(usageChip(U)).toEqual([]);
+  expect(usageChip({ ...U, cap: null, left: null, low: true, source: { kind: 'typed', stale: true, days: 3 } })).toEqual([]);
+  expect(textOf(usageChip({ ...U, account: { name: 'Work' } }))).toBe('Work');
   expect(textOf(usageChip({ ...U, capped: { kind: 'own' } }))).toBe('paused');
-  expect(textOf(usageChip({ ...U, cap: null, left: null }))).toBe('$66.56 this month');
+  expect(textOf(usageChip({ ...U, capped: { kind: 'own' }, account: { name: 'Work' } }))).toBe('Work · paused');
+  expect(textOf(usageChip(U))).not.toMatch(/\$/);
 });
 
-test('the card’s line holds still at rest and shines while a reply runs', () => {
+// No fuel line of what is left since 19 Nov 2026: the card's line under THIS MONTH is one faint rule, at rest and live.
+test('the card’s line under the month is one still rule, at rest and while a reply runs', () => {
   const colours = (now, live) => usagePanel(U, 152, { now, live })[3].map((s) => `${s.fg}:${s.t.length}`).join(',');
-  expect(colours(NOW, false)).toBe(colours(NOW + 777, false));
-  expect(colours(NOW, true)).not.toBe(colours(NOW + 777, true));
+  expect(colours(NOW, false)).toBe('240:1,252:1,237:148,252:1,240:1'); // the border, a space, the faint rule, a space, the border
+  expect(colours(NOW, true)).toBe(colours(NOW + 777, true));
 });
 
 test('the /usage card has the prompt box’s ends: the whole width, round corners, text one cell in, one label column, numbers to one edge, meters ending together', () => {
   for (const W of [72, 80, 120, 152, 177]) {
     const rows = usagePanel(U, W, { now: NOW }).map(textOf);
     expect(rows.every((r) => [...r].length === W)).toBe(true);
-    expect(rows[0]).toMatch(W >= 101 ? /^╭─ ◆ Usage · Claude API · Opus 5\.5 ─+ r refresh · b balance · l limit · s spent · k admin key · esc ─╮$/ : /^╭─ ◆ Usage · Claude API · Opus 5\.5 ─+ r · b · l · s · k · esc ─╮$/);
+    expect(rows[0]).toMatch(W >= 80 ? /^╭─ ◆ Usage · Claude API · Opus 5\.5 ─+ r refresh · s spent · k admin key · esc ─╮$/ : /^╭─ ◆ Usage · Claude API · Opus 5\.5 ─+ r · s · k · esc ─╮$/);
     expect(rows.at(-1)).toBe(`╰${'─'.repeat(W - 2)}╯`);
     for (const r of rows.slice(1, -1)) { expect(r.startsWith('│ ')).toBe(true); expect(r.endsWith(' │')).toBe(true); }
     const inner = rows.slice(1, -1).map((r) => r.slice(2, -2));
     const at = (word) => inner.find((r) => r.startsWith(word));
-    expect(at('THIS MONTH').trimEnd().endsWith('$433.44 left of $500')).toBe(true);
+    expect(at('THIS MONTH').trimEnd().endsWith('$66.56 spent')).toBe(true);
+    expect(rows.join('\n')).not.toMatch(/ left|balance|your limit/);
     expect(at('THIS MONTH').trimEnd().length).toBe(W - 4); // to the inner edge
     expect(inner.find((r) => /^[━╸─]+$/.test(r))).toHaveLength(W - 4); // the line: the whole inner width
     for (const label of ['TODAY', '14 DAYS', 'CACHE', 'THIS MINUTE', 'requests', 'input', 'output']) expect(at(label)[LABEL_W - 1]).toBe(' '), expect(at(label)[LABEL_W]).not.toBe(' ');
@@ -150,7 +152,7 @@ test('the /usage card has the prompt box’s ends: the whole width, round corner
     expect(blanks.every((i, k) => k === 0 || i - blanks[k - 1] > 1)).toBe(true);
   }
   const wide = usagePanel(U, 152, { now: NOW }).map(textOf).join('\n');
-  expect(wide).toContain('▲ at ~$33 a day it runs out around Oct 22, and the API stops until Nov 1');
+  expect(wide).not.toContain('runs out');
   expect(wide).toContain('1,000 of 1,000');
   expect(wide).toContain('limits from Anthropic’s last reply, 10 min ago');
   expect(wide).toContain('CACHE         86% of what was sent today came from the cache · saved $6.02 · 14 days 82%, saved $25.75');
@@ -253,7 +255,7 @@ test('each Claude API answer is kept with its moment, so what came after a figur
   expect(claudeSince(NOW, { dir: join(home, 'spend'), now: new Date(NOW) })).toBe(0);
 });
 
-test('your limit, a figure typed from the Console and Anthropic’s bill: the newest of the two, plus this Mac since; the meter without either', () => {
+test('a figure typed from the Console and Anthropic’s bill: the newest of the two, plus this Mac since; the meter without either; a limit kept from before counts nothing down', () => {
   freshHome();
   const month = monthOf(NOW);
   const claude = { remote: true, kind: 'claude', label: CLAUDE_HOST, price: { in: 4, out: 20 } };
@@ -264,87 +266,64 @@ test('your limit, a figure typed from the Console and Anthropic’s bill: the ne
   expect(u.spent).toBeCloseTo(10, 6);
   setOwn({ limit: 200 });
   u = usageNow({ model: OPUS, now: NOW });
-  expect(u).toMatchObject({ cap: 200, tierCap: 500, ownLimit: 200, low: false });
-  expect(u.left).toBeCloseTo(190, 6);
+  expect(u).toMatchObject({ cap: null, left: null, tierCap: 500, ownLimit: null, low: false });
   // the Console said $120 an hour ago; $1 since on this Mac
   setOwn({ spent: { usd: 120, at: NOW - 3_600_000, month } });
   recordSpend(claude, { prompt_tokens: 250_000, completion_tokens: 0 }, { now: new Date(NOW - 60_000), pid: 2 });
   u = usageNow({ model: OPUS, now: NOW });
   expect(u.source).toMatchObject({ kind: 'typed', usd: 120 });
   expect(u.spent).toBeCloseTo(121, 6);
-  expect(u.left).toBeCloseTo(79, 6);
+  expect(u.left).toBeNull();
   expect(sourceWords(u, NOW)).toBe('spent: the $120.00 you typed 60 min ago + $1.00 this Mac since · other Macs after it not counted');
   // a typed figure from another month is not this month's
   setOwn({ spent: { usd: 120, at: NOW - 3_600_000, month: '2026-09' } });
   expect(usageNow({ model: OPUS, now: NOW }).source.kind).toBe('meter');
-  // under a tenth left: low
+  // near the old limit: nothing is low, nothing left is said
   setOwn({ spent: { usd: 185, at: NOW - 3_600_000, month } });
-  expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ low: true });
-  expect(usageNow({ model: OPUS, now: NOW }).left).toBeCloseTo(14, 6);
+  expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ low: false, left: null });
   setOwn({ limit: null, spent: null });
   expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ cap: null, left: null, ownLimit: null, source: { kind: 'meter' } });
 });
 
-// 18 Nov 2026, the owner: "it says i have $500 available but i only have 201"; their pick "type it once, the app
-// counts down". No API tells the credit balance, so the one typed from the Console's Billing page is what is left.
-test('your credit balance, typed once, counts down with each Claude answer after it; it wins over a limit and the tier; old, it asks again', () => {
+// 19 Nov 2026, the owner on "$168.88 left of $200": "the amount is wrong", then "remove the balance overall from the
+// agentic coder". A balance or a limit typed before (18 Nov) stays in the file but counts nothing down anywhere.
+test('a balance and a limit typed before are ignored: no "left" in usageNow, the footer or the card; the month’s spend still counts', () => {
   freshHome();
-  const DAY = 86_400_000;
   const claude = { remote: true, kind: 'claude', label: CLAUDE_HOST, price: { in: 4, out: 20 } };
   noteLimits(START, OPUS, NOW - 600_000);
-  setOwn({ limit: 300 });
-  recordSpend(claude, { prompt_tokens: 2_500_000, completion_tokens: 0 }, { now: new Date(NOW - 7_200_000), pid: 1 }); // $10 before it was typed
-  setOwn({ balance: { usd: 201, at: NOW - 3_600_000 } });
-  recordSpend(claude, { prompt_tokens: 650_000, completion_tokens: 0 }, { now: new Date(NOW - 60_000), pid: 2 }); // $2.60 after
-  let u = usageNow({ model: OPUS, now: NOW });
-  expect(u).toMatchObject({ cap: 201, tier: 'Start', tierCap: 500, ownLimit: 300, balance: { usd: 201, days: 0, stale: false }, low: false });
-  expect(u.balance.since).toBeCloseTo(2.6, 6);
-  expect(u.left).toBeCloseTo(198.4, 6);
-  expect(u.spent).toBeCloseTo(12.6, 6); // the month still counts everything
-  expect(u.pace.beforeReset).toBe(false); // a balance does not come back on the 1st
-  expect(textOf(usageChip(u))).toBe('$198.40 left');
-  for (const w of WIDTHS) for (const r of usagePanel(u, w, { now: NOW })) expect(widthOf(r)).toBe(w);
-  const card = usagePanel(u, 152, { now: NOW }).map(textOf).join('\n');
-  expect(card).toContain('$198.40 left of $201, your balance');
-  expect(card).toContain('balance: the $201.00 you typed 60 min ago − $2.60 this Mac since · other Macs not counted · b types it again');
-  expect(card).not.toContain('the API stops until');
-  // three whole days old: the footer and the card ask for it again
-  setOwn({ balance: { usd: 201, at: NOW - 3 * DAY } });
-  u = usageNow({ model: OPUS, now: NOW });
-  expect(u.balance).toMatchObject({ days: 3, stale: true });
-  expect(textOf(usageChip(u))).toBe(`$${u.left.toFixed(2)} left (3 d old)`);
-  expect(usagePanel(u, 152, { now: NOW }).map(textOf).join('\n')).toContain('▲ the balance you typed is 3 days old: b types the Console’s figure again');
-  // spent down to nothing: $0.00 left, never below; under a tenth: low
-  setOwn({ balance: { usd: 2, at: NOW - 3_600_000 } });
-  expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ left: 0, low: true });
-  // taken out: the limit counts again; with neither, the month's spend and no "left"
-  setOwn({ balance: null });
-  expect(usageNow({ model: OPUS, now: NOW })).toMatchObject({ cap: 300, balance: null });
-  setOwn({ limit: null });
-  u = usageNow({ model: OPUS, now: NOW });
-  expect(u).toMatchObject({ cap: null, left: null });
-  expect(textOf(usageChip(u))).toBe('$12.60 this month');
+  setOwn({ limit: 200, balance: { usd: 201, at: NOW - 3_600_000 } });
+  recordSpend(claude, { prompt_tokens: 2_500_000, completion_tokens: 0 }, { now: new Date(NOW - 7_200_000), pid: 1 }); // $10
+  recordSpend(claude, { prompt_tokens: 650_000, completion_tokens: 0 }, { now: new Date(NOW - 60_000), pid: 2 }); // $2.60
+  const u = usageNow({ model: OPUS, now: NOW });
+  expect(u).toMatchObject({ cap: null, left: null, balance: null, ownLimit: null, low: false, tier: 'Start', tierCap: 500 });
+  expect(u.spent).toBeCloseTo(12.6, 6);
+  expect(u.pace).toMatchObject({ runsOut: null, beforeReset: false });
+  expect(usageChip(u)).toEqual([]);
+  for (const w of WIDTHS) {
+    const rows = usagePanel(u, w, { now: NOW });
+    for (const r of rows) expect(widthOf(r)).toBe(w);
+    const card = rows.map(textOf).join('\n');
+    expect(card).toContain('$12.60 spent');
+    expect(card).not.toMatch(/ left|balance|your limit|\$201|\$200/);
+  }
 });
 
-test('a typed figure three whole days old asks to be typed again: in the footer and the card; fresh, the bill and the meter never do', () => {
+test('a typed figure three whole days old asks to be typed again in the card (the footer has no dollars); fresh, the bill and the meter never do', () => {
   freshHome();
   const month = monthOf(NOW);
   noteLimits(START, OPUS, NOW - 600_000);
-  setOwn({ limit: 200 });
   const DAY = 86_400_000;
   const typedAgo = (ms) => { setOwn({ spent: { usd: 50, at: NOW - ms, month } }); return usageNow({ model: OPUS, now: NOW }); };
   // fresh, and a minute short of three days: no nudge
   for (const ms of [3_600_000, 3 * DAY - 60_000]) {
     const u = typedAgo(ms);
     expect(u.source.stale).toBe(false);
-    expect(textOf(usageChip(u))).toBe('$150.00 left');
     expect(usagePanel(u, 120, { now: NOW }).map(textOf).some((r) => r.includes('▲ the figure you typed'))).toBe(false);
   }
-  // exactly three days: stale; the footer says so after what is left, in amber
+  // exactly three days: stale; the footer still says nothing
   let u = typedAgo(3 * DAY);
   expect(u.source).toMatchObject({ kind: 'typed', days: 3, stale: true });
-  expect(textOf(usageChip(u))).toBe('$150.00 left (3 d old)');
-  expect(usageChip(u).at(-1).fg).toBe(215);
+  expect(usageChip(u)).toEqual([]);
   // the card: one amber row under where the spend comes from, the card's ends kept at every width
   for (const w of WIDTHS) {
     const rows = usagePanel(u, w, { now: NOW });
@@ -352,8 +331,7 @@ test('a typed figure three whole days old asks to be typed again: in the footer 
     const words = rows.map(textOf).find((r) => r.includes('▲'));
     expect(words).toContain(w - 4 >= 80 ? 'the figure you typed is 3 days old: s types the Console’s figure again' : 'typed 3 days ago · s to update');
   }
-  // without a cap the month's words get it too; at the cap only "paused"
-  expect(textOf(usageChip({ ...u, cap: null, left: null }))).toBe(`$${u.spent.toFixed(2)} this month (3 d old)`);
+  // at the cap only "paused"
   expect(textOf(usageChip({ ...u, capped: { kind: 'own' } }))).toBe('paused');
   // typed again: fresh
   u = typedAgo(0);
@@ -392,7 +370,7 @@ test('Anthropic’s bill: every page of the month added up, once a minute over e
 });
 
 // 19 Nov 2026, the owner: "i just changed the api key but my $ amount stayed the same".
-test('a key of another account counts its own month: dollars, today, limits, the cap and what you typed follow the account the key belongs to', () => {
+test('a key of another account counts its own month: dollars, today, limits and the cap follow the account the key belongs to', () => {
   const home = freshHome();
   const A = 'test-stand-in-key-of-account-a', B = 'test-stand-in-key-of-account-b', A2 = 'test-another-key-of-account-a';
   const claude = { remote: true, kind: 'claude', label: CLAUDE_HOST, price: { in: 4, out: 20 } };
@@ -420,17 +398,15 @@ test('a key of another account counts its own month: dollars, today, limits, the
   // another key of the same account: the same month, once a reply names it
   noteLimits({ 'anthropic-organization-id': 'org-aaaa-1111' }, OPUS, NOW, A2);
   expect(usageNow({ model: OPUS, now: NOW, key: A2 }).spent).toBeCloseTo(4, 6);
-  // a key of account B: its own month from $0, none of A's limits, A's balance not counted
-  setOwn({ balance: { usd: 201, at: NOW - 7_200_000, org: 'org-aaaa-1111' } });
+  // a key of account B: its own month from $0, none of A's limits
   noteLimits({ 'anthropic-organization-id': 'org-bbbb-2222' }, OPUS, NOW, B); // a free call: an account, no limits
   u = usageNow({ model: OPUS, now: NOW, key: B });
   expect(u).toMatchObject({ spent: 0, limits: null, tier: null, balance: null, cap: null, account: { pending: false, orgEnd: '2222' } });
   recordSpend(claude, { prompt_tokens: 500_000, completion_tokens: 0, org: 'org-bbbb-2222' }, { now: new Date(NOW - 30_000), pid: 22 }); // $2
   expect(usageNow({ model: OPUS, now: NOW, key: B }).spent).toBeCloseTo(2, 6);
-  // back to A: its $4 and its balance less A's answers since ($201 − $4), not B's
+  // back to A: its $4, not B's
   u = usageNow({ model: OPUS, now: NOW, key: A });
   expect(u.spent).toBeCloseTo(4, 6);
-  expect(u.left).toBeCloseTo(197, 6);
   // a cap reached under B does not pause A
   noteCapped('tier', NOW, 'org-bbbb-2222');
   expect(usageNow({ model: OPUS, now: NOW, key: B }).capped).toMatchObject({ kind: 'tier' });

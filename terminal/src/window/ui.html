@@ -646,13 +646,10 @@ function homeHtml(st) {
     + '<div class="sub" style="margin-top:14px;font-size:12px;color:var(--faint)">Type below to start · / for commands · @ for files</div></div>';
 }
 // ---- the pill beside the model (12 Oct 2026, the owner's pick "2 · Gauge + card") --------------------------------
-// On the Claude API, what is left of the month: a fuel line and the terminal footer's words ("$43.16 left of $200":
-// amber when the month runs out before the 1st at its pace, red under a tenth of the cap, "paused" at the cap), the
-// numbers /usage's (bridge.mjs usageOf). On a model that costs nothing (another service, this Mac), the context and
+// On the Claude API, "paused" at the cap and nothing else (no "$ left" since 19 Nov 2026, usagePill), the numbers
+// /usage's (bridge.mjs usageOf). On a model that costs nothing (another service, this Mac), the context and
 // the memory instead (bridge.mjs meterOf). A click drops a card under it with the rest.
 const dayOf = (ms, utc) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', ...(utc ? { timeZone: 'UTC' } : {}) });
-const money0 = (v) => '$' + Math.round(v).toLocaleString('en-US');
-const capMoney = (v) => (Number.isInteger(v) ? money0(v) : money(v));
 const tok = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : Number(n).toLocaleString('en-US'));
 const agoMs = (ms) => (ms < 90e3 ? Math.max(1, Math.round(ms / 1e3)) + ' s ago' : ms < 5400e3 ? Math.round(ms / 60e3) + ' min ago' : ms < 129600e3 ? Math.round(ms / 3600e3) + ' h ago' : Math.round(ms / 86400e3) + ' days ago');
 function fuelHtml(u, w, live) {
@@ -662,10 +659,11 @@ function fuelHtml(u, w, live) {
   const ramp = left > 0.5 ? 'blue' : left > 0.2 ? 'amber' : 'red';
   return '<span class="fuel' + (live ? ' live' : '') + '" style="width:' + w + '"><i class="left ' + ramp + '" style="width:' + (left * 100).toFixed(2) + '%"></i>' + (today > 0 ? '<i class="today" style="width:max(2px,' + (today * 100).toFixed(2) + '%)"></i>' : '') + '</span>';
 }
+// No dollars beside the model since 19 Nov 2026 (the owner, on "$168.88 left of $200": "the amount is wrong", then
+// "remove the balance overall from the agentic coder"): the pill shows only "paused" at the cap; /usage has the rest.
 function usagePill(u, live) {
-  const tone = u.tone ? ' ' + u.tone : '';
-  const words = u.capped ? '<b>paused</b>' : u.cap == null ? '<b>' + money(u.spent) + '</b> this month' : '<b>' + money(u.left) + '</b> left <span class="of">of ' + capMoney(u.cap) + '</span>';
-  return '<span class="upill' + tone + (S.usageCard ? ' open' : '') + '" data-act="usage">' + fuelHtml(u, '54px', live) + '<span>' + words + ((u.balance || u.source)?.stale && !u.capped ? ' <span class="of">(' + (u.balance || u.source).days + ' d old)</span>' : '') + '</span></span>';
+  if (!u.capped) return '';
+  return '<span class="upill bad' + (S.usageCard ? ' open' : '') + '" data-act="usage">' + fuelHtml(u, '54px', live) + '<span><b>paused</b></span></span>';
 }
 // A free model's pill: the context used (amber at 70%, red at 85%: the footer's and the memory warning's points),
 // then the memory (the Mac's in Activity Monitor's pressure colours; the service's GPU, amber while part of the model
@@ -693,14 +691,9 @@ function meterPill(m) {
 }
 function usageCardHtml(u, live) {
   const now = Date.now() - S.skew;
-  const known = u.cap != null;
-  const head = u.capped ? '<span class="big bad">paused</span><span> · back ' + dayOf(u.resetsOn, true) + ' (UTC)</span>' : known ? '<span class="big' + (u.tone ? ' ' + u.tone : '') + '">' + money(u.left) + '</span><span> left of ' + capMoney(u.cap) + (u.balance ? ', your balance' : u.own ? ', your limit' : '') + '</span>' : '<span class="big">' + money(u.spent) + '</span><span> spent</span>';
-  const capWords = u.balance ? 'balance typed ' + agoMs(now - u.balance.at) : u.own ? 'your limit' : 'b in /usage types your balance';
-  let pace = '';
-  if (u.capped) pace = '<div class="ln bad">■ The month’s limit is used: the Claude API answers again on ' + dayOf(u.resetsOn, true) + ', or raise it in the Console</div>';
-  else if (u.balance && u.runsOut) pace = u.runsOut < u.resetsOn ? '<div class="ln warn">▲ at ~' + money0(u.perDay) + ' a day the balance runs out around ' + dayOf(u.runsOut) + ': add credit in the Console</div>' : '<div class="ln"><span class="ok">✓</span> at ~' + money0(u.perDay) + ' a day the balance lasts until about ' + dayOf(u.runsOut) + '</div>';
-  else if (u.beforeReset) pace = '<div class="ln warn">▲ at ~' + money0(u.perDay) + ' a day it runs out around ' + dayOf(u.runsOut) + ', and the API stops until ' + dayOf(u.resetsOn, true) + '</div>';
-  else if (known && u.perDay > 0) pace = '<div class="ln"><span class="ok">✓</span> at ~' + money0(u.perDay) + ' a day it lasts the month</div>';
+  // The month's dollars spent, never what is "left" (19 Nov 2026, the owner: "remove the balance overall").
+  const head = u.capped ? '<span class="big bad">paused</span><span> · back ' + dayOf(u.resetsOn, true) + ' (UTC)</span>' : '<span class="big">' + money(u.spent) + '</span><span> spent</span>';
+  const pace = u.capped ? '<div class="ln bad">■ The month’s limit is used: the Claude API answers again on ' + dayOf(u.resetsOn, true) + ', or raise it in the Console</div>' : '';
   const max = Math.max(...u.last14, 0.01), total = u.last14.reduce((a, b) => a + b, 0);
   const bars = '<svg width="168" height="18" style="align-self:center">' + u.last14.map((v, i) => { const h = v > 0 ? Math.max(3, (v / max) * 16) : 1.5; return '<rect x="' + i * 12 + '" y="' + (17 - h) + '" width="9" height="' + h + '" rx="1.5" fill="' + (i === 13 ? '#ffd75f' : v > 0 ? '#d7af00' : '#3a3a40') + '"/>'; }).join('') + '</svg>';
   let minute = '';
@@ -715,17 +708,16 @@ function usageCardHtml(u, live) {
   const a = u.account;
   const acct = a?.pending ? '<br><span class="warn">account: checking which account the new key belongs to · nothing counted until it answers</span>'
     : a?.orgEnd ? '<br>account: organization …' + esc(a.orgEnd) + ', the key in use’s · only its dollars count' + (a.earlier > 0.005 ? '<br>' + money(a.earlier) + ' earlier this month came before keys were told apart: not counted' : '') : '';
-  const bal = u.balance ? '<br>balance: the ' + money(u.balance.usd) + ' you typed ' + agoMs(now - u.balance.at) + (u.balance.since > 0.005 ? ' − ' + money(u.balance.since) + ' this Mac since' : '') + ' · other Macs not counted' + (u.balance.stale ? '<br><span class="warn">▲ the balance you typed is ' + u.balance.days + ' days old: b in /usage types it again</span>' : '') : '';
   return '<div class="ucard" id="ucard"><div class="hd">Usage <span class="m">· Claude API · ' + esc(u.modelName || '') + '</span><span class="r">resets ' + dayOf(u.resetsOn, true) + ' (UTC)</span></div>'
     + '<div class="ln"><span class="lbl">This month</span><span>' + esc(u.month) + '</span><span class="r">' + head + '</span></div>'
-    + (known || u.capped ? '<div style="margin:8px 0 6px">' + fuelHtml(u, '100%', live).replace('class="fuel', 'style="height:8px;border-radius:4px" class="fuel') + '</div>' : '')
-    + '<div class="ln" style="white-space:nowrap"><span class="v">' + money(u.spent) + ' spent</span><span>· ' + capWords + '</span>' + (known ? '<span class="r"><span class="key" style="background:#8a6420"></span>today &nbsp;<span class="key" style="background:#2e2e33"></span>before</span>' : '') + '</div>'
+    + (u.capped ? '<div style="margin:8px 0 6px">' + fuelHtml(u, '100%', live).replace('class="fuel', 'style="height:8px;border-radius:4px" class="fuel') + '</div>' : '')
+    + '<div class="ln" style="white-space:nowrap"><span class="v">' + money(u.spent) + ' spent</span></div>'
     + pace
     + '<div class="sec"><div class="ln"><span class="lbl">Today</span><span class="v">' + money(u.today) + '</span><span>on this Mac · this window ' + money(u.window) + '</span></div>'
     + '<div class="ln"><span class="lbl">14 days</span>' + bars + '<span class="r v">' + money(total) + '</span></div></div>'
     + '<div class="sec"><div class="ln"><span class="lbl">This minute</span><span>Anthropic’s limits · they refill all the time</span></div>' + minute + '</div>'
-    + '<div class="src">' + esc(src) + acct + bal + (u.own && !u.balance && u.tierCap ? '<br>your limit is ' + capMoney(u.cap) + '; the ' + esc(u.tier) + ' tier allows ' + capMoney(u.tierCap) : '') + (u.limits ? '<br>limits from Anthropic’s last reply, ' + agoMs(now - u.limits.at) : '') + '</div>'
-    + '<div class="acts"><button class="bb" data-run="/usage">Open /usage</button><button class="bb" data-run="/remote key">Change API key</button><span class="k">r refresh · b your balance · l your limit · s the Console’s figure · k Admin key</span></div></div>';
+    + '<div class="src">' + esc(src) + acct + (u.limits ? '<br>limits from Anthropic’s last reply, ' + agoMs(now - u.limits.at) : '') + '</div>'
+    + '<div class="acts"><button class="bb" data-run="/usage">Open /usage</button><button class="bb" data-run="/remote key">Change API key</button><span class="k">r refresh · s the Console’s figure · k Admin key</span></div></div>';
 }
 function meterCardHtml(m) {
   const now = Date.now() - S.skew;

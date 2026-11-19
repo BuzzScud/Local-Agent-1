@@ -231,19 +231,14 @@ test('the window\'s clicks do what the same thing typed does: a mode chip as /mo
   srv.close();
 });
 
-test("the pill beside the model: the Claude API's month as the footer said it, a free model's context and memory", () => {
+test("the pill beside the model: on the Claude API only \"paused\" at the cap, a free model's context and memory", () => {
   const GB = 2 ** 30;
-  const month = { model: 'claude-opus-5-5', modelName: 'Opus 5.5', cap: 200, tierCap: 500, ownLimit: 200, tier: 'Start', spent: 156.84, left: 43.16, low: false, monthName: 'October', last14: [0, 9.85, 66.81], today: { usd: 1.2 }, window: 0.4, pace: { perDay: 26, runsOut: Date.UTC(2026, 9, 14), beforeReset: true }, limits: null, resetsOn: Date.UTC(2026, 10, 1), capped: null, source: { kind: 'typed', usd: 102.35, at: 1, since: 54.49, days: 1, stale: false } };
+  const month = { model: 'claude-opus-5-5', modelName: 'Opus 5.5', cap: null, tierCap: 500, ownLimit: null, tier: 'Start', spent: 156.84, left: null, low: false, monthName: 'October', last14: [0, 9.85, 66.81], today: { usd: 1.2 }, window: 0.4, pace: { perDay: 26, runsOut: Date.UTC(2026, 9, 14), beforeReset: true }, limits: null, resetsOn: Date.UTC(2026, 10, 1), capped: null, source: { kind: 'typed', usd: 102.35, at: 1, since: 54.49, days: 1, stale: false } };
   expect(usageOf(null)).toBeNull();
-  // amber when it runs out before the 1st, red under a tenth, "paused" at the cap, the month's dollars with no cap known
-  expect(usageOf(month)).toMatchObject({ text: '$43.16 left', tone: 'warn', left: 43.16, cap: 200, own: true, today: 1.2, beforeReset: true, source: { kind: 'typed', usd: 102.35 } });
-  expect(usageOf({ ...month, left: 14.2, low: true })).toMatchObject({ text: '$14.20 left', tone: 'bad' });
-  expect(usageOf({ ...month, pace: { perDay: 2, runsOut: null, beforeReset: false } })).toMatchObject({ tone: null });
+  // no dollars in the words since 19 Nov 2026 (the owner: "remove the balance overall"): "paused" at the cap, else none
+  expect(usageOf(month)).toMatchObject({ text: '', spent: 156.84, today: 1.2, source: { kind: 'typed', usd: 102.35 } });
   expect(usageOf({ ...month, capped: { kind: 'own', until: 9e15 } })).toMatchObject({ text: 'paused', tone: 'bad', capped: true });
-  expect(usageOf({ ...month, cap: null, left: null, spent: 138.32 })).toMatchObject({ text: '$138.32 this month', balance: null });
-  // a credit balance typed from the Console (18 Nov 2026): what is left of it, and how old it is, for the pill and card
-  const balance = { usd: 201, at: 5, since: 2.6, days: 3, stale: true };
-  expect(usageOf({ ...month, cap: 201, left: 198.4, balance, pace: { perDay: 2, runsOut: null, beforeReset: false } })).toMatchObject({ text: '$198.40 left (3 d old)', cap: 201, left: 198.4, balance });
+  expect(usageOf({ ...month, cap: null, left: null, spent: 138.32 })).toMatchObject({ text: '', spent: 138.32, balance: null });
   // on the Claude API the pill is the month's; with --url there is no model to speak of
   expect(meterOf({ usage: month, modelState: { remote: true, state: 'on' } })).toBeNull();
   expect(meterOf({ modelState: null })).toBeNull();

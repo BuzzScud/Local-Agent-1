@@ -80,8 +80,8 @@ export function usagePart(self) {
     try { await Promise.all([askLimits({ url, ep }), self.hasAdmin() ? fetchBill({ force: true }) : null]); } catch (e) { self.flash(`could not ask Anthropic: ${String(e.message ?? e).slice(0, 120)}`, 4000); }
     self.setPicker((p) => (p?.kind === 'usage' ? { ...p, asking: false } : p));
   };
-  // enter on a value typed in /usage (b your credit balance, l your limit, s the month's spend as the Console shows
-  // it, k an Admin key), and /usage balance 201 · /usage limit 200 · /usage spent 112.40. Returns the words said, or null when the value was refused
+  // enter on a value typed in /usage (s the month's spend as the Console shows it, k an Admin key), and
+  // /usage spent 112.40. Returns the words said, or null when the value was refused
   // (the box stays open to type it again).
   const saveUsageEdit = (e) => {
     const said = (text, tone = 'dim') => { self.setPicker((p) => (p?.kind === 'usage' ? { ...p, editing: null } : p)); self.push({ type: 'note', text, tone }); return text; };
@@ -109,14 +109,6 @@ export function usagePart(self) {
     const ep = endpointOf(self.agent.url);
     const org = ep?.kind === 'claude' ? accountOf(ep.key ?? null).org : null;
     const tag = org ? { org } : {};
-    if (e.id === 'balance') {
-      setUsageOwn({ balance: usd > 0 ? { usd, at: Date.now(), ...tag } : null });
-      return said(usd > 0 ? `/usage: your balance is $${usd.toFixed(2)} as of now. "$ left" counts down from it with each answer on this Mac.` : '/usage: your balance taken out; "$ left" counts from your limit, if you set one.');
-    }
-    if (e.id === 'limit') {
-      setUsageOwn({ limit: usd > 0 ? usd : null, limitOrg: usd > 0 ? org : null });
-      return said(usd > 0 ? `/usage: your limit is $${usd.toFixed(2)} a month. "$ left" counts down from it.` : '/usage: your own limit taken out.');
-    }
     setUsageOwn({ spent: off ? null : { usd, at: Date.now(), month: monthOf(), ...tag } });
     return said(off ? '/usage: the typed figure taken out; the month’s spend is this Mac’s meter again.' : `/usage: this month’s spend is $${usd.toFixed(2)} as of now; this Mac’s answers are added to it as they come.`);
   };

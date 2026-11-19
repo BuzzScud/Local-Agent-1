@@ -385,9 +385,9 @@ export function keysPart(self) {
     // /rewind: ↑↓ a message, enter shows what would go back; then ↑↓ or a
     // number picks what to put back, esc goes back to the list.
     if (cur.picker?.kind === 'rewind') { rewindKeys(cur, ch, key); return; }
-    // /usage: r asks Anthropic for the limits now (one tiny request) and its bill; l your limit, s the month's
-    // spend as the Console shows it, b the credit balance it shows, k an Admin key, each typed in the card's last row (enter saves, esc
-    // goes back); esc, enter or q closes it.
+    // /usage: r asks Anthropic for the limits now (one tiny request) and its bill; s the month's spend as the
+    // Console shows it, k an Admin key, each typed in the card's last row (enter saves, esc goes back); esc, enter
+    // or q closes it. (b your balance and l your limit went on 19 Nov 2026: no "left" is shown.)
     if (cur.picker?.kind === 'usage') {
       const pk = cur.picker;
       if (pk.editing) {
@@ -396,9 +396,9 @@ export function keysPart(self) {
         else self.setPicker({ ...pk, editing: editField(pk.editing, ch, key) });
         return;
       }
-      const id = { b: 'balance', l: 'limit', s: 'spent', k: 'key' }[ch];
+      const id = { s: 'spent', k: 'key' }[ch];
       if (ch === 'r' && !pk.asking) self.askUsage();
-      else if (id) { const value = id === 'limit' && self.S.current.usage?.ownLimit ? String(self.S.current.usage.ownLimit) : ''; self.setPicker({ ...pk, editing: { id, value, cursor: value.length } }); }
+      else if (id) self.setPicker({ ...pk, editing: { id, value: '', cursor: 0 } });
       else if (key.escape || key.return || ch === 'q' || (key.ctrl && ch === 'c')) self.setPicker(null);
       return;
     }

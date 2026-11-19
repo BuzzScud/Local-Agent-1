@@ -102,14 +102,14 @@ function wholeTip(app, left, right) {
 // On a remote (remote-footer.mjs): no Mac's memory, which holds no model then, and no cost meter
 // (/meters has it). Once the first answer has a speed, gauges take the left side, unless a note,
 // a tip or shell mode is there; the right is the model, where it runs and the mode. On the Claude
-// API the model's name goes alone, then what is left of the month ("$61.68 left", usageChip).
+// API the model's name goes alone, then the key's name or "paused" (usageChip; no dollars since 19 Nov 2026).
 function remoteParts(app, left, badges) {
   const { width, mode } = app;
   const ms = app.modelState;
   const modeText = MODE_SHORT[mode] ?? '';
   const labels = modelLabels(ms);
   const near = app.usage && ms.state === 'on' ? labels[1] : labels[0];
-  // On the Claude API, what is left of the month after the model's name (usage-bar.mjs usageChip).
+  // On the Claude API, the key's name or "paused" after the model's name (usage-bar.mjs usageChip).
   const chip = app.usage ? segsText(usageChip(app.usage)) : '';
   const rightOf = (label) => [label, chip, badges, modeText].filter(Boolean).join(' · ');
   const list = gaugesOf(app.gaugeList);
@@ -165,7 +165,7 @@ function FooterRows({ app, border }) {
   const pieces = [
     p.spend ? <Text color={C.dim}>{p.spend}</Text> : null,
     p.label ? <Text color={down ? C.bad : C.dim}><Text color={dot}>{p.label[0]}</Text>{named ? <><Text> </Text><Text color={WHITE}>{ms.name}</Text>{p.label.slice(2 + ms.name.length)}</> : p.label.slice(1)}</Text> : null,
-    app.usage ? <Text>{usageChip(app.usage).map((x, i) => <Text key={i} color={`ansi256(${x.fg})`} bold={x.b}>{x.t}</Text>)}</Text> : null,
+    app.usage && usageChip(app.usage).length ? <Text>{usageChip(app.usage).map((x, i) => <Text key={i} color={`ansi256(${x.fg})`} bold={x.b}>{x.t}</Text>)}</Text> : null,
     p.mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {p.mac}</Text> : null,
     p.badges ? <Text color={C.accent}>{p.badges}</Text> : null,
     modeLabel(mode, { short: true }),

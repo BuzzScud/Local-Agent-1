@@ -49,11 +49,13 @@ export function slashModel(self) {
       }
       case 'usage': {
         // The Claude API's usage (claude-usage.mjs, usage-bar.mjs): a card over the prompt, esc closes it.
-        if (self.model.remote?.kind !== 'claude') { self.push({ type: 'note', text: `/usage shows what the Claude API has left; this window runs on ${self.model.remote ? self.model.remote.label : 'this Mac'}. /remote claude connects it.`, tone: 'dim' }); break; }
-        // /usage balance 201 · /usage limit 200 · /usage spent 112.40 (off takes any out) · /usage key opens the card to paste an Admin key.
+        if (self.model.remote?.kind !== 'claude') { self.push({ type: 'note', text: `/usage shows what the Claude API has cost; this window runs on ${self.model.remote ? self.model.remote.label : 'this Mac'}. /remote claude connects it.`, tone: 'dim' }); break; }
+        // /usage spent 112.40 (off takes it out) · /usage key opens the card to paste an Admin key. (/usage balance and
+        // /usage limit went on 19 Nov 2026, the owner: "remove the balance overall": no "left" is shown.)
         const [what, ...rest] = arg.trim().split(/\s+/);
-        if (/^(balance|limit|spent)$/i.test(what ?? '') && rest.length) { self.saveUsageEdit({ id: what.toLowerCase(), value: rest.join(' ') }); break; }
-        if (/^(balance|limit|spent|key)$/i.test(what ?? '')) { self.setPicker({ kind: 'usage', asking: false, editing: { id: what.toLowerCase(), value: '', cursor: 0 } }); break; }
+        if (/^(balance|limit)$/i.test(what ?? '')) { self.push({ type: 'note', text: '/usage no longer keeps a balance or a limit: Agentic Coder shows only what was spent. The Console’s Billing page has your balance.', tone: 'dim' }); break; }
+        if (/^spent$/i.test(what ?? '') && rest.length) { self.saveUsageEdit({ id: what.toLowerCase(), value: rest.join(' ') }); break; }
+        if (/^(spent|key)$/i.test(what ?? '')) { self.setPicker({ kind: 'usage', asking: false, editing: { id: what.toLowerCase(), value: '', cursor: 0 } }); break; }
         self.setPicker({ kind: 'usage', asking: false });
         break;
       }
