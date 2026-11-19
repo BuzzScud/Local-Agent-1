@@ -37,7 +37,7 @@ section h2 small { color: var(--ink3); font-weight: 400; }
 .row:last-child { border-bottom: 0; }
 .row .note { color: var(--ink3); font-size: 12.5px; }
 .row.inherit select { color: var(--ink3); }
-select { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; max-width: 100%; }
+select { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; max-width: 100%; min-width: 0; }
 select:disabled { opacity: .45; }
 .tabs { display: flex; gap: 4px; padding: 8px 14px 0; flex-wrap: wrap; }
 .tabs button { font: inherit; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ink2); padding: 4px 8px; cursor: pointer; }
@@ -46,7 +46,8 @@ select:disabled { opacity: .45; }
 .empty { padding: 30px; color: var(--ink2); max-width: 640px; }
 .flash { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 6px 12px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .flash.show { opacity: .92; }
-@media (max-width: 760px) { body { overflow: auto; height: auto; } main { grid-template-columns: 1fr; } .row { grid-template-columns: 1fr 1fr; } .row .note { grid-column: 1 / -1; } }
+.flash.bad { background: var(--down); color: #fff; }
+@media (max-width: 760px) { body { overflow: auto; height: auto; } main { grid-template-columns: minmax(0, 1fr); } .row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .row .note { grid-column: 1 / -1; } .prof > div { min-width: 0; } }
 </style>
 </head>
 <body>
@@ -62,20 +63,31 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 let state = null, tab = 'ai';
 const models = {}; // source → model ids (the Remote tab's list)
 try { tab = localStorage.getItem('profiles-tab') || 'ai'; } catch {}
-function flash(t) { const f = $('#flash'); f.textContent = t; f.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => f.classList.remove('show'), 1800); }
+function flash(t, bad = false) { const f = $('#flash'); f.textContent = t; f.classList.toggle('bad', bad); f.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => f.classList.remove('show'), bad ? 4000 : 1800); }
+// The hub stopped (its window closed): said once, not at every look; the page tries again every 5 s and says when it is back.
+let down = false;
 async function load() {
-  const r = await fetch('/profiles.json', { cache: 'no-store' });
-  state = await r.json();
+  try {
+    const r = await fetch('/profiles.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error(String(r.status));
+    state = await r.json();
+  } catch {
+    if (!down) { down = true; if (state) flash('The hub is not answering: these are the profiles as last read. Trying again…', true); else $('#main').innerHTML = '<div class="empty"><b>The hub is not answering.</b><p>Open this page again from Agentic Coder (<code>/profiles</code> or <code>coding hub profiles</code>). It tries again every 5 s.</p></div>'; }
+    return;
+  }
+  if (down) { down = false; flash('The hub is answering again'); }
   draw();
   for (const p of state.profiles ?? []) if (p.models) models[p.source] = p.models; else if (!models[p.source]) {
     models[p.source] = [];
     fetch(`/remote.json?service=${encodeURIComponent(p.source)}`, { cache: 'no-store' }).then((x) => x.json()).then((l) => { models[p.source] = (l.models ?? []).map((m) => m.id); draw(); }).catch(() => {});
   }
 }
+// A change saved at once; one that fails says why and the dropdowns go back to what is saved.
 async function post(path, body, said) {
-  const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) { flash(j.error ?? 'not saved'); return; }
+  let r, j;
+  try { r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); j = await r.json().catch(() => ({})); }
+  catch { draw(); flash('Not saved: the hub is not answering', true); return; }
+  if (!r.ok) { draw(); flash(`Not saved: ${j.error ?? `the hub answered ${r.status}`}`, true); return; }
   state = j; draw(); flash(said);
 }
 function meterWords(m) {
@@ -93,14 +105,14 @@ function draw() {
     const list = [...new Set([p.model, ...(models[p.source] ?? [])])];
     const m = state.meters?.[p.name];
     return `<div class="prof"><b>${esc(p.name)}</b>
-      <div><select data-model="${esc(p.name)}">${list.map((id) => opt(id, id, id === p.model)).join('')}</select> <span class="meta">${esc(p.server)}</span></div>
+      <div><select data-model="${esc(p.name)}" aria-label="${esc(p.name)}: model">${list.map((id) => opt(id, id, id === p.model)).join('')}</select> <span class="meta">${esc(p.server)}</span></div>
       <span class="meta">backup</span>
-      <div><select data-backup="${esc(p.name)}">${opt('', 'none', !p.backup)}${names.filter((n) => n !== p.name).map((n) => opt(n, n, n === p.backup)).join('')}</select>
-        <select data-spill="${esc(p.name)}" ${p.backup ? '' : 'disabled'}>${state.spills.map((s) => opt(s, s ? `after ${s} s` : 'only when busy', s === p.spillAfter)).join('')}</select></div>
+      <div><select data-backup="${esc(p.name)}" aria-label="${esc(p.name)}: backup profile">${opt('', 'none', !p.backup)}${names.filter((n) => n !== p.name).map((n) => opt(n, n, n === p.backup)).join('')}</select>
+        <select data-spill="${esc(p.name)}" aria-label="${esc(p.name)}: when to use the backup" ${p.backup ? '' : 'disabled'}>${state.spills.map((s) => opt(s, s ? `after ${s} s` : 'only when busy', s === p.spillAfter)).join('')}</select></div>
       <span class="meter${m?.spills ? ' spilled' : ''}">${esc(meterWords(m))}</span></div>`;
   }).join('');
   const rows = state.rows.filter((r) => r.group === tab).map((r) => `<div class="row${r.own ? '' : ' inherit'}"><span>${esc(r.label)}</span>
-    <select data-use="${esc(r.key)}">${opt('', r.own ? '— none of its own' : `${r.uses} (not its own)`, !r.own)}${names.map((n) => opt(n, n, n === r.own)).join('')}</select>
+    <select data-use="${esc(r.key)}" aria-label="${esc(r.label)}: profile">${opt('', r.own ? '— none of its own' : `${r.uses} (not its own)`, !r.own)}${names.map((n) => opt(n, n, n === r.own)).join('')}</select>
     <span class="note">${esc(r.note)}</span></div>`).join('');
   main.innerHTML = `<section><h2>Profiles <small>today, every window</small></h2><div class="scroll">${profs}</div></section>
     <section><h2>Who uses which <small>saved as you pick</small></h2>

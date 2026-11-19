@@ -19,7 +19,7 @@ button,input,textarea{font:inherit;color:inherit}
 .top{display:flex;align-items:flex-end;gap:16px;min-width:0}
 .top .t{min-width:0;flex:1}
 h1{font-size:24px;line-height:1.15;letter-spacing:-.02em;margin:0 0 3px}
-.lede{color:var(--mute);margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lede.warn{color:var(--down)}
+.lede{color:var(--mute);margin:0;font-size:14px;overflow-wrap:anywhere}.lede.warn{color:var(--down)}
 .search{position:relative;flex:none}
 .search input{width:300px;padding:8px 12px 8px 32px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
 .search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
@@ -64,6 +64,7 @@ h1{font-size:24px;line-height:1.15;letter-spacing:-.02em;margin:0 0 3px}
 .item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;border-left:3px solid transparent}
 .item:hover{background:var(--soft)}
 .item[aria-selected="true"]{background:var(--tint);border-left-color:var(--accent)}
+.item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .item .x{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14.5px;line-height:1.45}
 .item .meta{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--mute)}
 .item .side{text-align:right;font-size:12.5px;color:var(--mute);white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -96,9 +97,10 @@ textarea{width:100%;min-height:140px;margin:8px 0 10px;padding:9px 11px;border:1
 .about{padding:18px 20px;overflow:auto;color:var(--mute);font-size:14px}.about li{margin:6px 0}.about h3{color:var(--ink);font-size:16px;margin:0 0 6px;text-transform:none;letter-spacing:0}
 code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
 .back{display:none}
+.narrow{display:none}
 /* narrower: the reader drops under; a phone: one column, the page scrolls */
 @media (max-width:1250px){.body{grid-template-columns:200px minmax(0,1fr) 340px}.search input{width:220px}}
-@media (max-width:980px){body{overflow:auto}.app{height:auto;min-height:100vh}.body{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;overflow:visible}.rail h4,.rail .foot{display:none}.rail button{width:auto}.list{max-height:60vh}.reader{max-height:none}.top{flex-wrap:wrap}.search input{width:100%}.search{flex:1 1 100%}}
+@media (max-width:980px){.wide{display:none}.narrow{display:inline}body{overflow:auto}.app{height:auto;min-height:100vh}.body{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;overflow:visible}.rail h4,.rail .foot{display:none}.rail button{width:auto}.list{max-height:60vh}.reader{max-height:none}.top{flex-wrap:wrap}.search input{width:100%}.search{flex:1 1 100%}}
 </style>
 </head>
 <body>
@@ -108,7 +110,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     <button type="button" class="newmem" id="new" title="Write a rule or a fact yourself (n)">+ New memory</button></div>
   <div class="body">
     <nav class="box rail" id="rail" aria-label="The memories"></nav>
-    <section class="box"><div class="lhead"><h2 id="lname"></h2><span class="sub" id="lsub"></span><span class="sp"></span><span id="ltools"></span></div><div class="list" id="list" tabindex="0"></div><div class="lfoot" id="lfoot"></div></section>
+    <section class="box"><div class="lhead"><h2 id="lname"></h2><span class="sub" id="lsub"></span><span class="sp"></span><span id="ltools"></span></div><div class="list" id="list" tabindex="0" role="listbox" aria-label="The list"></div><div class="lfoot" id="lfoot"></div></section>
     <aside class="box reader" id="reader" aria-live="polite"></aside>
   </div>
 </div>
@@ -204,10 +206,10 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     xs.forEach((x, i) => {
       if (view === 'changes') {
         const d = day(x.at);
-        if (d !== lastDay) { h += `<div class="day">${d}</div>`; lastDay = d; }
-        h += `<div class="item" data-i="${i}" aria-selected="${i === sel[view]}"><div class="x"><span class="what">${WHAT[x.what] || esc(x.what)}</span> · ${TITLE[x.where]}${x.text ? ` · ${mark(x.text)}` : ''}</div><div class="side">${clock(x.at)}</div></div>`;
+        if (d !== lastDay) { h += `<div class="day" role="presentation">${d}</div>`; lastDay = d; }
+        h += `<div class="item" role="option" tabindex="${i === sel[view] ? 0 : -1}" data-i="${i}" aria-selected="${i === sel[view]}"><div class="x"><span class="what">${WHAT[x.what] || esc(x.what)}</span> · ${TITLE[x.where]}${x.text ? ` · ${mark(x.text)}` : ''}</div><div class="side">${clock(x.at)}</div></div>`;
       } else {
-        h += `<div class="item" data-i="${i}" aria-selected="${i === sel[view]}"><div class="x">${mark(x.text)}</div><div class="side">${x.always ? 'rule' : `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span>`}</div><div class="meta">${chips(x)}${fresh.has(x.key) ? '<span class="chip fresh">just added</span>' : ''}${view === 'rules' || view === 'pinned' || view === 'retired' ? `<span>${TITLE[x.where]}</span>` : ''}<span>${view === 'retired' ? esc(String(x.retired || 'taken out').split(':')[0]) : x.always ? 'read at every start' : `used ${plural(x.used, 'time')}`}</span><span>saved ${esc(x.saved || '—')}</span></div></div>`;
+        h += `<div class="item" role="option" tabindex="${i === sel[view] ? 0 : -1}" data-i="${i}" aria-selected="${i === sel[view]}"><div class="x">${mark(x.text)}</div><div class="side">${x.always ? 'rule' : `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span>`}</div><div class="meta">${chips(x)}${fresh.has(x.key) ? '<span class="chip fresh">just added</span>' : ''}${view === 'rules' || view === 'pinned' || view === 'retired' ? `<span>${TITLE[x.where]}</span>` : ''}<span>${view === 'retired' ? esc(String(x.retired || 'taken out').split(':')[0]) : x.always ? 'read at every start' : `used ${plural(x.used, 'time')}`}</span><span>saved ${esc(x.saved || '—')}</span></div></div>`;
       }
     });
     $('list').innerHTML = h;
@@ -266,7 +268,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     }
     r.className = 'box reader';
     const x = xs[sel[view]];
-    if (!x) { r.innerHTML = '<p class="nothing">Pick something on the left.</p>'; return; }
+    if (!x) { r.innerHTML = '<p class="nothing"><span class="wide">Pick something on the left.</span><span class="narrow">Pick one above.</span></p>'; return; }
     const st = `<p class="said${said ? (saidGood ? ' good' : ' bad') : ''}" role="status">${esc(said)}</p>`;
     if (view === 'changes') {
       r.innerHTML = `<div class="k">${day(x.at)} · ${clock(x.at)} · ${TITLE[x.where]}</div><h2 style="margin:6px 0 0;font-size:19px">${WHAT[x.what] || esc(x.what)}</h2>${x.text ? `<p class="fact">${esc(x.text)}</p>` : ''}<dl>${x.reason ? `<dt>Why</dt><dd>${esc(x.reason)}</dd>` : ''}${x.why ? `<dt>From</dt><dd>${esc(x.why)}</dd>` : ''}${x.id ? `<dt>Fact</dt><dd><code>${esc(x.id)}</code></dd>` : ''}</dl>${x.id ? `<div class="acts"><button type="button" data-open="${esc(x.where)}/${esc(x.id)}">Open the fact</button></div>` : ''}${st}`;
@@ -312,11 +314,14 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     if (e.key === '/' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); $('q').focus(); return; }
     if (e.key === 'Escape' && e.target === $('q')) { $('q').value = ''; q = ''; $('q').blur(); draw(); return; }
     if (/^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName)) return;
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('item')) { e.preventDefault(); pick(+e.target.dataset.i); const r = $('reader'); r.scrollIntoView({ block: 'nearest' }); r.querySelector('button')?.focus({ preventScroll: true }); return; }
     const n = items().length; if (!n) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); pick(Math.min(Math.max(0, (sel[view] ?? 0) + (e.key === 'ArrowDown' ? 1 : -1)), n - 1), true); }
   });
 
   function draw() {
+    // The rows are made again: a row that had the focus (Tab, the arrows) gives it to the one picked.
+    const had = document.activeElement?.classList?.contains('item');
     if (!VIEWS().some((v) => v.id === view)) view = 'you';
     const all = facts();
     // The memory in one line (memory-hub.mjs status), and what is wrong with its folder when something is.
@@ -328,6 +333,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     $('lede').title = `For ${data.cwd}. A fact comes back when a request fits it; rules are read at every start.`;
     rail();
     reader(list());
+    if (had) $('list').querySelector(`.item[data-i="${sel[view]}"]`)?.focus({ preventScroll: true });
   }
   await load();
   // Live (18 Oct 2026, the owner: "ensure it updates in the hub too"): a save in any window shows here within 4 s.

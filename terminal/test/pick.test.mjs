@@ -61,3 +61,28 @@ test('after the menu, a reader like the prompt box gets what is typed next', asy
   input.write('hello');
   expect(await got).toBe('hello');
 });
+
+// A row wider than the terminal wraps onto more rows: each move goes up by the rows on the screen, not the lines, so
+// no copy of the menu is left above it (18 Nov 2026, the UI audit). Colours take no room, a wide character two.
+test('the redraw goes up by the rows a wrapped menu takes on the screen', async () => {
+  const { rowsUp } = await import('../src/app/pick.mjs');
+  expect(rowsUp('ab\ncd\n', 80)).toBe(2);
+  expect(rowsUp(`${'x'.repeat(45)}\n`, 20)).toBe(3);
+  expect(rowsUp(`${'x'.repeat(40)}\n`, 20)).toBe(2); // exactly two rows: the line break after it starts the third
+  expect(rowsUp('\x1b[38;5;147m❯ 1. ok\x1b[0m\n\n', 6)).toBe(3); // "❯ 1. ok" is 7 wide: two rows, then the blank one
+  expect(rowsUp('漢字漢字\n', 4)).toBe(2);
+  expect(rowsUp('ab\ncd', 80)).toBe(1); // a page that ends on its last row: the cursor is on it
+  expect(rowsUp('ab\nxxxxxxxxxx', 4)).toBe(3); // and that row wrapped twice
+  expect(rowsUp('ab\ncd\n', undefined)).toBe(2); // not a terminal: lines only, as before
+
+  const input = new PassThrough();
+  const output = new PassThrough(); output.columns = 20;
+  let written = ''; output.on('data', (c) => { written += String(c); });
+  const long = 'a'.repeat(45); // "❯ 1. " + 45 = 50 wide: three rows of 20
+  const p = pickOnTerminal([long, 'b'], { input, output });
+  input.write('\x1b[B\r');
+  expect(await p).toBe(1);
+  // 3 rows for the long one, 1 for b, the blank line, and the hint (30 wide: 2 rows) = 7, where counting lines said 4
+  expect(written).toContain('\x1b[7A\r\x1b[J');
+  expect(written).not.toContain('\x1b[4A');
+});

@@ -85,8 +85,13 @@ button { font: inherit; color: inherit; }
 /* the body */
 .body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 22px; position: relative; }
 .convo-wrap { flex: 1; min-height: 0; position: relative; }
-.convo { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 2px 14px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); scrollbar-width: none; }
-.convo::-webkit-scrollbar { display: none; }
+.convo { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 2px 14px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); }
+/* Its scroll bar (18 Nov 2026, the UI audit: it had none at all, so nothing said how long a conversation was): the
+   window's thin one, shown while the pointer is over it or it scrolls, out of sight the rest of the time. */
+.convo::-webkit-scrollbar-thumb { background-color: transparent; }
+.convo:hover::-webkit-scrollbar-thumb, .convo.scrolling::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,.14); }
+.convo:hover::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.26); }
+@supports not selector(::-webkit-scrollbar) { .convo { scrollbar-width: thin; scrollbar-color: transparent transparent; } .convo:hover, .convo.scrolling { scrollbar-color: rgba(255,255,255,.14) transparent; } }
 .hero { display: flex; align-items: center; gap: 16px; margin: 6px 0 14px; }
 .hero .name { font: 700 16px var(--mono); }
 .hero .name small { font: 400 13px var(--mono); color: var(--faint); margin-left: 6px; }
@@ -296,9 +301,14 @@ function moveThen(d, last) {
   moving = moving.then(async () => { for (const k of seq) { keys(k); await new Promise((r) => setTimeout(r, 25)); } });
 }
 // A command run as if typed: only with an empty prompt (what you typed is never lost).
+// Nor over a question, a list the app drew (/model, /settings…), the / menu or a full-screen view: the keys would go to
+// it (18 Nov 2026, the UI audit: New over a permission question sent /clear and enter to the question).
 function run(cmd) {
-  if (S.last?.input?.value) return toast('Your prompt has text: send it or clear it first');
   if (!S.last) return toast('Agentic Coder is still starting');
+  if (S.last.perm) return toast('Answer the question first');
+  if (S.last.panel || S.last.full) return toast('Close what is open first: esc');
+  if (S.last.menu?.items?.length) return toast('Close the / menu first: esc');
+  if (S.last.input?.value) return toast('Your prompt has text: send it or clear it first');
   keys(cmd + '\r');
 }
 let toastTimer = null;
@@ -871,7 +881,12 @@ document.addEventListener('click', (e) => {
   const pr = t.closest('[data-prow]'); if (pr && S.last?.panel) { const ch = panelChoices(S.last.panel.rows), to = ch ? ch.rows.indexOf(Number(pr.dataset.prow)) : -1; if (to < 0) return; const d = to - ch.rows.indexOf(ch.at); if (d === 0) keys('\r'); else moveThen(d, ''); return; }
   const mi = t.closest('[data-menu]'); if (mi && S.last?.menu) { moveThen(Number(mi.dataset.menu) - S.last.menu.index, '\t'); return; }
   if ((S.find || S.folderMenu || S.usageCard) && !t.closest('.drop') && !t.closest('.ucard')) { S.find = false; S.folderMenu = false; S.usageCard = false; renderUsage(S.last); renderDrops(); }
+  // The Chats side bar too, on a click outside it (the conversation, the prompt): as Search and the folder menu.
+  if (S.side && !t.closest('#side')) { S.side = false; S.q = ''; renderSide(); }
 });
+// While the conversation scrolls its thin bar shows, then fades back out of sight.
+let scrollShow = null;
+document.addEventListener('scroll', (e) => { const c = e.target; if (c?.id !== 'convo') return; c.classList.add('scrolling'); clearTimeout(scrollShow); scrollShow = setTimeout(() => c.classList.remove('scrolling'), 900); }, true);
 // The pretend terminal is as wide as the conversation, so what the app draws itself fits the window.
 let fitTimer = null;
 function fit() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { const probe = document.createElement('span'); probe.style.cssText = 'position:absolute;visibility:hidden;font:13px var(--mono)'; probe.textContent = 'M'.repeat(100); document.body.append(probe); const cw = probe.getBoundingClientRect().width / 100; probe.remove(); send({ t: 'resize', cols: Math.floor((innerWidth - 60) / cw), rows: Math.floor((innerHeight - 52) / 18) }); }, 150); }

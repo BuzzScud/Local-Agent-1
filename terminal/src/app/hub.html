@@ -26,6 +26,8 @@ header button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); 
 header .spacer { flex: 1; }
 header .now { color: var(--ink3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; min-width: 0; }
 header button, header h1, header a { flex: none; }
+/* The tabs (a tab list: ←/→ move between them); on a phone the header scrolls sideways and its edges fade where more tabs are */
+header .tabs { display: flex; align-items: center; gap: 6px; flex: none; }
 header a { color: var(--accent); font-size: 12px; text-decoration: none; white-space: nowrap; padding: 6px 8px; border-radius: 8px; }
 header a:hover { background: var(--panel); }
 /* The Structure tab holds two pages, Structure and Flow: its caret opens a small menu that picks one */
@@ -48,6 +50,8 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
 #list h2:first-child { margin-top: 0; }
 .row { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: baseline; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
 .row:hover { background: var(--panel); }
+a.row { color: inherit; text-decoration: none; }
+a.row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .row .t { font-weight: 500; } .row .f { font-family: var(--mono); font-size: 12px; color: var(--ink3); margin-left: 8px; }
 .row .m { color: var(--ink3); font-size: 12px; font-family: var(--mono); white-space: nowrap; }
 .row .k { color: var(--ink3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
@@ -68,12 +72,17 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
 #bm .bh button:hover { color: var(--ink); background: var(--panel); }
 #bm .bh a:focus-visible, #bm .bh button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (max-width: 720px) { #bm .win { inset: 6px; } #bm .bh span, #bm .bh a { display: none; } #bm .bh b { flex: 1; } }
-@media (max-width: 720px) { header { overflow-x: auto; scrollbar-width: none; } header::-webkit-scrollbar { display: none; } header button { padding: 7px 9px; } header h1 { display: none; } header .now { display: none; } .row { grid-template-columns: 1fr auto; } .row .k { display: none; } }
+@media (max-width: 720px) { header { overflow-x: auto; scrollbar-width: none; } header::-webkit-scrollbar { display: none; }
+  header.more-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  header.more-l { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+  header.more-l.more-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+  header button { padding: 7px 9px; } header h1 { display: none; } header .now { display: none; } .row { grid-template-columns: 1fr auto; } .row .k { display: none; } }
 </style>
 </head>
 <body>
 <header>
   <h1>Agentic Coder hub</h1>
+  <div class="tabs" id="tabs" role="tablist" aria-label="Hub pages">
   <button data-tab="weights">Weights</button>
   <button data-tab="harness">Harness</button>
   <button data-tab="structure" aria-haspopup="menu" aria-expanded="false" title="Structure and Flow: click again for the menu">Structure<i class="caret" aria-hidden="true"></i></button>
@@ -85,6 +94,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="instructions">Instructions</button>
   <button data-tab="docs">All docs</button>
   <button data-tab="help">Help</button>
+  </div>
   <span class="spacer"></span>
   <span class="now" id="now"></span>
   <a id="own" href="/weights" target="_blank" rel="noopener">open in its own tab ↗</a>
@@ -101,7 +111,11 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
-  const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own'), menu = $('#menu'), stab = document.querySelector('header > button[data-tab="structure"]'), bm = $('#bm'), bframe = $('#bframe');
+  const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own'), menu = $('#menu'), stab = document.querySelector('#tabs > button[data-tab="structure"]'), bm = $('#bm'), bframe = $('#bframe');
+  const head = document.querySelector('header'), tabs = [...document.querySelectorAll('#tabs > button')];
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // The page in the frame without the sub-tab it keeps after its #.
+  const framePath = () => (frame.getAttribute('src') ?? '').split('#')[0];
   let docs = null; // { dir, missing, pinned: { harness, structure }, pages: [{ file, title, kind, size, saved }] }
   // The Arena is the Tests tab and the Battle tab as one (30 Sep 2026): an address that names either opens it.
   // The Test builder was a tab until 30 Sep 2026 and is a window over the Arena now: ?tab=builder opens that.
@@ -149,7 +163,28 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   // The Arena in the frame, once its page has loaded (it is at its runner's own address, so a message goes to any origin: it
   // carries only a test's name). A message it cannot take yet is not sent.
   let frameReady = false;
-  frame.addEventListener('load', () => { frameReady = true; });
+  frame.addEventListener('load', () => { frameReady = true; watchSub(); });
+  // A page's own sub-tab (Instructions' #planning, Memory's #changes, Weights' #words/both…) lives after the # in its
+  // address, which the hub never saw, so a reload or "open in its own tab" lost it (18 Nov 2026, the UI audit). The hub
+  // keeps it as ?sub=… in its own address, hands it back on load, and the ↗ link carries it. Pages at another address
+  // (the Arena's runner) are left alone.
+  let subAsk = new URL(location.href).searchParams.get('sub');
+  function syncSub() {
+    let h;
+    try { const w = frame.contentWindow; if (!w || decodeURI(w.location.pathname + w.location.search) !== decodeURI(framePath())) return; h = w.location.hash.slice(1); } catch { return; }
+    const q = new URL(location.href); if (h) q.searchParams.set('sub', h); else q.searchParams.delete('sub');
+    if (q.href !== location.href) history.replaceState(null, '', q);
+    own.href = framePath() + (h ? `#${h}` : '');
+  }
+  function watchSub() {
+    try {
+      const w = frame.contentWindow; if (!w || w.location.href === 'about:blank') return;
+      w.addEventListener('hashchange', syncSub);
+      // The pages change their # with history.replaceState, which says nothing: the hub hears it here.
+      for (const k of ['replaceState', 'pushState']) { const f = w.history[k]; w.history[k] = function (...a) { const r = f.apply(this, a); syncSub(); return r; }; }
+    } catch { return; }
+    syncSub();
+  }
   function arenaSay(msg) {
     if (!frameReady || !(frame.getAttribute('src') ?? '').startsWith('/arena')) return false;
     try { frame.contentWindow.postMessage(msg, '*'); return true; } catch { return false; }
@@ -157,11 +192,15 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   // The Test builder window: the builder page (on this hub, with its tests) over the whole hub. It opens on a new
   // test, one test of yours, or where it was; ✕, esc or the builder's own esc close it, asking first if a test has
   // changes not saved. A click beside it does nothing, so no work is lost by a slip.
+  // While it is open everything behind it is inert (Tab and Enter stay in the window), and the focus goes back where it was.
+  let builderBack = null;
+  const behind = (on) => { for (const el of [head, document.querySelector('main'), menu]) el.inert = on; };
   function openBuilder({ test = null, fresh = false } = {}) {
     if (bm.classList.contains('on') && !closeBuilder()) return;
+    builderBack = document.activeElement;
     if (!(frame.getAttribute('src') ?? '').startsWith('/arena')) open('arena');
     const a = new URLSearchParams({ modal: '1' }); if (fresh) a.set('new', '1'); else if (test) a.set('test', test.slice(0, 120));
-    bframe.src = `/builder?${a}`; bm.classList.add('on');
+    bframe.src = `/builder?${a}`; bm.classList.add('on'); behind(true);
     const q = new URL(location.href); q.searchParams.set('builder', fresh ? 'new' : test || '1'); history.replaceState(null, '', q);
     bframe.focus();
   }
@@ -170,17 +209,40 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     const w = bframe.contentWindow;
     if (ask && w?.builderDirty?.() && !confirm('Close the Test builder without saving? What you changed in the test is lost.')) return false;
     if (w) w.builderLeaving = true;
-    bm.classList.remove('on'); bframe.src = 'about:blank';
+    bm.classList.remove('on'); behind(false); bframe.src = 'about:blank';
     const q = new URL(location.href); q.searchParams.delete('builder'); history.replaceState(null, '', q);
     arenaSay({ agentic: 'arena-refresh' });
-    frame.focus();
+    (builderBack?.isConnected && builderBack !== document.body && builderBack !== bframe ? builderBack : frame).focus(); builderBack = null;
     return true;
   }
   $('#bm-x').onclick = () => closeBuilder();
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bm.classList.contains('on')) { e.preventDefault(); closeBuilder(); } });
   const kb = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';
 
-  function setTab(tab) { for (const b of document.querySelectorAll('header > button')) b.classList.toggle('on', b.dataset.tab === tab); const q = new URL(location.href); q.searchParams.set('tab', tab); history.replaceState(null, '', q); }
+  function setTab(tab) {
+    for (const b of tabs) { const on = b.dataset.tab === tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; }
+    const q = new URL(location.href); q.searchParams.set('tab', tab); history.replaceState(null, '', q);
+    inView(tabs.find((b) => b.dataset.tab === tab)); edges();
+  }
+  // The picked tab in sight, clear of the faded edges (a phone's header scrolls sideways; on a desktop nothing moves).
+  function inView(b) {
+    if (!b || head.scrollWidth <= head.clientWidth) return;
+    const r = b.getBoundingClientRect(), h = head.getBoundingClientRect(), pad = 32;
+    if (r.right > h.right - pad) head.scrollLeft += r.right - (h.right - pad);
+    else if (r.left < h.left + pad) head.scrollLeft -= h.left + pad - r.left;
+  }
+  // A phone's header scrolls sideways: its edges fade where more tabs are.
+  function edges() { const more = head.scrollWidth - head.clientWidth > 1; head.classList.toggle('more-l', more && head.scrollLeft > 1); head.classList.toggle('more-r', more && head.scrollLeft < head.scrollWidth - head.clientWidth - 1); }
+  head.addEventListener('scroll', edges, { passive: true }); addEventListener('resize', edges);
+  for (const b of tabs) b.setAttribute('role', 'tab');
+  // ←/→ (Home, End) move between the tabs and open the one they reach, as the Instructions tabs do.
+  $('#tabs').addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(document.activeElement); if (i < 0 || e.altKey || e.metaKey || e.ctrlKey) return;
+    const to = e.key === 'ArrowRight' ? (i + 1) % tabs.length : e.key === 'ArrowLeft' ? (i + tabs.length - 1) % tabs.length : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+    if (to < 0) return;
+    e.preventDefault(); if (!menu.hidden) closeMenu(); open(tabs[to].dataset.tab);
+    (tabs.find((b) => b.classList.contains('on')) ?? tabs[to]).focus();
+  });
   // The Structure tab's two pages (30 Sep 2026): Structure, the folder map (the pinned DOCS page), and Flow (/flow). The
   // switch beside the tab shows only there; a click on the tab always opens Structure, and ?view=flow keeps Flow on a reload.
   function setView(view) {
@@ -190,21 +252,25 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   }
   function show(url, label) {
     list.classList.remove('on'); frame.classList.remove('off');
-    if (frame.getAttribute('src') !== url) { frameReady = false; frame.src = url; }
-    now.textContent = label || ''; now.className = 'now'; own.href = url; own.style.display = '';
-    const q = new URL(location.href); if (url.startsWith('/docs/')) q.searchParams.set('page', url.slice(6)); else q.searchParams.delete('page'); history.replaceState(null, '', q);
+    const sub = subAsk; subAsk = null;
+    const q = new URL(location.href);
+    if (framePath() !== url) { frameReady = false; frame.src = sub ? `${url}#${sub}` : url; own.href = frame.getAttribute('src'); if (!sub) q.searchParams.delete('sub'); }
+    now.textContent = label || ''; now.className = 'now'; own.style.display = '';
+    if (url.startsWith('/docs/')) q.searchParams.set('page', url.slice(6)); else q.searchParams.delete('page'); history.replaceState(null, '', q);
+    if (frameReady) syncSub();
   }
   function showList() {
-    frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none';
-    const q = new URL(location.href); q.searchParams.delete('page'); history.replaceState(null, '', q);
+    frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none'; subAsk = null;
+    const q = new URL(location.href); q.searchParams.delete('page'); q.searchParams.delete('sub'); history.replaceState(null, '', q);
     if (!docs) { list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
-    if (docs.missing) { list.innerHTML = `<p class="note">The DOCS folder was not found. Agentic Coder looks for <code>${docs.dir || 'docs'}</code> in the repo. Set <code>AGENTIC_DOCS</code> to point somewhere else.</p>`; return; }
-    const row = (p, kind) => `<div class="row" data-file="${p.file}"><span><span class="t">${p.title || p.name}</span>${p.title ? `<span class="f">${p.name}</span>` : ''}</span><span class="k">${kind || p.kind}</span><span class="m">${p.saved} · ${kb(p.size)}</span></div>`;
+    if (docs.missing) { list.innerHTML = `<p class="note">The DOCS folder was not found. Agentic Coder looks for <code>${esc(docs.dir || 'docs')}</code> in the repo. Set <code>AGENTIC_DOCS</code> to point somewhere else.</p>`; return; }
+    // Each page a real link (Tab reaches it, ⌘-click opens it in a tab of its own); names and titles escaped.
+    const row = (p, kind) => `<a class="row" href="?${esc(new URLSearchParams({ tab: 'docs', page: p.file }))}" data-file="${esc(p.file)}"><span><span class="t">${esc(p.title || p.name)}</span>${p.title ? `<span class="f">${esc(p.name)}</span>` : ''}</span><span class="k">${esc(kind || p.kind)}</span><span class="m">${esc(p.saved)} · ${kb(p.size)}</span></a>`;
     const pinned = [docs.pinned.harness, docs.pinned.structure].filter(Boolean);
     const BLURB = { unsorted: 'at the top level, not filed yet', diagrams: 'how Agentic Coder is built and how a request moves through it', reports: 'what got built, day by day', tests: 'measured runs, checks and the chart-bug rounds', 'design rounds': 'looks that were tried and picked', other: 'kept here, not about Agentic Coder itself', 'older versions': 'replaced by a newer page, kept as the record' };
     list.innerHTML = (pinned.length ? '<h2>Pinned</h2>' + pinned.map((p) => row(p, p === docs.pinned.harness ? 'harness' : 'structure')).join('') : '')
-      + docs.groups.map((g) => { const ps = docs.pages.filter((p) => p.group === g); return `<h2>${g} · ${ps.length}${BLURB[g] ? ` <span style="text-transform:none;letter-spacing:0;font-weight:400">— ${BLURB[g]}</span>` : ''}</h2>` + ps.map((p) => row(p)).join(''); }).join('')
-      + `<p class="note" style="margin-top:18px;font-size:12px">Read live from <code>${docs.dir}</code>: each group is a subfolder there. Save a page into one and it shows here on the next visit; a file at the top level shows as unsorted.</p>`;
+      + docs.groups.map((g) => { const ps = docs.pages.filter((p) => p.group === g); return `<h2>${esc(g)} · ${ps.length}${BLURB[g] ? ` <span style="text-transform:none;letter-spacing:0;font-weight:400">— ${BLURB[g]}</span>` : ''}</h2>` + ps.map((p) => row(p)).join(''); }).join('')
+      + `<p class="note" style="margin-top:18px;font-size:12px">Read live from <code>${esc(docs.dir)}</code>: each group is a subfolder there. Save a page into one and it shows here on the next visit; a file at the top level shows as unsorted.</p>`;
   }
   // The menu under the Structure tab: a click on the tab while it is open (or on its caret) shows it; a pick, Esc or a click elsewhere closes it.
   function openMenu() { const r = stab.getBoundingClientRect(); menu.style.left = `${Math.max(8, Math.min(r.left, innerWidth - 364))}px`; menu.style.top = `${r.bottom + 6}px`; menu.hidden = false; stab.setAttribute('aria-expanded', 'true'); (menu.querySelector('[aria-checked="true"]') ?? menu.querySelector('button')).focus(); }
@@ -213,7 +279,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     tab = ALIAS[tab] ?? tab;
     // Flow was a tab of its own until 30 Sep 2026: an old address or `coding hub flow` opens it in Structure.
     if (tab === 'flow') { tab = 'structure'; view = 'flow'; }
-    if (frame.getAttribute('src') === '/instructions' && tab !== 'instructions' && frame.contentWindow?.instructionsDirty?.()) {
+    if (framePath() === '/instructions' && tab !== 'instructions' && frame.contentWindow?.instructionsDirty?.()) {
       if (!confirm('Discard unsaved instruction edits and leave this tab?')) return;
       frame.contentWindow.instructionsLeaving = true;
       frame.src = 'about:blank';
@@ -235,11 +301,11 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
     const p = page ? docs.pages.find((x) => x.file === page) : docs.pinned[tab];
     // No folder map in the DOCS folder: the Structure tab says so and keeps its switch, so Flow is still one click away.
-    if (!p && tab === 'structure') { frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none'; list.innerHTML = docs.missing ? `<p class="note">The DOCS folder was not found, so the folder map cannot be shown. Agentic Coder looks for <code>${docs.dir || 'docs'}</code> in the repo. Flow, beside it, needs no folder.</p>` : '<p class="note">No structure page in the DOCS folder. Flow, beside it, needs no page.</p>'; return; }
-    if (!p) { setTab('docs'); showList(); if (!docs.missing) list.insertAdjacentHTML('afterbegin', `<p class="note">No ${page ? `page called <code>${page}</code>` : `${tab} page`} in the DOCS folder.</p>`); return; }
+    if (!p && tab === 'structure') { frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none'; subAsk = null; list.innerHTML = docs.missing ? `<p class="note">The DOCS folder was not found, so the folder map cannot be shown. Agentic Coder looks for <code>${esc(docs.dir || 'docs')}</code> in the repo. Flow, beside it, needs no folder.</p>` : '<p class="note">No structure page in the DOCS folder. Flow, beside it, needs no page.</p>'; return; }
+    if (!p) { setTab('docs'); showList(); if (!docs.missing) list.insertAdjacentHTML('afterbegin', `<p class="note">No ${page ? `page called <code>${esc(page)}</code>` : `${esc(tab)} page`} in the DOCS folder.</p>`); return; }
     show('/docs/' + p.file.split('/').map(encodeURIComponent).join('/'), p.title || p.name);
   }
-  for (const b of document.querySelectorAll('header > button')) b.onclick = (e) => {
+  for (const b of tabs) b.onclick = (e) => {
     if (b === stab && (b.classList.contains('on') || e.target.closest('.caret'))) { if (!b.classList.contains('on')) open('structure'); return menu.hidden ? openMenu() : closeMenu(); }
     open(b.dataset.tab);
   };
@@ -254,7 +320,8 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   });
   // A click inside the page below moves the focus into its frame: the hub's window loses it, and the menu closes.
   window.addEventListener('blur', () => { if (!menu.hidden) closeMenu(); });
-  list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
+  // A plain click opens the page here; ⌘, ctrl, shift or a middle click is the browser's (a tab of its own).
+  list.onclick = (e) => { const r = e.target.closest('.row'); if (!r || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return; e.preventDefault(); open('docs', r.dataset.file); };
 
   const q = new URL(location.href); const tab = ALIAS[q.searchParams.get('tab')] ?? (q.searchParams.get('tab') || 'weights'); const page = q.searchParams.get('page');
   const view = q.searchParams.get('view');
