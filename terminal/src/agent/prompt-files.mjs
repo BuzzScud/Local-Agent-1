@@ -5,10 +5,13 @@
 // message; the copy built into the app is used when the repo is not here.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { HOME } from '../../../models/index.mjs';
 import { ownWords } from '../flows/words.mjs';
 import { savedSkillFiles, skillsDir } from './skill-store.mjs';
+import { modeOf } from './permissions.mjs';
+import { activePlugins } from './plugins.mjs';
 
 export const PROMPT_FILES = Object.freeze({ tools: 'TOOLS.md', skills: 'SKILLS.md' });
 
@@ -261,15 +264,25 @@ then the steps, numbered, one line each, as they worked in this conversation (th
 
 // Every skill: SKILLS.md's, then your saved ones (one with a name SKILLS.md has is left out), then the
 // app's own. saved: the folder of yours (skill-store.mjs), null for none.
-export function readSkills(dir = rulesDir(), set = 'local', { saved = skillsDir() } = {}) {
+// plugins: the ones switched on (plugins.mjs); each skill/<name>/SKILL.md of theirs comes after yours, read-only.
+export function readSkills(dir = rulesDir(), set = 'local', { saved = skillsDir(), plugins = activePlugins() } = {}) {
   const shipped = parseSkills(readPromptFile('skills', dir, set).text);
   const taken = new Set(shipped.map((s) => s.slug));
   const mine = saved ? savedSkills(saved).filter((s) => !taken.has(s.slug)) : [];
-  return [...shipped, ...mine, ...(taken.has(SAVE_SKILL.slug) ? [] : [SAVE_SKILL])];
+  for (const s of mine) taken.add(s.slug);
+  const theirs = pluginSkills(plugins).filter((s) => !taken.has(s.slug) && taken.add(s.slug));
+  return [...shipped, ...mine, ...theirs, ...(taken.has(SAVE_SKILL.slug) ? [] : [SAVE_SKILL])];
+}
+// A plugin's skills, as a saved skill's file is read (a SKILL.md's front matter gives its name and About).
+function pluginSkills(plugins = activePlugins()) {
+  return (plugins ?? []).flatMap((p) => p.parts.skills.flatMap(({ slug, file, text }) => {
+    const s = parseSkills(savedSkillText(slug, text))[0];
+    return s?.body ? [{ ...s, slug, from: 'plugin', plugin: p.name, file }] : [];
+  }));
 }
 const listed = (skills) => skills.filter((s) => !s.hidden);
 // Where a skill comes from, in the words the screen and the model see.
-export const skillWhere = (s) => (s?.from === 'saved' ? 'your saved skills' : s?.from === 'built-in' ? 'Agentic Coder' : 'SKILLS.md');
+export const skillWhere = (s) => (s?.from === 'saved' ? 'your saved skills' : s?.from === 'built-in' ? 'Agentic Coder' : s?.from === 'plugin' ? `the ${s.plugin} plugin` : 'SKILLS.md');
 
 // What stops a save (errors) and what is only worth saying (warnings).
 export function skillProblems(skills) {
@@ -457,25 +470,79 @@ const AGENTS_FOLDER = 'agents';
 // Kinds the Agent tool already has: a file of that name is left out.
 const BUILT_IN_KINDS = ['explore', 'general'];
 
+//   - Mode: plan                        (19 Nov 2026) its own permission mode: plan, manual, edits, auto or
+//                                       dontask; never more open than the conversation's (helperMode)
+//   - Isolation: worktree               (19 Nov 2026) it works in its own copy of the repo (a git worktree);
+//                                       its changes stay there, and its report says where (runHelper)
+// Claude Code's agent files are read too (19 Nov 2026): front matter between --- lines (name, description,
+// tools, model, permissionMode, isolation), then its instructions; its tool names are ours (Grep is Search).
+const CLAUDE_TOOLS = { grep: 'Search', glob: 'List', ls: 'List', task: 'Agent', multiedit: 'Edit', notebookedit: 'Edit', bashoutput: 'Jobs', killshell: 'Jobs' };
+const helperModeOf = (word) => { const w = String(word ?? '').trim(); if (!w) return null; const m = modeOf(w); return m && m !== 'bypass' ? m : null; };
 export function parseHelperAgent(name, text) {
-  const t = String(text ?? '').replace(/<!--[\s\S]*?-->/g, '').replace(/^# .*\n/, '').trimStart();
+  const clean = String(text ?? '').replace(/\r\n/g, '\n').replace(/<!--[\s\S]*?-->/g, '');
+  const front = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(clean.trimStart());
+  if (front) {
+    const key = (k) => new RegExp(`^${k}:[ \\t]*(.*)$`, 'mi').exec(front[1])?.[1].trim().replace(/^["']|["']$/g, '') ?? '';
+    const named = key('name').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+    const about = key('description').replace(/\s+/g, ' ').slice(0, 300).replace(/\.$/, '');
+    const raw = key('tools');
+    const tools = !raw || /^(all|\*)$/i.test(raw) ? 'all' : raw.replace(/^\[|\]$/g, '').split(/[\s,]+/).map((x) => x.replace(/^["']|["']$/g, '')).filter(Boolean).map((x) => CLAUDE_TOOLS[x.toLowerCase()] ?? x);
+    const model = key('model');
+    const mode = helperModeOf(key('permissionMode') || key('mode'));
+    const isolation = /^worktree$/i.test(key('isolation')) ? 'worktree' : null;
+    const body = clean.trimStart().slice(front[0].length).replace(/^# .*\n/, '').trim();
+    return { name, kind: named || name.toLowerCase(), about, tools, model: !model || /^(inherit|main)$/i.test(model) ? 'main' : model, ...(mode ? { mode } : {}), ...(isolation ? { isolation } : {}), body };
+  }
+  const t = clean.replace(/^# .*\n/, '').trimStart();
   const at = t.search(/^## /m);
   const top = (at >= 0 ? t.slice(0, at) : t).split('\n');
   const field = (key) => top.find((l) => l.toLowerCase().startsWith(`- ${key}:`))?.slice(key.length + 3).trim() ?? '';
   const para = top.filter((l) => !/^- [a-z]+:/i.test(l)).join('\n').trim().split(/\n\s*\n/)[0].replace(/\s*\n\s*/g, ' ');
   const about = (/^.*?[.!?](?=\s|$)/.exec(para)?.[0] ?? para).trim().replace(/\.$/, '');
   const raw = field('tools').toLowerCase();
-  const tools = !raw || raw === 'all' ? 'all' : /^(look|look only|read only)$/.test(raw) ? 'look' : field('tools').split(/[\s,]+/).filter(Boolean);
-  return { name, kind: name.toLowerCase(), about, tools, model: field('model') || 'main', body: at >= 0 ? t.slice(at).trim() : '' };
+  const tools = !raw || raw === 'all' ? 'all' : /^(look|look only|read only)$/.test(raw) ? 'look' : field('tools').split(/[\s,]+/).filter(Boolean).map((x) => CLAUDE_TOOLS[x.toLowerCase()] ?? x);
+  const mode = helperModeOf(field('mode'));
+  const isolation = /^worktree$/i.test(field('isolation')) ? 'worktree' : null;
+  return { name, kind: name.toLowerCase(), about, tools, model: field('model') || 'main', ...(mode ? { mode } : {}), ...(isolation ? { isolation } : {}), body: at >= 0 ? t.slice(at).trim() : '' };
 }
 
-// Your helper agents: none on the local set, none without a folder of them.
-export function readHelperAgents(set = 'local', { own = ownDir() } = {}) {
+// The folders helper agents come from, first one wins a name (19 Nov 2026, as Claude Code: a project's own
+// first, then yours): the project's .agentic/agents and .claude/agents, your folder's agents/, Claude Code's
+// ~/.claude/agents (AGENTIC_CLAUDE_AGENTS names another; none in a test, where AGENTIC_HOME is set), then the
+// plugins you switched on (plugins.mjs). A project's helper is only words: its Mode can make it stricter, never
+// more open, and its steps ask as yours do.
+const claudeAgentsDir = () => process.env.AGENTIC_CLAUDE_AGENTS ?? (process.env.AGENTIC_HOME ? null : join(homedir(), '.claude', 'agents'));
+function agentFiles(folder) {
+  let names;
+  try { names = readdirSync(folder, { withFileTypes: true }); } catch { return []; }
+  return names.filter((e) => e.isFile() && /\.md$/i.test(e.name) && FILE_NAME.test(e.name.slice(0, -3))).map((e) => ({ name: e.name.slice(0, -3), file: join(folder, e.name) })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Your helper agents: none on the local set. from: where each came from (project, yours, claude, plugin <name>).
+export function readHelperAgents(set = 'local', { own = ownDir(), cwd = null, claude = claudeAgentsDir(), plugins = activePlugins() } = {}) {
   if (set !== 'remote') return [];
-  const folder = join(own, AGENTS_FOLDER);
-  return mdFiles(folder).map((f) => {
-    try { return parseHelperAgent(f.name, readFileSync(join(folder, f.file), 'utf8')); } catch { return null; }
-  }).filter((a) => a && a.body && !BUILT_IN_KINDS.includes(a.kind));
+  const sources = [
+    ...(cwd ? [{ dir: join(cwd, '.agentic', 'agents'), from: 'project' }, { dir: join(cwd, '.claude', 'agents'), from: 'project' }] : []),
+    { dir: join(own, AGENTS_FOLDER), from: 'yours', upper: true },
+    ...(claude ? [{ dir: claude, from: 'claude' }] : []),
+  ];
+  const out = [];
+  const add = (a) => { if (a && a.body && !BUILT_IN_KINDS.includes(a.kind) && !out.some((x) => x.kind === a.kind)) out.push(a); };
+  for (const s of sources) {
+    // Your folder's names as they always were (TEST-WRITER.md); the others by Claude Code's (code-reviewer.md).
+    const files = s.upper ? mdFiles(s.dir).map((f) => ({ name: f.name, file: join(s.dir, f.file) })) : agentFiles(s.dir);
+    for (const f of files) { try { add({ ...parseHelperAgent(f.name, readFileSync(f.file, 'utf8')), ...(s.from === 'yours' ? {} : { from: s.from }) }); } catch {} }
+  }
+  for (const p of plugins ?? []) for (const f of p.parts.agents) { try { add({ ...parseHelperAgent(f.name, f.text), from: `plugin ${p.name}` }); } catch {} }
+  return out;
+}
+
+// The mode a helper of yours works in: its own when that is as strict as the conversation's or stricter,
+// else the conversation's. Plan is the strictest, then Manual; Accept edits and Don't ask let edits through.
+const MODE_RANK = { plan: 0, ask: 1, edits: 2, dontask: 2, auto: 3, bypass: 4 };
+export function helperMode(own, mode) {
+  const want = own?.mode;
+  return want && (MODE_RANK[want] ?? 9) <= (MODE_RANK[mode] ?? 9) ? want : mode;
 }
 
 // The list in the instructions: every guide by the path that opens it.

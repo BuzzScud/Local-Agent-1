@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { endpointOf } from '../../../models/index.mjs';
 import { EXPLORE_TOOLS } from './tools.mjs';
-import { decide } from './permissions.mjs';
+import { decide, refusedAsk } from './permissions.mjs';
 import { MCP_TOOL, argLines, argsPreview, catalogStamp, checkArgs, describeEntry, describeServer, findEntry, gateCall, mcpBrief, mcpPlan, mcpRule, mcpToolDefs, resultParts, resultText, unwrapArgs } from './mcp.mjs';
 import { pictureFor } from '../tools/mcp.mjs';
 import { MCP_WAIT_MS } from './agent-said.mjs';
@@ -147,6 +147,8 @@ export class McpPart {
       note = this.turn?.question ? 'This was read as a question, and the tool is not one you marked as only reading.' : 'This skill only reads, and the tool is not one you marked as only reading.';
       d = { decision: 'ask', rule, once: true };
     }
+    // Don't ask (--mode dontask): that question is refused too; nobody is here.
+    d = refusedAsk(d, this.mode);
     // /agents' stop list (agents-guards.mjs): a tool that may change things asks first while it
     // builds, and is turned away where a stage only reads.
     if (this.toolGuard) {

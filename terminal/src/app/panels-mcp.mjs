@@ -131,6 +131,8 @@ export function panelsMcp(self, own) {
     const cfg = row.server ? cfgOf(row.server.name) : null;
     const theirs = cfg?.from === 'project';
     const say = (text, tone) => self.setPicker({ ...pk, confirm: null, note: { text, tone } });
+    // A plugin's server (plugins.mjs) follows its plugin: changed, switched or removed with /plugins; its tools can be marked here.
+    if (cfg?.from === 'plugin' && !pk.confirm && (ch === 'e' || ch === ' ' || ch === 'd' || (key.return && row.server.state !== 'connected' && row.server.state !== 'signin'))) { say(`${cfg.name} comes with the ${cfg.plugin} plugin: /plugins off ${cfg.plugin} switches it off with the rest of it, /plugins remove ${cfg.plugin} takes it away.`, 'warn'); return; }
     if (self.mcpSigning.current && key.escape) { self.mcpSigning.current.abort(); return; }
     if (pk.confirm) {
       if (ch === 'd' && cfg && pk.confirm === cfg.name) {

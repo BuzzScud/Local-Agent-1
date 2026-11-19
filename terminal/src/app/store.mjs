@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { HOME, DEFAULT_MODEL, sourceOf } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
 import { startModeFor } from './perm-store.mjs';
-import { modeOf } from '../agent/permissions.mjs';
+import { DONT_ASK, modeOf } from '../agent/permissions.mjs';
 
 const SETTINGS = join(HOME, 'settings.json');
 export const SETTINGS_FILE = SETTINGS;
@@ -85,7 +85,8 @@ export function loadSettings(cwd) {
 // 'flag', 'saved', 'last' or 'default'. AGENTIC_LAST_MODE=off: the last one is not used (the tests).
 export const keepsLastMode = () => !['off', '0', 'false'].includes(String(process.env.AGENTIC_LAST_MODE ?? 'on').toLowerCase());
 export function firstMode(asked, settings = {}) {
-  if (asked && modeOf(asked)) return { mode: modeOf(asked), from: 'flag' };
+  // Don't ask (--mode dontask) is for runs with nobody there (coding -p, loops): a window starts in Manual instead.
+  if (asked && modeOf(asked) && modeOf(asked) !== DONT_ASK) return { mode: modeOf(asked), from: 'flag' };
   if ((settings.modeFrom || settings.fromFolder?.includes('mode')) && modeOf(settings.mode)) return { mode: modeOf(settings.mode), from: 'saved' };
   if (keepsLastMode() && modeOf(settings.lastMode)) return { mode: modeOf(settings.lastMode), from: 'last' };
   return { mode: modeOf(settings.mode) ?? 'ask', from: 'default' };

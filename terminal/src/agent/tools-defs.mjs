@@ -140,7 +140,7 @@ export const AGENT_TOOL_DEF = {
 export function agentToolDef(helpers = []) {
   if (!helpers.length) return AGENT_TOOL_DEF;
   const kinds = ['explore', 'general', ...helpers.map((h) => h.kind)];
-  const own = helpers.map((h) => `- ${h.kind}${h.about ? `: ${h.about}` : ''}`).join('\n');
+  const own = helpers.map((h) => `- ${h.kind}${h.about ? `: ${h.about}` : ''}${h.mode === 'plan' ? ' (it only reads and plans)' : ''}${h.isolation ? ' (it works in its own copy of the repository: its changes come back as a diff, not in the folder)' : ''}`).join('\n');
   return {
     ...AGENT_TOOL_DEF,
     description: `${AGENT_TOOL_DEF.description}\nThe user's own helpers, each a kind of its own with its own instructions; when one fits the work, use its kind:\n${own}`,

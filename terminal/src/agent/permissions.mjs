@@ -20,9 +20,14 @@ export const MODES = ['auto', 'ask', 'edits', 'plan', 'bypass'];
 // bypass), never by cycling into it; from Bypass, shift+tab goes back to Manual.
 export const CYCLE = ['ask', 'edits', 'plan', 'auto'];
 export const nextMode = (mode) => CYCLE[(CYCLE.indexOf(mode) + 1) % CYCLE.length];
+// Don't ask (19 Nov 2026, Claude Code's dontAsk): for coding -p, loops and scripts, where nobody is there to
+// answer. File changes inside the project go through, as in Accept edits; every step that would ask is refused
+// instead, and the run goes on. So what runs is what only reads, what /permissions allows, and the MCP tools you
+// marked as reading. Picked with --mode dontask only: it is not one of the five, nor in /mode or shift+tab.
+export const DONT_ASK = 'dontask';
 // The words a mode is typed as: Claude Code's names, and the ones this app used before.
-const MODE_ALIASES = { manual: 'ask', default: 'ask', accept: 'edits', 'accept-edits': 'edits', acceptedits: 'edits', 'auto-edit': 'edits', bypasspermissions: 'bypass', 'bypass-permissions': 'bypass' };
-export const modeOf = (word) => { const w = String(word ?? '').trim().toLowerCase(); return MODES.includes(w) ? w : MODE_ALIASES[w] ?? null; };
+const MODE_ALIASES = { manual: 'ask', default: 'ask', accept: 'edits', 'accept-edits': 'edits', acceptedits: 'edits', 'auto-edit': 'edits', bypasspermissions: 'bypass', 'bypass-permissions': 'bypass', 'dont-ask': DONT_ASK, ci: DONT_ASK };
+export const modeOf = (word) => { const w = String(word ?? '').trim().toLowerCase(); return MODES.includes(w) || w === DONT_ASK ? w : MODE_ALIASES[w] ?? null; };
 
 // Self (the owner's pick, 8 Oct 2026): Bypass permissions with the Claude API as the model. The app
 // is then let work on itself: its own code (always a project like any other), and its own settings,
@@ -77,6 +82,14 @@ export function ruleCovers(rule, part) {
     if (!w[i].startsWith('-')) return false;
   }
   return true;
+}
+
+// A part that only makes, moves or copies files (Accept edits lets it run inside the project): mkdir, touch,
+// mv or cp with at least one path, and no word the shell would fill in ($VAR) that could point anywhere.
+const FILE_OPS = new Set(['mkdir', 'touch', 'mv', 'cp']);
+export function fileOpPart(part) {
+  const w = shellWords(String(part ?? '')).map(String);
+  return FILE_OPS.has(w[0]) && w.slice(1).some((x) => !x.startsWith('-')) && !w.some((x) => x.includes('$') || x.includes('`'));
 }
 
 // The rule "always allow" saves for a command: what it runs ("npm test",
@@ -292,6 +305,8 @@ const hasRule = (list, rule) => [...(list ?? [])].some((r) => String(r).toLowerC
 //   mcp: for a tool of an MCP server, what the app knows of it: { server, tool, reads, changed }.
 //   self: Bypass with the Claude API (isSelf): the app's own files, git push and its own processes are open.
 export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel, mcp, self = false } = {}) {
+  // Don't ask: judged as Accept edits, then whatever would ask is refused (dontAsk below).
+  if (mode === DONT_ASK) return dontAsk(judge(name, args, { mode: 'edits', allowedPrefixes, inside, cwd, rules, rel, mcp }), name, mcp);
   const bypass = mode === 'bypass';
   self = bypass && Boolean(self);
   // A tool of an MCP server (agent/mcp.mjs): a program or a service of the user's, which can do
@@ -412,6 +427,10 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     // A command that names a protected file: asked every time, with no "don't ask again".
     const guarded = c.parts.find((p) => p.protectedBy);
     if (guarded) return { decision: 'ask', once: true, protectedBy: guarded.protectedBy, why: `"${guarded.part}" names a protected file (${guarded.protectedBy}), so it asks` };
+    // Accept edits and Auto (19 Nov 2026, as Claude Code's acceptEdits): making, moving and copying files inside
+    // the project is a file change like an Edit. The fence above already refused a path outside it, a protected
+    // file asks (above), and /rewind keeps a copy around every command.
+    if ((mode === 'edits' || mode === 'auto') && c.plain && c.parts.every((p) => p.by || fileOpPart(p.part))) return { decision: 'allow', why: `${mode === 'auto' ? 'Auto' : 'Accept edits'}: it only makes, moves or copies files inside the project` };
     // Auto: what no rule covers, the model checks against your request (agent/auto-check.mjs);
     // runs when it fits and can be undone, else it asks you as Manual would.
     if (mode === 'auto') return { decision: 'check', why: 'Auto: no rule covers it, so the model checks it first' };
@@ -425,23 +444,36 @@ export function decide(name, args, ctx) {
   return d;
 }
 
+// Don't ask (DONT_ASK): a step Accept edits would ask about is refused, with what would let it run.
+// An MCP tool you marked as only reading runs, as it does in Auto.
+export function dontAsk(d, name, mcp) {
+  if (d.decision === 'allow' || d.decision === 'deny') return d;
+  if (isMcpCall(name) && mcp?.reads && !mcp.changed) return { decision: 'allow', why: "Don't ask: you marked this tool as one that only reads" };
+  const how = d.protectedBy ? 'a protected file always needs a person' : d.once ? 'it always needs a person' : d.rule ? `a rule lets it run: /permissions allow ${d.rule}` : name === 'Bash' ? 'a rule lets it run: /permissions allow <the command>' : 'nobody is here to say yes';
+  return { decision: 'deny', reason: `Don't ask is on, so a step that would ask is refused (${d.why ?? 'it would ask'}; ${how})` };
+}
+// The same for a decision made after judge() (a hook's "ask", a saved skill): nobody is here to answer it.
+export const refusedAsk = (d, mode) => (mode === DONT_ASK && d.decision === 'ask' ? dontAsk(d, '') : d);
+
 // ---- the remote set's PERMISSIONS guide (prompt-files.mjs) -------------------------------------
 
-const MODE_NAMES = { auto: 'Auto', ask: 'Manual', edits: 'Accept edits', plan: 'Plan', bypass: 'Bypass permissions' };
+const MODE_NAMES = { auto: 'Auto', ask: 'Manual', edits: 'Accept edits', plan: 'Plan', bypass: 'Bypass permissions', [DONT_ASK]: "Don't ask (nobody is here: whatever would ask is refused)" };
 // What each kind of step does in a mode, as judge() decides it.
 const STEPS = {
-  edit: { ask: 'asks first', edits: 'runs', auto: 'runs', plan: 'refused', bypass: 'runs' },
-  protect: { ask: 'always asks', edits: 'always asks', auto: 'always asks', plan: 'refused', bypass: 'runs' },
-  readCmd: { ask: 'runs', edits: 'runs', auto: 'runs', plan: 'runs', bypass: 'runs' },
-  cmd: { ask: 'asks first', edits: 'asks first', auto: 'the app checks it against the request: runs, or asks', plan: 'refused', bypass: 'runs' },
-  commit: { ask: 'always asks', edits: 'always asks', auto: 'always asks', plan: 'refused', bypass: 'runs' },
-  web: { ask: 'asks first', edits: 'asks first', auto: 'the app checks it against the request: runs, or asks', plan: 'asks first', bypass: 'runs' },
-  mcp: { ask: 'asks first', edits: 'asks first', auto: 'asks first, unless the user marked the tool as only reading', plan: 'refused, unless the user marked the tool as only reading', bypass: 'runs' },
+  edit: { ask: 'asks first', edits: 'runs', auto: 'runs', plan: 'refused', bypass: 'runs', [DONT_ASK]: 'runs' },
+  protect: { ask: 'always asks', edits: 'always asks', auto: 'always asks', plan: 'refused', bypass: 'runs', [DONT_ASK]: 'refused' },
+  readCmd: { ask: 'runs', edits: 'runs', auto: 'runs', plan: 'runs', bypass: 'runs', [DONT_ASK]: 'runs' },
+  fileCmd: { ask: 'asks first', edits: 'runs', auto: 'runs', plan: 'refused', bypass: 'runs', [DONT_ASK]: 'runs' },
+  cmd: { ask: 'asks first', edits: 'asks first', auto: 'the app checks it against the request: runs, or asks', plan: 'refused', bypass: 'runs', [DONT_ASK]: 'refused' },
+  commit: { ask: 'always asks', edits: 'always asks', auto: 'always asks', plan: 'refused', bypass: 'runs', [DONT_ASK]: 'refused' },
+  web: { ask: 'asks first', edits: 'asks first', auto: 'the app checks it against the request: runs, or asks', plan: 'asks first', bypass: 'runs', [DONT_ASK]: 'refused' },
+  mcp: { ask: 'asks first', edits: 'asks first', auto: 'asks first, unless the user marked the tool as only reading', plan: 'refused, unless the user marked the tool as only reading', bypass: 'runs', [DONT_ASK]: 'refused, unless the user marked the tool as only reading' },
 };
 // "Right now": a table of what runs, asks or is refused in this mode, with the user's own rules,
 // added to PERMISSIONS.md when the model reads it, so the guide never disagrees with the app.
 export function permissionsTable({ mode = 'ask', rules = null, session = [], self = false } = {}) {
-  const m = MODES.includes(mode) ? mode : 'ask';
+  const m = MODES.includes(mode) || mode === DONT_ASK ? mode : 'ask';
+  const ruled = m === 'ask' || m === 'edits' || m === 'auto' || m === DONT_ASK;
   self = m === 'bypass' && Boolean(self);
   const blocked = [...new Set(BLOCKED.filter((b) => !(self && b.self)).map((b) => b.why))];
   const list = (xs) => (xs?.length ? xs.map((x) => `"${x}"`).join(', ') : 'none');
@@ -450,11 +482,12 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [], sel
     ['Edit or Write a file in the project', STEPS.edit[m]],
     [`A protected file (${[...PROTECTED.slice(0, 5), ...(rules?.protect ?? [])].join(', ')}…)`, STEPS.protect[m]],
     ['A command that only reads (ls, cat, git status, git diff…)', STEPS.readCmd[m]],
-    ['Any other command', `${STEPS.cmd[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', unless a rule below allows it' : ''}`],
+    ['mkdir, touch, mv or cp with every path inside the project (no protected file)', STEPS.fileCmd[m]],
+    ['Any other command', `${STEPS.cmd[m]}${ruled ? ', unless a rule below allows it' : ''}`],
     ['git commit', STEPS.commit[m]],
-    ['git push (only when the user asks; a force push is refused)', m === 'plan' ? 'refused' : m === 'bypass' && self ? 'runs' : 'asks first, every time (it then reaches GitHub)'],
+    ['git push (only when the user asks; a force push is refused)', m === 'plan' || m === DONT_ASK ? 'refused' : m === 'bypass' && self ? 'runs' : 'asks first, every time (it then reaches GitHub)'],
     ['WebSearch and WebFetch (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the site' : ''}`],
-    ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', or a rule allows it' : ''}`],
+    ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${ruled ? ', or a rule allows it' : ''}`],
     ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
     ['Other files or commands outside the project, the internet from a command', m === 'bypass' ? 'runs (Bypass lifts the fence), except secrets outside the project (keys, .ssh, .env); ssh, scp and rsync still log in with this Mac\'s saved keys; what already runs on this Mac stays out of reach' : 'refused (the sandbox)'],
     ['Agentic Coder\'s own settings and rules (~/.agentic-coder, .agentic/)', self ? 'runs: you work on Agentic Coder itself (a copy of each own file is kept first); only door.key and trust.json stay locked' : 'refused'],

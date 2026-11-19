@@ -17,6 +17,8 @@ export const COMMANDS = [
   { name: 'instructions', desc: 'Edit the instructions and prompt files (AGENTS, TOOLS, SKILLS.md) in the hub' },
   // /skills (28 Oct 2026): your saved skills (~/.agentic-coder/skills, every project) and SKILLS.md's (agent/skill-store.mjs).
   { name: 'skills', desc: 'Your saved skills and SKILLS.md’s: steps a request’s words bring, kept for every project; save turns this conversation into one', arg: '[save [name]|show <name>|remove <name>|open]' },
+  // /plugins (19 Nov 2026, as Claude Code's /plugin): skills, helper agents, hooks and MCP servers in one folder (agent/plugins.mjs).
+  { name: 'plugins', desc: 'Plugins: skills, helper agents, hooks and MCP servers that come in one folder (Claude Code\'s layout); add one from a folder or a git address, switch it on or off', arg: '[add <folder|git address>|on|off|show|remove <name>|open]' },
   { name: 'rules', desc: 'What the model reads at every start, numbered; add, switch off or remove a rule', arg: '[add|off|on|remove|always|open]' },
   { name: 'helpers', desc: 'The context helpers (Scout, Medic, Oracle, Sentry): what comes along with a request before the first step; switch one on or off', arg: '[on|off] [number|name|all]' },
   { name: 'hooks', desc: "The app's checks (empty reply, tests after a change, done check…) as hooks: which run while the model decides (/effort's Who decides); switch one on or off; lean switches them all off (the model checks its own work, like Claude Code), full brings them back", arg: '[on|off] [number|name|all] | lean | full' },
@@ -122,7 +124,8 @@ const SERVICE_MENU = new Set(['tune', 'bonsai']);
 // /steps (9 Oct 2026): how a reply's steps show (task-rows.jsx); after /bot.
 // /tune (27 Oct 2026): after /jumptomac, so the 18 of an 80 × 24 window stay as they were; /tu finds it in any window.
 // /skills (28 Oct 2026): after /status, so the rows before it keep their places; /sk finds it in any window.
-export const WHEN_ROOM = new Set(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'skills', 'bot', 'steps']);
+// /plugins (19 Nov 2026): last, so every row before it keeps its place; /pl finds it in any window.
+export const WHEN_ROOM = new Set(['jumptomac', 'tune', 'bonsai', 'loop', 'mcp', 'jobs', 'status', 'skills', 'bot', 'steps', 'plugins']);
 const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On

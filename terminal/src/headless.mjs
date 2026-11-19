@@ -2,6 +2,7 @@
 // practice-task runner and by `coding -p "…"`.
 import { Agent } from './agent/agent.mjs';
 import { UserHooks } from './agent/user-hooks.mjs';
+import { DONT_ASK } from './agent/permissions.mjs';
 import { applyLimits, applySearch, testLimits } from './app/limits.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from './agent/prompt.mjs';
 import { wayEnv, wayOf, hooksOn, hooksEnv, leanFrom, leanEnv, LEAN_AUTO } from './agent/way.mjs';
@@ -85,10 +86,12 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
         // before (the old limits stop it), so practice results stay comparable.
         if (req.kind === 'stuck' && !answers?.steers) return { choice: 'skip' };
         const steering = req.kind === 'plan' || req.kind === 'checkin' || req.kind === 'stuck';
-        if (steering && !answers?.steers) return autoApprove ? { choice: 'answer', text: req.kind === 'plan' ? 'yes' : 'keep going' } : { choice: 'no' };
+        // Don't ask (--mode dontask) goes on as --yes does here: its steps are kept in check by the mode itself.
+        const goOn = autoApprove || agent.mode === DONT_ASK;
+        if (steering && !answers?.steers) return goOn ? { choice: 'answer', text: req.kind === 'plan' ? 'yes' : 'keep going' } : { choice: 'no' };
         const text = answers ? await answers(req.args.question, req) : null;
         if (text != null) return { choice: 'answer', text: String(text) };
-        return autoApprove ? { choice: 'answer', text: 'I do not know. If the files do not tell you, stop and tell me what you found; do not invent anything.' } : { choice: 'no' };
+        return goOn ? { choice: 'answer', text: 'I do not know. If the files do not tell you, stop and tell me what you found; do not invent anything.' } : { choice: 'no' };
       }
       return { choice: autoApprove && (!approve || approve(req)) ? 'yes' : 'no' };
     },

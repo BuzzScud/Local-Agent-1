@@ -76,7 +76,7 @@ const STATE_WORDS = { connected: 'connected', starting: 'starting…', failed: '
 // One server's line: [dot, state, where, tools].
 export function serverLine(s) {
   const tools = s.state !== 'connected' ? (s.error ?? '') : `${s.off ? `${s.tools - s.off} of ${s.tools} tools on` : `${s.tools} tool${s.tools === 1 ? '' : 's'}`}${s.reads ? ` · ${s.reads} read${s.reads === 1 ? 's' : ''}` : ''}${s.changes ? ' · changed its tools' : ''}`;
-  return { dot: s.state === 'connected' ? '●' : s.state === 'starting' ? '◐' : '○', state: STATE_WORDS[s.state] ?? s.state, where: `${s.where}${s.from === 'project' ? ' · this project’s' : ''}`, tools };
+  return { dot: s.state === 'connected' ? '●' : s.state === 'starting' ? '◐' : '○', state: STATE_WORDS[s.state] ?? s.state, where: `${s.where}${s.from === 'project' ? ' · this project’s' : s.from === 'plugin' ? ' · from a plugin' : ''}`, tools };
 }
 export const projectLine = (p) => `${p.servers.length} server${p.servers.length === 1 ? '' : 's'} of this project (${p.servers.map((s) => s.name).join(', ')}) ${p.answer === 'never' ? 'will not be started: you said never' : p.changed ? 'changed since you allowed them: not started' : 'not started yet'} · enter to look`;
 

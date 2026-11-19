@@ -4,9 +4,10 @@
 // agents/ folder is a helper the main model can hand work to with the Agent tool, with its own
 // instructions, tools and model. A file left in the repo's folder is not one of them.
 import { test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, cpSync, unlinkSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, cpSync, unlinkSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 // A throwaway home BEFORE the models part is first imported (it reads AGENTIC_HOME once).
 process.env.AGENTIC_HOME = mkdtempSync(join(tmpdir(), 'agentic-agent-files-home-'));
@@ -226,6 +227,100 @@ test('a file you save between two messages counts from the next one: the new gui
     expect(two.messages[0].content).toContain('- RULES/SUBAGENTS.md:');
     expect(two.tools.find((t) => t.function.name === 'Agent').function.parameters.properties.kind.enum).toContain('test-writer');
   } finally { await fake.close(); }
+});
+
+// 19 Nov 2026: Claude Code's agent files, a project's own helpers, a Mode line and a copy of the repo of its own.
+const REVIEWER = `---
+name: code-reviewer
+description: Reviews a change for real bugs. Use it after a change.
+tools: Read, Grep, Glob
+model: haiku
+permissionMode: plan
+---
+
+You review code. Report only real bugs, with file:line.
+`;
+
+test("a helper in Claude Code's format: its front matter's name, description, tools (as ours), model, mode and isolation", () => {
+  expect(parseHelperAgent('code-reviewer', REVIEWER)).toEqual({ name: 'code-reviewer', kind: 'code-reviewer', about: 'Reviews a change for real bugs. Use it after a change', tools: ['Read', 'Search', 'List'], model: 'haiku', mode: 'plan', body: 'You review code. Report only real bugs, with file:line.' });
+  const iso = parseHelperAgent('fixer', '---\nname: fixer\ndescription: Fixes one bug\nmodel: inherit\nisolation: worktree\npermissionMode: bypassPermissions\n---\nFix it.\n');
+  expect(iso).toMatchObject({ kind: 'fixer', tools: 'all', model: 'main', isolation: 'worktree', body: 'Fix it.' });
+  expect(iso.mode).toBe(undefined); // a helper never asks for Bypass
+  // ours, with the two new lines
+  expect(parseHelperAgent('PLANNER', '# Planner\n\nUse it to plan.\n\n- Tools: look\n- Mode: plan\n- Isolation: worktree\n\n## Do\nPlan.\n')).toMatchObject({ mode: 'plan', isolation: 'worktree', tools: 'look' });
+});
+
+test("where helpers come from: the project's own first, then yours, then Claude Code's folder; a name is taken once", () => {
+  const claude = mkdtempSync(join(tmpdir(), 'agentic-claude-agents-'));
+  writeFileSync(join(claude, 'code-reviewer.md'), REVIEWER);
+  writeFileSync(join(claude, 'test-writer.md'), '---\nname: test-writer\ndescription: Claude\'s own\n---\nTheirs.\n');
+  writeFileSync(join(helpersDir(), 'TEST-WRITER.md'), WRITER);
+  mkdirSync(join(proj, '.claude', 'agents'), { recursive: true });
+  writeFileSync(join(proj, '.claude', 'agents', 'code-reviewer.md'), REVIEWER.replace('Reviews a change', 'The project reviews a change'));
+  const list = readHelperAgents('remote', { cwd: proj, claude, plugins: [] });
+  expect(list.map((a) => [a.kind, a.from ?? 'yours'])).toEqual([['code-reviewer', 'project'], ['test-writer', 'yours']]);
+  expect(list[0].about).toContain('The project reviews');
+  // A test never sees Claude Code's real folder: with AGENTIC_HOME set, none is read unless named.
+  expect(readHelperAgents('remote', { plugins: [] }).map((a) => a.kind)).toEqual(['test-writer']);
+});
+
+test("a helper's Mode makes it stricter, never more open than the conversation's", async () => {
+  const { helperMode } = await import('../src/agent/prompt-files.mjs');
+  expect(helperMode({ mode: 'plan' }, 'bypass')).toBe('plan');
+  expect(helperMode({ mode: 'ask' }, 'auto')).toBe('ask');
+  expect(helperMode({ mode: 'auto' }, 'ask')).toBe('ask'); // it asked for more than you gave: yours
+  expect(helperMode({ mode: 'edits' }, 'plan')).toBe('plan');
+  expect(helperMode({}, 'edits')).toBe('edits');
+  expect(helperMode(null, 'auto')).toBe('auto');
+});
+
+test('a helper in plan mode is refused its edits, even when the conversation is on Accept edits', async () => {
+  writeFileSync(join(helpersDir(), 'PLANNER.md'), '# Planner\n\nUse it to plan a change.\n\n- Mode: plan\n\n## Do\nPlan.\n');
+  const fake = await startFakeServer([{ tool: { name: 'Write', args: { path: 'made.txt', content: 'x\n' } } }, { text: 'A plan: change a.mjs.' }]);
+  try {
+    const a = new Agent({ url: fake.url, model: local, cwd: proj, system: 'You are the main agent.', memory: false, flows: false, verify: false, way: 'app', hooks: [], mode: 'edits', instructions: 'remote', checkIns: false, confirmPlan: false });
+    const out = await a.runHelper('h1', { prompt: 'Plan it.', kind: 'planner' }, { label: 'planner', arg: 'plan' });
+    expect(out.text).toContain("The planner helper's report (");
+    expect(JSON.stringify(fake.requests.map((q) => q.messages))).toContain('plan mode is on');
+    expect(existsSync(join(proj, 'made.txt'))).toBe(false);
+  } finally { await fake.close(); }
+});
+
+test('a helper with Isolation: worktree works in its own copy: your folder is untouched, the report shows where and the diff; a copy with no change is taken away', async () => {
+  process.env.AGENTIC_WORKTREES = mkdtempSync(join(tmpdir(), 'agentic-wt-'));
+  const git = (...args) => execFileSync('git', ['-C', proj, ...args], { stdio: 'pipe' });
+  writeFileSync(join(proj, 'a.mjs'), 'export const add = (a, b) => a - b;\n');
+  git('init', '-q'); git('add', '.'); git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'one');
+  writeFileSync(join(helpersDir(), 'FIXER.md'), '# Fixer\n\nUse it to fix one bug.\n\n- Isolation: worktree\n\n## Do\nFix it.\n');
+  const fake = await startFakeServer([{ tool: { name: 'Edit', args: { path: 'a.mjs', old_text: 'a - b', new_text: 'a + b' } } }, { tool: { name: 'Write', args: { path: 'b.mjs', content: 'export const b = 1;\n' } } }, { text: 'Fixed add in a.mjs.' }]);
+  try {
+    const a = new Agent({ url: fake.url, model: local, cwd: proj, system: 'You are the main agent.', memory: false, flows: false, verify: false, way: 'app', hooks: [], mode: 'edits', instructions: 'remote', checkIns: false, confirmPlan: false });
+    const out = await a.runHelper('h1', { prompt: 'Fix add.', kind: 'fixer' }, { label: 'fixer', arg: 'fix' });
+    expect(readFileSync(join(proj, 'a.mjs'), 'utf8')).toBe('export const add = (a, b) => a - b;\n'); // yours untouched
+    expect(existsSync(join(proj, 'b.mjs'))).toBe(false);
+    expect(out.text).toContain('Its changes are NOT in your folder');
+    expect(out.text).toContain('+export const add = (a, b) => a + b;');
+    expect(out.text).toContain('+export const b = 1;'); // a new file is in the diff too
+    const copy = /in its own copy of the repository, (\S+) \(git worktree\)/.exec(out.text)[1];
+    expect(readFileSync(join(copy, 'a.mjs'), 'utf8')).toBe('export const add = (a, b) => a + b;\n');
+    // A helper that changes nothing: its copy is gone.
+    const fake2 = await startFakeServer([{ tool: { name: 'Read', args: { path: 'a.mjs' } } }, { text: 'Nothing to fix.' }]);
+    try {
+      const b = new Agent({ url: fake2.url, model: local, cwd: proj, system: 'You are the main agent.', memory: false, flows: false, verify: false, way: 'app', hooks: [], mode: 'edits', instructions: 'remote', checkIns: false, confirmPlan: false });
+      const out2 = await b.runHelper('h2', { prompt: 'Look.', kind: 'fixer' }, { label: 'fixer', arg: 'look' });
+      expect(out2.text).toContain('changed nothing there; the copy is gone');
+      expect(readdirSync(process.env.AGENTIC_WORKTREES).length).toBe(1); // only the first one's
+    } finally { await fake2.close(); }
+  } finally { await fake.close(); delete process.env.AGENTIC_WORKTREES; }
+  // Not a repository: it says so and does not run.
+  const plain = mkdtempSync(join(tmpdir(), 'agentic-plain-'));
+  const c = new Agent({ url: 'http://127.0.0.1:9', model: local, cwd: plain, system: 'x', memory: false, flows: false, verify: false, way: 'app', hooks: [], mode: 'edits', instructions: 'remote' });
+  expect((await c.runHelper('h3', { prompt: 'x', kind: 'fixer' }, { label: 'fixer', arg: 'x' })).text).toContain('not in a git repository');
+});
+
+test('on the Claude API a Model line may name a Claude by its word', async () => {
+  const { claudeModelOf } = await import('../src/agent/auto-check.mjs');
+  expect(['haiku', 'Sonnet', 'opus', 'fable', 'claude-haiku-4-5', 'inherit', 'main', '', 'qwen3:4b'].map((w) => claudeModelOf(w, 'claude-opus-5-5'))).toEqual(['claude-haiku-4-5', 'claude-sonnet-5-5', null, 'claude-fable-5-1', 'claude-haiku-4-5', null, null, null, null]);
 });
 
 test('with none of your files nothing changes: no helpers, no added guides, a file in the repo\'s agents folder is not one; the helpers guide says where they go', () => {

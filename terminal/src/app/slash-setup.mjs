@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { dirname } from 'node:path';
 import { helpersEnv, helperRows, changeHelpers } from './helpers.mjs';
 import { changeHooks, leanEnv } from '../agent/way.mjs';
-import { modeOf } from '../agent/permissions.mjs';
+import { DONT_ASK, modeOf } from '../agent/permissions.mjs';
 import { thinkingLevel, embedderReady, Embedder } from '../../../models/index.mjs';
 import { MODE_OPTIONS } from './help.mjs';
 import { memoryDirs, healthLine, health, undoSave, readFacts, readLog, heldTidy, tidyHeld, keepHeld } from '../agent/facts.mjs';
@@ -20,8 +20,9 @@ import { packState } from '../agent/claude-pack.mjs';
 import { saveSettings } from './store.mjs';
 import { INIT_PROMPT, short } from './app-common.mjs';
 import { skillsCommand } from './skills-cmd.mjs';
+import { pluginsCommand } from './plugins-cmd.mjs';
 
-export const SETUP_COMMANDS = ['effort', 'think', 'mode', 'memory', 'rules', 'skills', 'helpers', 'hooks', 'init'];
+export const SETUP_COMMANDS = ['effort', 'think', 'mode', 'memory', 'rules', 'skills', 'plugins', 'helpers', 'hooks', 'init'];
 
 export function slashSetup(self) {
   return async (cmd, arg, busy, line) => {
@@ -49,6 +50,7 @@ export function slashSetup(self) {
         if (!arg.trim()) { self.openChoice('mode'); break; }
         const m = modeOf(arg) ?? (/^[1-5]$/.test(arg.trim()) ? MODE_OPTIONS[Number(arg) - 1].id : null);
         if (!m) { self.push({ type: 'note', text: `There is no mode "${arg.trim()}": auto, manual, edits, plan or bypass (or 1–5, as /mode lists them).`, tone: 'warn' }); break; }
+        if (m === DONT_ASK) { self.push({ type: 'note', text: "Don't ask is for runs with nobody there: coding -p \"…\" --mode dontask. In a window, Accept edits or Auto is the nearest.", tone: 'warn' }); break; }
         self.applyChoice('mode', m);
         break;
       }
@@ -141,6 +143,8 @@ export function slashSetup(self) {
       }
       // /skills (skills-cmd.mjs): yours and SKILLS.md's; save, show, remove, open.
       case 'skills': skillsCommand(self, arg, busy); break;
+      // /plugins (plugins-cmd.mjs): skills, helpers, hooks and MCP servers in one folder; add, on, off, show, remove.
+      case 'plugins': pluginsCommand(self, arg, busy); break;
       case 'helpers': {
         // The context helpers, numbered, on or off; "/helpers off 3" switches one.
         const [what = '', ...rest] = arg.trim().split(/\s+/);

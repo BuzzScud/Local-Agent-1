@@ -34,6 +34,30 @@ test('stopping the reply stops the check too (it is not read as a no)', async ()
   await expect(p).rejects.toThrow('aborted');
 });
 
+test('the checker is a model of its own: the cheapest Claude on the Claude API, the second opinion on a service, else the main one', async () => {
+  const { checkerUse } = await import('../src/agent/auto-check.mjs');
+  expect(checkerUse({ claude: true, main: 'claude-opus-5-5' })).toEqual({ model: 'claude-haiku-4-5' });
+  expect(checkerUse({ claude: true, main: 'claude-haiku-4-5' })).toBe(undefined); // the main one is it already
+  const review = { model: 'qwen3:4b', numCtx: 32768 };
+  expect(checkerUse({ review })).toBe(review);
+  expect(checkerUse({ review: undefined })).toBe(undefined);
+  expect(checkerUse({})).toBe(undefined);
+});
+
+test('the checker is asked by name; one that cannot answer hands the check to the main model once', async () => {
+  const uses = [];
+  const ok = await autoCheck({ ...base, use: { model: 'claude-haiku-4-5' }, ask: async (a) => { uses.push(a.use?.model ?? 'main'); return { json: { verdict: 'run', reason: 'fits' } }; } });
+  expect([ok.run, ok.by, uses]).toEqual([true, 'claude-haiku-4-5', ['claude-haiku-4-5']]);
+  uses.length = 0;
+  const handed = await autoCheck({ ...base, use: { model: 'qwen3:4b' }, ask: async (a) => { uses.push(a.use?.model ?? 'main'); if (a.use) throw new Error('model not found'); return { json: { verdict: 'ask', reason: 'not asked for' } }; } });
+  expect([handed.run, handed.by, handed.reason, uses]).toEqual([false, null, 'not asked for', ['qwen3:4b', 'main']]);
+  // No checker: the main model, and by is null.
+  expect((await autoCheck({ ...base, ask: said({ verdict: 'run', reason: 'x' }) })).by).toBe(null);
+  // Out of time with the checker: no second try, it asks you.
+  const slow = (a) => new Promise((_, no) => a.signal.addEventListener('abort', () => no(new Error('aborted'))));
+  expect(await autoCheck({ ...base, use: { model: 'x' }, timeoutMs: 30, ask: slow })).toMatchObject({ run: false, reason: 'the check took too long', failed: true });
+});
+
 test('the steps in words: a web search and a page by their words and address', () => {
   expect(stepText('WebSearch', { query: 'left-pad license' })).toBe('Search the web for: left-pad license');
   expect(stepText('WebFetch', { url: 'https://example.org/a' })).toBe('Read this web page: https://example.org/a');

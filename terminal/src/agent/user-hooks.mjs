@@ -17,6 +17,7 @@ import { join, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { HOME } from '../../../models/index.mjs';
+import { activePlugins, withRoot } from './plugins.mjs';
 
 export const EVENTS = [
   { id: 'PreToolUse', label: 'Before a step', tool: true, what: 'before a tool runs: exit 2 stops it, and the model is told why (what it prints to stderr)' },
@@ -95,6 +96,18 @@ export function writeUserHooks(list, home = HOME) {
   writeFileSync(f, `${JSON.stringify({ ...rest, hooks: hooksBlock(list) }, null, 2)}\n`);
 }
 
+// The hooks of the plugins you switched on (plugins.mjs): each with its plugin's name and folder, which its
+// command gets as CLAUDE_PLUGIN_ROOT (and ${CLAUDE_PLUGIN_ROOT} in its words), as Claude Code gives it.
+// Adding a plugin was your yes to them. A file that cannot be read brings none.
+export function pluginHooks(home = HOME) {
+  return activePlugins(home).flatMap((p) => {
+    if (!p.parts.hooks) return [];
+    let r;
+    try { r = parseHooks(readFileSync(p.parts.hooks, 'utf8')); } catch { return []; }
+    return (r.list ?? []).map((h) => ({ ...h, command: withRoot(h.command, p.root), plugin: p.name, root: p.root }));
+  });
+}
+
 // A project's own: { file, print, list, answer: 'yes' | 'never' | null, changed, error } or null.
 export function readProjectHooks(cwd, home = HOME) {
   const file = projectHooksFile(cwd);
@@ -145,7 +158,7 @@ export function toolInput(name, args = {}, cwd = '') {
 export function runHook(hook, input, { cwd, signal } = {}) {
   return new Promise((resolve) => {
     const t0 = Date.now();
-    const env = { ...process.env, AGENTIC_PROJECT_DIR: cwd ?? '', CLAUDE_PROJECT_DIR: cwd ?? '', AGENTIC_HOOK_EVENT: hook.event };
+    const env = { ...process.env, AGENTIC_PROJECT_DIR: cwd ?? '', CLAUDE_PROJECT_DIR: cwd ?? '', AGENTIC_HOOK_EVENT: hook.event, ...(hook.root ? { CLAUDE_PLUGIN_ROOT: hook.root } : {}) };
     delete env.AGENTIC_RESTART_FILE;
     let child;
     try { child = spawn('/bin/zsh', ['-c', hook.command], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true }); } catch (e) { resolve({ code: 1, stdout: '', stderr: e.message, timedOut: false, ms: 0 }); return; }
@@ -207,7 +220,8 @@ export class UserHooks {
     this.error = yours.error ?? null;
     this.project = readProjectHooks(this.cwd, this.home);
     const theirs = this.project?.answer === 'yes' ? this.project.list.map((h) => ({ ...h, project: true })) : [];
-    this.list = [...this.yours.map((h) => ({ ...h })), ...theirs];
+    this.plugins = pluginHooks(this.home);
+    this.list = [...this.yours.map((h) => ({ ...h })), ...theirs, ...this.plugins];
     return this;
   }
   moveTo(cwd) { if (cwd !== this.cwd) { this.cwd = cwd; this.reload(); } }

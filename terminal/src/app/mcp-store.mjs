@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 import { readKey, saveKey, removeKey, keyEnd } from '../../../models/index.mjs';
 import { realFolder } from './trust.mjs';
 import { SERVER_NAME } from '../agent/mcp.mjs';
+import { activePlugins } from '../agent/plugins.mjs';
 
 // Read when used, not at import, so tests can point it at their own home.
 const home = () => process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
@@ -154,6 +155,7 @@ export function answerProject(cwd, print, answer) {
 export function saveMarks(server, marks, cwd) {
   const clean = { off: [...new Set(marks.off ?? [])], reads: { ...(marks.reads ?? {}) } };
   if (server.from === 'project') { changeState((s) => { const key = realFolder(cwd); s.projects[key] = { ...(s.projects[key] ?? {}), marks: { ...(s.projects[key]?.marks ?? {}), [server.name]: clean } }; }); return { ok: true }; }
+  if (server.from === 'plugin') { changeState((s) => { s.pluginMarks = { ...(s.pluginMarks ?? {}), [server.name]: clean }; }); return { ok: true }; }
   return changeServers((servers) => { if (!(server.name in servers)) return { ok: false, missing: true }; const t = { ...(clean.off.length ? { off: clean.off } : {}), ...(Object.keys(clean.reads).length ? { reads: clean.reads } : {}) }; const { tools: _t, ...rest } = servers[server.name]; servers[server.name] = { ...rest, ...(Object.keys(t).length ? { tools: t } : {}) }; return { ok: true }; });
 }
 
@@ -184,5 +186,18 @@ export function serversFor(cwd) {
   const project = cwd ? readProject(cwd) : null;
   const names = new Set(mine.servers.map((s) => s.name));
   const theirs = project?.answer === 'yes' ? project.servers.filter((s) => !names.has(s.name)) : [];
-  return { servers: [...mine.servers, ...theirs], project, broken: mine.broken ?? project?.broken ?? null };
+  for (const s of theirs) names.add(s.name);
+  const plugged = pluginServers().filter((s) => !names.has(s.name) && names.add(s.name));
+  return { servers: [...mine.servers, ...theirs, ...plugged], project, broken: mine.broken ?? project?.broken ?? null };
+}
+
+// The servers of the plugins you switched on (plugins.mjs), started as yours are: a program behind the same
+// fence (it may read its plugin's folder), unless its file says otherwise. Your marks on their tools are kept
+// in the state file, by the server's name. Adding the plugin was your yes to them.
+export function pluginServers() {
+  const marks = readState().pluginMarks ?? {};
+  return activePlugins(home()).flatMap((p) => Object.entries(p.parts.servers).map(([name, raw]) => {
+    const s = serverOf(name, { ...raw, tools: marks[name] }, { from: 'plugin' });
+    return s ? { ...s, plugin: p.name } : null;
+  })).filter(Boolean).slice(0, MAX_SERVERS);
 }

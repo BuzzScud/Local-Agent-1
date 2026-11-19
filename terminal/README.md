@@ -112,6 +112,16 @@ stopping services, and piping the internet into a shell; a `git commit` always a
 commands outside the project folder are refused, and macOS's own sandbox fences what a command
 can reach.
 
+**Accept edits** and **Auto** also let `mkdir`, `touch`, `mv` and `cp` run without a question when every
+path stays in the project and none is a protected file (as Claude Code's acceptEdits; /rewind keeps a
+copy). **Auto's check** goes to a model other than the one doing the work when there is one: on the
+Claude API the cheapest Claude (Haiku), on an Ollama service the second opinion of `/subagents`; one
+that cannot answer hands the check to the main model, and the note under the step says who checked.
+**Don't ask** (`coding -p "…" --mode dontask`, also `--permission-mode dontAsk`; never in a window) is
+for scripts and CI: file changes in the project go through, and every step that would ask is refused
+instead, so the run goes on with what only reads, what `/permissions allow` covers and the MCP tools
+you marked as reading.
+
 `/permissions` (also the first row of `/settings`) adds your own rules on top, kept in
 `~/.agentic-coder/permissions.json` for a folder (and what is inside it) or for every folder, and
 never in the project, so a project you download cannot bring rules of its own:

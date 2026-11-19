@@ -5,7 +5,7 @@ import { PROVIDER_NAMES, searchKey } from '../tools/web.mjs';
 import { EXPLORE_TOOLS, WHOLE_MAX, arrivedNote, desktopDefault, display, execute, needsSight, needsText, normalizeArgs, parseArgs, patchOps, plainFetch, plainRead, prepare, resolvePath, sentArgs, syntaxError, toolNameOf } from './tools.mjs';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { repoMap } from '../tools/repomap.mjs';
-import { decide, isReadOnly, offerFor, testRunOf } from './permissions.mjs';
+import { decide, DONT_ASK, isReadOnly, offerFor, refusedAsk, testRunOf } from './permissions.mjs';
 import { isHomeFolder } from './prompt.mjs';
 import { folderKind } from './folder.mjs';
 import { filesMade, madeNote } from './made.mjs';
@@ -19,7 +19,7 @@ import { copyNote, keepOwnCopy } from './self.mjs';
 import { readResults, testsFailed } from '../flows/results.mjs';
 import { tallies } from '../flows/llm.mjs';
 import { toolTiming } from './timing.mjs';
-import { autoCheck } from './auto-check.mjs';
+import { autoCheck, checkerUse } from './auto-check.mjs';
 import { screenAccess } from '../tools/screen.mjs';
 import { nearParts, openPart, partFor, partsOf, readLadder } from './ladder.mjs';
 import { MAP_DIR } from '../tools/codemap.mjs';
@@ -540,11 +540,15 @@ export class StepPart {
     // request first (auto-check.mjs): it runs, or it asks you with the check's reason.
     if (d.decision === 'check') {
       this.emit('auto-check', { id, name: call.name, ...shown });
-      const r = await autoCheck({ url: this.url, model: this.model, slot: this.slots?.side, request: this.turn?.request ?? '', name: call.name, args, cwd: this.cwd, signal });
+      // Checked by a model of its own when there is one (auto-check.mjs checkerUse): not the one that wants the step.
+      const use = checkerUse({ claude: endpointOf(this.url)?.kind === 'claude', main: this.modelName(), review: this.helperUse('review') });
+      const r = await autoCheck({ url: this.url, model: this.model, slot: this.slots?.side, request: this.turn?.request ?? '', name: call.name, args, cwd: this.cwd, signal, use });
       if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
-      this.emit('note', { text: `Auto ${r.run ? 'let it run' : 'asks you'}: ${r.reason} (${(r.ms / 1000).toFixed(1)} s)`, tone: 'dim', auto: { run: r.run, failed: Boolean(r.failed) } });
+      this.emit('note', { text: `Auto ${r.run ? 'let it run' : 'asks you'}: ${r.reason} (${(r.ms / 1000).toFixed(1)} s${r.by ? `, checked by ${r.by}` : ''})`, tone: 'dim', auto: { run: r.run, failed: Boolean(r.failed), by: r.by ?? null } });
       d = r.run ? { decision: 'allow' } : { ...d, decision: 'ask', autoReason: r.reason };
     }
+    // Don't ask (--mode dontask): a hook's "ask" or a saved skill's question is refused too; nobody is here.
+    d = refusedAsk(d, this.mode);
     // The screen while macOS does not allow pictures yet: no question first, straight to the
     // tool, which takes nothing and says how to set it up (/screen setup).
     if (call.name === 'Screen' && d.decision === 'ask' && !screenAccess()) d = { decision: 'allow' };
@@ -554,7 +558,7 @@ export class StepPart {
       return { text: `Not allowed: ${d.reason}. ${this.noteNames(where) ? "If the note that came with the request answers it, answer from the note now; do not look for the files it names." : 'Do something else.'}`, error: true };
     }
     // Edits on auto-accept: the first one of a message is shown as a plan first (not in Bypass, where nothing asks).
-    if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan && this.mode !== 'bypass' && this.hook('plan')) {
+    if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan && this.mode !== 'bypass' && this.mode !== DONT_ASK && this.hook('plan')) {
       const plan = planLine(call.name, args, prepared);
       const r = await this.confirm(plan, signal);
       if (r.stop) return { text: 'Interrupted.', stop: r.stop };

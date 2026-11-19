@@ -106,6 +106,7 @@ coding                     # start here
 coding "fix the tests"     # start with a first prompt
 coding -c                  # continue the last conversation in this folder
 coding -p "what does x do" # answer once and exit
+coding -p "fix the tests" --mode dontask  # for scripts and CI: edits go through, whatever would ask is refused
 coding --way model         # the model decides, like Claude Code (/effort shows it as Who decides)
 ```
 
@@ -247,6 +248,19 @@ place on the first and goes on without reading everything again; on the Claude A
 one reply run side by side. `"subagents": false` in settings.json leaves them out. The Subagent
 check in the Arena tests them with the real model.
 
+**Helpers of your own** (on the remote set) are one `.md` file each, a kind the Agent tool offers by
+name. They are read from, first one wins a name: the project's `.agentic/agents/` and `.claude/agents/`,
+yours in `~/.agentic-coder/rules/remote/agents/`, Claude Code's `~/.claude/agents/`, then your plugins.
+Ours is `# Title`, a sentence on what it is for, then `- Tools:` (all, look, or a list), `- Model:`,
+`- Mode:` and `- Isolation:` lines and `## Instructions`; Claude Code's front matter (`name`,
+`description`, `tools`, `model`, `permissionMode`, `isolation`) is read as it is, its tool names as ours
+(Grep is Search, Glob is List). **Mode** (plan, manual, edits, auto, dontask) makes the helper stricter,
+never more open than your conversation. **Model** is another model of an Ollama service, or on the
+Claude API haiku, sonnet, opus, fable or an id. **Isolation: worktree** runs it in its own copy of the
+repository (a git worktree of the last commit, in `~/.agentic-worktrees/`): your folder is never
+touched, a copy it changed nothing in is taken away, and one it changed is kept, its report giving
+where and the diff.
+
 ### MCP servers (tools from outside the app)
 
 MCP (the Model Context Protocol) lets the model use tools that live outside Agentic Coder: a program
@@ -312,6 +326,20 @@ not ask. Models on another machine get a guide, `RULES/MCP.md`, and the MCP line
 `TOOLS.md`, only while a server is on. The **MCP check** in the Arena (`/test mcp`, and
 `/test mcp-remote` for the model on your service) runs nine checks on two stand-in servers with
 the real model, and reads what the servers really received from their own log.
+
+### Plugins
+
+A plugin is one folder that brings skills, helper agents, hooks and MCP servers together, in Claude
+Code's layout, so a plugin made for it works here: `.claude-plugin/plugin.json` (name, description,
+version), `skills/<name>/SKILL.md`, `agents/<name>.md`, `hooks/hooks.json` and `.mcp.json`;
+`${CLAUDE_PLUGIN_ROOT}` in a command is the plugin's folder. `/plugins add <folder or git address>`
+copies it into `~/.agentic-coder/plugins/<name>` and says what it brings; adding it is your yes to it.
+`/plugins` lists them, `/plugins off <name>` and `on` switch all of one at once, `/plugins show` and
+`/plugins remove` (kept dated in `plugins/.removed/`). Its skills come with the rest (`/skills` lists
+them under its name), its helpers join the Agent tool, its hooks run as yours do, and its MCP servers
+start as yours do: behind the same fence, each tool asking before its first use. A plugin changes no
+permission, mode or never-list, and the model cannot change its files. Not read yet: a plugin's
+`commands/` and a marketplace list.
 
 ### A model on another machine
 

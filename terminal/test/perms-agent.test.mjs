@@ -168,6 +168,56 @@ test('Auto: a check that does not answer clearly asks you', async () => {
   expect(asked.map((a) => a.autoReason)).toEqual(['the check gave no clear answer']);
 });
 
+test("Don't ask: nothing is asked, not even the plan question; edits and file commands run, the rest is refused and the run goes on", async () => {
+  // (Three refusals in a row would bring the "stuck" question, which coding -p answers by going on.)
+  const { asked, tools, cwd } = await run([write('made.md', 'ok\n'), bash('mkdir -p out && cp made.md out/made.md'), bash('npm install left-pad'), bash('node --test'), bash('git commit -m x'), write('.env', 'A=1\n'), { text: 'Done.' }], { mode: 'dontask', confirmPlan: true, rules: { allow: ['node --test'] } });
+  expect(asked).toEqual([]);
+  expect(readFileSync(join(cwd, 'out', 'made.md'), 'utf8')).toBe('ok\n');
+  expect(existsSync(join(cwd, '.env'))).toBe(false);
+  const denied = tools.filter((t) => t.view?.kind === 'denied').map((t) => t.view.message);
+  expect(denied.length).toBe(3);
+  for (const m of denied) expect(m).toContain("Don't ask is on");
+  expect(tools.some((t) => t.label === 'Bash' && String(t.arg).includes('node --test') && !t.error)).toBe(true); // the run went on to its allowed step
+});
+
+test("coding -p --mode dontask: a run with nobody there edits, is refused the rest, and finishes on its own (no --yes)", async () => {
+  const { runHeadless } = await import('../src/headless.mjs');
+  const cwd = project();
+  const fake = await startFakeServer([write('made.md', 'ok\n'), bash('npm install left-pad'), bash('git commit -m x'), write('.env', 'A=1\n'), bash('node --test'), { text: 'Done.' }]);
+  const r = await runHeadless({ prompt: 'make made.md', cwd, url: fake.url, model, thinking: false, ctx: 32768, flows: false, mode: 'dontask', permissions: () => ({ allow: ['node --test'] }) });
+  await fake.close();
+  expect(r.reason).toBe('done');
+  expect(readFileSync(join(cwd, 'made.md'), 'utf8')).toBe('ok\n');
+  expect(existsSync(join(cwd, '.env'))).toBe(false);
+  expect(fake.remaining()).toBe(0); // every scripted step was reached: no refusal ended the run
+});
+
+test('Accept edits: mkdir, mv and cp in the project run without a question; another command still asks', async () => {
+  const { asked, cwd } = await run([bash('mkdir -p docs/new && cp trades.json docs/new/p.json && mv docs/new/p.json docs/new/q.json'), bash('npm install left-pad'), { text: 'Done.' }], { mode: 'edits', answers: ['no'] });
+  expect(asked.map((a) => a.command)).toEqual(['npm install left-pad']);
+  expect(existsSync(join(cwd, 'docs', 'new', 'q.json'))).toBe(true);
+});
+
+test('Auto: the check goes to a model of its own when there is one (the second opinion), and the note names it', async () => {
+  const cwd = project();
+  const seen = [];
+  const fake = await startFakeServer([bash('find dist -delete'), { text: 'Done.' }], { route: (json) => {
+    if (!String(json.messages?.[0]?.content ?? '').startsWith('You check one step')) return null;
+    seen.push(json.model ?? null);
+    return { text: JSON.stringify({ verdict: 'ask', reason: 'Deleting was not asked for.' }) };
+  } });
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'auto', flows: false, verify: false, ask: async () => ({ choice: 'no' }) });
+  const notes = [];
+  agent.on('note', (e) => { if (e.auto) notes.push(e); });
+  agent.helperUse = (id) => (id === 'review' ? { model: 'second-opinion:4b' } : undefined);
+  await agent.send('tidy up');
+  await fake.close();
+  // (This stand-in answers whatever model is named; on a real service helperUse gives the second opinion only on Ollama.)
+  expect(notes.length).toBe(1);
+  expect(notes[0].auto.by).toBe('second-opinion:4b');
+  expect(notes[0].text).toMatch(/^Auto asks you: Deleting was not asked for \([\d.]+ s, checked by second-opinion:4b\)$/);
+});
+
 test('Bypass permissions: commands and edits go through unasked (a commit and .env too); rm -rf and the app\'s own settings are refused', async () => {
   const { asked, tools, cwd } = await run([bash('node -e "require(\'fs\').writeFileSync(\'made.txt\', \'ok\')"'), write('.env', 'A=1\n'), bash('rm -rf build'), write('.agentic/settings.json', '{"mode":"bypass"}'), { text: 'Done.' }], { mode: 'bypass', confirmPlan: true }); // the app's plan question too
   expect(asked).toEqual([]);

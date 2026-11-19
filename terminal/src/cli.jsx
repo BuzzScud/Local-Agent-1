@@ -106,7 +106,8 @@ function parse(argv) {
     else if (a === '--think') o.thinking = true;
     else if (a === '--no-think') o.thinking = false;
     else if (a === '--ctx') { const v = val(); o.ctx = /^\d+k$/i.test(v) ? Number.parseInt(v, 10) * 1024 : Number(v); }
-    else if (a === '--mode') o.mode = val();
+    // --permission-mode: Claude Code's name for the same flag (dontAsk, acceptEdits, bypassPermissions…).
+    else if (a === '--mode' || a === '--permission-mode') o.mode = val();
     else if (a === '--yes' || a === '-y') o.yes = true;
     else if (a === '--url') o.url = val();
     // --slots 2: the server given with --url keeps two slots (llama-server -np 2), so
@@ -536,7 +537,8 @@ if (opts.print) {
     // Manual, its commands offline, with no word of it. A loop's run gets its mode with the loop's own parts below.
     const { modeOf } = await import('./agent/permissions.mjs');
     const asked = !loop && opts.mode ? modeOf(opts.mode) : null;
-    if (!loop && opts.mode && !asked) process.stderr.write(`· --mode ${opts.mode} is not a mode (auto, manual, edits, plan, bypass): the run goes on as if it were not given\n`);
+    if (!loop && opts.mode && !asked) process.stderr.write(`· --mode ${opts.mode} is not a mode (auto, manual, edits, plan, bypass, dontask): the run goes on as if it were not given\n`);
+    if (asked === 'dontask') process.stderr.write("· Don't ask: file changes in the project go through; anything that would ask is refused (/permissions allow lets a command run)\n");
     let printed = false;
     const r = await runHeadless({
       images, canSee, visionOn, userHooks: true,

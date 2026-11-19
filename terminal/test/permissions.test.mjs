@@ -526,3 +526,70 @@ test('a heredoc body is the program\'s text: a division is not the folder /, a r
   expect(outsidePath('echo $(( 1 << 2 )) /Users/x', p)).toBe('/Users/x');                           // a shift is not a heredoc
   expect(outsidePath('expr 4 / 2', p)).toBe('/');                                                    // a bare / outside a body is still the disk
 });
+
+// ---- Don't ask (19 Nov 2026, Claude Code's dontAsk): for coding -p and scripts --------------------
+
+test("Don't ask: by name and alias, never one of the five, never in the shift+tab walk", async () => {
+  const { DONT_ASK } = await import('../src/agent/permissions.mjs');
+  expect(['dontask', 'dontAsk', 'dont-ask', 'CI'].map(modeOf)).toEqual([DONT_ASK, DONT_ASK, DONT_ASK, DONT_ASK]);
+  expect(MODES).not.toContain(DONT_ASK);
+  expect(CYCLE).not.toContain(DONT_ASK);
+});
+
+test("Don't ask: edits and what only reads or a rule allows run; whatever would ask is refused, with what would let it run", () => {
+  const dd = (name, args, extra) => decide(name, args, ctx5('dontask', extra));
+  expect(dd('Edit', { path: 'src/a.js' }).decision).toBe('allow');
+  expect(dd('Bash', { command: 'git status' }).decision).toBe('allow');
+  expect(dd('Bash', { command: 'mkdir -p out && cp a.txt out/' }).decision).toBe('allow');
+  expect(dd('Bash', { command: 'npm test' }, { rules: { allow: ['npm test'] } }).decision).toBe('allow');
+  const npm = dd('Bash', { command: 'npm install left-pad' });
+  expect(npm.decision).toBe('deny');
+  expect(npm.reason).toContain("Don't ask is on");
+  expect(npm.reason).toContain('/permissions allow');
+  expect(dd('Bash', { command: 'git commit -m x' }).decision).toBe('deny');
+  expect(dd('Bash', { command: 'git push' }).decision).toBe('deny');
+  expect(dd('Write', { path: '.env' }, { rel: '.env' }).reason).toContain('protected file');
+  expect(dd('WebSearch', { query: 'x' }).decision).toBe('deny');
+  expect(dd('WebFetch', { url: 'https://example.org/' }, { rules: { allow: ['WebFetch(example.org)'] } }).decision).toBe('allow');
+  expect(dd('Bash', { command: 'rm -rf build' }).decision).toBe('deny'); // the hard lines hold
+  expect(dd('Bash', { command: 'cat ../other/notes.txt' }).decision).toBe('deny'); // the fence holds
+  expect(dd('Edit', { path: 'a.js' }, { inside: false }).decision).toBe('deny');
+  // MCP: refused unless allowed, or marked by you as only reading.
+  expect(dm('dontask', mcpTool()).decision).toBe('deny');
+  expect(dm('dontask', mcpTool({ reads: true })).decision).toBe('allow');
+  expect(dm('dontask', mcpTool(), { rules: { allow: ['Mcp(github:create_issue)'] } }).decision).toBe('allow');
+});
+
+test("Don't ask: a question decided after the rules (a hook's ask, a saved skill) is refused too; other modes keep it", async () => {
+  const { refusedAsk } = await import('../src/agent/permissions.mjs');
+  expect(refusedAsk({ decision: 'ask', once: true }, 'dontask').decision).toBe('deny');
+  expect(refusedAsk({ decision: 'ask' }, 'edits')).toEqual({ decision: 'ask' });
+  expect(refusedAsk({ decision: 'allow' }, 'dontask')).toEqual({ decision: 'allow' });
+});
+
+test("the guide's table for Don't ask says what runs and what is refused", async () => {
+  const { permissionsTable } = await import('../src/agent/permissions.mjs');
+  const t = permissionsTable({ mode: 'dontask' });
+  expect(t).toContain("Mode: Don't ask");
+  expect(t).toContain('| Any other command | refused, unless a rule below allows it |');
+  expect(t).toContain('| git push (only when the user asks; a force push is refused) | refused |');
+});
+
+// ---- Accept edits makes, moves and copies files (19 Nov 2026, as Claude Code's acceptEdits) --------
+
+test('Accept edits and Auto: mkdir, touch, mv and cp inside the project run; Manual still asks', async () => {
+  const { fileOpPart } = await import('../src/agent/permissions.mjs');
+  for (const c of ['mkdir -p src/new', 'touch notes.md', 'mv a.txt b.txt', 'cp -R assets dist/assets', 'mkdir out && cp a.txt out/', 'mkdir x; git status'])
+    for (const m of ['edits', 'auto']) expect([m, c, d5('Bash', { command: c }, m)]).toEqual([m, c, 'allow']);
+  for (const c of ['mkdir out', 'mv a b']) expect(d5('Bash', { command: c }, 'ask')).toBe('ask');
+  expect(d5('Bash', { command: 'mkdir out' }, 'plan')).toBe('deny');
+  // Not a file command alone, a protected file, a path outside, or words the shell fills in: as before.
+  expect(d5('Bash', { command: 'mkdir out && npm install' }, 'edits')).toBe('ask');
+  expect(decide('Bash', { command: 'cp x .env' }, ctx5('edits'))).toMatchObject({ decision: 'ask', once: true, protectedBy: '.env' });
+  expect(d5('Bash', { command: 'mv a.txt ../other/a.txt' }, 'edits')).toBe('deny');
+  expect(d5('Bash', { command: 'cp a.txt ~/a.txt' }, 'edits')).toBe('deny');
+  expect(d5('Bash', { command: 'cp a.txt $DEST' }, 'edits')).toBe('ask');
+  expect(d5('Bash', { command: 'cp a.txt out.txt > log.txt' }, 'edits')).toBe('ask'); // a file written with >
+  expect(['mkdir', 'mkdir -p', 'rm a.txt', 'cpx a b'].map(fileOpPart)).toEqual([false, false, false, false]);
+  expect(judge('Bash', { command: 'mv a b' }, ctx5('edits')).why).toBe('Accept edits: it only makes, moves or copies files inside the project');
+});

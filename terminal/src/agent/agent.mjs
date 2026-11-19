@@ -5,10 +5,12 @@ import { EventEmitter } from 'node:events';
 import { endpointOf } from '../../../models/index.mjs';
 import { focusedInstructions, readInstructions, replaceInstructionBlock, withModelNotes } from './instructions.mjs';
 import { EXPLORE_TOOLS, resolvePath, toolSchemas } from './tools.mjs';
-import { isSelf, ownBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
+import { DONT_ASK, isSelf, ownBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
 import { gitSummary, isHomeFolder, notesRoom, projectNotes, promptSetOf, systemPrompt, testCommand } from './prompt.mjs';
 import { lookSecs } from './look.mjs';
-import { guidePath, guidesList, harnessOf, readGuides, readHelperAgents, readSkills, rulesSetOf, skillPath, skillsList, toolUseFor } from './prompt-files.mjs';
+import { guidePath, guidesList, harnessOf, helperMode, readGuides, readHelperAgents, readSkills, rulesSetOf, skillPath, skillsList, toolUseFor } from './prompt-files.mjs';
+import { closeWorktree, openWorktree, worktreeNote } from './helper-worktree.mjs';
+import { claudeModelOf } from './auto-check.mjs';
 import { homedir } from 'node:os';
 import { isCodeProject } from '../flows/index.mjs';
 import { LEAN_AUTO, LEAN_AUTO_NOTE, OPT_IN_HOOKS, hooksOn, leanForModel, leanPrompt, wayOf, wayPrompt } from './way.mjs';
@@ -210,7 +212,7 @@ export class Agent extends EventEmitter {
   }
   // Your helper agents (prompt-files.mjs readHelperAgents): read from their folder each time, so a
   // new file is offered at the next step. None inside a helper, none on the local set.
-  helperAgents() { return this.isHelper ? [] : readHelperAgents(this.rulesSetUsed ?? this.rulesSet()); }
+  helperAgents() { return this.isHelper ? [] : readHelperAgents(this.rulesSetUsed ?? this.rulesSet(), { cwd: this.cwd }); }
   // Self (permissions.mjs isSelf, the owner's pick 8 Oct 2026): Bypass permissions on the Claude API.
   // The app works on itself: its own settings, rules, hooks and memory may change (a copy kept first,
   // self.mjs), git push and stopping its own processes run, and the App tool is offered (runs a slash
@@ -418,10 +420,10 @@ export class Agent extends EventEmitter {
         this.emit(name, ev);
       },
       ask: (req) => this.ask(req),
-      confirm: (plan) => (this.confirmPlan && this.mode !== 'bypass' ? this.confirm(plan, signal) : { ok: true }),
+      confirm: (plan) => (this.confirmPlan && this.mode !== 'bypass' && this.mode !== DONT_ASK ? this.confirm(plan, signal) : { ok: true }),
       // The focused paths know two ways (flows/apply.mjs): edits asked about, or on auto-accept.
-      // Auto and Bypass let edits inside the project through, as Accept edits does.
-      mode: () => (this.mode === 'auto' || this.mode === 'bypass' ? 'edits' : this.mode),
+      // Auto, Bypass and Don't ask let edits inside the project through, as Accept edits does.
+      mode: () => (this.mode === 'auto' || this.mode === 'bypass' || this.mode === DONT_ASK ? 'edits' : this.mode),
       setMode: (m) => this.setMode(m),
       // A protected file always asks (permissions.mjs), even on auto-accept; in Bypass only the
       // app's own settings still do (the tool loop refuses those; here the path asks).
@@ -616,7 +618,13 @@ export class Agent extends EventEmitter {
     // main model go (28 Oct 2026, the Bonsai helpers check: 9B's answer and its next message came from 2B).
     const away = !own && this.helpersElsewhere() ? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null;
     const awayHere = away?.model && endpointOf(this.url)?.ollama && endpointOf(away.url) === endpointOf(this.url) ? away.model : null;
-    const ownUse = (otherModel || awayHere) && endpointOf(this.url)?.ollama ? { model: otherModel ?? awayHere, numCtx: OWN_HELPER_CTX, keepAlive: '30m' } : undefined;
+    // On the Claude API its Model line may name a Claude by Claude Code's words (haiku, sonnet, opus, fable) or its id (19 Nov 2026).
+    const claudeOwn = own && endpointOf(this.url)?.kind === 'claude' ? claudeModelOf(own.model, this.modelName()) : null;
+    const ownUse = claudeOwn ? { model: claudeOwn } : (otherModel || awayHere) && endpointOf(this.url)?.ollama ? { model: otherModel ?? awayHere, numCtx: OWN_HELPER_CTX, keepAlive: '30m' } : undefined;
+    // Its own mode (its Mode line), never more open than yours; its own copy of the repository (Isolation: worktree).
+    const mode = helperMode(own, this.mode);
+    const wt = own?.isolation === 'worktree' ? openWorktree(this.cwd, kind) : null;
+    if (wt?.error) { this.emit('tool', { id, name: 'Agent', ...shown, view: { kind: 'error', message: `no copy for the ${kind} helper: ${wt.error}` }, error: true }); return { text: `The ${kind} helper works only in its own copy of the repository (Isolation: worktree), and ${wt.error}. Do the work yourself, or use another kind.`, error: true }; }
     // On the smaller model (28 Oct 2026, the owner's picks after the Bonsai helpers check): the short instructions
     // (smallHelperPrompt). It thinks as the conversation does: tried without, 2B's reports answered one part of two
     // and 9B searched the rest itself (10 replies); with, they covered both. Its report is checked against the files
@@ -626,8 +634,8 @@ export class Agent extends EventEmitter {
     const slot = this.slots ? { main: this.slots.side ?? this.slots.main } : undefined;
     const helper = new Agent({
       // On a model of its own it has that model's room (OWN_HELPER_CTX), so it summarizes in time.
-      url: this.url, model: this.model, cwd: this.cwd, system: small ? smallHelperPrompt(kind) : helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
-      mode: this.mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash, home: this.home,
+      url: this.url, model: this.model, cwd: wt?.cwd ?? this.cwd, system: small ? smallHelperPrompt(kind) : helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse && !claudeOwn ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
+      mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash, home: this.home,
       way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, mcp: this.mcp, permissions: this.permissions, waitForServer: this.waitForServer, instructions: this.rulesSet(),
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
       ask: Object.assign((req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))), { together: Boolean(this.ask?.together) }),
@@ -639,7 +647,8 @@ export class Agent extends EventEmitter {
     if (this.mcpFrozen) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
     // Its move to a project ("Work in …?") leaves your conversation's folder for /rewind as it is: edits are kept by full path.
-    if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn), moved: () => {}, whenMoved: async () => {} };
+    // In its own copy (wt) there is nothing of yours to put back.
+    if (this.rewind && !wt) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn), moved: () => {}, whenMoved: async () => {} };
     const steps = [];
     let report = '';
     // The helpers panel (app/helpers-panel.mjs, 28 Oct 2026): which model it runs on, its steps and its last one, as it goes.
@@ -676,6 +685,9 @@ export class Agent extends EventEmitter {
     const secs = (Date.now() - t0) / 1000;
     panel({ done: true, secs, reason });
     this.stats.requests += helper.stats.requests;
+    // Its own copy: taken away when it changed nothing, else kept, with where and the diff under its report.
+    const isolated = wt ? worktreeNote(closeWorktree(wt), (p) => (p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p)) : '';
+    if (isolated) edited.clear();
     if (edited.size && this.turn) {
       this.turn.changed = true;
       this.turn.changedHere = true;
@@ -684,7 +696,7 @@ export class Agent extends EventEmitter {
     }
     const done = reason === 'done' || reason === 'answered';
     const proof = checked ? proofBlock(checked) : '';
-    const body = `${report.trim() || '(it ended without a report)'}${proof ? `\n\n${proof}` : ''}`;
+    const body = `${report.trim() || '(it ended without a report)'}${proof ? `\n\n${proof}` : ''}${isolated ? `\n\n${isolated}` : ''}`;
     const view = { kind: 'agent', steps: steps.length, secs, reason, content: `${steps.join('\n')}${steps.length ? '\n\n' : ''}${body}` };
     if (signal?.aborted) { this.emit('tool', { id, name: 'Agent', ...shown, view: { ...view, reason: 'interrupted' }, error: true }); return { text: 'Interrupted.', stop: 'interrupted' }; }
     // You said no to one of its changes (with nothing more to say): the turn ends there, as it does for the conversation's own.

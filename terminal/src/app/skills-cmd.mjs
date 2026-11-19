@@ -20,7 +20,8 @@ export const saveSkillPrompt = (name) => `Save what worked in this conversation 
 export function skillsPanel({ skills = readSkills(), uses = skillUses(), dir = skillsDir() } = {}) {
   const mine = skills.filter((s) => s.from === 'saved');
   const shipped = skills.filter((s) => !s.from);
-  const pad = Math.min(30, Math.max(14, ...[...mine, ...shipped].map((s) => s.slug.length + 4)));
+  const theirs = skills.filter((s) => s.from === 'plugin');
+  const pad = Math.min(30, Math.max(14, ...[...mine, ...shipped, ...theirs].map((s) => s.slug.length + 4)));
   const row = (s) => [`  ${s.slug}`, `${s.about || s.name}${s.words.length ? ` · words: ${s.words.slice(0, 4).join(', ')}${s.words.length > 4 ? ` +${s.words.length - 4}` : ''}` : ' · no Words: only opened from the list'} · ${usedWords(uses[s.slug])}`];
   const rows = [[`Saved · ${tilde(dir)} · every project`]];
   if (mine.length) rows.push(...mine.map(row));
@@ -28,6 +29,8 @@ export function skillsPanel({ skills = readSkills(), uses = skillUses(), dir = s
   rows.push([`SKILLS.md · read-only · the hub's Instructions → 08`]);
   if (shipped.length) rows.push(...shipped.map(row));
   else rows.push(['  None switched on.']);
+  // A plugin's (plugins.mjs), only when one brings any: /plugins switches them with their plugin.
+  if (theirs.length) { rows.push(['From your plugins · read-only · /plugins']); rows.push(...theirs.map((s) => [`  ${s.slug}`, `${row(s)[1]} · ${s.plugin}`])); }
   rows.push(['', '/skills save [name] · /skills show <name> · /skills remove <name> · /skills open']);
   return { type: 'panel', title: `Skills · ${mine.length} saved · ${shipped.length} in SKILLS.md · each comes with a request that uses its words`, pad, rows };
 }
