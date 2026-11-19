@@ -201,6 +201,20 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   them into a request. `AGENTIC_MEMORY_SAVE=off` writes none. `terminal/test/memory-notes.test.mjs`; app-memory.test
   waits for the new line.
 
+- **Days of use, and a big clear-out asks first** (19 Nov 2026, the owner: "fix all 5"; `terminal/src/agent/facts.mjs`,
+  `lessons.mjs`, `recall.mjs`, `memory-home.mjs`, `terminal/src/app/slash-setup.mjs`). After a month away from this
+  project, the first save back ran the daily tidy and retired 18 of its 22 facts at once ("not used in 35 days"), the
+  commit-and-push rule and the test commands among them: nothing had used them because the app had not been used here.
+  Now `UNUSED_DAYS` (30) counts days the memory was in use in that folder (`workedDays`: `days` in its state.json, noted
+  once a day by `noteDay` from each `recall` with `mark`, plus the dates in its log and the facts' last use, so a folder
+  from before this counts its past too), not calendar days; the reason reads "not used in N days of use". A tidy from
+  `tidyDue` runs with `hold`: when it would take out more than `BIG_TIDY` (3) facts and more than a quarter of the
+  folder, nothing is retired and the list waits in state.json (`held`; `heldTidy` reads it). It is said after the save
+  (`saveLine`, `heldWords`), in the memory's one line ("N to tidy or keep (/memory)"), and listed under `/memory`;
+  `/memory tidy` retires them as one tidy batch (`tidyHeld`; Taken out brings one back), `/memory keep` keeps them and
+  starts their clock again (`keepHeld`: last = today). A smaller tidy, or `tidy()` called directly, retires as before.
+  `terminal/test/facts.test.mjs` (the last two tests), `terminal/test/app-memory.test.mjs` (a held clear-out).
+
 - **The hub's Memory tab** (`terminal/src/app/memory.html`, `memory-hub.mjs`; redone 8 Oct 2026 after the owner's
   "i cant scroll here": the Overview showed 13 of 39 changes and hid the rest, by design, with no way to scroll). Their
   pick of four designs, "1 · Reading pane": the memories on the left (About you, This project, Rules, Pinned, Taken out,

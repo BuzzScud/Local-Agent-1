@@ -16,7 +16,7 @@ import { existsSync, lstatSync, readlinkSync, statSync, readdirSync, readFileSyn
 import { join, dirname, resolve, sep, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { HOME } from '../../../models/index.mjs';
-import { youDir, memoryDirs, readFacts, readLog } from './facts.mjs';
+import { youDir, memoryDirs, readFacts, readLog, heldTidy } from './facts.mjs';
 import { notesToday } from './notes.mjs';
 
 const isDir = (d) => { try { return statSync(d).isDirectory(); } catch { return false; } };
@@ -162,7 +162,9 @@ export function memoryStatus(cwd, home = homedir()) {
   const last = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d)).filter((l) => SAVES.has(l.what)).map((l) => String(l.at)).sort().at(-1) ?? null;
   let notes = 0;
   try { notes = notesToday(dirs); } catch { /* no notes folder yet */ }
-  return { you: readFacts(dirs.you).length, project: dirs.project ? readFacts(dirs.project).length : null, notes, last, state: s.state, dir: s.dir, target: s.target ?? null };
+  // A clear-out the daily tidy held back for you to answer (facts.mjs BIG_TIDY).
+  const held = [dirs.you, dirs.project].filter(Boolean).reduce((n, d) => n + heldTidy(d).length, 0);
+  return { you: readFacts(dirs.you).length, project: dirs.project ? readFacts(dirs.project).length : null, notes, held, last, state: s.state, dir: s.dir, target: s.target ?? null };
 }
 // "Memory · 13 about you · 22 this project · last saved 18 Oct", and what is wrong with the folder.
 export function statusWords(st) {
@@ -172,6 +174,7 @@ export function statusWords(st) {
   if (st.project !== null) parts.push(`${st.project} this project`);
   // The answers noted today (notes.mjs), once there is one.
   if (st.notes) parts.push(`${st.notes} answer${st.notes === 1 ? '' : 's'} noted today`);
+  if (st.held) parts.push(`${st.held} to tidy or keep (/memory)`);
   parts.push(when);
   return `Memory · ${parts.join(' · ')}`;
 }

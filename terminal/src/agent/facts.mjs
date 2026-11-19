@@ -20,8 +20,10 @@ import { memoryFile } from './memory.mjs';
 export const KINDS = ['you', 'project', 'worked', 'failed', 'mistake', 'recipe'];
 const ABOUT_YOU = new Set(['you']);
 export const RETIRE_AT = -3; // trust this low takes a fact out of use
-export const UNUSED_DAYS = 30; // never recalled for this long: retired
+export const UNUSED_DAYS = 30; // never recalled on this many days the memory was in use (not calendar days): retired
 export const NEWS_DAYS = 7; // a dated news fact this long after it was saved: retired, used or not
+export const BIG_TIDY = 3; // a daily tidy that would take more than this out, and more than a quarter of a folder, asks first
+const DAYS_KEPT = 400; // the days of use a folder's state.json keeps
 const INDEX_LINES = 40;
 const LINE_CHARS = 90;
 
@@ -478,11 +480,17 @@ export function fileNames(root) {
 // you: the folder about you. Its facts never go for not being used (18 Nov 2026, the audit): a standing preference
 // ("explain things simply") is in every start's short lines but is seldom the fact a request picks, so it was
 // retired after UNUSED_DAYS while still true. Dated news and a fact about a file that is gone still go.
-function tidyNow(dir, { today = day(), root = null, you = false } = {}) {
+// Unused is counted in days the memory was in use (workedDays), not calendar days (19 Nov 2026, the owner: a month away
+// from this project, and the first save back retired 18 of its 22 facts, the commit-and-push rule among them).
+// hold: a big clear-out (more than BIG_TIDY, and more than a quarter of the folder) is not done but kept in state.json
+// as held, for the owner to answer with /memory tidy or /memory keep (tidyDue; tidy() called directly retires).
+function tidyNow(dir, { today = day(), root = null, you = false, hold = false } = {}) {
   const batch = `tidy-${Date.now()}`;
-  const out = { merged: [], retired: [] };
+  const out = { merged: [], retired: [], held: [] };
   const seen = new Map();
   const names = root ? fileNames(root) : null;
+  const worked = workedDays(dir);
+  const plan = [];
   const goes = (f) => {
     if (f.always || f.pinned) return null;
     if (namesMissingFile(f, root, names)) return 'the file it names is gone';
@@ -490,8 +498,8 @@ function tidyNow(dir, { today = day(), root = null, you = false } = {}) {
     if (looksLikeNews(f.text) && age >= NEWS_DAYS) return `dated news, ${age} days old`;
     if (you || ABOUT_YOU.has(f.kind)) return null;
     const since = f.last ?? f.saved;
-    const days = since ? Math.floor((Date.parse(today) - Date.parse(since)) / 86_400_000) : 0;
-    return days >= UNUSED_DAYS ? `not used in ${days} days` : null;
+    const days = since ? worked.filter((d) => d > since && d <= today).length : 0;
+    return days >= UNUSED_DAYS ? `not used in ${days} days of use` : null;
   };
   for (const f of readFacts(dir).sort(byWorth)) {
     const key = norm(f.text);
@@ -505,11 +513,59 @@ function tidyNow(dir, { today = day(), root = null, you = false } = {}) {
     }
     // Only a fact that stays is one to merge into: one retired here is never written back by a repeat of it after.
     const why = goes(f);
-    if (why) { retireFact(dir, f, why, batch); out.retired.push({ fact: f, why }); continue; }
+    if (why) { plan.push({ fact: f, why }); continue; }
     seen.set(key, f);
+  }
+  const left = readFacts(dir).length;
+  if (hold && plan.length > BIG_TIDY && plan.length * 4 > left) {
+    out.held = plan;
+    writeStateNow(dir, { held: { day: today, facts: plan.map((p) => ({ id: p.fact.id, why: p.why })) } });
+  } else {
+    for (const p of plan) { retireFact(dir, p.fact, p.why, batch); out.retired.push(p); }
+    if (hold && readState(dir).held) writeStateNow(dir, { held: null });
   }
   if (out.merged.length || out.retired.length) rebuildIndex(dir);
   return out;
+}
+
+// The days the memory was in use in a folder: noted at each request (noteDay, from recall), and read back from what
+// the folder already holds (the log's dates, the facts' last use), so a folder from before 19 Nov 2026 counts too.
+export function workedDays(dir) {
+  const set = new Set(readState(dir).days ?? []);
+  for (const l of readLog(dir)) if (l.at) set.add(String(l.at).slice(0, 10));
+  for (const f of readFacts(dir)) if (f.last) set.add(f.last);
+  return [...set].sort();
+}
+function noteDayNow(dir, today = day()) {
+  if (!dir || !existsSync(dir)) return;
+  const days = readState(dir).days ?? [];
+  if (days.includes(today)) return;
+  writeStateNow(dir, { days: [...days, today].sort().slice(-DAYS_KEPT) });
+}
+
+// A clear-out the daily tidy held back (hold above): the facts it would take out, those still in use.
+export function heldTidy(dir) {
+  const h = dir ? readState(dir).held : null;
+  if (!h?.facts?.length) return [];
+  const live = new Map(readFacts(dir).map((f) => [f.id, f]));
+  return h.facts.filter((x) => live.has(x.id)).map((x) => ({ fact: live.get(x.id), why: x.why }));
+}
+// /memory tidy: the held clear-out done, as one batch (Taken out lists it; undoLast with its batch brings it back).
+function tidyHeldNow(dir) {
+  const batch = `tidy-${Date.now()}`;
+  const list = heldTidy(dir);
+  for (const p of list) retireFact(dir, p.fact, p.why, batch);
+  writeStateNow(dir, { held: null });
+  if (list.length) rebuildIndex(dir);
+  return { batch, retired: list };
+}
+// /memory keep: the held facts stay, and their clock starts again today.
+function keepHeldNow(dir, today = day()) {
+  const list = heldTidy(dir);
+  const batch = `keep-${Date.now()}`;
+  for (const p of list) { write(dir, { ...p.fact, last: today }); logLine(dir, { batch, what: 'keep', id: p.fact.id }); }
+  writeStateNow(dir, { held: null });
+  return { kept: list };
 }
 
 // What other code calls: the same changes, one at a time per folder (locked).
@@ -523,6 +579,9 @@ export function editFact(...a) { return locked(a[0], () => editFactNow(...a)); }
 export function pinFact(...a) { return locked(a[0], () => pinFactNow(...a)); }
 export function setAlways(...a) { return locked(a[0], () => setAlwaysNow(...a)); }
 export function tidy(...a) { return locked(a[0], () => tidyNow(...a)); }
+export function tidyHeld(...a) { return locked(a[0], () => tidyHeldNow(...a)); }
+export function keepHeld(...a) { return locked(a[0], () => keepHeldNow(...a)); }
+export function noteDay(...a) { try { return locked(a[0], () => noteDayNow(...a)); } catch { return undefined; /* a day not noted, never the work */ } }
 
 const readState = (dir) => { try { return JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')); } catch { return {}; } };
 const writeState = (dir, patch) => locked(dir, () => writeStateNow(dir, patch));

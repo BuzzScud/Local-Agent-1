@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { memoryDirs, dirFor, parseFact, formatFact, readFacts, applyChanges, undoLast, restoreFact, markUsed, changeTrust, pinFact, tidy, openMemory, memoryNotes, looksSecret, namesMissingFile, fileNames, countDay, health, healthLine, readLog, FIRST_FACTS, RETIRE_AT } from '../src/agent/facts.mjs';
+import { memoryDirs, dirFor, parseFact, formatFact, readFacts, applyChanges, undoLast, restoreFact, markUsed, changeTrust, pinFact, tidy, openMemory, memoryNotes, looksSecret, namesMissingFile, fileNames, countDay, health, healthLine, readLog, FIRST_FACTS, RETIRE_AT, noteDay, workedDays, heldTidy, tidyHeld, keepHeld, readState } from '../src/agent/facts.mjs';
 
 const place = () => {
   const home = mkdtempSync(join(tmpdir(), 'agentic-facts-'));
@@ -14,6 +14,8 @@ const place = () => {
   return { home, repo, ...memoryDirs(join(repo, 'src'), home) };
 };
 const names = (dir, sub) => (existsSync(join(dir, sub)) ? readdirSync(join(dir, sub)).sort() : []);
+// n days the memory was in use in a folder, one after another from the day given.
+const workDays = (dir, from, n) => { for (let i = 0; i < n; i++) noteDay(dir, new Date(Date.parse(from) + i * 86_400_000).toISOString().slice(0, 10)); };
 
 test('where the memory lives: the project\'s at the repo\'s top, yours in the home folder; the home folder has no project', () => {
   const { home, repo, you, project } = place();
@@ -115,12 +117,13 @@ test('keeping clean: repeats merge, a fact about a file that is gone and one unu
     { text: 'Old and never used: the build takes two minutes.' },
     { text: 'Fresh: the build takes ten seconds.' },
   ] }, { today: '2026-08-01' });
+  workDays(project, '2026-08-02', 56); // worked here every day since
   markUsed(project, ['fresh-the-build-takes-ten-seconds', 'the-flags-are-read-in-export'], '2026-09-25');
   // the same fact written twice by hand
   writeFileSync(join(project, 'facts', 'again.md'), 'kind: project\nused: 2 times, last 2026-09-24\n\nFresh: the build takes ten seconds.\n');
   const t = tidy(project, { today: '2026-09-26', root: repo });
   expect(t.merged.map((m) => [m.kept.id, m.gone.id])).toEqual([['again', 'fresh-the-build-takes-ten-seconds']]); // the one used more stays
-  expect(t.retired.map((r) => r.why).sort()).toEqual(['not used in 56 days', 'the file it names is gone', 'the file it names is gone']);
+  expect(t.retired.map((r) => r.why).sort()).toEqual(['not used in 56 days of use', 'the file it names is gone', 'the file it names is gone']);
   expect(readFacts(project).map((f) => [f.id, f.used])).toEqual([['again', 3], ['the-flags-are-read-in-export', 1]]);
   expect(namesMissingFile({ kind: 'you', text: 'Likes pages as index.html' }, repo)).toBe(false); // about the user, not a file here
   expect(namesMissingFile({ kind: 'project', text: 'No file named here.' }, repo)).toBe(false);
@@ -235,6 +238,8 @@ test('facts about you stay however long unused; non-English facts are their own;
   mkdirSync(you, { recursive: true });
   applyChanges(you, { add: [{ kind: 'you', text: 'Explain things simply, in three to five plain steps.' }] }, { today: '2026-08-01' });
   applyChanges(project, { add: [{ kind: 'project', text: 'Old and never used: the build takes two minutes.' }] }, { today: '2026-08-01' });
+  workDays(you, '2026-08-02', 40);
+  workDays(project, '2026-08-02', 40);
   tidyDue({ you, project }, '2026-11-18');
   expect(readFacts(you).map((f) => f.text)).toEqual(['Explain things simply, in three to five plain steps.']);
   expect(readFacts(project)).toHaveLength(0);
@@ -248,6 +253,9 @@ test('facts about you stay however long unused; non-English facts are their own;
   expect(filesIn('The app runs on Node.js 22 and uses Chart.js for graphs; see src/app.js')).toEqual(['src/app.js']);
   // undo after a save that set off the tidy
   const cwd = join(repo, 'src');
+  // A save in the same millisecond as the one about you above has the same time in its log, and either could be "the
+  // last" (1 run in 5 failed on 19 Nov 2026): a save a moment later, as in use.
+  await Bun.sleep(5);
   const out = applySave({ cwd, home, adds: [{ kind: 'project', text: 'The shop keeps its prices in cents, never floats.' }] }, { today: '2026-11-19' });
   expect(out.added).toHaveLength(1);
   const u = undoSave(memoryDirs(cwd, home));
@@ -266,4 +274,65 @@ test('a request\'s facts follow Memory sent: none about you to a service that is
   const proj = await recall(join(repo, 'src'), ask, { home, mark: false, top: 5, sent: 'project' });
   expect(proj.facts.some((f) => f.dir === you)).toBe(false);
   expect((await recall(join(repo, 'src'), ask, { home, mark: false, sent: 'none' })).facts).toEqual([]);
+});
+
+// 19 Nov 2026, the owner: a month away from this project, and the first save back retired 18 of its 22 facts.
+test('unused counts the days the memory was in use, not the calendar: a month away retires nothing; a request notes its day', async () => {
+  const { recall } = await import('../src/agent/recall.mjs');
+  const { home, repo, project } = place();
+  applyChanges(project, { add: [{ text: 'For commit and push here, commit only own files by path.' }, { text: 'The shop tests run with npm test from the top folder.' }] }, { today: '2025-01-01' });
+  workDays(project, '2025-01-02', 5); // five days of work, then two months away
+  expect(tidy(project, { today: '2025-03-10', root: repo }).retired).toEqual([]);
+  // A request is a day of use (recall notes it, once a day).
+  const r = await recall(join(repo, 'src'), 'how do the shop tests run', { home, today: '2025-03-11' });
+  expect(r.facts.map((f) => f.text)).toEqual(['The shop tests run with npm test from the top folder.']);
+  await recall(join(repo, 'src'), 'how do the shop tests run', { home, today: '2025-03-11' });
+  expect(readState(project).days.filter((d) => d === '2025-03-11')).toHaveLength(1);
+  expect(workedDays(project)).toContain('2025-03-11');
+  // Thirty days of use without the fact: it goes, with the days of use as its reason; the one used on the 11th stays.
+  workDays(project, '2025-03-12', 29);
+  const t = tidy(project, { today: '2025-04-20', root: repo });
+  expect(t.retired.map((x) => [x.fact.text, x.why])).toEqual([['For commit and push here, commit only own files by path.', 'not used in 35 days of use']]);
+});
+
+test('a big clear-out asks first: held, said after a save, at the start and in /memory; /memory keep keeps, /memory tidy takes out', async () => {
+  const { tidyDue, saveLine, heldWords } = await import('../src/agent/lessons.mjs');
+  const { memoryStatus, statusWords } = await import('../src/agent/memory-home.mjs');
+  const six = Array.from({ length: 6 }, (_, i) => ({ text: `Standing rule number ${['one', 'two', 'three', 'four', 'five', 'six'][i]} for the shop.` }));
+  // Six of six would go: held, nothing retired.
+  const a = place();
+  applyChanges(a.project, { add: six }, { today: '2025-01-01' });
+  workDays(a.project, '2025-01-02', 40);
+  const did = tidyDue({ you: a.you, project: a.project }, '2025-03-01');
+  expect(did.map((d) => [d.retired.length, d.held.length])).toEqual([[0, 6]]);
+  expect(readFacts(a.project)).toHaveLength(6);
+  expect(heldTidy(a.project).map((p) => p.why)).toEqual(Array(6).fill('not used in 40 days of use'));
+  expect(saveLine({ added: [], replaced: [], retired: [], tidied: did })).toBe(`Memory: ${heldWords(6)}`);
+  expect(heldWords(6)).toBe('6 facts not used in a while: /memory tidy takes them out, /memory keep keeps them');
+  const st = memoryStatus(join(a.repo, 'src'), a.home);
+  expect(st.held).toBe(6);
+  expect(statusWords(st)).toContain('· 6 to tidy or keep (/memory) ·');
+  // /memory keep: all stay, their clock starts again, and the next day's tidy asks nothing.
+  expect(keepHeld(a.project, '2025-03-01').kept).toHaveLength(6);
+  expect(heldTidy(a.project)).toEqual([]);
+  expect(readFacts(a.project).every((f) => f.last === '2025-03-01')).toBe(true);
+  expect(tidyDue({ you: a.you, project: a.project }, '2025-03-02')).toEqual([]);
+  // /memory tidy: the held six go in one batch, and can be brought back.
+  const b = place();
+  applyChanges(b.project, { add: six }, { today: '2025-01-01' });
+  workDays(b.project, '2025-01-02', 40);
+  tidyDue({ you: b.you, project: b.project }, '2025-03-01');
+  expect(tidyHeld(b.project).retired).toHaveLength(6);
+  expect(readFacts(b.project)).toEqual([]);
+  expect(readFacts(b.project, { retired: true }).every((f) => f.retired.includes('not used in 40 days of use'))).toBe(true);
+  expect(heldTidy(b.project)).toEqual([]);
+  expect(undoLast(b.project).did.filter((d) => d.what === 'brought back')).toHaveLength(6);
+  // A small tidy (3 at most) is done as before, and clears what was held.
+  const c = place();
+  applyChanges(c.project, { add: six }, { today: '2025-01-01' });
+  workDays(c.project, '2025-01-02', 40);
+  markUsed(c.project, readFacts(c.project).slice(0, 3).map((f) => f.id), '2025-02-28');
+  const small = tidyDue({ you: c.you, project: c.project }, '2025-03-01');
+  expect(small.map((d) => [d.retired.length, d.held.length])).toEqual([[3, 0]]);
+  expect(readFacts(c.project)).toHaveLength(3);
 });

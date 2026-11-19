@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { memoryDirs, readFacts, markUsed, namesMissingFile, fileNames, filesIn, looksLikeEvent, countDay } from './facts.mjs';
+import { memoryDirs, readFacts, markUsed, namesMissingFile, fileNames, filesIn, looksLikeEvent, countDay, noteDay } from './facts.mjs';
 import { choose } from './search.mjs';
 
 // At most this many facts travel with a request (3 until 1 Oct 2026, the user's pick "keep more notes"). How
@@ -140,6 +140,8 @@ export async function recall(cwd, text, { embedder = null, home = homedir(), top
   const skipped = scored.filter((s) => event(s) && s.score >= cut).slice(0, top);
   if (mark && picked.length) for (const dir of new Set(picked.map((s) => s.fact.dir))) markUsed(dir, picked.filter((s) => s.fact.dir === dir).map((s) => s.fact.id), today);
   if (mark) countDay(dirs, { requests: 1, found: picked.length ? 1 : 0 }, today);
+  // A day the memory was in use here: "not used in 30 days" counts these, not the calendar (facts.mjs workedDays).
+  if (mark) for (const dir of [dirs.you, dirs.project]) if (dir) noteDay(dir, today);
   const plain = (s) => ({ ...s.fact, close: Math.round(s.close * 1000) / 1000 });
   return { facts: picked.map(plain), skipped: skipped.map(plain), how, ms: Date.now() - t0, chosen, ...(note || chosen.note ? { note: note ?? chosen.note } : {}), ...(near ? { near: real.filter((s) => !picked.includes(s)).slice(0, near).map(plain) } : {}) };
 }

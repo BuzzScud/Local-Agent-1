@@ -7,7 +7,11 @@ import { changeHooks, leanEnv } from '../agent/way.mjs';
 import { modeOf } from '../agent/permissions.mjs';
 import { thinkingLevel, embedderReady, Embedder } from '../../../models/index.mjs';
 import { MODE_OPTIONS } from './help.mjs';
-import { memoryDirs, healthLine, health, undoSave, readFacts, readLog } from '../agent/facts.mjs';
+import { memoryDirs, healthLine, health, undoSave, readFacts, readLog, heldTidy, tidyHeld, keepHeld } from '../agent/facts.mjs';
+import { heldWords } from '../agent/lessons.mjs';
+
+// Why the daily tidy would take a fact out, in a /memory panel's column: "unused 40 days" (days of use), "old news".
+const whyShort = (why) => { const n = /^not used in (\d+)/.exec(why)?.[1]; return n ? `unused ${n} days` : /^dated news/.test(why) ? 'old news' : /file it names is gone/.test(why) ? 'its file is gone' : why.slice(0, 16); };
 import { repairYou, repairWords, memoryStatus, statusWords } from '../agent/memory-home.mjs';
 import { memoryPlaces } from './memory-start.mjs';
 import { rulesList, ALWAYS_MAX, changeRules, looksLikeEvent } from './rules.mjs';
@@ -69,6 +73,17 @@ export function slashSetup(self) {
           self.push({ type: 'panel', title: 'Memory · the last save taken back', pad: 14, rows: [...u.did.map((d) => [d.what, d.fact.text.replace(/\s+/g, ' ').slice(0, 110)]), ['/memory undo again takes back the save before it']] });
           break;
         }
+        // A big clear-out the daily tidy held back to ask you first (facts.mjs BIG_TIDY, 19 Nov 2026): done or kept.
+        if (/^(tidy|keep)\b/i.test(arg.trim())) {
+          const places = [dirs.you, dirs.project].filter(Boolean);
+          const list = places.flatMap((d) => heldTidy(d));
+          if (!list.length) { self.push({ type: 'note', text: 'Nothing waits to be tidied: the daily tidy asks here when it would take out more than a few facts at once.', tone: 'dim' }); break; }
+          const doIt = /^tidy/i.test(arg.trim());
+          for (const d of places) (doIt ? tidyHeld : keepHeld)(d);
+          const rows = list.map((p) => [doIt ? whyShort(p.why) : 'kept', p.fact.text.replace(/\s+/g, ' ').slice(0, 110)]);
+          self.push({ type: 'panel', title: `Memory · ${list.length} fact${list.length === 1 ? '' : 's'} ${doIt ? 'taken out' : 'kept'}`, pad: doIt ? 18 : 8, rows: [...rows, [doIt ? 'Nothing is deleted: /memory open, Taken out, brings one back' : 'Their clock starts again today']] });
+          break;
+        }
         // Folders said short: under the project as ./…, under home as ~/…
         const short = (p) => {
           const s = p?.startsWith(self.cwd) ? `.${p.slice(self.cwd.length)}` : tilde(p);
@@ -96,6 +111,9 @@ export function slashSetup(self) {
         const when = at ? `${at.getDate()} ${at.toLocaleString('en-US', { month: 'short' })}, ${at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : null;
         // How it is doing: is it learning, and do the facts come with requests?
         self.push({ type: 'memory', how: self.agent.memory.embedder ? 'meaning' : 'words', status: statusWords(status), warn: status.state === 'broken', sections, claude, health: healthLine(health(dirs)), last: when });
+        // What the daily tidy would take out, held back to ask first.
+        const held = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => heldTidy(d));
+        if (held.length) self.push({ type: 'panel', title: `Memory · ${heldWords(held.length)}`, pad: 18, rows: [...held.map((p) => [whyShort(p.why), p.fact.text.replace(/\s+/g, ' ').slice(0, 110)]), ['Nothing is deleted either way: what goes stays under Taken out in /memory open']] });
         break;
       }
       case 'rules': {

@@ -187,3 +187,28 @@ test('"remember that …" saves at once into the new memory, and "memory": false
   expect(last.messages.find((x) => x.role === 'user').content).toBe('what is a self-contained HTML file?');
   expect(off.text).not.toContain('Context ·');
 }, T * 2);
+
+// 19 Nov 2026: a big clear-out the daily tidy held back is listed by /memory, and /memory keep or /memory tidy answers it.
+test('a held clear-out: /memory lists what would go, /memory keep keeps it all, /memory tidy then finds nothing waiting', async () => {
+  const { tidy, noteDay, heldTidy } = await import('../src/agent/facts.mjs');
+  const { cwd, env } = setup();
+  const project = join(cwd, '.agentic', 'memory');
+  applyChanges(project, { add: ['one', 'two', 'three', 'four', 'five'].map((n) => ({ kind: 'project', text: `Shop rule ${n}: prices are kept in cents.` })) }, { today: '2025-01-01' });
+  for (let i = 0; i < 40; i++) noteDay(project, new Date(Date.parse('2025-01-02') + i * 86_400_000).toISOString().slice(0, 10));
+  expect(tidy(project, { today: '2025-03-01', hold: true }).held).toHaveLength(5);
+  const fake = await startFakeServer([{ text: 'Fine.' }]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' },
+    { type: '/memory' }, { key: 'enter' }, { wait: '/memory keep keeps them' }, { sleep: 200 }, { snapshot: 'held' },
+    { type: '/memory keep' }, { key: 'enter' }, { wait: '5 facts kept' }, { sleep: 200 }, { snapshot: 'kept' },
+    { type: '/memory tidy' }, { key: 'enter' }, { wait: 'Nothing waits to be tidied' }, { sleep: 200 },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.held).toMatch(/5 facts not used in a while/);
+  expect(r.snapshots.held).toContain('5 this project · 5 to tidy or keep (/memory)'); // the memory's one line says it too
+  expect(r.snapshots.held).toMatch(/\nunused 40 days {4}Shop rule five: prices are kept in cents\./);
+  expect(r.snapshots.kept).toMatch(/kept\s+Shop rule/);
+  expect(readFacts(project)).toHaveLength(5);
+  expect(heldTidy(project)).toEqual([]);
+}, T);

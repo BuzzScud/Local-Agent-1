@@ -323,12 +323,16 @@ export function tidyDue(dirs, today) {
   const did = [];
   for (const dir of [dirs.you, dirs.project].filter(Boolean)) {
     if (!existsSync(dir) || readState(dir).tidied === today) continue;
-    const t = tidy(dir, { today, root: dir === dirs.project ? dirname(dirname(dir)) : null, you: dir === dirs.you && dir !== dirs.project });
+    // hold: a big clear-out waits for the owner's /memory tidy or /memory keep (facts.mjs BIG_TIDY, 19 Nov 2026).
+    const t = tidy(dir, { today, root: dir === dirs.project ? dirname(dirname(dir)) : null, you: dir === dirs.you && dir !== dirs.project, hold: true });
     writeState(dir, { tidied: today });
-    if (t.merged.length || t.retired.length) did.push({ dir, ...t });
+    if (t.merged.length || t.retired.length || t.held.length) did.push({ dir, ...t });
   }
   return did;
 }
+
+// The question a held clear-out asks (saveLine, /memory, the start's memory line).
+export const heldWords = (n) => `${n} fact${n === 1 ? '' : 's'} not used in a while: /memory tidy takes ${n === 1 ? 'it' : 'them'} out, /memory keep keeps ${n === 1 ? 'it' : 'them'}`;
 
 // One line for the screen.
 // One line after a save (the owner's pick, 18 Oct 2026: "Saved 2 facts · 1 about you, 1 about this project"), and
@@ -341,6 +345,9 @@ export function saveLine(out) {
   const tidiedN = (out.tidied ?? []).reduce((n, t) => n + (t.retired?.length ?? 0) + (t.merged?.length ?? 0), 0);
   const tidied = tidiedN ? `tidied: ${tidiedN} out of use (/memory shows them under Taken out)` : '';
   if (tidied) failed.push(tidied);
+  // A big clear-out is asked, not done (19 Nov 2026).
+  const heldN = (out.tidied ?? []).reduce((n, t) => n + (t.held?.length ?? 0), 0);
+  if (heldN) failed.push(heldWords(heldN));
   if (!parts.length) return failed.length ? `Memory: ${failed.join(' · ')}` : '';
   const about = (f) => (f.dir && out.where?.you && f.dir === out.where.you ? 'you' : 'project');
   const facts = [...out.added, ...out.replaced.map((r) => ({ ...r.fact, dir: r.dir }))];

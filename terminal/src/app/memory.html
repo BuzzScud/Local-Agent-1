@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agentic Coder memory</title>
 <style>
-:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e;--warn:#8a5a00;--accent:#2a78d6;--tint:rgba(42,120,214,.08)}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c674;--accent:#5a9ceb;--tint:rgba(90,156,235,.12)}}
-:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c674;--accent:#5a9ceb;--tint:rgba(90,156,235,.12)}
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#726c60;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e;--warn:#8a5a00;--accent:#2772cd;--on-accent:#fff;--tint:rgba(42,120,214,.08)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#87847c;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c674;--accent:#5a9ceb;--on-accent:#0d1117;--tint:rgba(90,156,235,.12)}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#87847c;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c674;--accent:#5a9ceb;--on-accent:#0d1117;--tint:rgba(90,156,235,.12)}
 *{box-sizing:border-box}html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
 button,input,textarea{font:inherit;color:inherit}
@@ -24,7 +24,7 @@ h1{font-size:24px;line-height:1.15;letter-spacing:-.02em;margin:0 0 3px}
 .search input{width:300px;padding:8px 12px 8px 32px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
 .search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--faint);fill:none;stroke-width:2}
-.newmem{flex:none;border:0;background:var(--accent);color:#fff;border-radius:10px;padding:8px 16px;font-weight:600;cursor:pointer;white-space:nowrap}
+.newmem{flex:none;border:0;background:var(--accent);color:var(--on-accent);border-radius:10px;padding:8px 16px;font-weight:600;cursor:pointer;white-space:nowrap}
 .newmem:hover{filter:brightness(1.07)}
 .compose h2{font-size:19px;margin:0 0 4px}.compose p.k{margin:0 0 12px}
 .compose textarea{min-height:110px;margin:0 0 12px}
@@ -86,7 +86,7 @@ mark{background:color-mix(in srgb,var(--warn) 30%,transparent);color:inherit;bor
 .acts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
 .acts button{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:6px 14px;cursor:pointer}
 .acts button:hover{border-color:var(--faint)}
-.acts button.go{background:var(--accent);border-color:var(--accent);color:#fff}
+.acts button.go{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .acts button.bad{color:var(--down)}
 .reader h3{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin:0 0 6px;font-weight:600}
 .hist{list-style:none;margin:0;padding:0;font-size:13px}
@@ -185,7 +185,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   function rail() {
     let last = '';
     $('rail').innerHTML = VIEWS().map((v) => `${v.group !== last ? `<h4>${(last = v.group)}</h4>` : ''}<button type="button" data-v="${v.id}" aria-current="${v.id === view}">${v.dot ? `<span class="dot" style="background:${v.dot}"></span>` : ''}${v.name}${v.n != null ? `<span class="n">${v.n}</span>` : ''}</button>`).join('')
-      + `<div class="foot">Taken out at trust <b>${data.retireAt}</b>, or unused for <b>${data.unusedDays} days</b>. Pinned facts stay.</div>`;
+      + `<div class="foot">Taken out at trust <b>${data.retireAt}</b>, or unused on <b>${data.unusedDays} days of use</b>. Pinned facts stay.</div>`;
   }
   $('rail').onclick = (e) => { const b = e.target.closest('button[data-v]'); if (b) go(b.dataset.v); };
   function go(v) { view = v; editing = null; said = ''; if (composing && !composing.text.trim()) composing = null; try { history.replaceState(null, '', `#${v}`); } catch {} draw(); $('list').scrollTop = 0; }
@@ -240,6 +240,8 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     if ($('ckind')) $('ckind').onchange = (e) => { c.kind = e.target.value; };
   }
   function startNew() {
+    // Opened without Agentic Coder (no /memory.json), there is nowhere to save it: say so instead of failing.
+    if (!data) { $('lede').textContent = '+ New memory saves through Agentic Coder: open this page with /memory open in the app.'; return; }
     // Where it goes: the memory you are looking at, else about you; from Rules it starts as a rule.
     composing = { text: '', where: data.parts.some((p) => p.where === view) ? view : 'you', always: view === 'rules', kind: 'project' };
     said = ''; editing = null; draw();
@@ -263,7 +265,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     const r = $('reader');
     if (view === 'about') {
       r.className = 'box about';
-      r.innerHTML = `<h3>How the memory is kept</h3><ul><li>Trust goes up by 1 when a task passes its check after a fact was used, down by 1 when it fails or Agentic Coder got stuck, down by 2 when you correct or stop it. At ${data.retireAt} a fact is taken out of use, unless it is pinned.</li><li>A fact not used in ${data.unusedDays} days, or about a file that is gone, is taken out when the memory is tidied.</li><li>Every change here goes through the same store as Agentic Coder's own saves: it shows under Changes, and "Take back the last save" undoes it.</li><li>+ New memory writes one yourself: a rule (read in full at every start) or a fact (brought back when a request fits). Make it a rule / Not a rule moves one between the two.</li><li>The facts are plain files in ${data.parts.map((p) => `<code>${esc(p.dir || '')}</code>`).join(' and ')}.</li></ul>`;
+      r.innerHTML = `<h3>How the memory is kept</h3><ul><li>Trust goes up by 1 when a task passes its check after a fact was used, down by 1 when it fails or Agentic Coder got stuck, down by 2 when you correct or stop it. At ${data.retireAt} a fact is taken out of use, unless it is pinned.</li><li>A fact about this project not used on ${data.unusedDays} of the days you worked here, or about a file that is gone, is taken out when the memory is tidied. When a tidy would take out more than a few at once, it asks first: /memory tidy or /memory keep.</li><li>Every change here goes through the same store as Agentic Coder's own saves: it shows under Changes, and "Take back the last save" undoes it.</li><li>+ New memory writes one yourself: a rule (read in full at every start) or a fact (brought back when a request fits). Make it a rule / Not a rule moves one between the two.</li><li>The facts are plain files in ${data.parts.map((p) => `<code>${esc(p.dir || '')}</code>`).join(' and ')}.</li></ul>`;
       return;
     }
     r.className = 'box reader';
