@@ -3,9 +3,9 @@
 // the installer asks for) and kept in ~/.agentic-coder/tools under the source's
 // hash, so a changed source is built again. No package, nothing downloaded.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { HOME } from '../../../models/index.mjs';
 
@@ -42,12 +42,37 @@ export function mediaTool() {
     const file = join(tmpdir(), `agentic-media-${process.pid}.swift`);
     writeFileSync(file, src);
     const tmp = `${bin}.${process.pid}`;
-    const r = spawnSync('/usr/bin/swiftc', ['-O', file, '-o', tmp], { encoding: 'utf8', timeout: 240_000 });
+    const swiftc = (more = []) => spawnSync('/usr/bin/swiftc', ['-O', file, '-o', tmp, ...more], { encoding: 'utf8', timeout: 240_000 });
+    let r = swiftc();
+    const hide = staleModuleMap(r.stderr);
+    if (r.status !== 0 && hide) {
+      const overlay = hideFile(hide);
+      try { r = swiftc(['-vfsoverlay', overlay, '-Xcc', '-ivfsoverlay', '-Xcc', overlay]); } finally { rmSync(dirname(overlay), { force: true, recursive: true }); }
+    }
     rmSync(file, { force: true });
     if (r.status !== 0) { rmSync(tmp, { force: true }); throw new Error(`the picture and PDF helper did not build (it needs Apple's command line tools: xcode-select --install). ${String(r.stderr || r.error?.message || '').trim().split('\n')[0]}`); }
     renameSync(tmp, bin);
   }
   return (built = bin);
+}
+
+// Apple's command line tools updated over an old copy can keep a stale usr/include/swift/module.modulemap beside the
+// new bridging.modulemap: both say "module SwiftBridging", and every Swift build fails with "redefinition of module
+// 'SwiftBridging'" (19 Nov 2026, this Mac: no picture could be pasted or dropped, the helper never built). Moving
+// the old file needs sudo; instead the build is run again with it hidden (a file overlay maps it to an empty one).
+// Answers the stale file's path, or null for any other failure.
+export function staleModuleMap(stderr) {
+  const m = /(\/\S+\/usr\/include\/swift\/module\.modulemap):\d+:\d+: error: redefinition of module 'SwiftBridging'/.exec(String(stderr ?? ''));
+  return m && existsSync(join(dirname(m[1]), 'bridging.modulemap')) ? m[1] : null;
+}
+// A file overlay for the Swift compiler and its clang in which `path` is empty; answers the overlay's path.
+function hideFile(path) {
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-media-overlay-'));
+  const empty = join(dir, 'empty.modulemap');
+  writeFileSync(empty, '');
+  const overlay = join(dir, 'overlay.yaml');
+  writeFileSync(overlay, JSON.stringify({ version: 0, 'case-sensitive': 'false', roots: [{ name: dirname(path), type: 'directory', contents: [{ name: basename(path), type: 'file', 'external-contents': empty }] }] }));
+  return overlay;
 }
 
 function run(args, { timeout = 60_000 } = {}) {

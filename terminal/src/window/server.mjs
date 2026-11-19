@@ -6,7 +6,7 @@
 // way. Closing the window ends the app as closing its terminal did (it saves first); the app ending closes it.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, rmSync, chmodSync, openSync, closeSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
 import UI_PAGE from './ui.html' with { type: 'text' };
@@ -23,6 +23,8 @@ import { rigPixels, trimmed } from '../ui/bot-rig.mjs';
 import { HOME } from '../../../models/index.mjs';
 
 const APP_NAME = 'Agentic Coder Window.app';
+// What /pic answers a picture as (media.mjs isImage's kinds the window's browser draws).
+const PIC_TYPE = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.heic': 'image/heic', '.heif': 'image/heif', '.tif': 'image/tiff', '.tiff': 'image/tiff', '.bmp': 'image/bmp' };
 // The window's program: AGENTIC_WINDOW_APP, else the one `bun run window` installs, else a build of it here.
 export function windowApp(env = process.env) {
   const tries = [env.AGENTIC_WINDOW_APP, join(HOME, 'app', APP_NAME, 'Contents', 'MacOS', 'agentic-coder-window'), join(HOME, 'build', 'window-target', 'release', 'agentic-coder-window')];
@@ -162,6 +164,14 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
       if (u.pathname === '/ws') return srv.upgrade(req, { data: { screen: false } }) ? undefined : new Response('Not here.', { status: 400 });
       if (u.pathname === '/') return new Response(UI, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (u.pathname === '/sessions') { let list = []; try { list = listSessions(folder).slice(0, 200); } catch {} return Response.json(list); }
+      if (u.pathname === '/pic') {
+        // A picture in the prompt's tray or in a message you sent (bridge.mjs trayOf, view.mjs picsOf): only a file the
+        // app named there, never any other path.
+        const f = u.searchParams.get('f') ?? '';
+        const named = (st.last?.tray ?? []).some((x) => x.file === f) || Object.values(st.items).some((v) => v?.pics?.some((p) => p.file === f));
+        if (!named || !existsSync(f)) return new Response('Not here.', { status: 404 });
+        return new Response(Bun.file(f), { headers: { 'content-type': PIC_TYPE[extname(f).toLowerCase()] ?? 'application/octet-stream', 'cache-control': 'private, max-age=3600' } });
+      }
       if (u.pathname === '/reveal') { execFile('open', [folder]); return Response.json({ ok: true }); }
       if (u.pathname === '/other-folder') {
         // A folder picked in the Mac's own dialog, then a window of its own on it.

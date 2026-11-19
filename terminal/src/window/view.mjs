@@ -22,6 +22,9 @@ const one = (s) => String(s ?? '').replace(/\*\*|`/g, '').replace(/\s+/g, ' ').t
 const tilde = (s) => String(s ?? '').split(HOME).join('~');
 const short = (s, n = 160) => { const t = tilde(one(s)); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const base = (p) => String(p ?? '').split('/').pop();
+// The pictures among attachments (a sent message's cards, the prompt's tray: attach.mjs trayItems) as the window
+// shows them: { n, file, name }. A card saved before 19 Nov 2026 has no file: it stays words only.
+export const picsOf = (list) => (list ?? []).filter((c) => c?.kind === 'image' && typeof c.file === 'string' && c.file).map((c) => ({ n: c.n ?? null, file: c.file, name: base(c.name ?? c.file) }));
 const flat = (list) => list.flatMap((x) => (x.type === 'looks' ? x.list : [x])).filter((x) => x.type !== 'machine');
 
 // One step in a few words: what it was, on what, how it went.
@@ -118,7 +121,8 @@ export function partsOf(rows, ctx = { plan: null, raws: new Map() }) {
 // ctx (the bridge's, one a redraw): the plan carried across the reply's parts, and every step met.
 export function viewItem(it, ctx) {
   switch (it.type) {
-    case 'user': return it.rail ? null : { t: 'user', key: it.key, text: tilde(it.text), cards: (it.cards ?? []).map((c) => tilde(c.text)) };
+    // pics: the pictures sent with it, shown as pictures (server.mjs serves each at /pic, picsOf).
+    case 'user': return it.rail ? null : { t: 'user', key: it.key, text: tilde(it.text), cards: (it.cards ?? []).map((c) => tilde(c.text)), pics: picsOf(it.cards) };
     case 'text': return { t: 'text', key: it.key, text: tilde(it.text) };
     case 'taskrun': {
       const all = groupFacts(it.run.rows.flatMap((r) => r.list));

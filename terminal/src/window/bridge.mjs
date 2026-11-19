@@ -16,6 +16,31 @@ import { AgentsView } from '../app/agents-view.jsx';
 import { LoopsView } from '../app/loops-view.jsx';
 import { knownOf } from '../app/start.jsx';
 import { viewItem, heldView, ansiRows, stepView } from './view.mjs';
+import { askState } from '../app/app-ask.mjs';
+import { shortName, sizeLine } from '../app/attach.mjs';
+
+// The question box as it stands (app-ask.mjs): every tab, the row you are on, the ticks, what you typed and the answers
+// so far (19 Nov 2026, the owner: "i also cant select the answer correctly"). Before, the window drew the request's
+// top-level choices with row 0 lit: several questions showed one "Type something…" row, and a click counted its
+// arrows from row 0 instead of from the row the box was on.
+export function askBoxOf(box) {
+  return {
+    at: box.at,
+    tabs: box.tabs.map((t) => ({
+      header: t.header, question: String(t.q?.question ?? ''), several: Boolean(t.q?.several), ticks: Boolean(t.ticks),
+      options: t.options.map((o) => ({ label: String(o.label ?? ''), about: String(o.about ?? ''), type: o.choice === 'type', recommended: Boolean(o.recommended) })),
+      selected: t.selected, ticked: [...t.ticked], typed: t.typed?.value ?? '', answer: t.answer,
+    })),
+  };
+}
+
+// The attachments in the prompt box (App.jsx app.tray, attach.mjs trayItems) as the window shows them over the box: a
+// card each with its chip, name and size, and a picture's file, shown as itself (server.mjs /pic) (19 Nov 2026, the
+// owner: "when i attach a screenshot or image, it shows in the agentic coder"). Before, the window showed "[Image #1]"
+// in the box and nothing else.
+export function trayOf(tray) {
+  return (tray ?? []).map((it) => ({ n: it.n, token: it.token, kind: it.kind, name: shortName(it.name), size: sizeLine(it), file: it.kind === 'image' ? it.file : null }));
+}
 
 const SEND_MS = 33; // at most 30 states a second; a burst of redraws is sent as the last of them
 
@@ -126,6 +151,7 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
       options: (app.perm.options ?? []).map((o) => o?.label ?? String(o)), selected: app.perm.selected ?? 0, ask: Boolean(app.perm.ask),
       // What an Ask asks ("Work in …?", the model's own question): before, the window showed its choices under "Ask" alone.
       question: app.perm.req?.name === 'Ask' ? String(app.perm.req?.args?.question ?? '') || null : null,
+      box: app.perm.req?.name === 'Ask' ? askBoxOf(app.perm.ask ?? askState(app.perm.req)) : null,
     } : null;
     // A panel in the prompt box's place: the app's own drawing of it (the window draws a permission question itself).
     const panel = panelOpen(app) ? { kind: app.picker?.kind ?? (app.perm ? 'perm' : app.btw ? 'btw' : 'picker'), rows: ansiRows(renderToString(React.createElement(PanelArea, { app }), { columns: width })) } : null;
@@ -161,7 +187,7 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
         // for the timeline's line under way (7 · Smooth): the thought's tokens (its pieces, or its length where it came in a
         // few, as the saved thought counts them) and start, the answer's start, what the app does between replies
         thinkTokens: live.thinking ? Math.max(live.thinking.tokens ?? 0, Math.ceil(String(live.thinking.text ?? '').length / 3.6)) : null, thinkStart: live.thinking?.startedAt ?? null, textStart: live.text ? live.textAt ?? null : null, task: live.task ? String(live.task).slice(0, 200) : null },
-      input: { value: app.input?.value ?? '', cursor: app.input?.cursor ?? 0 }, placeholder: app.placeholder ?? '', inputMode: app.inputMode ?? 'prompt', argHint: app.argHint ?? null,
+      input: { value: app.input?.value ?? '', cursor: app.input?.cursor ?? 0 }, tray: trayOf(app.tray), placeholder: app.placeholder ?? '', inputMode: app.inputMode ?? 'prompt', argHint: app.argHint ?? null,
       menu: app.menu ? { kind: app.menu.kind, index: app.menu.index ?? 0, items: (app.menu.items ?? []).slice(0, 60).map((x) => ({ label: x.label, desc: x.desc ?? '' })) } : null,
       perm, panel, full,
       mode: app.mode, modelName: app.modelName, modelOff: Boolean(app.modelOff), starting: Boolean(app.starting), cwd: app.cwd, cwdShort: app.cwdShort,
@@ -207,6 +233,7 @@ export function usageOf(u) {
   return {
     text: textOf(usageChip(u)), tone, capped: Boolean(u.capped), modelName: u.modelName ?? null,
     left: u.left, cap: u.cap, spent: u.spent, own: Boolean(u.ownLimit), tier: u.tier ?? null, tierCap: u.tierCap ?? null,
+    balance: u.balance ? { usd: u.balance.usd, at: u.balance.at, since: u.balance.since, days: u.balance.days, stale: u.balance.stale } : null,
     month: u.monthName, resetsOn: u.resetsOn, today: u.today?.usd ?? 0, window: u.window ?? 0, last14: u.last14 ?? [],
     perDay: u.pace?.perDay ?? 0, runsOut: u.pace?.runsOut ?? null, beforeReset: Boolean(u.pace?.beforeReset),
     source: { kind: u.source?.kind ?? 'meter', usd: u.source?.usd ?? null, at: u.source?.at ?? null, since: u.source?.since ?? 0, days: u.source?.days ?? null, stale: Boolean(u.source?.stale) },

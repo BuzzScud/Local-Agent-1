@@ -21,7 +21,7 @@ import { complete } from '../flows/llm.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { helpersOn } from './helpers.mjs';
 import { useOf } from './helper-models.mjs';
-import { CHECK_INS, FULL, HELPER_STEPS, MAX_STEPS, OWN_HELPER_CTX, RESULT_MAX, TRIM_AT, aboutTheCode, asksForWork, budgetFromEnv, helperPrompt, helperToolFilter, newConversation, smallHelperPrompt, tokensOf } from './agent-said.mjs';
+import { CHECK_INS, FULL, HELPER_STEPS, LIMIT_REPORT, MAX_STEPS, OWN_HELPER_CTX, RESULT_MAX, TRIM_AT, aboutTheCode, asksForWork, budgetFromEnv, helperPrompt, helperToolFilter, newConversation, smallHelperPrompt, tokensOf } from './agent-said.mjs';
 import { checkReport, proofBlock, recheckNote } from './helper-proof.mjs';
 export { MAX_CALLS, MCP_BACKS, THINK_BUDGET_SECS, STEP_DOWN_CAP, RESULT_MAX, filesNamed, isLooping, AUTO, asksTheUser, announcesNextStep, claimsAlreadyThere, asksForWork, aboutTheCode, fullPathsIn, filesInAnswer, CHECK_IT, looksGood, wantsCheck, missingParts, claimsAllGood, claimsFound, severalAsks, wantsDesktop, claimsDone, keyLines, namesAFix, KEEP_FROM, keptPart, keptWriteNote, CALL_MARK, beforeCall, leakedThinking, leakedCall, toolCallInText, bareCallInText, safeArgs, READ_TIP, CHECK_INS, helperPrompt, helperToolFilter, requestReminder, planReminder } from './agent-said.mjs';
 import { McpPart } from './agent-mcp.mjs';
@@ -652,6 +652,15 @@ export class Agent extends EventEmitter {
     say('');
     let reason;
     try { reason = await helper.send(args.prompt, { signal }); } catch (e) { reason = 'error'; report ||= `It stopped: ${e.message}`; }
+    // Stopped at its step limit with nothing written (18 Nov 2026: five audit helpers in a row came back "(it ended
+    // without a report)", 30 steps of findings each lost): asked once for its report from what it has found, as Claude
+    // Code's sub-agents always end with one. A few steps only; it stays marked as stopped at the limit.
+    if (reason === 'limit' && !report.trim() && !signal?.aborted) {
+      steps.push('⏺ step limit reached: asked for its report');
+      say('writing its report');
+      helper.maxSteps = 2;
+      try { await helper.send(LIMIT_REPORT, { signal }); } catch { /* the body says it ended without one */ }
+    }
     // A report from a helper on a model of its own that only read: the lines it cites, read from the files, go under
     // it, so the conversation need not read them again; what the files do not have sends it back once to look again.
     let checked = null;

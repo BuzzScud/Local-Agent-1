@@ -127,7 +127,8 @@ export function runPart(self) {
     // Your message keeps one line of what went with it (rail.jsx): each chip as its card says it,
     // a chip that could not be read with why; and the @files as before.
     const notRead = new Map(expanded.attached.filter((a) => a.chip && /^not /.test(a.label ?? '')).map((a) => [a.chip, a.label]));
-    const cards = trayItems(value, self.pastedRef.current).map((it) => ({ n: it.n, text: notRead.has(it.n) ? `▣ ${it.token} ${shortName(it.name, 22)} · ${notRead.get(it.n)}` : compactText(it) }));
+    // file and kind: the window shows a sent picture as a picture (window/view.mjs).
+    const cards = trayItems(value, self.pastedRef.current).map((it) => ({ n: it.n, text: notRead.has(it.n) ? `▣ ${it.token} ${shortName(it.name, 22)} · ${notRead.get(it.n)}` : compactText(it), file: it.file, kind: it.kind }));
     const attached = expanded.attached.filter((a) => !a.chip);
     for (const p of mcpRead ?? []) {
       if (p.error) { attached.push({ path: p.token, label: `not read: ${p.error}` }); continue; }

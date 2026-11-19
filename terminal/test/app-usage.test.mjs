@@ -1,7 +1,8 @@
 // /usage and "$ left" in the footer in the real window (8 Oct 2026; "3 · One row", 9 Oct 2026), on a stand-in
 // Claude API that sends the owner's real limits (fake-anthropic.mjs): what is left in the footer before and after
 // a reply, /usage in the / menu, its card with the prompt box's ends, r asking Anthropic once, esc closing it,
-// /usage limit 200 counting down from your own limit; and none of it on a model that is not the Claude API.
+// /usage limit 200 counting down from your own limit, /usage balance 201 counting down from your credit balance (18 Nov
+// 2026: the tier's $500 is not money left); and none of it on a model that is not the Claude API.
 import { test, expect } from 'bun:test';
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,7 +13,7 @@ import { startFakeServer } from './fake-server.mjs';
 const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: 'test-anthropic-key-0123456789', ANTHROPIC_API_KEY: '' };
 const lines = (text) => text.split('\n').map((l) => l.trimEnd());
 
-test('on the Claude API: what is left in the footer, /usage in the menu, its card, r asks once, esc closes it, your own limit', async () => {
+test('on the Claude API: the month in the footer, /usage in the menu, its card, r asks once, esc closes it, your own limit, your balance', async () => {
   const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
   const { cwd, env, base } = setup();
   const claude = await startFakeAnthropic([{ text: 'Hello from Claude.' }], { limits: { requests: [1000, 999], input: [2_000_000, 1_996_000], output: [400_000, 399_000] } });
@@ -26,12 +27,13 @@ test('on the Claude API: what is left in the footer, /usage in the menu, its car
   writeFileSync(join(base, 'home', 'spend', day, '1.json'), JSON.stringify({ usd: 9.85, service: 'api.anthropic.com', byService: { 'api.anthropic.com': 9.85 }, byKind: { claude: 9.85 } }));
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, TZ: 'UTC' }, args: ['--no-flows'], cols: 152, rows: 44, timeoutMs: 90_000, steps: [
     { wait: ON_REMOTE, ms: 25_000 }, { sleep: 600 }, { snapshot: 'start' },
-    { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.', ms: 20_000 }, { sleep: 800 }, { snapshot: 'after', has: [' left │'] },
+    { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.', ms: 20_000 }, { sleep: 800 }, { snapshot: 'after', has: [' this month │'] },
     { type: '/us' }, { sleep: 400 }, { snapshot: 'menu' },
     { key: 'enter' }, { wait: 'THIS MONTH' }, { sleep: 300 }, { snapshot: 'card' },
     { type: 'r' }, { wait: 'r refresh', ms: 10_000 }, { sleep: 600 }, { snapshot: 'asked' },
     { key: 'esc' }, { waitGone: 'THIS MONTH' }, { sleep: 300 }, { snapshot: 'closed' },
     { type: '/usage limit 200' }, { key: 'enter' }, { wait: 'your limit is $200.00' }, { sleep: 500 }, { snapshot: 'limit', has: ['left'] },
+    { type: '/usage balance 201' }, { key: 'enter' }, { wait: 'your balance is $201.00' }, { sleep: 500 }, { snapshot: 'balance', has: ['$201.00 left'] },
     ...quit,
   ] });
   await claude.close();
@@ -42,11 +44,12 @@ test('on the Claude API: what is left in the footer, /usage in the menu, its car
   const start = lines(r.snapshots.start);
   expect(start.at(-1)).toBe(`╰${'─'.repeat(150)}╯`);
   expect(start.at(-2)).toMatch(/● (Opus 5\.5|claude-opus-5-5) · \$9\.85 this month( · .+)? │$/);
-  // After it: the rule, then the footer: what is left of the tier's $500, in cents. The model goes by its name alone.
+  // After it: the rule, then the footer: the month so far, in cents; the Start tier's $500 is a ceiling, not money left.
+  // The model goes by its name alone.
   const after = lines(r.snapshots.after);
   const [rule, footer] = after.slice(-3, -1);
   expect(rule).toBe(`├${'╌'.repeat(150)}┤`);
-  expect(footer).toMatch(/^│ \? for shortcuts {2,}● (Opus 5\.5|claude-opus-5-5) · \$490\.1\d left │$/);
+  expect(footer).toMatch(/^│ \? for shortcuts {2,}● (Opus 5\.5|claude-opus-5-5) · \$9\.\d\d this month │$/);
   for (const l of [rule, footer, after.at(-1)]) expect(l.length).toBe(152);
   expect(after.at(-1)).toBe(`╰${'─'.repeat(150)}╯`);
   expect(r.snapshots.after).not.toContain('◆');
@@ -56,7 +59,8 @@ test('on the Claude API: what is left in the footer, /usage in the menu, its car
   const top = card.findIndex((l) => l.startsWith('╭─ ◆ Usage · Claude API · Opus 5.5'));
   expect(top).toBeGreaterThan(-1);
   expect(card[top]).toHaveLength(152);
-  expect(card[top].endsWith('r refresh · l limit · s spent · k admin key · esc ─╮')).toBe(true);
+  expect(card[top].endsWith('r refresh · b balance · l limit · s spent · k admin key · esc ─╮')).toBe(true);
+  expect(r.snapshots.card).toContain('b types your balance, l your limit');
   const bottom = card.findIndex((l, i) => i > top && l.startsWith('╰'));
   expect(card[bottom]).toBe(`╰${'─'.repeat(150)}╯`);
   expect(card.slice(top + 1, bottom).every((l) => l.length === 152 && l.startsWith('│ ') && l.endsWith(' │'))).toBe(true);
@@ -72,10 +76,12 @@ test('on the Claude API: what is left in the footer, /usage in the menu, its car
   expect(tiny[0].body.messages).toEqual([{ role: 'user', content: 'Reply with the single word: ok' }]);
   // esc: the card goes, the footer comes back
   expect(r.snapshots.closed).not.toContain('THIS MONTH');
-  expect(lines(r.snapshots.closed).at(-2)).toMatch(/ · \$490\.\d\d left │$/);
+  expect(lines(r.snapshots.closed).at(-2)).toMatch(/ · \$9\.\d\d this month │$/);
   // /usage limit 200: the footer counts down from your own limit, every window (the usage folder)
   expect(lines(r.snapshots.limit).at(-2)).toMatch(/ · \$190\.\d\d left │$/);
-  expect(JSON.parse(readFileSync(join(base, 'home', 'usage', 'claude-own.json'), 'utf8'))).toEqual({ limit: 200 });
+  // /usage balance 201: the credit balance wins over the limit, and counts down from the moment it was typed
+  expect(lines(r.snapshots.balance).at(-2)).toMatch(/ · \$201\.00 left │$/);
+  expect(JSON.parse(readFileSync(join(base, 'home', 'usage', 'claude-own.json'), 'utf8'))).toMatchObject({ limit: 200, balance: { usd: 201 } });
 }, T * 2);
 
 test('on a model that is not the Claude API: no bar, no /usage in the menu, and typed in full it says where it works', async () => {

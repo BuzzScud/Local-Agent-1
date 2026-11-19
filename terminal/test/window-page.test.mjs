@@ -8,7 +8,9 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runWindow } from '../src/window/server.mjs';
-import { meterOf, modelNowOf, effortWords } from '../src/window/bridge.mjs';
+import { meterOf, modelNowOf, effortWords, askBoxOf } from '../src/window/bridge.mjs';
+import { askState, askKey } from '../src/app/app-ask.mjs';
+import { askedQuestions } from '../src/agent/questions.mjs';
 import { viewItem, heldView, stepView } from '../src/window/view.mjs';
 import { printedOf } from '../src/app/screen.jsx';
 import { knownOf } from '../src/app/start.jsx';
@@ -311,6 +313,41 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a model still loadi
   } finally { await p.close(); }
 }, 60_000);
 
+// The model's questions in the window (19 Nov 2026, the owner: "i also cant select the answer correctly"): four questions
+// showed as one "Type something…" row, and a click counted its arrows from row 0, not from the row the box was on.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the model\'s questions show a tab each with their choices, and a click picks the choice clicked from the row the box is on', async () => {
+  const p = await openPage();
+  try {
+    const questions = askedQuestions({
+      question: 'What bothers you most?', options: [{ label: 'Hard to follow', about: 'Steps blur together' }, { label: 'Too cluttered' }, { label: 'Changes hard to read' }],
+      more: [{ header: 'Look', question: 'What feel?', options: ['Calm', 'Dense'] }, { header: 'Parts', question: 'Which parts?', options: ['Top bar', 'Prompt'], several: true }],
+    });
+    const req = { name: 'Ask', args: { questions } };
+    let box = askState(req);
+    for (let i = 0; i < 2; i++) box = askKey(req, box, '', { downArrow: true }).box; // the keyboard left it on row 2
+    const ask = (b) => ({ ...base, perm: { name: 'Ask', options: [], selected: 0, box: askBoxOf(b) } });
+    await p.say(ask(box));
+    const keysSent = () => p.got().filter((m) => m.from === 'keys').map((m) => m.data).join('');
+    expect(await p.js(`[...document.querySelectorAll('.atab')].map((e) => e.textContent)`)).toEqual(['Question 1', 'Look', 'Parts', 'Submit']);
+    expect(await p.js(`document.querySelector('.perm .q').textContent`)).toBe('What bothers you most?');
+    expect(await p.js(`[...document.querySelectorAll('.aopt .lb')].map((e) => e.textContent)`)).toEqual(['Hard to follow', 'Too cluttered', 'Changes hard to read']);
+    expect(await p.js(`document.querySelector('.aopt .ab').textContent`)).toBe('Steps blur together');
+    expect(await p.js(`document.querySelector('.aopt.on').dataset.aopt`)).toBe('2');
+    // A click on the first choice: up twice from row 2, then Enter
+    await p.click('[data-aopt="0"]');
+    expect(keysSent()).toBe('\x1b[A\x1b[A\r');
+    // The box on the third question (several may be ticked): a click ticks, a tab goes to its question
+    box = { ...box, at: 2 };
+    await p.say(ask(box));
+    expect(await p.js(`[...document.querySelectorAll('.aopt .mk')].map((e) => e.textContent)`)).toEqual(['☐', '☐', '✎']);
+    await p.click('[data-aopt="1"]');
+    expect(keysSent()).toBe('\x1b[A\x1b[A\r\x1b[B ');
+    await p.click('[data-atab="0"]');
+    expect(keysSent()).toBe('\x1b[A\x1b[A\r\x1b[B \x1b[Z\x1b[Z');
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
 // The reply as the bridge sends it (view.mjs viewItem, heldView, stepView over the app's own grouping): its items, the part
 // under way and every step. The turn: a line, a plan that moves from its first to-do to its second, a read, a thought, an
 // edit and a test run.
@@ -499,6 +536,56 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking, then 
     await p.click('[data-tail7]');
     expect(await box()).toMatchObject({ tag: 'Writing…', tail: null });
     expect(p.got()).toEqual([]);
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
+// A picture you attach shows in the window (19 Nov 2026, the owner: "when i attach a screenshot or image, it shows in
+// the agentic coder"): the prompt's tray draws each picture as itself over the box (the window server serves only the
+// files the app named), a click shows it full size and esc closes it, a sent message shows its pictures, and ⌘V of a
+// copied screenshot goes to the app as ctrl+v (its own key for the clipboard's picture) while text still pastes as text.
+test.skipIf(needs('chrome', findChrome))('in a real browser: an attached picture shows over the box and in the sent message, opens full size, and ⌘V of a picture goes as ctrl+v', async () => {
+  const p = await openPage();
+  try {
+    // a real PNG, 2×2 red, and one the app never named
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==', 'base64');
+    const shot = join(p.folder, 'Screenshot 2026-11-19 at 9.41.07 AM.png'), other = join(p.folder, 'secret.png');
+    writeFileSync(shot, png); writeFileSync(other, png);
+    const tray = [{ n: 1, token: '[Image #1]', kind: 'image', name: 'Screenshot 9.41 AM', size: '2×2 · 75 B', file: shot }, { n: 2, token: '[PDF #2]', kind: 'pdf', name: 'invoice.pdf', size: 'PDF · 1 page · 9 KB', file: null }];
+    await p.say({ ...base, input: { value: 'what is wrong here? [Image #1] [PDF #2] ', cursor: 40 }, tray });
+    for (let i = 0; i < 40 && !(await p.js(`document.querySelector('#tray .pic img')?.complete && document.querySelector('#tray .pic img').naturalWidth > 0`)); i++) await Bun.sleep(50);
+    expect(await p.js(`[...document.querySelectorAll('#tray .tcard')].map((c) => c.textContent)`)).toEqual(['[Image #1]Screenshot 9.41 AM2×2 · 75 B', 'PDF[PDF #2]invoice.pdfPDF · 1 page · 9 KB']);
+    expect(await p.js(`document.querySelector('#tray .pic img').naturalWidth`)).toBe(2);
+    // only what the app named is served
+    expect(await p.js(`fetch('/pic?t=' + T + '&f=' + encodeURIComponent(${JSON.stringify(other)})).then((r) => r.status)`)).toBe(404);
+    expect(await p.js(`fetch('/pic?f=' + encodeURIComponent(${JSON.stringify(shot)})).then((r) => r.status)`)).toBe(403);
+    // typing draws the box again, never the tray's pictures
+    await p.js(`window.__img = document.querySelector('#tray .pic img')`);
+    await p.say({ ...base, input: { value: 'what is wrong here? [Image #1] [PDF #2] x', cursor: 41 }, tray });
+    expect(await p.js(`document.querySelector('#tray .pic img') === window.__img`)).toBe(true);
+    // a click: full size; esc closes it and nothing goes to the app
+    const keysBefore = p.got().filter((m) => m.from === 'keys').length;
+    await p.click('#tray .pic');
+    expect(await p.js(`Boolean(document.querySelector('#picfull img'))`)).toBe(true);
+    await p.press('Escape', 27);
+    expect(await p.js(`Boolean(document.getElementById('picfull'))`)).toBe(false);
+    expect(p.got().filter((m) => m.from === 'keys').length).toBe(keysBefore);
+    // ⌘V of a copied screenshot: ctrl+v to the app; text: as text
+    await p.js(`(() => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'image.png', { type: 'image/png' })); dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })()`);
+    await p.js(`(() => { const dt = new DataTransfer(); dt.setData('text/plain', 'hello'); dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })()`);
+    await Bun.sleep(300);
+    const typed = p.got().filter((m) => m.from === 'keys').map((m) => m.data).join('');
+    expect(typed).toContain('\x16');
+    expect(typed).toContain('\x1b[200~hello\x1b[201~');
+    expect(typed).not.toContain('image.png');
+    // sent: the message shows its picture; the box's tray is gone
+    const u2 = { t: 'user', key: 'u2', text: 'what is wrong here? [Image #1]', cards: ['▣ [Image #1] Screenshot 9.41 AM · 2×2 · 75 B'], pics: [{ n: 1, file: shot, name: 'shot.png' }] };
+    await p.say({ ...base, order: [...base.order, 'u2'], items: { u2 }, input: { value: '', cursor: 0 }, tray: [] });
+    for (let i = 0; i < 40 && !(await p.js(`document.querySelector('.you .pics .pic img')?.naturalWidth > 0`)); i++) await Bun.sleep(50);
+    expect(await p.js(`document.querySelector('.you .pics .pic img').naturalWidth`)).toBe(2);
+    expect(await p.js(`document.querySelectorAll('#tray').length`)).toBe(0);
+    // nothing makes the window scroll sideways
+    expect(await p.js(`document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);

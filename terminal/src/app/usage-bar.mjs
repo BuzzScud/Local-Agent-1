@@ -92,10 +92,11 @@ const thinMeter = (w, frac) => fuelLine(w, frac, 0);
 // The footer's words on the Claude API (the owner's pick "3 · One row", 9 Oct 2026): "$61.68 left", amber when
 // the month runs out before the 1st at its pace, red under a tenth of the cap left, "paused" at the cap;
 // "$138.32 this month" with no cap known. The footer puts it after the model's name (screen.jsx).
-// A figure typed days ago adds "(3 d old)" in amber: /usage, then s, types it again.
+// A figure typed days ago adds "(3 d old)" in amber: /usage, then s (b for a balance), types it again.
 export function usageChip(u) {
   if (u.capped) return [S('paused', C.bad, null, true)];
-  const old = u.source?.stale ? [S(` (${u.source.days} d old)`, C.warn)] : [];
+  const typed = u.balance ?? u.source;
+  const old = typed?.stale ? [S(` (${typed.days} d old)`, C.warn)] : [];
   if (u.cap == null) return [S(money(u.spent), C.value, null, true), S(' this month', C.dim), ...old];
   const tone = u.low ? C.bad : u.pace.beforeReset ? C.warn : null;
   return [S(money(u.left), tone ?? C.value, null, true), S(' left', tone ?? C.dim), ...old];
@@ -132,8 +133,9 @@ export function cacheWords(cache, wide = true) {
 // Sections a blank row apart: THIS MONTH (the line), TODAY and 14 DAYS, THIS MINUTE (a meter a
 // limit), then where the numbers come from. Every row is exactly `width` cells.
 export const LABEL_W = 14;
-// edit: a value being typed ({ id: 'limit' | 'spent' | 'key', value, cursor }), shown as the card's last row.
+// edit: a value being typed ({ id: 'balance' | 'limit' | 'spent' | 'key', value, cursor }), shown as the card's last row.
 const USAGE_EDITS = {
+  balance: 'Your credit balance, as the Console’s Billing page shows it ($; 0 takes it out)',
   limit: 'Your limit, as set in the Console ($ a month; 0 takes it out)',
   spent: 'Spent this month, as the Console’s Cost page shows it ($)',
   key: 'Admin key (sk-ant-admin…, Console → Settings → Admin keys; empty takes it out)',
@@ -149,17 +151,21 @@ export function usagePanel(u, width, { now = Date.now(), live = false, asking = 
   // Left and right in one row: the right part ends at the card's inner edge.
   const lr = (a, b) => [...a, ...gap(inner - widthOf(a) - widthOf(b)), ...b];
   const title = [S('╭─ ', B), S('◆', C.diamond), S(' Usage', C.value, null, true), S(` · Claude API · ${u.modelName} `, C.dim)];
-  const keys = [S(asking ? ' asking Anthropic… ' : edit ? ' enter saves · esc back ' : wide ? ' r refresh · l limit · s spent · k admin key · esc ' : ' r · l · s · k · esc ', C.sep), S('─╮', B)];
+  // The keys in the top border, the longest that fits (b is new on 18 Nov 2026; the narrowest card keeps the old four).
+  const fits = (t) => widthOf(title) + t.length + 3 <= width;
+  const keyWords = [' r refresh · b balance · l limit · s spent · k admin key · esc ', ' r · b · l · s · k · esc '].find(fits) ?? ' r · l · s · k · esc ';
+  const keys = [S(asking ? ' asking Anthropic… ' : edit ? ' enter saves · esc back ' : keyWords, C.sep), S('─╮', B)];
   rows.push([...title, S('─'.repeat(Math.max(1, width - widthOf(title) - widthOf(keys))), B), ...keys]);
   blank();
   const capped = Boolean(u.capped);
   const known = u.cap != null;
-  line(lr([label('THIS MONTH'), S(u.monthName, C.dim)], capped ? [S('paused', C.bad, null, true), S(` · back ${dayUtc(u.resetsOn)} (UTC)`, C.dim)] : known ? [S(money(u.left), u.low ? C.bad : u.pace.beforeReset ? C.warn : C.value, null, true), S(` left of ${capMoney(u.cap)}${u.ownLimit ? ', your limit' : ''}`, C.dim)] : [S(money(u.spent), C.value, null, true), S(' spent', C.dim)]));
+  line(lr([label('THIS MONTH'), S(u.monthName, C.dim)], capped ? [S('paused', C.bad, null, true), S(` · back ${dayUtc(u.resetsOn)} (UTC)`, C.dim)] : known ? [S(money(u.left), u.low ? C.bad : u.pace.beforeReset ? C.warn : C.value, null, true), S(` left of ${capMoney(u.cap)}${u.balance ? ', your balance' : u.ownLimit ? ', your limit' : ''}`, C.dim)] : [S(money(u.spent), C.value, null, true), S(' spent', C.dim)]));
   line(capped ? [S('─'.repeat(inner), C.bad)] : known ? fuelLine(inner, u.left / u.cap, Math.min(u.spent, u.today.usd) / u.cap, { now, live }) : [S('─'.repeat(inner), C.faint)]);
-  const capWords = u.ownLimit ? (u.tierCap && wide ? ` · your limit (the ${u.tier} tier allows ${capMoney(u.tierCap)})` : ' · your limit') : known ? ` · ${u.tier}-tier cap · l sets your own` : ' · l sets your limit';
+  const capWords = u.balance ? ` · balance typed ${ago(now - u.balance.at)}` : u.ownLimit ? (u.tierCap && wide ? ` · your limit (the ${u.tier} tier allows ${capMoney(u.tierCap)})` : ' · your limit') : wide ? ' · b types your balance, l your limit' : ' · b your balance';
   line(lr([S(`${money(u.spent)} spent`, C.text), S(`${capWords} · resets ${dayUtc(u.resetsOn)} (UTC)`, C.dim)], known && wide ? [S('━', C.today), S(' today  ', C.dim), S('─', C.sep), S(' before', C.dim)] : []));
-  if (capped) line([S('■ ', C.bad), S(u.capped.kind === 'own' ? 'Your own spend limit (set in the Console) is reached: raise it there, or wait for the 1st' : `The ${money0(u.cap ?? 0)} is used: the Claude API answers again on ${dayUtc(u.resetsOn)}, or raise the limit in the Console`, C.bad)]);
+  if (capped) line([S('■ ', C.bad), S(u.capped.kind === 'own' ? 'Your own spend limit (set in the Console) is reached: raise it there, or wait for the 1st' : `The ${money0(u.tierCap ?? u.cap ?? 0)} is used: the Claude API answers again on ${dayUtc(u.resetsOn)}, or raise the limit in the Console`, C.bad)]);
   else if (u.pace.beforeReset) line([S('▲ ', C.warn), S(wide ? `at ~${money0(u.pace.perDay)} a day it runs out around ${day(u.pace.runsOut)}, and the API stops until ${dayUtc(u.resetsOn)}` : `at ~${money0(u.pace.perDay)}/day it runs out ~${day(u.pace.runsOut)}, then stops until ${dayUtc(u.resetsOn)}`, C.warn)]);
+  else if (u.balance && u.pace.runsOut) line(u.pace.runsOut < u.resetsOn ? [S('▲ ', C.warn), S(`at ~${money0(u.pace.perDay)} a day the balance runs out around ${day(u.pace.runsOut)}${wide ? ': add credit in the Console' : ''}`, C.warn)] : [S('✓ ', C.ok), S(`at ~${money0(u.pace.perDay)} a day the balance lasts until about ${day(u.pace.runsOut)}`, C.dim)]);
   else if (known && u.pace.perDay > 0) line([S('✓ ', C.ok), S(`at ~${money0(u.pace.perDay)} a day it lasts the month`, C.dim)]);
   blank();
   line([label('TODAY'), S(money(u.today.usd), C.value, null, true), S(` on this Mac · ${u.today.windows} window${u.today.windows === 1 ? '' : 's'} · this window ${money(u.window)}`, C.dim)]);
@@ -177,6 +183,8 @@ export function usagePanel(u, width, { now = Date.now(), live = false, asking = 
   } else line([S(''.padEnd(LABEL_W)), S('nothing yet: a reply brings them, or r asks now (a fraction of a cent)', C.dim)]);
   blank();
   line([S(sourceWords(u, now, wide), C.sep)]);
+  if (u.balance) line([S(wide ? `balance: the ${money(u.balance.usd)} you typed ${ago(now - u.balance.at)}${u.balance.since > 0.005 ? ` − ${money(u.balance.since)} this Mac since` : ''} · other Macs not counted · b types it again` : `balance: ${money(u.balance.usd)} typed ${ago(now - u.balance.at)} · b again`, C.sep)]);
+  if (u.balance?.stale) line([S('▲ ', C.warn), S(wide ? `the balance you typed is ${u.balance.days} days old: b types the Console’s figure again` : `balance typed ${u.balance.days} days ago · b to update`, C.warn)]);
   if (u.source?.stale) line([S('▲ ', C.warn), S(wide ? `the figure you typed is ${u.source.days} days old: s types the Console’s figure again` : `typed ${u.source.days} days ago · s to update`, C.warn)]);
   if (u.source?.error) line([S('■ ', C.warn), S(`Anthropic’s bill: ${u.source.error.status ? `${u.source.error.status} · ` : ''}${u.source.error.message}${u.source.error.status === 401 || u.source.error.status === 403 ? ' (k: the key again)' : ''}`, C.warn)]);
   else if (u.admin && u.source?.kind !== 'bill') line([S('asking Anthropic for the bill…', C.sep)]);

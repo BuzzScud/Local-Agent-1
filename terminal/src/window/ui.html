@@ -100,6 +100,25 @@ button { font: inherit; color: inherit; }
 .you { margin: 16px -22px 10px; padding: 7px 22px; background: #2a2a2e; font: 14px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; display: flex; gap: 10px; }
 .you .m { color: var(--dim); }
 .you .cards { color: var(--faint); font-size: 12px; margin-top: 3px; }
+/* pictures you attached: in a sent message, in the tray over the box, and full size on a click */
+.pic { display: inline-block; padding: 0; border: 1px solid var(--hair2); border-radius: 8px; background: #111113; overflow: hidden; cursor: zoom-in; line-height: 0; }
+.pic img { display: block; max-width: 100%; height: auto; object-fit: contain; }
+.pic:hover { border-color: var(--accent-line); }
+.pic:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.you .pics { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; max-width: 100%; }
+.you .pics .pic img { max-height: 220px; max-width: min(420px, 100%); }
+.nopic { color: var(--faint); font: 12px var(--mono); padding: 8px; line-height: 1.4; }
+.tray { display: flex; gap: 10px; padding: 8px 2px 10px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.tcard { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; max-width: 320px; background: var(--raise); border: 1px solid var(--hair); border-radius: 10px; padding: 6px 12px 6px 6px; }
+.tcard .pic img { width: 76px; height: 56px; object-fit: cover; }
+.tcard .ticon { width: 56px; height: 56px; border-radius: 8px; background: var(--raise2); color: var(--dim); display: grid; place-items: center; font: 600 11px var(--mono); letter-spacing: .08em; }
+.tcard .tw { display: flex; flex-direction: column; gap: 1px; min-width: 0; font: 12px/1.45 var(--mono); }
+.tcard .tk { color: var(--accent); }
+.tcard .tn { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tcard .ts { color: var(--faint); }
+.picfull { position: fixed; inset: 0; z-index: 20; background: rgba(8,8,10,.88); display: grid; place-items: center; padding: 32px; cursor: zoom-out; }
+.picfull img { max-width: 100%; max-height: calc(100vh - 80px); border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.picfull .hint { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: var(--faint); font: 12px var(--mono); }
 .reply { font: 13px/1.6 var(--mono); color: #dcdce0; margin: 10px 0 8px 4px; max-width: 1060px; overflow-wrap: anywhere; }
 .reply p { margin: 0 0 9px; } .reply ul, .reply ol { margin: 0 0 9px; padding-left: 22px; } .reply li { margin: 2px 0; }
 .reply code { background: var(--raise2); border-radius: 4px; padding: 1px 5px; color: #e6e6ea; }
@@ -205,6 +224,24 @@ button { font: inherit; color: inherit; }
 .perm .opt { display: flex; gap: 8px; padding: 5px 8px; border-radius: 7px; cursor: pointer; } .perm .opt:hover { background: rgba(255,255,255,.04); }
 .perm .opt.on { background: var(--accent-bg); color: var(--accent); }
 .perm .foot { color: var(--faint); font-size: 12px; margin-top: 8px; }
+/* the model's questions (askHtml): a tab each, its choices with what each means, a tick box only where several may be
+   picked, the row you type into, and Next or Submit as buttons */
+.atabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+.atab { border: 1px solid var(--hair2); background: var(--raise); color: var(--dim); border-radius: 7px; padding: 3px 10px; cursor: pointer; font: 12px var(--sans); }
+.atab:hover { color: var(--text); } .atab.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-bg); } .atab .ok { color: var(--ok); }
+.aopt { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px 6px; padding: 6px 8px; border-radius: 7px; cursor: pointer; border: 1px solid transparent; }
+.aopt:hover { background: rgba(255,255,255,.04); }
+.aopt.on { background: var(--accent-bg); border-color: var(--accent-line); }
+.aopt .mk { color: var(--faint); font: 12px var(--mono); padding-top: 1px; } .aopt.on .mk, .aopt .mk.tk { color: var(--accent); }
+.aopt .lb { font: 13.5px/1.45 var(--sans); color: var(--text); } .aopt .rec { color: var(--accent); font-size: 12px; margin-left: 6px; }
+.aopt .ab { grid-column: 2; color: var(--dim); font: 12px/1.45 var(--sans); }
+.aopt .ty { font: 13px var(--mono); color: var(--text); white-space: pre-wrap; word-break: break-word; } .aopt .ty .ph { color: #5d5d64; }
+.arev { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-bottom: 4px; }
+.arev .rq { color: var(--dim); font: 12.5px var(--sans); } .arev .ra { font: 13.5px var(--sans); color: var(--text); } .arev .ra.none { color: var(--warn); }
+.aacts { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.aacts .sp { flex: 1; }
+.abtn { border: 1px solid var(--hair2); background: var(--raise2); color: var(--dim); border-radius: 8px; padding: 4px 14px; font: 500 13px var(--sans); cursor: pointer; }
+.abtn:hover { color: var(--text); } .abtn.go { background: var(--accent); border-color: var(--accent); color: #0b1a2b; }
 .panel { border: 1px solid var(--hair2); border-radius: 12px; background: #19191c; padding: 8px 10px; margin: 8px 0 10px; max-height: 62vh; overflow: auto; }
 /* a choice in a list the app draws (/model, /remote, /settings…): a click picks it, a click on the picked one opens it */
 .panel .pi { cursor: pointer; border-radius: 4px; }
@@ -308,8 +345,9 @@ let moving = Promise.resolve();
 function moveThen(d, last) {
   const seq = Array(Math.abs(d)).fill(d > 0 ? '\x1b[B' : '\x1b[A');
   if (last) seq.push(last);
-  moving = moving.then(async () => { for (const k of seq) { keys(k); await new Promise((r) => setTimeout(r, 25)); } });
+  pressAll(seq);
 }
+function pressAll(seq) { moving = moving.then(async () => { for (const k of seq) { keys(k); await new Promise((r) => setTimeout(r, 25)); } }); }
 // A command run as if typed: only with an empty prompt (what you typed is never lost).
 // Nor over a question, a list the app drew (/model, /settings…), the / menu or a full-screen view: the keys would go to
 // it (18 Nov 2026, the UI audit: New over a permission question sent /clear and enter to the question).
@@ -395,7 +433,7 @@ const openRows = new Set();
 function rowHtml(r) { const open = openRows.has(r.id); return '<div class="rowx" data-row="' + esc(r.id) + '"><span class="w' + (r.said ? '' : ' guess') + '">' + esc(r.words) + '</span><span class="n">' + (r.facts ? plural(r.facts.steps, 'step') : '') + '</span></div>' + (open ? '<div class="steps">' + r.steps.map(stepHtml).join('') + '</div>' : ''); }
 function itemHtml(v, prev, next) {
   switch (v.t) {
-    case 'user': return '<div class="you"><span class="m">❯</span><div>' + esc(v.text) + (v.cards?.length ? '<div class="cards">' + v.cards.map(esc).join('<br>') + '</div>' : '') + '</div></div>';
+    case 'user': return '<div class="you"><span class="m">❯</span><div>' + esc(v.text) + (v.pics?.length ? '<div class="pics">' + v.pics.map((p) => picHtml(p.file, p.name)).join('') + '</div>' : '') + (v.cards?.length ? '<div class="cards">' + v.cards.map(esc).join('<br>') + '</div>' : '') + '</div></div>';
     case 'text': return '<div class="reply">' + md(v.text) + '</div>';
     case 'taskrun': {
       const first = v.first || !prev || (prev.t !== 'taskrun');
@@ -488,6 +526,25 @@ function statusHtml(L) {
     + (st.queued ? '<span style="color:var(--sand)">⏵ Queued: ' + esc(st.queued.slice(0, 60)) + (now.wait ? ' · ' + now.wait : '') + '</span>' : '')
     + '<span class="r">' + esc(st.notice || (!st.queued && now.hint) || st.tip || (st.usage ? '' : st.usageText || st.spend) || '') + '</span>';
 }
+// A picture you attached, drawn as itself from the window server (server.mjs /pic serves only the files the app named);
+// a click shows it full size (data-pic). One the browser cannot draw keeps its name.
+const picUrl = (file) => '/pic?t=' + T + '&f=' + encodeURIComponent(file);
+const picHtml = (file, name) => '<button class="pic" data-pic="' + esc(file) + '" title="' + esc(name || '') + ' · click to see it full size"><img src="' + esc(picUrl(file)) + '" alt="' + esc(name || 'picture') + '" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'nopic\',textContent:this.alt}))"></button>';
+// The attachments in the box (bridge.mjs trayOf), over it: a picture as itself, any other file as its chip; each with
+// its name and size. Deleting the chip in the box takes its card away (the app's own tray, attach.mjs).
+function trayHtml(tray) {
+  if (!tray?.length) return '';
+  return '<div class="tray" id="tray">' + tray.map((it) => '<div class="tcard">' + (it.file ? picHtml(it.file, it.name) : '<span class="ticon">' + esc(it.kind === 'pdf' ? 'PDF' : it.kind === 'folder' ? 'DIR' : 'FILE') + '</span>')
+    + '<div class="tw"><span class="tk">' + esc(it.token) + '</span><span class="tn">' + esc(it.name) + '</span><span class="ts">' + esc(it.size) + '</span></div></div>').join('') + '</div>';
+}
+function picFull(file) {
+  closePicFull();
+  const d = document.createElement('div');
+  d.className = 'picfull'; d.id = 'picfull';
+  d.innerHTML = '<img src="' + esc(picUrl(file)) + '" alt=""><span class="hint">esc or click to close</span>';
+  document.body.append(d);
+}
+function closePicFull() { const d = document.getElementById('picfull'); if (d) { d.remove(); return true; } return false; }
 function promptHtml(st) {
   const v = st.input.value, c = Math.min(st.input.cursor, v.length);
   const text = v ? esc(v.slice(0, c)) + '<span class="caret"></span>' + esc(v.slice(c)) + (st.argHint ? ' <span class="hint">' + esc(st.argHint) + '</span>' : '') : '<span class="caret"></span><span class="ph">' + esc(st.placeholder || 'Ask anything') + '</span>';
@@ -497,7 +554,30 @@ function menuHtml(menu) {
   if (!menu?.items?.length) return '';
   return '<div class="menu" id="menu">' + menu.items.map((x, i) => '<div class="mi' + (i === menu.index ? ' on' : '') + '" data-menu="' + i + '"><span class="l">' + esc(x.label) + '</span><span class="d">' + esc(x.desc) + '</span></div>').join('') + '</div>';
 }
+// The model's questions as the box stands (bridge.mjs askBoxOf): a click on a choice picks it (ticks it where several
+// may be picked), a click on the row you type into puts you there, a tab goes to its question.
+function askHtml(p) {
+  const B = p.box, n = B.tabs.length, multi = n > 1, t = B.tabs[B.at];
+  const head = '<div class="h">' + esc(p.title || 'Agentic Coder asks') + (p.helper ? ' <span style="color:var(--faint)">· asked by the ' + esc(p.helper) + ' helper</span>' : '') + (multi ? ' <span style="color:var(--faint)">· ' + Math.min(B.at + 1, n) + ' of ' + n + '</span>' : '') + '</div>';
+  const tabs = multi ? '<div class="atabs">' + B.tabs.map((x, i) => '<button class="atab' + (i === B.at ? ' on' : '') + '" data-atab="' + i + '">' + (x.answer != null ? '<span class="ok">✓</span> ' : '') + esc(x.header) + '</button>').join('') + '<button class="atab' + (B.at === n ? ' on' : '') + '" data-atab="' + n + '">Submit</button></div>' : '';
+  if (!t) {
+    const missing = B.tabs.some((x) => x.answer == null);
+    return '<div class="perm ask">' + head + tabs + '<div class="arev">' + B.tabs.map((x) => '<div><div class="rq">' + esc(x.question) + '</div><div class="ra' + (x.answer == null ? ' none' : '') + '">' + (x.answer == null ? 'Not answered' : '→ ' + esc(x.answer)) + '</div></div>').join('') + '</div>'
+      + '<div class="aacts"><span class="foot" style="margin:0">' + (missing ? 'A question has no answer yet: it goes without one.' : 'Check your answers, then send them.') + '</span><span class="sp"></span><button class="abtn" data-akey="back">Back</button><button class="abtn" data-akey="stop">Stop</button><button class="abtn go" data-akey="next">Submit answers</button></div></div>';
+  }
+  const rows = t.options.map((o, i) => {
+    const on = i === t.selected, ticked = t.ticked.includes(i);
+    const mk = o.type ? (on ? '❯' : '✎') : ticked ? '☑' : t.several ? '☐' : on ? '❯' : String(i + 1);
+    const label = o.type ? '<div class="ty">' + (t.typed ? esc(t.typed) : '<span class="ph">' + esc(String(o.label).replace(/[….]+$/, '')) + '…</span>') + (on ? '<span class="caret"></span>' : '') + '</div>'
+      : '<div class="lb">' + esc(o.label) + (o.recommended ? '<span class="rec">recommended</span>' : '') + '</div>';
+    return '<div class="aopt' + (on ? ' on' : '') + '" data-aopt="' + i + '"><span class="mk' + (ticked ? ' tk' : '') + '">' + mk + '</span>' + label + (o.about ? '<div class="ab">' + esc(o.about) + '</div>' : '') + '</div>';
+  }).join('');
+  const hint = t.several ? 'Click to tick as many as you like' : 'Click a choice to pick it';
+  return '<div class="perm ask">' + head + tabs + '<div class="q">' + esc(t.question) + '</div>' + rows
+    + '<div class="aacts"><span class="foot" style="margin:0">' + hint + ' · or ↑↓ and Enter · Esc stops</span><span class="sp"></span><button class="abtn" data-akey="stop">Stop</button>' + (t.several || t.options[t.selected]?.type ? '<button class="abtn go" data-akey="next">' + (multi ? 'Next' : 'Done') + '</button>' : '') + '</div></div>';
+}
 function permHtml(p) {
+  if (p.box) return askHtml(p);
   const what = p.question ? '<div class="q">' + esc(p.question) + '</div>' : p.command ? '<div class="what">$ ' + esc(p.command) + '</div>' : p.path ? '<div class="what">' + (p.created ? 'Create ' : 'Edit ') + esc(p.path) + '</div>' : '';
   const diff = p.hunk?.length ? '<div class="diff">' + p.hunk.map((h) => '<div class="' + (h.type === '+' ? 'add' : h.type === '-' ? 'del' : '') + '"><span class="n">' + esc(h.newNo ?? h.oldNo ?? '') + '</span>' + esc(h.type === ' ' ? ' ' : h.type) + ' ' + esc(h.text) + '</div>').join('') + '</div>' : '';
   return '<div class="perm"><div class="h">' + esc(p.title || (p.name === 'Ask' ? 'Agentic Coder asks' : p.name) || 'Agentic Coder asks') + (p.helper ? ' <span style="color:var(--faint)">· asked by the ' + esc(p.helper) + ' helper</span>' : '') + '</div>' + what + diff
@@ -563,7 +643,7 @@ function fuelHtml(u, w, live) {
 function usagePill(u, live) {
   const tone = u.tone ? ' ' + u.tone : '';
   const words = u.capped ? '<b>paused</b>' : u.cap == null ? '<b>' + money(u.spent) + '</b> this month' : '<b>' + money(u.left) + '</b> left <span class="of">of ' + capMoney(u.cap) + '</span>';
-  return '<span class="upill' + tone + (S.usageCard ? ' open' : '') + '" data-act="usage">' + fuelHtml(u, '54px', live) + '<span>' + words + (u.source?.stale && !u.capped ? ' <span class="of">(' + u.source.days + ' d old)</span>' : '') + '</span></span>';
+  return '<span class="upill' + tone + (S.usageCard ? ' open' : '') + '" data-act="usage">' + fuelHtml(u, '54px', live) + '<span>' + words + ((u.balance || u.source)?.stale && !u.capped ? ' <span class="of">(' + (u.balance || u.source).days + ' d old)</span>' : '') + '</span></span>';
 }
 // A free model's pill: the context used (amber at 70%, red at 85%: the footer's and the memory warning's points),
 // then the memory (the Mac's in Activity Monitor's pressure colours; the service's GPU, amber while part of the model
@@ -592,10 +672,11 @@ function meterPill(m) {
 function usageCardHtml(u, live) {
   const now = Date.now() - S.skew;
   const known = u.cap != null;
-  const head = u.capped ? '<span class="big bad">paused</span><span> · back ' + dayOf(u.resetsOn, true) + ' (UTC)</span>' : known ? '<span class="big' + (u.tone ? ' ' + u.tone : '') + '">' + money(u.left) + '</span><span> left of ' + capMoney(u.cap) + (u.own ? ', your limit' : '') + '</span>' : '<span class="big">' + money(u.spent) + '</span><span> spent</span>';
-  const capWords = u.own ? 'your limit' : known ? esc(u.tier) + '-tier cap' : 'no limit set';
+  const head = u.capped ? '<span class="big bad">paused</span><span> · back ' + dayOf(u.resetsOn, true) + ' (UTC)</span>' : known ? '<span class="big' + (u.tone ? ' ' + u.tone : '') + '">' + money(u.left) + '</span><span> left of ' + capMoney(u.cap) + (u.balance ? ', your balance' : u.own ? ', your limit' : '') + '</span>' : '<span class="big">' + money(u.spent) + '</span><span> spent</span>';
+  const capWords = u.balance ? 'balance typed ' + agoMs(now - u.balance.at) : u.own ? 'your limit' : 'b in /usage types your balance';
   let pace = '';
   if (u.capped) pace = '<div class="ln bad">■ The month’s limit is used: the Claude API answers again on ' + dayOf(u.resetsOn, true) + ', or raise it in the Console</div>';
+  else if (u.balance && u.runsOut) pace = u.runsOut < u.resetsOn ? '<div class="ln warn">▲ at ~' + money0(u.perDay) + ' a day the balance runs out around ' + dayOf(u.runsOut) + ': add credit in the Console</div>' : '<div class="ln"><span class="ok">✓</span> at ~' + money0(u.perDay) + ' a day the balance lasts until about ' + dayOf(u.runsOut) + '</div>';
   else if (u.beforeReset) pace = '<div class="ln warn">▲ at ~' + money0(u.perDay) + ' a day it runs out around ' + dayOf(u.runsOut) + ', and the API stops until ' + dayOf(u.resetsOn, true) + '</div>';
   else if (known && u.perDay > 0) pace = '<div class="ln"><span class="ok">✓</span> at ~' + money0(u.perDay) + ' a day it lasts the month</div>';
   const max = Math.max(...u.last14, 0.01), total = u.last14.reduce((a, b) => a + b, 0);
@@ -608,6 +689,7 @@ function usageCardHtml(u, live) {
   const s = u.source || { kind: 'meter' };
   const plus = s.since > 0.005 ? ' + ' + money(s.since) + ' this Mac since' : ' + this Mac since';
   const src = s.kind === 'bill' ? 'spent: Anthropic’s bill, read ' + agoMs(now - s.at) + plus : s.kind === 'typed' ? 'spent: the ' + money(s.usd) + ' you typed ' + agoMs(now - s.at) + plus + ' · other Macs after it not counted' : 'spent: this Mac’s meter only · /usage, then s types the Console’s figure';
+  const bal = u.balance ? '<br>balance: the ' + money(u.balance.usd) + ' you typed ' + agoMs(now - u.balance.at) + (u.balance.since > 0.005 ? ' − ' + money(u.balance.since) + ' this Mac since' : '') + ' · other Macs not counted' + (u.balance.stale ? '<br><span class="warn">▲ the balance you typed is ' + u.balance.days + ' days old: b in /usage types it again</span>' : '') : '';
   return '<div class="ucard" id="ucard"><div class="hd">Usage <span class="m">· Claude API · ' + esc(u.modelName || '') + '</span><span class="r">resets ' + dayOf(u.resetsOn, true) + ' (UTC)</span></div>'
     + '<div class="ln"><span class="lbl">This month</span><span>' + esc(u.month) + '</span><span class="r">' + head + '</span></div>'
     + (known || u.capped ? '<div style="margin:8px 0 6px">' + fuelHtml(u, '100%', live).replace('class="fuel', 'style="height:8px;border-radius:4px" class="fuel') + '</div>' : '')
@@ -616,8 +698,8 @@ function usageCardHtml(u, live) {
     + '<div class="sec"><div class="ln"><span class="lbl">Today</span><span class="v">' + money(u.today) + '</span><span>on this Mac · this window ' + money(u.window) + '</span></div>'
     + '<div class="ln"><span class="lbl">14 days</span>' + bars + '<span class="r v">' + money(total) + '</span></div></div>'
     + '<div class="sec"><div class="ln"><span class="lbl">This minute</span><span>Anthropic’s limits · they refill all the time</span></div>' + minute + '</div>'
-    + '<div class="src">' + esc(src) + (u.own && u.tierCap ? '<br>your limit is ' + capMoney(u.cap) + '; the ' + esc(u.tier) + ' tier allows ' + capMoney(u.tierCap) : '') + (u.limits ? '<br>limits from Anthropic’s last reply, ' + agoMs(now - u.limits.at) : '') + '</div>'
-    + '<div class="acts"><button class="bb" data-run="/usage">Open /usage</button><span class="k">r refresh · l your limit · s the Console’s figure · k Admin key</span></div></div>';
+    + '<div class="src">' + esc(src) + bal + (u.own && !u.balance && u.tierCap ? '<br>your limit is ' + capMoney(u.cap) + '; the ' + esc(u.tier) + ' tier allows ' + capMoney(u.tierCap) : '') + (u.limits ? '<br>limits from Anthropic’s last reply, ' + agoMs(now - u.limits.at) : '') + '</div>'
+    + '<div class="acts"><button class="bb" data-run="/usage">Open /usage</button><span class="k">r refresh · b your balance · l your limit · s the Console’s figure · k Admin key</span></div></div>';
 }
 function meterCardHtml(m) {
   const now = Date.now() - S.skew;
@@ -706,7 +788,7 @@ function frameOf(kind, html) {
   if (kind !== 'main') { parts.frame = html; body.innerHTML = html; return; }
   body.innerHTML = '<div class="convo-wrap"><div class="convo" id="convo"><div id="top"></div><div id="items"></div><div id="live"></div></div>'
     + '<button class="back" id="back" data-act="latest" hidden>Jump to the latest</button></div>'
-    + '<div class="status" id="status"></div><div id="bottom"></div><div id="modes"></div><div id="full"></div>';
+    + '<div class="status" id="status"></div><div id="trayat"></div><div id="bottom"></div><div id="modes"></div><div id="full"></div>';
   document.getElementById('convo').addEventListener('scroll', backButton, { passive: true });
 }
 // The items in order, each element made again only when its item (or what sits beside it, which decides a task row's
@@ -765,6 +847,8 @@ function render() {
   tlDraw(home ? [] : all, home ? null : st, document.getElementById('items'));
   put('live', '');
   putStatus(statusHtml(st.live || {}));
+  // the tray in a place of its own: a key typed draws the box again, never its pictures
+  put('trayat', st.perm || st.panel ? '' : trayHtml(st.tray));
   const bottomChanged = put('bottom', st.perm ? permHtml(st.perm) : st.panel ? panelHtml(st.panel.rows) : menuHtml(st.menu) + promptHtml(st));
   if (put('modes', modesHtml(st))) fitModes();
   put('full', st.full ? '<div class="full ansi">' + runsHtml(st.full.rows) + '</div>' : '');
@@ -871,6 +955,7 @@ addEventListener('keydown', (e) => {
   if (e.metaKey && e.key.toLowerCase() === 'b') { e.preventDefault(); S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }
   if (e.metaKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newWindow(); return; }
   if (e.metaKey && e.key.toLowerCase() === 'k') { e.preventDefault(); S.find = !S.find; S.folderMenu = false; if (S.find) loadSessions().then(renderDrops); renderDrops(); return; }
+  if (e.key === 'Escape' && closePicFull()) { e.preventDefault(); return; }
   if (S.modeMenu && !e.metaKey) {
     const n = MODE_MENU.length;
     if (e.key === 'Escape') { e.preventDefault(); openModeMenu(false); return; }
@@ -900,9 +985,18 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('paste', (e) => {
   if (document.activeElement?.tagName === 'INPUT') return;
+  // A picture on the clipboard (a screenshot copied with ctrl+shift+⌘4, a picture copied in Finder or a browser) goes as
+  // ctrl+v, the app's own key for it (app-keys.mjs attachClipboard): the app reads the Mac's clipboard and attaches it
+  // as [Image #n], its card over the box. Before (19 Nov 2026), ⌘V of a screenshot did nothing in the window.
+  if (pastedPicture(e.clipboardData)) { e.preventDefault(); keys('\x16'); return; }
   const text = e.clipboardData?.getData('text/plain');
   if (text) { e.preventDefault(); send({ t: 'paste', text }); }
 });
+function pastedPicture(cd) {
+  if (!cd) return false;
+  for (const it of cd.items ?? []) if (it.kind === 'file' && /^image\//.test(it.type)) return true;
+  return [...(cd.types ?? [])].some((t) => /^image\//.test(t)) && !cd.getData('text/plain');
+}
 // Files dragged onto the window (a screenshot, say): the window (main.rs) hands their paths here, and they go to the
 // app as Terminal types a drop (server.mjs dropText), so each becomes [Image #n] with its card over the box.
 window.agenticDropped = (paths) => {
@@ -929,6 +1023,8 @@ document.addEventListener('click', (e) => {
   const t = e.target;
   // the mode's pop-up closes on a click anywhere outside it (its own button toggles it)
   if (S.modeMenu && !t.closest('#mpop') && !t.closest('[data-act="modes"]')) openModeMenu(false);
+  if (t.closest('#picfull')) { closePicFull(); return; }
+  const pic = t.closest('[data-pic]'); if (pic) { picFull(pic.dataset.pic); return; }
   const runBtn = t.closest('[data-run]'); if (runBtn) { if (S.usageCard) { S.usageCard = false; renderUsage(S.last); renderDrops(); } return run(runBtn.dataset.run); }
   const act = t.closest('[data-act]')?.dataset.act;
   if (act === 'side') { S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }
@@ -947,6 +1043,10 @@ document.addEventListener('click', (e) => {
   const task = t.closest('[data-task]'); if (task) { send({ t: 'act', do: 'toggle', id: task.dataset.task }); return; }
   const row = t.closest('[data-row]'); if (row) { const k = row.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); rowsVer++; render(); return; }
   if (act === 'latest') { const c = document.getElementById('convo'); if (c) c.scrollTop = c.scrollHeight; backButton(); return; }
+  const box = S.last?.perm?.box, at = box?.tabs[box.at];
+  const aopt = t.closest('[data-aopt]'); if (aopt && at) { const i = Number(aopt.dataset.aopt), o = at.options[i]; if (!o) return; moveThen(i - at.selected, o.type ? '' : at.several ? ' ' : '\r'); return; }
+  const atab = t.closest('[data-atab]'); if (atab && box) { const d = Number(atab.dataset.atab) - box.at; pressAll(Array(Math.abs(d)).fill(d > 0 ? '\t' : '\x1b[Z')); return; }
+  const akey = t.closest('[data-akey]')?.dataset.akey; if (akey && box) { pressAll([akey === 'next' ? '\r' : akey === 'back' ? '\x1b[Z' : '\x1b']); return; }
   const opt = t.closest('[data-opt]'); if (opt && S.last?.perm) { moveThen(Number(opt.dataset.opt) - S.last.perm.selected, '\r'); return; }
   const pr = t.closest('[data-prow]'); if (pr && S.last?.panel) { const ch = panelChoices(S.last.panel.rows), to = ch ? ch.rows.indexOf(Number(pr.dataset.prow)) : -1; if (to < 0) return; const d = to - ch.rows.indexOf(ch.at); if (d === 0) keys('\r'); else moveThen(d, ''); return; }
   const mi = t.closest('[data-menu]'); if (mi && S.last?.menu) { moveThen(Number(mi.dataset.menu) - S.last.menu.index, '\t'); return; }

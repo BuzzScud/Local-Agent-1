@@ -579,6 +579,8 @@ export const LOOKS = new Set(['Read', 'Search', 'List', 'Glob', 'Grep', 'Bash'])
 
 // A helper's steps at most (its own limit, under the conversation's).
 export const HELPER_STEPS = 30;
+// What a helper stopped at that limit with no report is told (agent.mjs runHelper): write it now, from what it found.
+export const LIMIT_REPORT = 'You have reached your step limit. Do not call any more tools. Write your report now, from what you have found so far, in the form you were asked for: what you found (with file:line), and what you did not get to.';
 // How long a conversation's first message waits for MCP servers that are still starting.
 export const MCP_WAIT_MS = 8000;
 // A helper's instructions: the conversation's (the project, its rules), then what a helper is.

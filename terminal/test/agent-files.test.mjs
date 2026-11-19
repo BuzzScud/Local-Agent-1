@@ -14,6 +14,7 @@ const { readGuides, readGuidePath, readHelperAgents, parseHelperAgent, extraGuid
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const { prepare, execute, toolDefs, agentToolDef, AGENT_TOOL_DEF, EXPLORE_TOOLS } = await import('../src/agent/tools.mjs');
 const { Agent, helperToolFilter } = await import('../src/agent/agent.mjs');
+const { HELPER_STEPS } = await import('../src/agent/agent-said.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
 const { fakeOllama } = await import('./fake-ollama.mjs');
 const { MODELS, DEFAULT_MODEL, setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
@@ -186,6 +187,26 @@ test('a helper\'s Model line: on an Ollama service it runs on that model at a he
     const out = await b.runHelper('h2', { prompt: 'Read notes.txt.', kind: 'reader' }, { label: 'reader', arg: 'read notes' });
     expect(out.text).toContain('its Model line (tiny:3b) works on an Ollama service only');
     expect(fake.requests.filter((q) => q.stream)[0].model ?? '').not.toBe('tiny:3b');
+  } finally { await fake.close(); }
+});
+
+// 18 Nov 2026: five audit helpers in a row used their 30 steps and came back "(it ended without a report)".
+test('a helper stopped at its step limit with no report is asked once for it, and what it found comes back, marked as stopped at the limit', async () => {
+  for (let i = 0; i < HELPER_STEPS; i++) writeFileSync(join(proj, `f${i}.txt`), `file ${i}\n`);
+  const fake = await startFakeServer([
+    ...Array.from({ length: HELPER_STEPS }, (_, i) => ({ tool: { name: 'Read', args: { path: `f${i}.txt` } } })),
+    { text: `Found: f0.txt:1 says "file 0"; did not get to the rest.` },
+  ]);
+  try {
+    const a = new Agent({ url: fake.url, model: local, cwd: proj, system: 'You are the main agent.', memory: false, flows: false, verify: false, way: 'app', hooks: [], mode: 'edits', instructions: 'remote', checkIns: false, confirmPlan: false });
+    const out = await a.runHelper('h1', { prompt: 'Read every file and report.', kind: 'explore' }, { label: 'Explore', arg: 'read all' });
+    const chats = fake.requests.filter((q) => q.stream);
+    expect(chats).toHaveLength(HELPER_STEPS + 1);
+    expect(JSON.stringify(chats.at(-1).messages.at(-1))).toContain('You have reached your step limit');
+    expect(out.text).toContain(', it stopped: limit');
+    expect(out.text).toContain('Found: f0.txt:1 says "file 0"');
+    expect(out.text).not.toContain('(it ended without a report)');
+    expect(out.error).toBe(false);
   } finally { await fake.close(); }
 });
 

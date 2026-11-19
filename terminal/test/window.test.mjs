@@ -240,7 +240,10 @@ test("the pill beside the model: the Claude API's month as the footer said it, a
   expect(usageOf({ ...month, left: 14.2, low: true })).toMatchObject({ text: '$14.20 left', tone: 'bad' });
   expect(usageOf({ ...month, pace: { perDay: 2, runsOut: null, beforeReset: false } })).toMatchObject({ tone: null });
   expect(usageOf({ ...month, capped: { kind: 'own', until: 9e15 } })).toMatchObject({ text: 'paused', tone: 'bad', capped: true });
-  expect(usageOf({ ...month, cap: null, left: null, spent: 138.32 })).toMatchObject({ text: '$138.32 this month' });
+  expect(usageOf({ ...month, cap: null, left: null, spent: 138.32 })).toMatchObject({ text: '$138.32 this month', balance: null });
+  // a credit balance typed from the Console (18 Nov 2026): what is left of it, and how old it is, for the pill and card
+  const balance = { usd: 201, at: 5, since: 2.6, days: 3, stale: true };
+  expect(usageOf({ ...month, cap: 201, left: 198.4, balance, pace: { perDay: 2, runsOut: null, beforeReset: false } })).toMatchObject({ text: '$198.40 left (3 d old)', cap: 201, left: 198.4, balance });
   // on the Claude API the pill is the month's; with --url there is no model to speak of
   expect(meterOf({ usage: month, modelState: { remote: true, state: 'on' } })).toBeNull();
   expect(meterOf({ modelState: null })).toBeNull();

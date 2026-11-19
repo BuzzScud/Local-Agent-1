@@ -29,7 +29,7 @@ export function usagePart(self) {
     let shown = '';
     const show = () => {
       const u = usageNow({ model: claudeModel, admin: self.hasAdmin() });
-      const key = JSON.stringify([u.spent.toFixed(2), u.left, u.cap, u.tierCap, u.capped, u.low, u.pace.beforeReset, u.pace.runsOut, u.today, u.window.toFixed(2), u.source, u.limits?.at, u.admin]);
+      const key = JSON.stringify([u.spent.toFixed(2), u.left, u.cap, u.tierCap, u.capped, u.low, u.pace.beforeReset, u.pace.runsOut, u.today, u.window.toFixed(2), u.source, u.balance, u.limits?.at, u.admin]);
       if (key !== shown) { shown = key; self.setUsage(u); }
     };
     const bill = () => { if (self.hasAdmin()) fetchBill().catch(() => {}); };
@@ -56,8 +56,8 @@ export function usagePart(self) {
     try { await Promise.all([askLimits({ url, ep }), self.hasAdmin() ? fetchBill({ force: true }) : null]); } catch (e) { self.flash(`could not ask Anthropic: ${String(e.message ?? e).slice(0, 120)}`, 4000); }
     self.setPicker((p) => (p?.kind === 'usage' ? { ...p, asking: false } : p));
   };
-  // enter on a value typed in /usage (l your limit, s the month's spend as the Console shows it, k an Admin key),
-  // and /usage limit 200 · /usage spent 112.40. Returns the words said, or null when the value was refused
+  // enter on a value typed in /usage (b your credit balance, l your limit, s the month's spend as the Console shows
+  // it, k an Admin key), and /usage balance 201 · /usage limit 200 · /usage spent 112.40. Returns the words said, or null when the value was refused
   // (the box stays open to type it again).
   const saveUsageEdit = (e) => {
     const said = (text, tone = 'dim') => { self.setPicker((p) => (p?.kind === 'usage' ? { ...p, editing: null } : p)); self.push({ type: 'note', text, tone }); return text; };
@@ -73,9 +73,13 @@ export function usagePart(self) {
     const off = !v || /^(off|none|clear)$/i.test(v);
     const usd = off ? null : dollarsOf(v);
     if (!off && usd == null) { self.flash('Type dollars, like 200 or 112.40', 3000); return null; }
+    if (e.id === 'balance') {
+      setUsageOwn({ balance: usd > 0 ? { usd, at: Date.now() } : null });
+      return said(usd > 0 ? `/usage: your balance is $${usd.toFixed(2)} as of now. "$ left" counts down from it with each answer on this Mac.` : '/usage: your balance taken out; "$ left" counts from your limit, if you set one.');
+    }
     if (e.id === 'limit') {
       setUsageOwn({ limit: usd > 0 ? usd : null });
-      return said(usd > 0 ? `/usage: your limit is $${usd.toFixed(2)} a month. "$ left" counts down from it.` : '/usage: your own limit taken out; the tier’s cap counts again.');
+      return said(usd > 0 ? `/usage: your limit is $${usd.toFixed(2)} a month. "$ left" counts down from it.` : '/usage: your own limit taken out.');
     }
     setUsageOwn({ spent: off ? null : { usd, at: Date.now(), month: monthOf() } });
     return said(off ? '/usage: the typed figure taken out; the month’s spend is this Mac’s meter again.' : `/usage: this month’s spend is $${usd.toFixed(2)} as of now; this Mac’s answers are added to it as they come.`);
