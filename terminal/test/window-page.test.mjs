@@ -143,14 +143,14 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: Enter and Tab work 
     expect(await p.js(`document.getElementById('side').inert`)).toBe(true);
     await p.press('Tab', 9);
     expect(p.got().filter((m) => m.from === 'keys').map((m) => m.data)).toEqual(['\t']);
-    // Reduce motion: the caret holds still, and the spinner is one still mark.
+    // Reduce motion: the caret holds still, and the spinner is one still mark (Claude Code's ✻ since 19 Nov 2026).
     expect(await p.js(`getComputedStyle(document.querySelector('.caret')).animationName`)).toBe('blink');
     await p.on('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await p.say({ ...base, input: { value: 'hi', cursor: 2 }, live: { phase: 'working', turnStart: Date.now(), tokens: 3, text: '' } });
     expect(await p.js(`getComputedStyle(document.querySelector('.caret')).animationName`)).toBe('none');
     const marks = [];
     for (let i = 0; i < 4; i++) { marks.push(await p.js(`document.querySelector('.ac')?.textContent.slice(0, 1)`)); await Bun.sleep(300); }
-    expect(new Set(marks)).toEqual(new Set(['⠿']));
+    expect(new Set(marks)).toEqual(new Set(['✻']));
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
@@ -174,6 +174,55 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a stopped reply say
     // While it works, a message sent waits for the next step, and the status line says so.
     await p.say({ ...base, live: { phase: 'working', turnStart: Date.now(), tokens: 3 }, queued: 'also check the README' });
     expect(await p.js(`document.getElementById('status').textContent`)).toContain('⏵ Queued: also check the README');
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
+// The bottom of the window (19 Nov 2026, the owner: "clean up the bottom area … hide all of the buttons in the bypass button
+// and if we want to change the mode, its a pop up menu"; their pick "A · Claude Code"): the prompt in a box with no paste
+// hint and an arrow for Send, one row under it with the mode as its only button, and a pop-up that picks a mode by a
+// click, a number or the arrows and enter. shift+tab still goes to the app, which cycles all but Bypass.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the box and one row under it; the mode button opens a pop-up that picks by click, number and arrows', async () => {
+  const p = await openPage();
+  try {
+    await p.say({ ...base, mode: 'bypass' });
+    const row = () => p.js(`(() => { const r = document.querySelector('.modes'); return { text: r.textContent, buttons: r.querySelectorAll('button').length, mode: r.querySelector('.modeb').className }; })()`);
+    expect(await row()).toEqual({ text: '⏵⏵ bypass permissions on ▾(shift+tab to cycle)Stand-in·project', buttons: 1, mode: 'modeb bypass' });
+    expect(await p.js(`[document.getElementById('prompt').textContent, document.querySelector('.send').title]`)).toEqual(['❯Ask anything', 'Send ⏎']);
+    const modes = () => p.got().filter((m) => m.from === 'socket' && m.do === 'mode').map((m) => m.mode);
+    const pop = () => p.js(`(() => { const m = document.getElementById('mpop'); return m ? [...m.querySelectorAll('.it')].map((i) => i.querySelector('.l').textContent + (i.querySelector('.c').textContent ? ' ✓' : '') + (i.classList.contains('cur') ? ' <' : '')) : null; })()`);
+    // a click opens it over the button, the mode now ticked and the keys' place on it; a number picks and closes it
+    await p.click('[data-act="modes"]');
+    expect(await pop()).toEqual(['Manual', 'Accept edits', 'Plan', 'Auto', 'Bypass permissions ✓ <']);
+    expect(await p.js(`(() => { const m = document.getElementById('mpop').getBoundingClientRect(), b = document.querySelector('.modeb').getBoundingClientRect(); return m.bottom <= b.top && m.left >= 0 && m.top >= 0; })()`)).toBe(true);
+    await p.press('2', 50);
+    expect([modes(), await pop()]).toEqual([['edits'], null]);
+    // the arrows and enter
+    await p.say({ ...base, mode: 'edits' });
+    await p.click('[data-act="modes"]');
+    expect((await pop())[1]).toBe('Accept edits ✓ <');
+    await p.press('ArrowDown', 40);
+    await p.press('ArrowDown', 40);
+    expect((await pop())[3]).toBe('Auto <');
+    await p.press('Enter', 13);
+    expect(modes()).toEqual(['edits', 'auto']);
+    // a click on a mode; esc and a click outside close it with nothing sent; picking the mode it is in sends nothing
+    await p.click('[data-act="modes"]');
+    await p.click('#mpop [data-mode="plan"]');
+    expect(modes()).toEqual(['edits', 'auto', 'plan']);
+    await p.click('[data-act="modes"]');
+    await p.press('Escape', 27);
+    expect(await pop()).toBe(null);
+    await p.click('[data-act="modes"]');
+    await p.click('#items');
+    expect(await pop()).toBe(null);
+    await p.click('[data-act="modes"]');
+    await p.click('#mpop [data-mode="edits"]');
+    expect(modes()).toEqual(['edits', 'auto', 'plan']);
+    // none of those keys reached the app; with the pop-up shut shift+tab does
+    expect(p.got().filter((m) => m.from === 'keys')).toEqual([]);
+    await p.press('Tab', 9, true);
+    expect(p.got().filter((m) => m.from === 'keys').map((m) => m.data)).toEqual(['\x1b[Z']);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }
 }, 60_000);
@@ -270,8 +319,11 @@ const turnState = (raw, working) => {
   const live = working ? heldView(held, ctx) : null;
   return { order: views.map((v) => v.key), items: Object.fromEntries(views.map((v) => [v.key, v])), held: live, steps: Object.fromEntries([...ctx.raws].map(([k, x]) => [k, stepView(x)])) };
 };
-// Each part as drawn: its title, under way or folded, its lines (coloured verb, what it was on, how it went), what is open.
-const PARTS = `[...document.querySelectorAll('#items .ch7')].map((el) => { const ti = el.querySelector('.hd7 .ti').cloneNode(true); ti.querySelector('.nw7')?.remove(); return { title: ti.textContent.trim(), live: el.classList.contains('live'), shut: el.classList.contains('shut'), lines: [...el.querySelectorAll('.l7')].map((l) => [l.querySelector('.tg').textContent, l.querySelector('.tx').textContent, l.querySelector('.rs').textContent].join(' | ')), open: el.querySelectorAll('.det7').length }; })`;
+// Each part as drawn (19 Nov 2026, Claude Code's lines): its head (▸ a to-do, ⏺ the model's line), under way or folded, its
+// lines (the tool's name or the model's words | (what it was on) | how it went, after ⎿), what is open. The step under way
+// is the spinner line, read on its own (LIVE).
+const PARTS = `[...document.querySelectorAll('#items .ch7')].map((el) => { const h = el.querySelector('.hd7:not(.none)'); return { title: h ? (h.querySelector('.pl7') ? '▸ ' : '⏺ ') + h.querySelector('.ti').firstChild.textContent.trim() : '', live: el.classList.contains('live'), shut: el.classList.contains('shut'), lines: [...el.querySelectorAll('.tl7 > .s7 > .l7:not(.live)')].map((l) => { const sub = l.nextElementSibling?.classList.contains('sub7') ? l.nextElementSibling.querySelector('.v').textContent : ''; return [l.querySelector('.nm, .sy').textContent, l.querySelector('.ar')?.textContent ?? '', sub].join(' | '); }), thoughts: el.querySelector('.th7')?.textContent ?? null, open: el.querySelectorAll('.det7').length }; })`;
+const LIVE = `(() => { const l = document.querySelector('.ch7.live .l7.live'); return l ? [l.querySelector('.vb').textContent, l.querySelector('.ar')?.textContent ?? '', l.querySelector('.mt').textContent] : null; })()`;
 
 // The reply under way in parts (27 Oct 2026, the owner's pick "7 · Smooth" after five rounds, and "keep everything here,
 // not in the bottom chat box"): each part a box with every step on a line, the part under way says what it does now; a
@@ -283,15 +335,23 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the reply under way
     const t0 = Date.now() - 60_000, raw = turnRaw(t0);
     const at = (n, live) => ({ ...base, ...turnState(raw.slice(0, n), true), live: { phase: 'working', turnStart: t0, stepStart: Date.now() - 2000, tokens: 3, ...live } });
     await p.say(at(7, { running: { label: 'Bash', arg: 'bun test' } }));
-    // the plan named each part; the model's line stays as its first line; the part under way ends with the step under way
+    // the plan named each part; the model's line stays as its first line; a finished thought is hidden behind one line;
+    // the part under way ends with the step under way
     expect(await p.js(PARTS)).toEqual([
-      { title: '▸ Find the bug', live: false, shut: false, open: 0, lines: ['Said | Looking at the cart first. | ', 'Planning | 2 to-dos · 0 done | ', 'Reading | cart.mjs | ', 'Thought | It floors. | '] },
-      { title: '▸ Fix and test it', live: true, shut: false, open: 0, lines: ['Planning | 2 to-dos · 1 done | ', 'Editing | cart.mjs | +1 −1', 'Testing | bun test | '] },
+      { title: '▸ Find the bug', live: false, shut: false, open: 0, thoughts: '∴ 1 thought hidden · show thinking', lines: ['Looking at the cart first. |  | ', 'Update Todos |  | 2 to-dos · 0 done', 'Read | (cart.mjs) | '] },
+      { title: '▸ Fix and test it', live: true, shut: false, open: 0, thoughts: null, lines: ['Update Todos |  | 2 to-dos · 1 done', 'Update | (cart.mjs) | +1 −1'] },
     ]);
-    // when each step started from the turn's start and how long it took (the model's line has neither), and the head of
-    // the part under way
-    expect(await p.js(`[...document.querySelectorAll('.ch7')[0].querySelectorAll('.l7')].map((l) => l.querySelector('.at').textContent + ' ' + l.querySelector('.du').textContent)`)).toEqual([' ', '0:02 0.0 s', '0:03 0.0 s', '0:04 2.5 s']);
-    expect(await p.js(`(() => { const h = document.querySelector('.ch7.live .hd7'); return [h.querySelector('.nw7 .vb').textContent, h.querySelector('.nw7 .tg').textContent, h.querySelector('.oc').textContent]; })()`)).toEqual(['Testing', 'bun test', '4 calls · 12 thinking']);
+    // when each step started from the turn's start and how long it took, in its tip (the model's line has neither), and
+    // the spinner line: what it does now, for how long, the turn's counts
+    expect(await p.js(`[...document.querySelectorAll('.ch7')[0].querySelectorAll('.tl7 .l7')].map((l) => l.title)`)).toEqual(['', '0:02 · 0.0 s', '0:03 · 0.0 s']);
+    const live = await p.js(LIVE);
+    expect(live.slice(0, 2)).toEqual(['Testing…', 'bun test']);
+    expect(live[2]).toMatch(/^\(\d+\.\d s · 4 calls · 12 thinking · 1m 0\ds in all · esc to interrupt\)$/);
+    // the thought shows on a press of its line, kept for the next state, and hides again
+    await p.click('[data-thinks7]');
+    expect((await p.js(PARTS))[0]).toMatchObject({ thoughts: '∴ 1 thought · hide thinking', lines: ['Looking at the cart first. |  | ', 'Update Todos |  | 2 to-dos · 0 done', 'Read | (cart.mjs) | ', 'Thought for 2.5 s | It floors. | '] });
+    await p.click('[data-thinks7]');
+    expect((await p.js(PARTS))[0].lines).toHaveLength(3);
     // A line opens in place: the file as read; a change with its line numbers and Copy inside its box.
     await p.click('[data-r7="r1"]');
     expect(await p.js(`document.querySelector('.ch7 .det7 .out').innerText`)).toBe('export const total = (x) =>\n  Math.floor(x * 100) / 100;');
@@ -305,8 +365,8 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the reply under way
     await p.say(at(8, { thinking: 'Two of them fail on the totals.', thinkStart: Date.now() - 1500 }));
     const now = await p.js(PARTS);
     expect(now[0]).toMatchObject({ shut: true, open: 1 });
-    expect(now[1].lines).toEqual(['Planning | 2 to-dos · 1 done | ', 'Editing | cart.mjs | +1 −1', 'Testing | bun test | ✗ 1', 'Thinking | ' + now[1].lines[3].split(' | ')[1] + ' | ']);
-    expect(now[1].lines[3]).toMatch(/^Thinking \| \d+ tokens/);
+    expect(now[1].lines).toEqual(['Update Todos |  | 2 to-dos · 1 done', 'Update | (cart.mjs) | +1 −1', 'Bash | (bun test) | ✗ 1 failed · 0.9 s']);
+    expect(await p.js(LIVE)).toEqual(['Thinking…', '', expect.stringMatching(/^\(\d+\.\d s · ↓ 0 tokens · 5 calls · 12 thinking · /)]);
     expect(now[1].open).toBe(1);
     expect(await p.js(`[document.querySelector('[data-k="e1"]').__kept, document.querySelector('[data-k="b1"]').classList.contains('enter7'), document.querySelector('[data-k="e1"]').classList.contains('enter7')]`)).toEqual([1, true, false]);
     // Unfolded again by its title; nothing went to the app: no keys, no actions.
@@ -334,9 +394,9 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a web search with i
       { key: 'd2', rail: true, type: 'done', reason: 'done', past: 'Baked', secs: 9, at: t0 + 9000, steps: 1, calls: 2 },
     ];
     await p.say({ ...base, ...turnState(raw, false) });
-    expect((await p.js(PARTS))[0].lines).toEqual(['Web search | “bun 1.3” | 6 sources', 'Reading | index.html | ']);
+    expect((await p.js(PARTS))[0].lines).toEqual(['Web Search | (“bun 1.3”) | 6 sources', 'Read | (index.html) | ']);
     // the times from the turn's start, as its end line gives it (as they read while it worked)
-    expect(await p.js(`[...document.querySelectorAll('.l7 .at')].map((e) => e.textContent)`)).toEqual(['0:01', '0:03']);
+    expect(await p.js(`[...document.querySelectorAll('.l7')].map((e) => e.title)`)).toEqual(['0:01 · 1.2 s', '0:03 · 0.0 s']);
     const srcs = () => p.js(`[...document.querySelectorAll('.src7')].map((a) => a.querySelector('.host').textContent + ' ' + a.getAttribute('href'))`);
     expect(await srcs()).toEqual([1, 2, 3, 4].map((i) => `site${i}.example https://www.site${i}.example/bun`));
     expect(await p.js(`document.querySelector('.src7 .age').textContent`)).toBe('2 days ago');
@@ -371,7 +431,7 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: what streams is fiv
     const turnStart = Date.now();
     const at = async (thinking) => {
       await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 50, thinking } });
-      return p.js(`(() => { const t = document.querySelector('.ch7.live .tail7'), inner = t.firstElementChild; const r = t.getBoundingClientRect(), last = inner.getBoundingClientRect(), lh = parseFloat(getComputedStyle(t).lineHeight); const you = document.querySelector('.you, .user, [data-key="u1"]'); return { h: Math.round(r.height), lines: r.height / lh, hidden: (last.height - r.height) / lh, lastIn: last.bottom <= r.bottom + 1, head: Math.round(document.querySelector('.ch7.live .hd7').getBoundingClientRect().top), status: document.getElementById('status').hidden, you: you ? Math.round(you.getBoundingClientRect().top) : null }; })()`);
+      return p.js(`(() => { const t = document.querySelector('.ch7.live .tail7'), inner = t.firstElementChild; const r = t.getBoundingClientRect(), last = inner.getBoundingClientRect(), lh = parseFloat(getComputedStyle(t).lineHeight); const you = document.querySelector('.you, .user, [data-key="u1"]'); return { h: Math.round(r.height), lines: r.height / lh, hidden: (last.height - r.height) / lh, lastIn: last.bottom <= r.bottom + 1, head: Math.round(document.querySelector('.ch7.live .l7.live').getBoundingClientRect().top), status: document.getElementById('status').hidden, you: you ? Math.round(you.getBoundingClientRect().top) : null }; })()`);
     };
     const short = await at('The user wants the totals.');
     const long = await at(Array.from({ length: 30 }, (_, i) => `Line ${i + 1} of the thinking, about the totals and the rounding in checkout.`).join('\n'));
@@ -397,16 +457,16 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: what streams is fiv
 test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking, then the answer as it comes, under the line under way, hidden by a press and kept so for the next reply', async () => {
   const p = await openPage();
   try {
-    const box = () => p.js(`(() => { const part = document.querySelector('.ch7.live'); if (!part) return null; const l = part.querySelector('[data-tail7]'), t = part.querySelector('.tail7'); return { tag: l.querySelector('.tg').textContent, bar: Boolean(l.querySelector('.bar7')), said: l.querySelector('.bv')?.textContent ?? null, tail: t ? t.textContent : null, mono: Boolean(t?.classList.contains('w')), h: Math.round(part.getBoundingClientRect().height) }; })()`);
+    const box = () => p.js(`(() => { const part = document.querySelector('.ch7.live'); if (!part) return null; const l = part.querySelector('[data-tail7]'), t = part.querySelector('.tail7'); return { tag: l.querySelector('.vb').textContent, said: l.querySelector('.mt').textContent.split(' · ').slice(1, 3).join(' · '), tail: t ? t.textContent : null, mono: Boolean(t?.classList.contains('w')), h: Math.round(part.getBoundingClientRect().height) }; })()`);
     const lines = (n) => Array.from({ length: n }, (_, i) => `Line ${i + 1} of the thinking.`).join('\n');
     let turnStart = Date.now();
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 50, thinking: lines(3), thinkTokens: 20, thinkStart: Date.now() - 4000 } });
     const open = await box();
-    expect(open).toMatchObject({ tag: 'Thinking', bar: true, said: expect.stringMatching(/^20 tokens · \d+\/s$/), mono: false });
+    expect(open).toMatchObject({ tag: 'Thinking…', said: expect.stringMatching(/^↓ 20 tokens · \d+\/s$/), mono: false });
     expect(open.tail).toContain('Line 3 of the thinking.');
     await p.click('[data-tail7]');
     const shut = await box();
-    expect(shut).toMatchObject({ tag: 'Thinking', bar: true, tail: null });
+    expect(shut).toMatchObject({ tag: 'Thinking…', tail: null });
     expect(shut.h).toBeLessThan(open.h);
     // Hidden, the part stays one height as the thinking grows.
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 90, thinking: lines(40) } });
@@ -414,17 +474,17 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking, then 
     // The next reply starts hidden too; a press shows it again.
     turnStart += 60_000;
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 5, thinking: 'A new thought.' } });
-    expect(await box()).toMatchObject({ tag: 'Thinking', tail: null });
+    expect(await box()).toMatchObject({ tag: 'Thinking…', tail: null });
     await p.click('[data-tail7]');
     expect((await box()).tail).toContain('A new thought.');
     // The answer as it comes, the thought still there until the reply ends: Writing, its words counted, in the same place.
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 9, thinking: 'A new thought.', text: 'Here it is.', textStart: Date.now() } });
-    expect(await box()).toMatchObject({ tag: 'Writing', bar: true, said: '3 words', mono: true, tail: 'Here it is.' });
+    expect(await box()).toMatchObject({ tag: 'Writing…', said: expect.stringMatching(/^3 words · /), mono: true, tail: 'Here it is.' });
     const css = Array.from({ length: 60 }, (_, i) => `.part-${i + 1} { padding: ${i}px; }`).join('\n');
     await p.say({ ...base, live: { phase: 'working', turnStart, tokens: 900, text: css } });
     expect(await p.js(`(() => { const t = document.querySelector('.ch7.live .tail7'), last = t.firstElementChild.getBoundingClientRect(); return t.textContent.includes('.part-60 { padding: 59px; }') && last.bottom <= t.getBoundingClientRect().bottom + 1; })()`)).toBe(true);
     await p.click('[data-tail7]');
-    expect(await box()).toMatchObject({ tag: 'Writing', tail: null });
+    expect(await box()).toMatchObject({ tag: 'Writing…', tail: null });
     expect(p.got()).toEqual([]);
     expect(p.errors).toEqual([]);
   } finally { await p.close(); }

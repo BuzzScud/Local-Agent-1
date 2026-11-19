@@ -58,14 +58,7 @@
     if (L.task) return { key: 'live', k: 'tool', since, verb: ['Working', L.task] };
     return { key: 'live', k: 'wait', since, verb: ['Waiting', L.waiting ? 'for the model to read what is new' : ''] };
   }
-  function resultOf(d) {
-    if (d.k === 'diff') return '<span class="add">+' + d.add + '</span> <span class="del">−' + d.del + '</span>';
-    if (d.tests) return d.tests.failed ? '<span class="bad">✗ ' + d.tests.failed + '</span>' : '<span class="ok">✓ ' + d.tests.passed + '</span>';
-    if ((d.k === 'bash' || d.k === 'job') && d.code) return '<span class="bad">exit ' + d.code + '</span>';
-    if (d.k === 'search' && !d.count) return '<span class="dim">none</span>';
-    if (d.k === 'websearch') return '<span class="dim">' + plural(d.sources?.length || d.count || 0, 'source') + '</span>';
-    return '';
-  }
+
   // what opens under a step: the change with its line numbers, the command and what it printed (the failing lines red),
   // the thought as written, what the app gave the model
   const HOT = (l) => /\b(fail(ed|ures?|ing)?|errors?|✗|not ok|Traceback|exception)\b/i.test(l) && !/\b(fail(ed|ures?)?|errors?)\W{0,3}0\b|\b0\s+(fail(ed|ures?)?|errors?)\b/i.test(l);
@@ -86,68 +79,143 @@
     return '<div class="dt"><div class="cmd">' + esc(d.arg || d.url || '') + '</div></div>';
   }
 
-  // ---- a line of the timeline ----
-  const pos = (s) => Math.min(1, Math.log10(1 + Math.max(0, s)) / Math.log10(301));
-  // the time bar in the line under way while it thinks or writes: it fills with the seconds on a scale that slows
-  // (10 s under half, 1 min about three quarters, 5 min full), with what came so far beside it
-  function barHtml(d) {
-    const secs = (now() - d.since) / 1000;
-    const so = d.k === 'think' ? d.tokens ?? 0 : String(d.text ?? '').split(/\s+/).filter(Boolean).length;
-    const rate = d.k === 'think' && secs > 0.5 && so ? Math.round(so / secs) : null;
-    return '<span class="tx bar7w"><span class="bar7"><i style="width:' + (pos(secs) * 100).toFixed(1) + '%"></i>' + [10, 30, 60, 300].map((t) => '<b style="left:' + (pos(t) * 100).toFixed(1) + '%"></b>').join('') + '</span><span class="bv">' + (d.k === 'think' ? ktok(so) + ' tokens' + (rate ? ' · ' + rate + '/s' : '') : plural(so, 'word')) + '</span></span>';
+  // ---- a line, as Claude Code prints it ----
+  // (19 Nov 2026, the owner's pick "A · Claude Code transcript", docs/private/design rounds/window-footer-steps-2026-11-19/:
+  // "reduce the windows here? make it like claude code".) No box and no columns: a bullet, the tool's name and what it was
+  // on, and under it after ⎿ how it went when that says something. Reads, searches and lists in a row are one line; edits
+  // to one file in a row are one line with their sum; the same failure twice is one line. A finished thought is hidden
+  // (one line a part says how many, and shows them); the step under way is Claude Code's spinner line.
+  let thinkShown = false;
+  try { thinkShown = localStorage.getItem('think-shown') === '1'; } catch {}
+  const failed = (d) => Boolean(d.err || d.k === 'error');
+  const LOOK = new Set(['read', 'same', 'search', 'list']);
+  const looks = (d) => LOOK.has(d.k) && !failed(d);
+  const NAME = { Reading: 'Read', Searching: 'Search', Listing: 'List', Skill: 'Skill', Guide: 'Guide' };
+  // Claude Code's name for a step and what it was on
+  function ccOf(d) {
+    if (failed(d)) return [d.label || 'Error', d.arg && d.arg !== d.message ? d.arg : ''];
+    switch (d.k) {
+      case 'diff': return [d.created ? 'Write' : 'Update', d.path];
+      case 'bash': return ['Bash', d.arg];
+      case 'job': return ['Bash', d.arg];
+      case 'todos': return ['Update Todos', ''];
+      case 'answer': return ['Asked you', d.question];
+      case 'websearch': return ['Web Search', d.query ? '“' + d.query + '”' : ''];
+      case 'fetched': return ['Fetch', d.url];
+      default: { const [v, t] = verbOf(d); return [NAME[v] ?? v, t]; }
+    }
+  }
+  // how it went, after ⎿: only when that says something (a plain command that ran is its line alone)
+  function subOf(d, n) {
+    if (failed(d)) return '<span class="bad">' + esc(cut(d.message || d.arg || 'failed', 260)) + (n > 1 ? ' (×' + n + ')' : '') + '</span>';
+    if (d.k === 'diff') return '<span class="add">+' + d.add + '</span> <span class="del">−' + d.del + '</span>' + (n > 1 ? ' <span class="dim">· ' + n + ' edits</span>' : '');
+    if (d.tests) return (d.tests.failed ? '<span class="bad">✗ ' + d.tests.failed + ' failed</span>' : '<span class="ok">✓ ' + d.tests.passed + ' passed</span>') + (d.ms != null ? ' <span class="dim">· ' + dur(d.ms) + '</span>' : '');
+    if ((d.k === 'bash' || d.k === 'job') && d.code) return '<span class="bad">exit ' + d.code + '</span>';
+    if (d.k === 'job') return '<span class="dim">in the background</span>';
+    if (d.k === 'todos') return '<span class="dim">' + plural((d.items ?? []).length, 'to-do') + ' · ' + (d.items ?? []).filter((t) => t.done).length + ' done</span>';
+    if (d.k === 'websearch') return '<span class="dim">' + plural(d.sources?.length || d.count || 0, 'source') + '</span>';
+    if (d.k === 'answer') return '→ ' + esc(cut(d.answer || '(no answer kept)', 200));
+    return '';
+  }
+  const bulletOf = (d) => (failed(d) ? 'bad' : d.k === 'note' || d.k === 'machine' ? 'app' : '');
+  // a line: its bullet, name and (what it was on); when it started and how long it took in its tip and on hover
+  function ccHtml(key, d, t0, name, arg, sub, cls) {
+    const tip = [d.at && t0 ? mmss(d.at - t0) : '', d.ms != null ? dur(d.ms) : ''].filter(Boolean).join(' · ');
+    return '<div class="l7' + (cls ? ' ' + cls : '') + '" data-r7="' + esc(key) + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '><span class="b7">' + (cls === 'app' ? '·' : '⏺') + '</span><span class="nm">' + esc(name) + '</span>' + (arg ? '<span class="ar">(' + esc(cut(arg, 220)) + ')</span>' : '') + '<span class="du">' + (d.ms != null ? dur(d.ms) : '') + '</span></div>'
+      + (sub ? '<div class="sub7"><span class="k">⎿</span><span class="v">' + sub + '</span></div>' : '')
+      + (opened.has(key) ? '<div class="det7">' + detailHtml(d) + '</div>' : '');
+  }
+  // what the model said: its words in full, white, as Claude Code's ⏺ text (a long one to its first lines, opened by a click)
+  function sayHtml(key, text) {
+    const t = String(text ?? ''), long = t.length > 300;
+    return '<div class="l7 say"' + (long ? ' data-r7="' + esc(key) + '"' : '') + '><span class="b7">⏺</span><span class="sy">' + esc(long && !opened.has(key) ? cut(plain(t), 300) : t) + '</span></div>';
+  }
+  // reads, searches and lists in a row: "Read 2 files, searched 1 pattern"; one alone names what it read
+  function lookHtml(group, t0) {
+    const [k0, d0] = group[0];
+    if (group.length === 1) { const [nm, ar] = ccOf(d0); return [k0, ccHtml(k0, d0, t0, nm, ar, d0.k === 'search' && !d0.count ? '<span class="dim">none found</span>' : '')]; }
+    const n = (ks) => group.filter(([, d]) => ks.includes(d.k)).length, r = n(['read', 'same']), s = n(['search']), l = n(['list']);
+    const words = [r ? 'read ' + plural(r, 'file') : '', s ? 'searched ' + plural(s, 'pattern') : '', l ? 'listed ' + plural(l, 'folder') : ''].filter(Boolean).join(', ');
+    const key = 'g:' + k0, ms = group.reduce((x, [, d]) => x + (d.ms ?? 0), 0);
+    const inner = opened.has(key) ? '<div class="grp7">' + group.map(([k, d]) => { const [nm, ar] = ccOf(d); return '<div class="gl7" data-r7="' + esc(k) + '"><span class="nm">' + esc(nm) + '</span> <span class="ar">' + esc(cut(ar, 200)) + '</span></div>' + (opened.has(k) ? '<div class="det7">' + detailHtml(d) + '</div>' : ''); }).join('') + '</div>' : '';
+    return [key, '<div class="l7 grp" data-r7="' + esc(key) + '"><span class="b7">⏺</span><span class="nm">' + words[0].toUpperCase() + words.slice(1) + '</span><span class="du">' + (ms ? dur(ms) : '') + '</span></div>' + inner];
+  }
+  // the step under way, as Claude Code's spinner line: what it does now, then (for how long · the turn's counts · its time)
+  const GLYPHS = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+  function liveLine(ls, turn) {
+    const [vb, tg] = ls.verb, fails = turn.steps.filter(failed).length, secs = (now() - ls.since) / 1000;
+    const so = ls.k === 'think' ? ls.tokens ?? 0 : ls.k === 'said' ? String(ls.text ?? '').split(/\s+/).filter(Boolean).length : null;
+    const rate = ls.k === 'think' && secs > 0.5 && so ? Math.round(so / secs) : null;
+    const think = turn.think + (ls.k === 'think' ? ls.tokens ?? 0 : 0);
+    const meta = [dur(now() - ls.since), so != null ? (ls.k === 'think' ? '↓ ' + ktok(so) + ' tokens' + (rate ? ' · ' + rate + '/s' : '') : plural(so, 'word')) : '', plural(turn.steps.filter(isCall).length, 'call'), think ? ktok(think) + ' thinking' : '', fails ? '<span class="bad">' + fails + ' failed</span>' : '', dur(now() - (turn.start ?? now())) + ' in all', 'esc to interrupt'].filter(Boolean).join(' · ');
+    return '<div class="l7 live" data-tail7="1" style="--c:' + fam(ls) + '"><span class="b7 ac">' + (STILL.matches ? '✻' : GLYPHS[Math.floor(now() / 120) % GLYPHS.length]) + '</span><span class="nm vb">' + esc(vb) + '…</span>' + (tg ? '<span class="ar">' + esc(cut(tg, 160)) + '</span>' : '') + '<span class="mt">(' + meta + ')</span></div>';
   }
   // what streams: its newest words, at most five whole lines, starting at a whole word
   function tailHtml(d) {
     let t = d.k === 'said' ? String(d.text ?? '') : plain(d.text);
-    if (t.length > 700) { t = t.slice(-700); t = '… ' + t.slice(t.search(/\s/) + 1); }
+    // 1,600 characters: five whole lines across a wide window, now that the lines start at the left (19 Nov 2026)
+    if (t.length > 1600) { t = t.slice(-1600); t = '… ' + t.slice(t.search(/\s/) + 1); }
     return '<div class="tail7' + (d.k === 'said' ? ' w' : '') + '"><div>' + esc(t) + '<span class="caret7"></span></div></div>';
   }
-  function lineHtml(d, t0, live) {
-    const [vb, tg] = live ? d.verb : verbOf(d);
-    const mid = live && (d.k === 'think' || d.k === 'said') ? barHtml(d) : '<span class="tx">' + esc(cut(d.k === 'diff' || live ? tg : tg, 220)) + '</span>';
-    const took = live ? dur(now() - d.since) : dur(d.ms);
-    return '<div class="l7' + (d.err || d.k === 'error' ? ' err' : '') + (live ? ' live' : '') + (d.k === 'note' || d.k === 'machine' ? ' app' : '') + '" ' + (live ? 'data-tail7="1"' : 'data-r7="' + esc(d.key) + '"') + ' style="--c:' + fam(d) + '"><span class="at">' + (d.at && t0 ? mmss(d.at - t0) : '') + '</span><span class="tg">' + esc(vb) + '</span>' + mid + '<span class="rs">' + (live ? '' : resultOf(d)) + '</span><span class="du">' + took + '</span></div>';
-  }
-  // the lines of a part: each step (opened, its result under it), a web search's sources, the step under way
-  function linesOf(p, t0, ls) {
+  // the lines of a part: the model's line, each step (opened, its result under it), a web search's sources, the hidden
+  // thoughts, the step under way
+  function linesOf(p, t0, ls, turn) {
     const out = [];
-    // the model's line, when a move in its plan names the part
-    if (p.line) out.push([p.key + '#said', lineHtml({ key: p.key + '#said', k: 'said', text: p.line }, t0, false)]);
-    for (const k of p.keys) {
-      const d = S.steps[k];
-      if (!d) continue;
-      if (d.k === 'websearch') {
-        out.push([k, lineHtml(d, t0, false)]);
-        const all = opened.has(k), n = (d.sources ?? []).length, show = all ? n : Math.min(n, 4);
-        for (const [i, s] of (d.sources ?? []).slice(0, show).entries()) out.push([k + '#' + i, '<a class="src7" href="' + esc(s.url) + '" target="_blank" rel="noopener"><span class="fav">' + esc((host(s.url)[0] ?? '·').toUpperCase()) + '</span><span class="host">' + esc(host(s.url)) + '</span><span class="st">' + esc(s.title || s.url) + '</span>' + (s.age ? '<span class="age">' + esc(s.age) + '</span>' : '') + '</a>']);
-        if (n > 4) out.push([k + '#more', '<div class="srcmore" data-r7="' + esc(k) + '">' + (all ? 'Show fewer' : '+ ' + plural(n - 4, 'more source')) + '</div>']);
-        continue;
+    if (p.line) out.push([p.key + '#said', sayHtml(p.key + '#said', p.line)]);
+    const ds = p.keys.map((k) => [k, S.steps[k]]).filter(([, d]) => d);
+    let thoughts = 0;
+    for (let i = 0; i < ds.length;) {
+      const [k, d] = ds[i];
+      if (d.k === 'think' && !failed(d)) {
+        thoughts++;
+        if (thinkShown) out.push([k, '<div class="l7 think" data-r7="' + esc(k) + '"><span class="b7">∴</span><span class="nm">Thought' + (d.ms ? ' for ' + dur(d.ms) : '') + '</span><span class="ar">' + esc(cut(firstSentence(d.text), 160)) + '</span></div>' + (opened.has(k) ? '<div class="det7">' + detailHtml(d) + '</div>' : '')]);
+        i++; continue;
       }
-      out.push([k, lineHtml(d, t0, false) + (opened.has(k) ? '<div class="det7">' + detailHtml(d) + '</div>' : '')]);
+      if (d.k === 'said') { out.push([k, sayHtml(k, d.text)]); i++; continue; }
+      if (looks(d)) { let j = i; while (j < ds.length && looks(ds[j][1])) j++; out.push(lookHtml(ds.slice(i, j), t0)); i = j; continue; }
+      // the same file changed again and again, or the same failure: one line
+      let j = i + 1;
+      const same = (x) => (d.k === 'diff' && !failed(d) ? x.k === 'diff' && !failed(x) && !x.created && !d.created && x.path === d.path : failed(d) && failed(x) && x.label === d.label && (x.message || x.arg) === (d.message || d.arg));
+      while (j < ds.length && same(ds[j][1])) j++;
+      const run = ds.slice(i, j).map(([, x]) => x), [nm, ar] = ccOf(d);
+      const sum = run.length > 1 && d.k === 'diff' ? { ...d, add: run.reduce((s, x) => s + x.add, 0), del: run.reduce((s, x) => s + x.del, 0), ms: run.reduce((s, x) => s + (x.ms ?? 0), 0), hunk: run.flatMap((x) => x.hunk ?? []) } : d;
+      out.push([k, ccHtml(k, sum, t0, nm, ar, subOf(sum, run.length), bulletOf(d))]);
+      if (d.k === 'websearch') {
+        const all = opened.has(k + '#src'), n = (d.sources ?? []).length, show = all ? n : Math.min(n, 4);
+        for (const [x, s] of (d.sources ?? []).slice(0, show).entries()) out.push([k + '#' + x, '<a class="src7" href="' + esc(s.url) + '" target="_blank" rel="noopener"><span class="fav">' + esc((host(s.url)[0] ?? '?').toUpperCase()) + '</span><span class="host">' + esc(host(s.url)) + '</span><span class="st">' + esc(s.title || s.url) + '</span><span class="age">' + esc(s.age ?? '') + '</span></a>']);
+        if (n > 4) out.push([k + '#more', '<div class="srcmore" data-r7="' + esc(k + '#src') + '">' + (all ? 'Show fewer' : '+ ' + plural(n - 4, 'more source')) + '</div>']);
+      }
+      i = j;
     }
-    if (ls) out.push(['live', lineHtml(ls, t0, true) + (tailOpen && (ls.k === 'think' || ls.k === 'said') ? tailHtml(ls) : '')]);
+    if (thoughts) out.push([p.key + '#thinks', '<div class="th7" data-thinks7="1">∴ ' + plural(thoughts, 'thought') + (thinkShown ? ' · hide thinking' : ' hidden · show thinking') + '</div>']);
+    if (ls) out.push(['live', liveLine(ls, turn) + (tailOpen && (ls.k === 'think' || ls.k === 'said') ? tailHtml(ls) : '')]);
     return out;
   }
 
   // ---- a part ----
+  // Its head is the model's line for it (⏺, white) or the to-do the plan moved on to (▸); a part with neither has none.
+  // A click on the head folds the part's steps; a finished part's counts show beside it on hover.
   function partHead(p, n, live, turn) {
     const ds = p.keys.map((k) => S.steps[k]).filter(Boolean), acts = ds.filter(isCall);
-    const title = (p.plan ? '<span class="pl7">▸</span> ' : '') + (p.said && p.title ? esc(p.title) : '<span class="g">' + esc(cut(p.title || (acts[0] ? verbOf(acts[0]).join(' ') : 'Part ' + n), 160)) + '</span>');
-    if (live) {
-      const ls = live, [vb, tg] = ls.verb, fails = turn.steps.filter((d) => d.err || d.k === 'error').length;
-      return '<div class="hd7"><span class="no"><span class="ac">' + (STILL.matches ? '⠿' : SPIN[Math.floor(now() / 120) % 10]) + '</span></span><span class="ti">' + title + '<span class="nw7" style="--c:' + fam(ls) + '"><span class="vb">' + esc(vb) + '</span>' + (tg ? ' <span class="tg">' + esc(cut(tg, 90)) + '</span>' : '') + ' <span class="t">' + dur(now() - ls.since) + '</span></span></span><span class="oc">' + turn.steps.filter(isCall).length + ' calls · ' + ktok(turn.think + (ls.k === 'think' ? ls.tokens ?? 0 : 0)) + ' thinking' + (fails ? ' · <span class="bad">' + fails + ' failed</span>' : '') + '</span><span class="tm"><b>' + dur(now() - (turn.start ?? now())) + '</b></span></div>';
-    }
+    if (!p.title || (!p.said && !p.plan)) return '<div class="hd7 none"></div>';
+    const title = (p.plan ? '<span class="pl7">▸</span>' : '<span class="b7">⏺</span>') + '<span class="ti">' + esc(p.title) + (!live && shut.has(p.key) ? ' <span class="g">· ' + plural(ds.length, 'step') + ' folded</span>' : '') + '</span>';
+    if (live) return '<div class="hd7' + (p.plan ? ' plan' : '') + '" data-o7="' + esc(p.key) + '">' + title + '</div>';
     const files = {}; for (const d of acts) if (d.k === 'diff') { const f = files[base(d.path)] ??= { a: 0, r: 0 }; f.a += d.add; f.r += d.del; }
-    const names = Object.keys(files), test = acts.filter((d) => d.tests).pop(), fails = acts.filter((d) => d.err || d.k === 'error').length;
+    const names = Object.keys(files), test = acts.filter((d) => d.tests).pop(), fails = acts.filter(failed).length;
     const oc = [names.length ? '<span class="ed">' + esc(names.length === 1 ? names[0] : names.length + ' files') + ' <span class="add">+' + names.reduce((s, x) => s + files[x].a, 0) + '</span> <span class="del">−' + names.reduce((s, x) => s + files[x].r, 0) + '</span></span>' : '', test ? (test.tests.failed ? '<span class="bad">✗ ' + test.tests.failed + ' failed</span>' : '<span class="ok">✓ ' + test.tests.passed + ' passed</span>') : '', fails ? '<span class="bad">' + plural(fails, 'failed step') + '</span>' : ''].filter(Boolean).join('');
     const ms = ds.reduce((s, d) => s + (d.ms ?? 0), 0);
-    return '<div class="hd7" data-o7="' + esc(p.key) + '"><span class="no">' + n + '</span><span class="ti">' + title + '</span><span class="oc">' + oc + '</span><span class="tm">' + (ms ? dur(ms) : '') + '</span></div>';
+    return '<div class="hd7' + (p.plan ? ' plan' : '') + '" data-o7="' + esc(p.key) + '">' + title + '<span class="oc">' + oc + '</span><span class="tm">' + (ms ? dur(ms) : '') + '</span></div>';
   }
+  // the to-dos under the spinner line, in two rows: what is done as a count, the one under way, the next two and how
+  // many more
   function planOf(turn) {
-    const last = turn.steps.filter((d) => d.k === 'todos').pop();
-    if (!last) return '';
-    const i = (last.items ?? []).findIndex((t) => !t.done);
-    return '<div class="plan7">' + (last.items ?? []).map((t, j) => '<span class="' + (t.done ? 'done' : j === i ? 'now' : '') + '">' + (t.done ? '✓' : j === i ? '▸' : '○') + ' ' + esc(cut(t.text, 48)) + '</span>').join('') + '</div>';
+    const last = turn.steps.filter((d) => d.k === 'todos').pop(), items = last?.items ?? [];
+    if (!items.length) return '';
+    const done = items.filter((t) => t.done).length, i = items.findIndex((t) => !t.done);
+    if (i < 0) return '<div class="plan7"><div><span class="k">⎿</span><span class="done">☒ ' + plural(done, 'to-do') + ' done</span></div></div>';
+    const next = items.slice(i + 1).filter((t) => !t.done), more = next.length - 2;
+    return '<div class="plan7"><div><span class="k">⎿</span>' + (done ? '<span class="done">☒ ' + done + ' done</span><span class="sep">·</span>' : '') + '<span class="now">☐ ' + esc(cut(items[i].text, 80)) + '</span></div>'
+      + (next.length ? '<div><span class="k"></span>' + next.slice(0, 2).map((t) => '<span>☐ ' + esc(cut(t.text, 48)) + '</span>').join('<span class="sep">·</span>') + (more > 0 ? '<span class="sep">· +' + more + ' more</span>' : '') + '</div>' : '') + '</div>';
   }
 
   // ---- kept elements ----
@@ -164,10 +232,10 @@
   function place(box, el, prev) { if ((prev ? prev.nextSibling : box.firstChild) !== el) box.insertBefore(el, prev ? prev.nextSibling : box.firstChild); return el; }
   function partInto(el, p, n, t0, live, turn, quiet) {
     // a finished part that nothing changed in is left as it is
-    const sig = live ? null : [p.key, p.keys.length, n, t0, shut.has(p.key), p.keys.filter((k) => opened.has(k)).join(','), p.keys.filter((k) => !S.steps[k]).length].join('|');
+    const sig = live ? null : [p.key, p.keys.length, n, t0, shut.has(p.key), [...opened].join(','), thinkShown, p.keys.filter((k) => !S.steps[k]).length].join('|');
     if (sig && el.dataset.sig === sig) return;
     el.dataset.sig = sig ?? '';
-    if (!el.firstChild) el.innerHTML = '<div class="hd7w"></div><div class="fold7"><div class="in7"><div class="live7"><div class="li7"></div></div><div class="tl7"></div></div></div>';
+    if (!el.firstChild) el.innerHTML = '<div class="hd7w"></div><div class="fold7"><div class="in7"><div class="tl7"></div><div class="live7"><div class="li7"></div></div></div></div>';
     el.classList.add('ch7');
     el.classList.toggle('live', Boolean(live));
     el.classList.toggle('shut', !live && shut.has(p.key));
@@ -175,7 +243,7 @@
     if (live) write(el.querySelector('.li7'), planOf(turn)); // when the part ends its plan stays while it folds away
     const tl = el.querySelector('.tl7'), have = new Map([...tl.children].map((x) => [x.dataset.k, x]));
     let prev = null;
-    for (const [k, html] of linesOf(p, t0, live)) {
+    for (const [k, html] of linesOf(p, t0, live, turn)) {
       const x = have.get(k) ?? made('s7', k, quiet);
       write(x, html);
       prev = place(tl, x, prev);
@@ -270,11 +338,12 @@
   // way is drawn again five times a second); a click copies.
   document.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    const el = e.target.closest('[data-r7],[data-o7],[data-fold7],[data-tail7]');
+    const el = e.target.closest('[data-r7],[data-o7],[data-fold7],[data-tail7],[data-thinks7]');
     if (!el) return;
     if (el.dataset.r7) { const k = el.dataset.r7; opened.has(k) ? opened.delete(k) : opened.add(k); }
     else if (el.dataset.o7) { const k = el.dataset.o7; shut.has(k) ? shut.delete(k) : shut.add(k); }
     else if (el.dataset.fold7) { const k = el.dataset.fold7; unfolded.has(k) ? unfolded.delete(k) : unfolded.add(k); }
+    else if (el.dataset.thinks7) { thinkShown = !thinkShown; try { localStorage.setItem('think-shown', thinkShown ? '1' : '0'); } catch {} }
     else if (el.dataset.tail7) { tailOpen = !tailOpen; try { localStorage.setItem('think-open', tailOpen ? '1' : '0'); } catch {} }
     render();
   });

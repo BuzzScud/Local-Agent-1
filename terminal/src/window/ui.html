@@ -162,32 +162,39 @@ button { font: inherit; color: inherit; }
 .status { display: flex; align-items: center; gap: 14px; padding: 9px 2px; color: var(--dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; min-height: 38px; }
 .status .v { color: var(--text); } .status .ac { color: var(--accent); font-weight: 600; } .status .r { margin-left: auto; color: var(--faint); }
 .bar10 { display: inline-flex; gap: 2px; } .bar10 i { width: 9px; height: 5px; border-radius: 1px; background: #38383e; display: block; } .bar10 i.on { background: var(--accent); }
-/* the prompt between two lines */
-.prompt { border-top: 1px solid var(--hair2); border-bottom: 1px solid var(--hair2); display: flex; align-items: flex-start; gap: 12px; padding: 11px 2px; cursor: text; }
+/* the prompt in a box, as Claude Code draws it (19 Nov 2026, the owner's pick "A · Claude Code": the hint to paste and
+   the word Send went; ⌘V still pastes and enter still sends) */
+.prompt { border: 1px solid var(--hair2); border-radius: 10px; display: flex; align-items: flex-start; gap: 12px; padding: 9px 10px 9px 14px; margin-top: 4px; cursor: text; }
 .prompt .m { color: var(--accent); font-weight: 700; }
 .prompt .t { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; font: 14px/1.5 var(--mono); min-height: 21px; max-height: 40vh; overflow-y: auto; }
 .prompt .t .ph { color: #5d5d64; }
 .prompt .t .hint { color: var(--faint); }
 .caret { display: inline-block; width: 8px; height: 17px; vertical-align: -3px; background: var(--accent); animation: blink 1.1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
-.prompt .hk { color: var(--faint); font: 600 11px var(--mono); letter-spacing: .1em; padding-top: 3px; }
-.send { border: 1px solid var(--hair2); background: var(--raise2); color: var(--dim); border-radius: 8px; padding: 4px 14px; font: 500 13px var(--sans); cursor: pointer; }
+.send { flex-shrink: 0; width: 28px; height: 28px; margin: -2px 0; border: 1px solid var(--hair2); background: var(--raise2); color: var(--faint); border-radius: 7px; padding: 0; display: grid; place-items: center; cursor: pointer; }
 .send.ready { background: var(--accent); border-color: var(--accent); color: #0b1a2b; }
 .menu { border: 1px solid var(--hair2); background: #1c1c1f; border-radius: 10px; margin: 0 0 8px; max-height: 42vh; overflow-y: auto; padding: 4px; }
 .menu .mi { display: flex; gap: 14px; padding: 4px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
 .menu .mi .l { color: var(--text); min-width: 160px; } .menu .mi .d { color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
 .menu .mi.on { background: var(--accent-bg); } .menu .mi.on .l { color: var(--accent); }
-.modes { display: flex; align-items: center; gap: 10px; padding: 9px 2px 12px; font-size: 12.5px; color: var(--faint); white-space: nowrap; overflow: hidden; }
-.modes .sep { color: #45454b; } .modes .sp { flex: 1; min-width: 6px; } .modes .bad { color: var(--bad); }
-/* a narrow window (fitModes): "shift+tab" goes first, then the model's name ends in … (the loops' words a little
-   too); the folder keeps its name (22 letters at most), and the mode and its chips always show whole */
-.modes > span, .modes .chips { flex-shrink: 0; }
+.modes { display: flex; align-items: center; gap: 10px; padding: 7px 2px 10px; font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; }
+.modes .sep { color: #45454b; } .modes .sp { flex: 1; min-width: 6px; }
+/* a narrow window (fitModes): "(shift+tab to cycle)" goes first, then the model's name ends in … (the loops' words a little
+   too); the folder keeps its name (22 letters at most), and the mode always shows whole */
+.modes > span, .modes .modeb { flex-shrink: 0; }
 .modes .mn, .modes .mf, .modes .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .modes .mn { flex-shrink: 6; min-width: 48px; } .modes .mf { max-width: 22ch; } .modes .lb { flex-shrink: 1; } .modes.tight .hk2 { display: none; }
-.chips { display: flex; gap: 4px; }
-.chip { border: 1px solid transparent; background: var(--raise2); color: var(--dim); border-radius: 7px; padding: 2px 9px; cursor: pointer; font: 12px var(--mono); }
-.chip.on { border-color: var(--accent-line); background: var(--accent-bg); color: var(--accent); }
-.chip.on.bypass { border-color: rgba(255,107,107,.55); background: rgba(255,107,107,.1); color: var(--bad); }
+/* the mode: the row's one button; a click (or the pop-up's keys) picks another (19 Nov 2026, the owner: "hide all of the
+   buttons in the bypass button … a pop up menu") */
+.modeb { display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; background: transparent; border-radius: 7px; padding: 1px 8px; margin-left: -8px; cursor: pointer; font: 12px var(--mono); color: var(--sand); }
+.modeb:hover, .modeb.open { background: rgba(255,255,255,.05); border-color: var(--hair2); } .modeb.bypass { color: var(--bad); } .modeb.ask { color: var(--dim); } .modeb .car { font-size: 9px; opacity: .7; }
+.mpop { position: fixed; z-index: 8; width: 340px; background: #202023; border: 1px solid var(--hair2); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.55); padding: 6px; font-family: var(--sans); }
+.mpop .hd { display: flex; align-items: baseline; padding: 6px 10px 8px; font: 600 12.5px var(--sans); color: var(--text); border-bottom: 1px solid var(--hair); margin-bottom: 4px; } .mpop .hd span { margin-left: auto; color: var(--faint); font: 11px var(--mono); font-weight: 400; }
+.mpop .it { display: grid; grid-template-columns: 18px 1fr 14px; gap: 2px 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; align-items: baseline; }
+.mpop .it:hover, .mpop .it.cur { background: rgba(255,255,255,.06); }
+.mpop .it .n { color: #5d5d64; font: 11px var(--mono); } .mpop .it .l { color: var(--text); font-size: 13px; } .mpop .it .d { grid-column: 2; color: var(--faint); font-size: 11.5px; line-height: 1.4; }
+.mpop .it .c { grid-row: 1; grid-column: 3; color: var(--accent); font-size: 12px; } .mpop .it.bypass .l, .mpop .it.bypass .c { color: var(--bad); }
+.mpop .sep { height: 1px; background: var(--hair); margin: 4px 8px; } .mpop .ft { color: #6d6d74; font-size: 11px; padding: 6px 10px 4px; }
 /* a question: a card in the prompt's place */
 .perm { border: 1px solid var(--accent-line); border-radius: 12px; background: #1b1d22; padding: 14px 16px; margin: 8px 0 10px; }
 .perm .h { font: 600 13px var(--sans); color: #afafff; margin-bottom: 8px; }
@@ -260,7 +267,7 @@ button:focus-visible, .row:focus-visible, .card:focus-visible { outline: 2px sol
 <div id="drops"></div>
 <script>
 const T = new URLSearchParams(location.search).get('t');
-const S = { items: {}, order: [], steps: {}, last: null, screen: null, bot: null, folder: '', side: false, find: false, folderMenu: false, usageCard: false, q: '', toast: null, follow: true, sessions: null, gone: false, tps: [], skew: 0 };
+const S = { items: {}, order: [], steps: {}, last: null, screen: null, bot: null, folder: '', side: false, find: false, folderMenu: false, usageCard: false, modeMenu: false, modeCur: 0, q: '', toast: null, follow: true, sessions: null, gone: false, tps: [], skew: 0 };
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const svg = (d, s = 15) => '<svg width="' + s + '" height="' + s + '" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
 const I = {
@@ -481,7 +488,7 @@ function statusHtml(L) {
 function promptHtml(st) {
   const v = st.input.value, c = Math.min(st.input.cursor, v.length);
   const text = v ? esc(v.slice(0, c)) + '<span class="caret"></span>' + esc(v.slice(c)) + (st.argHint ? ' <span class="hint">' + esc(st.argHint) + '</span>' : '') : '<span class="caret"></span><span class="ph">' + esc(st.placeholder || 'Ask anything') + '</span>';
-  return '<div class="prompt" id="prompt"><span class="m">' + (st.inputMode === 'bash' ? '!' : '❯') + '</span><div class="t">' + text + '</div><span class="hk">PASTE ⌘V</span><button class="send' + (v ? ' ready' : '') + '" data-act="send">Send ⏎</button></div>';
+  return '<div class="prompt" id="prompt"><span class="m">' + (st.inputMode === 'bash' ? '!' : '❯') + '</span><div class="t">' + text + '</div><button class="send' + (v ? ' ready' : '') + '" data-act="send" title="Send ⏎" aria-label="Send">' + SEND_ICON + '</button></div>';
 }
 function menuHtml(menu) {
   if (!menu?.items?.length) return '';
@@ -497,10 +504,36 @@ function permHtml(p) {
 }
 const MODES = [['ask', 'manual'], ['edits', 'accept edits'], ['plan', 'plan'], ['auto', 'auto'], ['bypass', 'bypass']];
 const MODE_LINE = { ask: 'manual: asks before each change', edits: '⏵⏵ accept edits on', plan: '⏸ plan mode on', auto: '⏵⏵ auto mode on', bypass: '⏵⏵ bypass permissions on' };
+// The pop-up's words (help.mjs MODE_OPTIONS' notes, shorter). Bypass is picked here or with /mode, never by shift+tab.
+const MODE_MENU = [['ask', 'Manual', 'Asks before every edit and command'], ['edits', 'Accept edits', 'Edits files without asking; still asks before commands'], ['plan', 'Plan', 'Reads and plans; changes nothing'], ['auto', 'Auto', 'Clear steps run, the model checks the rest, risky ones ask'], ['bypass', 'Bypass permissions', 'Never asks; blocked commands and the project fence still hold']];
+const SEND_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg>';
+// The row under the box (19 Nov 2026, the owner's pick "A · Claude Code"): the mode, the row's one button, then the model
+// and the folder on the right.
 function modesHtml(st) {
   const m = st.mode || 'ask';
-  return '<div class="modes"><span class="mn" title="' + esc(st.modelName || '') + '">' + esc(st.modelName || '') + '</span><span class="sep">│</span><span class="mf">' + esc(String(st.cwdShort || S.folder).split('/').pop() || '~') + '</span><span class="sep">·</span><span class="' + (m === 'bypass' ? 'bad' : '') + '" style="' + (m === 'bypass' ? '' : 'color:var(--sand)') + '">' + (MODE_LINE[m] || m) + '</span><span class="hk2">shift+tab</span>' + (st.loopsBadge ? '<span class="lb" style="color:var(--accent)">' + esc(st.loopsBadge) + '</span>' : '') + '<span class="sp"></span><div class="chips">' + MODES.map(([k, w]) => '<button class="chip' + (m === k ? ' on' : '') + (k === 'bypass' ? ' bypass' : '') + '" data-mode="' + k + '">' + w + '</button>').join('') + '</div></div>';
+  return '<div class="modes"><button class="modeb ' + esc(m) + (S.modeMenu ? ' open' : '') + '" data-act="modes" aria-haspopup="menu" aria-expanded="' + (S.modeMenu ? 'true' : 'false') + '">' + esc(MODE_LINE[m] || m) + ' <span class="car">▾</span></button><span class="hk2">(shift+tab to cycle)</span>' + (st.loopsBadge ? '<span class="lb" style="color:var(--accent)">' + esc(st.loopsBadge) + '</span>' : '') + '<span class="sp"></span><span class="mn" title="' + esc(st.modelName || '') + '">' + esc(st.modelName || '') + '</span><span class="sep">·</span><span class="mf">' + esc(String(st.cwdShort || S.folder).split('/').pop() || '~') + '</span></div>';
 }
+function modeMenuHtml() {
+  const m = S.last?.mode;
+  return '<div class="mpop" id="mpop" role="menu"><div class="hd">Permission mode<span>shift+tab cycles</span></div>'
+    + MODE_MENU.map(([k, l, d], i) => (k === 'bypass' ? '<div class="sep"></div>' : '') + '<div class="it' + (k === 'bypass' ? ' bypass' : '') + (i === S.modeCur ? ' cur' : '') + '" role="menuitemradio" aria-checked="' + (k === m) + '" data-mode="' + k + '"><span class="n">' + (i + 1) + '</span><span class="l">' + l + '</span><span class="c">' + (k === m ? '✓' : '') + '</span><span class="d">' + d + '</span></div>').join('')
+    + '<div class="ft">↑↓ choose · enter or 1–5 pick · esc closes</div></div>';
+}
+// The pop-up stands over the mode's button, its left edge with the button's, inside the window.
+function placeModeMenu() {
+  const pop = document.getElementById('mpop'), b = document.querySelector('.modeb');
+  if (!pop || !b) return;
+  const r = b.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)) + 'px';
+  pop.style.bottom = (innerHeight - r.top + 6) + 'px';
+}
+function openModeMenu(on) {
+  S.modeMenu = on;
+  if (on) { S.find = false; S.folderMenu = false; S.usageCard = false; S.modeCur = Math.max(0, MODE_MENU.findIndex(([k]) => k === S.last?.mode)); renderUsage(S.last); }
+  renderDrops();
+  if (S.last && put('modes', modesHtml(S.last))) fitModes();
+}
+function pickMode(k) { openModeMenu(false); if (k && k !== S.last?.mode) send({ t: 'act', do: 'mode', mode: k }); }
 function homeHtml(st) {
   const recent = (st.start?.recent ?? []).slice(0, 3);
   return '<div class="home">' + bot('happy', 64) + '<div class="ttl">New conversation</div><div class="sub">in ' + esc(st.start?.cwd || st.cwdShort) + ' · ' + esc(st.start?.model || st.modelName) + (st.start?.effort ? ' · ' + esc(st.start.effort) : '') + '</div>'
@@ -713,7 +746,7 @@ function render() {
   document.getElementById('pilldot').className = 'dot' + (dot ? ' ' + dot : '');
   document.getElementById('folderbtn').title = S.folder;
   renderUsage(st);
-  if (S.usageCard || S.find) renderDrops();
+  if (S.usageCard || S.find || S.modeMenu) renderDrops();
   if (S.side) renderSide();
   // Before the app draws as data (the folder question, the safety check): its own screen, as drawn.
   if (!st) return frameOf('screen', '<div class="screen">' + (S.screen ? runsHtml(S.screen.rows) : '<span style="color:var(--faint)">Starting Agentic Coder…</span>') + '</div>');
@@ -785,6 +818,7 @@ function renderDrops() {
   if (S.folderMenu) h += '<div class="drop" style="width:360px"><div class="lbl" style="padding:4px 8px 6px">This window works in</div><div class="row static"><span class="t" style="font-family:var(--mono)">' + esc(S.folder) + '</span></div><div class="row" tabindex="0" role="button" data-act="reveal"><span class="t">Show in Finder</span></div><div class="row" tabindex="0" role="button" data-act="other"><span class="t">Open another folder…</span><span class="a">a new window</span></div></div>';
   if (S.usageCard && S.last?.usage) h += usageCardHtml(S.last.usage, S.last.live?.phase === 'working');
   else if (S.usageCard && S.last?.meter) h += meterCardHtml(S.last.meter);
+  if (S.modeMenu && S.last) h += modeMenuHtml();
   if (S.toast) h += '<div class="toast">' + esc(S.toast) + '</div>';
   if (h !== dropsHtml) {
     dropsHtml = h;
@@ -792,6 +826,7 @@ function renderDrops() {
     keepField('fq', () => { drops.innerHTML = h; }, opening);
   }
   placeCard();
+  placeModeMenu();
 }
 async function loadSessions() { try { S.sessions = await (await fetch('/sessions?t=' + T)).json(); } catch { S.sessions = []; } }
 
@@ -819,6 +854,14 @@ addEventListener('keydown', (e) => {
   const inField = document.activeElement?.tagName === 'INPUT';
   if (e.metaKey && e.key.toLowerCase() === 'b') { e.preventDefault(); S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }
   if (e.metaKey && e.key.toLowerCase() === 'k') { e.preventDefault(); S.find = !S.find; S.folderMenu = false; if (S.find) loadSessions().then(renderDrops); renderDrops(); return; }
+  if (S.modeMenu && !e.metaKey) {
+    const n = MODE_MENU.length;
+    if (e.key === 'Escape') { e.preventDefault(); openModeMenu(false); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); S.modeCur = (S.modeCur + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; renderDrops(); return; }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickMode(MODE_MENU[S.modeCur]?.[0]); return; }
+    if (/^[1-5]$/.test(e.key) && !e.ctrlKey && !e.altKey) { e.preventDefault(); pickMode(MODE_MENU[Number(e.key) - 1][0]); return; }
+    openModeMenu(false); // any other key closes it and goes on to the app (shift+tab cycles there)
+  }
   if (e.key === 'Escape' && (S.find || S.folderMenu || S.side || S.usageCard)) { e.preventDefault(); S.find = false; S.folderMenu = false; S.side = false; S.usageCard = false; S.q = ''; renderUsage(S.last); renderDrops(); renderSide(); return; }
   // In the search drop-down and the side bar, keys work the page's own way: Tab moves between the rows, Enter (or
   // space) opens the one you are on, and Enter in the box opens the first match. Everywhere else Tab still goes to the
@@ -862,6 +905,8 @@ function liveToggle(el) {
 document.addEventListener('pointerdown', (e) => { const el = e.button === 0 && e.target.closest?.(LIVE_TOGGLES); if (el) liveToggle(el); });
 document.addEventListener('click', (e) => {
   const t = e.target;
+  // the mode's pop-up closes on a click anywhere outside it (its own button toggles it)
+  if (S.modeMenu && !t.closest('#mpop') && !t.closest('[data-act="modes"]')) openModeMenu(false);
   const runBtn = t.closest('[data-run]'); if (runBtn) { if (S.usageCard) { S.usageCard = false; renderUsage(S.last); renderDrops(); } return run(runBtn.dataset.run); }
   const act = t.closest('[data-act]')?.dataset.act;
   if (act === 'side') { S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }
@@ -870,9 +915,10 @@ document.addEventListener('click', (e) => {
   if (act === 'usage') { S.usageCard = !S.usageCard; S.find = false; S.folderMenu = false; renderUsage(S.last); renderDrops(); return; }
   if (act === 'reveal') { fetch('/reveal?t=' + T); S.folderMenu = false; renderDrops(); return; }
   if (act === 'other') { S.folderMenu = false; renderDrops(); fetch('/other-folder?t=' + T).then((r) => r.json()).then((r) => { if (r.ok) toast('Opening ' + r.folder + ' in a new window'); }); return; }
+  if (act === 'modes') { openModeMenu(!S.modeMenu); return; }
   if (act === 'send') { if (S.last?.input?.value) keys('\r'); return; }
   const res = t.closest('[data-resume]'); if (res) { send({ t: 'act', do: 'resume', id: res.dataset.resume }); S.find = false; S.side = false; S.q = ''; renderDrops(); renderSide(); return; }
-  const md_ = t.closest('[data-mode]'); if (md_) { send({ t: 'act', do: 'mode', mode: md_.dataset.mode }); return; }
+  const md_ = t.closest('[data-mode]'); if (md_) { pickMode(md_.dataset.mode); return; }
   if (t.closest(LIVE_TOGGLES)) return; // done on the press (liveToggle)
   const task = t.closest('[data-task]'); if (task) { send({ t: 'act', do: 'toggle', id: task.dataset.task }); return; }
   const row = t.closest('[data-row]'); if (row) { const k = row.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); rowsVer++; render(); return; }
@@ -890,7 +936,7 @@ document.addEventListener('scroll', (e) => { const c = e.target; if (c?.id !== '
 // The pretend terminal is as wide as the conversation, so what the app draws itself fits the window.
 let fitTimer = null;
 function fit() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { const probe = document.createElement('span'); probe.style.cssText = 'position:absolute;visibility:hidden;font:13px var(--mono)'; probe.textContent = 'M'.repeat(100); document.body.append(probe); const cw = probe.getBoundingClientRect().width / 100; probe.remove(); send({ t: 'resize', cols: Math.floor((innerWidth - 60) / cw), rows: Math.floor((innerHeight - 52) / 18) }); }, 150); }
-addEventListener('resize', () => { fit(); fitBar(); fitModes(); placeCard(); });
+addEventListener('resize', () => { fit(); fitBar(); fitModes(); placeCard(); placeModeMenu(); });
 connect();
 </script>
 <!--steps-page-->
