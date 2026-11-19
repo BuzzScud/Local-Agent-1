@@ -85,6 +85,8 @@ export function slashPanels(self) {
         const r = self.settings.remote ?? DEFAULT_REMOTE;
         const to = { claude: 'claude', computer: 'machine', machine: 'machine', service: 'openai', openai: 'openai' }[w];
         if (to) { self.remoteFnRef.current.to(to); break; }
+        // key: the form of the service in use (the Claude API when on this Mac), typing in its API key row.
+        if (w === 'key') { self.remoteFnRef.current.openForm({ source: self.remoteRef.current.on && sourceOf(r) !== 'here' ? sourceOf(r) : 'claude', ask: 'key' }); break; }
         if (w === 'off' || w === 'here') {
           if (self.settings.remote) self.settings.remote = saveUse(r, false).remote;
           if (self.remoteRef.current.on) self.remoteFnRef.current.useLocal();
@@ -98,7 +100,7 @@ export function slashPanels(self) {
           else self.push({ type: 'note', text: `Already on the remote (${remoteLabel(r)}).`, tone: 'dim' });
           break;
         }
-        if (w) { self.push({ type: 'note', text: '/remote alone opens the form; /remote claude, computer or service switches to one, /remote here (or off) comes back to this Mac.', tone: 'dim' }); break; }
+        if (w) { self.push({ type: 'note', text: '/remote alone opens the form; /remote claude, computer or service switches to one, /remote key changes the API key of the one in use, /remote here (or off) comes back to this Mac.', tone: 'dim' }); break; }
         self.remoteFnRef.current.openForm();
         break;
       }

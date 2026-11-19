@@ -273,6 +273,22 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: what streams shows 
   } finally { await p.close(); }
 }, 60_000);
 
+// The Usage card on the Claude API (19 Nov 2026, the owner): a Change API key button runs /remote key, which opens
+// the form of the service in use typing in its key row.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the Usage card’s Change API key runs /remote key', async () => {
+  const p = await openPage();
+  try {
+    const usage = { spent: 27.68, cap: null, resetsOn: Date.UTC(2026, 11, 1), month: 'November', today: 15.28, window: 0.55, last14: Array(14).fill(0), modelName: 'Opus 5.5' };
+    await p.say({ ...base, usage });
+    await p.click('[data-act="usage"]');
+    expect(await p.js(`[...document.querySelectorAll('#ucard button')].map((b) => b.textContent)`)).toEqual(['Open /usage', 'Change API key']);
+    await p.click('#ucard [data-run="/remote key"]');
+    expect(p.got().filter((m) => m.from === 'keys').map((m) => m.data).join('')).toContain('/remote key\r');
+    expect(await p.js(`Boolean(document.getElementById('ucard'))`)).toBe(false); // the card closes
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
 // The window's first seconds on a model on the service (18 Oct 2026, the owner, from pictures of the real window taken
 // as it opened): it said Ready with a green dot for the ~12 s the model was still loading there, "ctx 17% of 32k" until
 // it jumped to "2% of 256k", and "on effort". The states are the bridge's own (meterOf, modelNowOf, effortWords with start.jsx knownOf).

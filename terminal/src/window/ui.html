@@ -699,7 +699,7 @@ function usageCardHtml(u, live) {
     + '<div class="ln"><span class="lbl">14 days</span>' + bars + '<span class="r v">' + money(total) + '</span></div></div>'
     + '<div class="sec"><div class="ln"><span class="lbl">This minute</span><span>Anthropic’s limits · they refill all the time</span></div>' + minute + '</div>'
     + '<div class="src">' + esc(src) + bal + (u.own && !u.balance && u.tierCap ? '<br>your limit is ' + capMoney(u.cap) + '; the ' + esc(u.tier) + ' tier allows ' + capMoney(u.tierCap) : '') + (u.limits ? '<br>limits from Anthropic’s last reply, ' + agoMs(now - u.limits.at) : '') + '</div>'
-    + '<div class="acts"><button class="bb" data-run="/usage">Open /usage</button><span class="k">r refresh · b your balance · l your limit · s the Console’s figure · k Admin key</span></div></div>';
+    + '<div class="acts"><button class="bb" data-run="/usage">Open /usage</button><button class="bb" data-run="/remote key">Change API key</button><span class="k">r refresh · b your balance · l your limit · s the Console’s figure · k Admin key</span></div></div>';
 }
 function meterCardHtml(m) {
   const now = Date.now() - S.skew;

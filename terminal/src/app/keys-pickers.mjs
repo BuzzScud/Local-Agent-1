@@ -116,6 +116,8 @@ export function pickerKeysPart(self) {
     else if (key.upArrow) self.setPicker({ ...pk, index: Math.max(0, pk.index - 1) });
     else if (key.downArrow) self.setPicker({ ...pk, index: Math.min(pk.models.length - 1, pk.index + 1) });
     else if (key.escape || (key.ctrl && ch === 'c')) self.setPicker(null);
+    // k on a remote's row: its /remote form, typing in the API key row.
+    else if (ch === 'k' && !key.ctrl && !key.meta && pk.models[pk.index]?.remoteRow) { const src = pk.models[pk.index].source; self.setPicker(null); self.openRemoteForm({ source: src, ask: 'key' }); }
     else if (key.return) {
       const lv = self.pickLevel(pk);
       const on = !!lv?.effort;

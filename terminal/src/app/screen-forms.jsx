@@ -497,7 +497,7 @@ export function ModelPicker({ app }) {
       <Text> </Text>
       <EffortRows levels={levels} at={at} />
       <Text> </Text>
-      <Text color={C.dim}>↑↓ model · ←→ effort · enter to save · esc to cancel</Text>
+      <Text color={C.dim}>↑↓ model · ←→ effort{pk.models[pk.index]?.remoteRow ? ' · k API key' : ''} · enter to save · esc to cancel</Text>
     </Box>
   );
 }

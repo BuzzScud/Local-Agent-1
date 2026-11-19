@@ -259,6 +259,51 @@ test('/remote claude with no key yet asks only for it, then Connect; the compute
   expect(settingsOf(base).remote).toMatchObject({ use: true, source: 'machine', keyId: 'default' });
 }, T);
 
+test('/model: k on the Claude API row opens its form typing in the API key; a new key pasted there replaces the old one', async () => {
+  const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
+  const { cwd, env, base } = setup();
+  const here = await startFakeServer([]);
+  const claude = await startFakeAnthropic([{ text: 'ready' }]);
+  // the Claude API saved with an old key that no longer works
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({
+    remotes: { claude: { source: 'claude', address: claude.url, port: null, connect: 'http', kind: 'claude', model: 'claude-opus-5-5', context: 0, key: true, keyEnd: '0000', keyId: 'claude' } },
+  }));
+  writeFileSync(join(base, 'home', 'remote-keys.json'), JSON.stringify({ claude: 'test-old-key-0000' }), { mode: 0o600 });
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--url', here.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' },
+    { type: '/model' }, { key: 'enter' }, { wait: 'Pick the model' }, { sleep: 150 }, { snapshot: 'local' },
+    { key: 'down', until: /❯ Claude API/ }, { sleep: 100 }, { snapshot: 'claude' },
+    { type: 'k' }, { wait: 'Remote model' }, { sleep: 150 }, { snapshot: 'form' },
+    { key: `\x1b[200~${claude.key}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 100 },
+    { key: 'enter' }, { wait: 'On the remote: claude-opus-5-5' }, { sleep: 200 },
+    // /remote key (the usage card's Change API key): the service in use, typing in its key row
+    { type: '/remote key' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 }, { snapshot: 'cmd' },
+    { key: 'escape' }, { sleep: 100 }, { key: 'escape' }, { sleep: 200 },
+    ...quit,
+  ] });
+  // On this Mac, /remote key opens the Claude API's key row too.
+  const r2 = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--url', here.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' },
+    { type: '/remote here' }, { key: 'enter' }, { sleep: 300 },
+    { type: '/remote key' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 }, { snapshot: 'cmd' },
+    { key: 'escape' }, { sleep: 100 }, { key: 'escape' }, { sleep: 200 },
+    ...quit,
+  ] });
+  await here.close();
+  await claude.close();
+  expect(r2.text).toMatch(/Back on .*, on this Mac\.|Already on the model on this Mac/); // r2's /remote key was on this Mac
+  for (const s of [r.snapshots.cmd, r2.snapshots.cmd]) {
+    expect(s).toMatch(/Run on\s+◀ Claude API\s+▶/);
+    expect(s).toMatch(/API key\s+█?\s*0 characters/);
+  }
+  expect(r.snapshots.local).toContain('↑↓ model · ←→ effort · enter to save · esc to cancel'); // a model on this Mac: no k
+  expect(r.snapshots.claude).toContain('↑↓ model · ←→ effort · k API key · enter to save · esc to cancel');
+  expect(r.snapshots.form).toMatch(/Run on\s+◀ Claude API\s+▶/);
+  expect(r.snapshots.form).toMatch(/API key\s+█?\s*0 characters/); // typing in the key row straight away
+  expect(JSON.parse(readFileSync(join(base, 'home', 'remote-keys.json'), 'utf8'))).toEqual({ claude: claude.key });
+  expect(claude.seen.every((x) => x.key === claude.key)).toBe(true);
+}, T);
+
 // An Ollama-like server: no llama.cpp /health, an open /v1/models with several models.
 const ollama = () => new Promise((ok) => {
   const srv = createServer(async (req, res) => {
