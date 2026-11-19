@@ -237,7 +237,11 @@ export async function startFakeMcp(spec = {}, { port = 0 } = {}) {
     const at = spec.oauthAt ?? '';
     const issuer = `${base}${at}`;
     const meta = { issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, registration_endpoint: `${issuer}/register`, response_types_supported: ['code'], grant_types_supported: ['authorization_code', 'refresh_token'], code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['none'] };
-    if (u.pathname.startsWith('/.well-known/oauth-protected-resource')) return json(200, { resource: `${base}/mcp`, authorization_servers: [issuer] }), true;
+    // spec.resourceAt ('/mcp/oauth/resource', as hearth's): the server's own details are only there, named by its 401,
+    // and /.well-known/oauth-protected-resource is not there.
+    const resource = () => json(200, { resource: `${base}/mcp`, authorization_servers: [issuer] });
+    if (spec.resourceAt && u.pathname === spec.resourceAt) return resource(), true;
+    if (u.pathname.startsWith('/.well-known/oauth-protected-resource')) return (spec.resourceAt ? json(404, {}) : resource()), true;
     if (at) {
       if (u.pathname === `${at}/.well-known/oauth-authorization-server` || u.pathname === `${at}/.well-known/openid-configuration`) return json(200, meta), true;
       if (u.pathname.startsWith('/.well-known/')) return json(404, {}), true;
@@ -276,7 +280,7 @@ export async function startFakeMcp(spec = {}, { port = 0 } = {}) {
     for await (const c of req) chunks.push(c);
     const raw = Buffer.concat(chunks).toString('utf8');
     if (spec.oauth && oauthRoute(req, res, raw)) return;
-    if (spec.oauth && !signin.issued.has(String(req.headers.authorization ?? '').replace(/^Bearer /, ''))) { res.writeHead(401, { 'www-authenticate': `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp"` }); res.end('sign in first'); return; }
+    if (spec.oauth && !signin.issued.has(String(req.headers.authorization ?? '').replace(/^Bearer /, ''))) { res.writeHead(401, { 'www-authenticate': `Bearer resource_metadata="${base}${spec.resourceAt ?? '/.well-known/oauth-protected-resource/mcp'}"` }); res.end('sign in first'); return; }
     let body = null;
     try { body = raw ? JSON.parse(raw) : null; } catch { /* not JSON */ }
     seen.push({ method: req.method, url: req.url, headers: req.headers, body });

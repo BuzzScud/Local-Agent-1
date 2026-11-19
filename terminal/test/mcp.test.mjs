@@ -586,6 +586,27 @@ test('a sign-in server that keeps its details under its own path (as hearth does
   signOut(s);
 }, 30_000);
 
+// 19 Nov 2026, still "Dynamic Client Registration rejected (HTTP 405)" after the fix above: hearth keeps the server's own
+// details only at the address its 401 names (/mcp/oauth/resource/…), not at /.well-known/oauth-protected-resource, so
+// the client never learned the sign-in server. signIn now asks the server first and follows its 401.
+test('a server whose details are only at the address its 401 names (as hearth\'s are): signs in and connects', async () => {
+  const { signIn, oauthProvider, readSignin, signOut } = await import('../src/app/mcp-auth.mjs');
+  const fake = await startFakeMcp({ oauth: true, oauthAt: '/mcp/oauth', resourceAt: '/mcp/oauth/resource/mcp' });
+  fakes.push(fake);
+  const s = store.serverOf('factory2', { url: fake.url, auth: 'oauth' });
+  const opened = [];
+  const browser = async (url) => { opened.push(url); const r = await fetch(url, { redirect: 'manual' }); await fetch(r.headers.get('location')); };
+  expect(await signIn(s, { open: browser })).toEqual({ ok: true });
+  expect(new URL(opened[0]).pathname).toBe('/mcp/oauth/authorize');
+  expect(readSignin(s).client.client_id).toBe('client-1');
+  const h = hub({ auth: (cfg) => oauthProvider(cfg) });
+  h.configure([s]);
+  await h.ready();
+  expect(h.status()[0].state).toBe('connected');
+  expect((await h.call('factory2', 'echo', { text: 'ready' })).content[0].text).toBe('ready');
+  signOut(s);
+}, 30_000);
+
 test('discoveryFetch: asks the issuer\'s own address only when the RFC one is not there; nothing else changes', async () => {
   const { discoveryFetch } = await import('../src/tools/mcp-discovery.mjs');
   const asked = [];

@@ -93,20 +93,37 @@ async function callbackPage() {
 
 export const openInBrowser = (url) => { spawn('open', [url], { stdio: 'ignore', detached: true }).unref(); };
 
+// Where the server says its sign-in details are (19 Nov 2026, hearth's Code Factory: "Dynamic Client Registration
+// rejected (HTTP 405)"). A server may keep them only at the address its 401 names (WWW-Authenticate resource_metadata),
+// not at /.well-known/oauth-protected-resource; without asking it first, the client never learns the sign-in server
+// and posts to /register at the site's root. → URL, or undefined (no 401, no address, or the server can't be reached).
+export async function resourceMetadataOf(serverUrl, { fetchFn = (...a) => globalThis.fetch(...a), extract } = {}) {
+  try {
+    const res = await fetchFn(serverUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'Agentic Coder', version: '0' } } }),
+    });
+    await res.body?.cancel?.().catch(() => {});
+    return res.status === 401 ? extract(res).resourceMetadataUrl : undefined;
+  } catch { return undefined; }
+}
+
 // Sign in to one server: the client's own sign-in (auth) with the browser in the middle.
 // open(url): opens the page (the browser). onStep(text): what is happening, for the screen.
 // → { ok, already } · { ok: false, error }
 // fetchFn: what the client fetches with (a test's own server); the sign-in details are also looked for under the
 // issuer's own path (mcp-discovery.mjs).
 export async function signIn(server, { open = openInBrowser, signal, timeoutMs = SIGNIN_MS, onStep = () => {}, fetchFn = discoveryFetch() } = {}) {
-  const { auth } = await import('@modelcontextprotocol/client');
+  const { auth, extractWWWAuthenticateParams } = await import('@modelcontextprotocol/client');
   const back = await callbackPage();
   let timer;
   try {
     let opened = false;
     const provider = oauthProvider(server, { redirectUrl: back.url, onRedirect: (url) => { opened = true; onStep('Opened the sign-in page in your browser · waiting for you there (esc stops)'); open(String(url)); } });
     const serverUrl = new URL(server.url);
-    const first = await auth(provider, { serverUrl, fetchFn });
+    const resourceMetadataUrl = await resourceMetadataOf(serverUrl, { fetchFn, extract: extractWWWAuthenticateParams });
+    const first = await auth(provider, { serverUrl, fetchFn, resourceMetadataUrl });
     if (first === 'AUTHORIZED') return { ok: true, already: !opened };
     const stop = new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error(`no answer from the browser in ${Math.round(timeoutMs / 60_000)} minutes`)), timeoutMs);
@@ -117,7 +134,7 @@ export async function signIn(server, { open = openInBrowser, signal, timeoutMs =
     if (!code) return { ok: false, error: `the service did not sign you in: ${params.get('error_description') ?? params.get('error') ?? 'no code came back'}` };
     if (params.get('state') !== provider.expectedState()) return { ok: false, error: 'the page that came back was not the one this sign-in opened (its state did not match)' };
     onStep('Signed in in the browser · getting the tokens…');
-    const r = await auth(provider, { serverUrl, fetchFn, authorizationCode: code, iss: params.get('iss') ?? undefined });
+    const r = await auth(provider, { serverUrl, fetchFn, resourceMetadataUrl, authorizationCode: code, iss: params.get('iss') ?? undefined });
     return r === 'AUTHORIZED' ? { ok: true } : { ok: false, error: 'the service asked for another sign-in' };
   } catch (e) {
     return { ok: false, error: String(e?.message ?? e).replace(/\s+/g, ' ').slice(0, 240) };
