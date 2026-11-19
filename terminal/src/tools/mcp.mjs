@@ -20,6 +20,7 @@ import { homedir, tmpdir } from 'node:os';
 import { catalogOf, fingerprint, saysOf } from '../agent/mcp.mjs';
 import { SANDBOX_EXEC, sandboxProfile, sandboxAvailable } from './sandbox.mjs';
 import { preparedImage } from './media.mjs';
+import { discoveryFetch } from './mcp-discovery.mjs';
 
 const CLIENT_INFO = { name: 'agentic-coder', version: '0.1.0' };
 // How long a server may take to start and list its tools, and one call to finish.
@@ -148,7 +149,8 @@ export class McpHub extends EventEmitter {
       else if (known?.era === 'modern' && known.discover) prior = { kind: 'modern', discover: known.discover };
     } else {
       const header = cfg.header && cfg.header !== 'Authorization' && key ? { [cfg.header]: key } : null;
-      httpOptions = { ...(cfg.auth === 'oauth' && this.auth ? { authProvider: this.auth(cfg) } : key && !header ? { authProvider: { token: async () => key } } : {}), ...(header ? { requestInit: { headers: header } } : {}) };
+      // A server you sign in to: its token refreshes through the same discovery as the sign-in (mcp-discovery.mjs).
+      httpOptions = { ...(cfg.auth === 'oauth' && this.auth ? { authProvider: this.auth(cfg), fetch: discoveryFetch() } : key && !header ? { authProvider: { token: async () => key } } : {}), ...(header ? { requestInit: { headers: header } } : {}) };
       transport = new StreamableHTTPClientTransport(new URL(cfg.url), httpOptions);
     }
     try {

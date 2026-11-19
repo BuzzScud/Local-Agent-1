@@ -12,6 +12,7 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { saveSecret, readSecret, removeKey } from '../../../models/index.mjs';
+import { discoveryFetch } from '../tools/mcp-discovery.mjs';
 
 const SIGNIN_PORTS = [17690, 17699];
 const SIGNIN_MS = 5 * 60_000;
@@ -95,7 +96,9 @@ export const openInBrowser = (url) => { spawn('open', [url], { stdio: 'ignore', 
 // Sign in to one server: the client's own sign-in (auth) with the browser in the middle.
 // open(url): opens the page (the browser). onStep(text): what is happening, for the screen.
 // → { ok, already } · { ok: false, error }
-export async function signIn(server, { open = openInBrowser, signal, timeoutMs = SIGNIN_MS, onStep = () => {} } = {}) {
+// fetchFn: what the client fetches with (a test's own server); the sign-in details are also looked for under the
+// issuer's own path (mcp-discovery.mjs).
+export async function signIn(server, { open = openInBrowser, signal, timeoutMs = SIGNIN_MS, onStep = () => {}, fetchFn = discoveryFetch() } = {}) {
   const { auth } = await import('@modelcontextprotocol/client');
   const back = await callbackPage();
   let timer;
@@ -103,7 +106,7 @@ export async function signIn(server, { open = openInBrowser, signal, timeoutMs =
     let opened = false;
     const provider = oauthProvider(server, { redirectUrl: back.url, onRedirect: (url) => { opened = true; onStep('Opened the sign-in page in your browser · waiting for you there (esc stops)'); open(String(url)); } });
     const serverUrl = new URL(server.url);
-    const first = await auth(provider, { serverUrl });
+    const first = await auth(provider, { serverUrl, fetchFn });
     if (first === 'AUTHORIZED') return { ok: true, already: !opened };
     const stop = new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error(`no answer from the browser in ${Math.round(timeoutMs / 60_000)} minutes`)), timeoutMs);
@@ -114,7 +117,7 @@ export async function signIn(server, { open = openInBrowser, signal, timeoutMs =
     if (!code) return { ok: false, error: `the service did not sign you in: ${params.get('error_description') ?? params.get('error') ?? 'no code came back'}` };
     if (params.get('state') !== provider.expectedState()) return { ok: false, error: 'the page that came back was not the one this sign-in opened (its state did not match)' };
     onStep('Signed in in the browser · getting the tokens…');
-    const r = await auth(provider, { serverUrl, authorizationCode: code, iss: params.get('iss') ?? undefined });
+    const r = await auth(provider, { serverUrl, fetchFn, authorizationCode: code, iss: params.get('iss') ?? undefined });
     return r === 'AUTHORIZED' ? { ok: true } : { ok: false, error: 'the service asked for another sign-in' };
   } catch (e) {
     return { ok: false, error: String(e?.message ?? e).replace(/\s+/g, ' ').slice(0, 240) };

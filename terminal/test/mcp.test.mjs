@@ -553,6 +553,60 @@ test('a server you sign in to: not connected until you do; the browser round tri
   expect(signedIn(s)).toBe(false);
 }, 30_000);
 
+// 19 Nov 2026: hearth's Code Factory would not sign in ("Dynamic Client Registration rejected (HTTP 405)"): its sign-in
+// server has a path (/mcp/oauth) and keeps its details under it, where the client never looked (mcp-discovery.mjs).
+test('a sign-in server that keeps its details under its own path (as hearth does): signs in, connects, refreshes', async () => {
+  const { signIn, oauthProvider, readSignin, signOut } = await import('../src/app/mcp-auth.mjs');
+  const fake = await startFakeMcp({ oauth: true, oauthAt: '/mcp/oauth' });
+  fakes.push(fake);
+  const s = store.serverOf('factory', { url: fake.url, auth: 'oauth' });
+  const opened = [];
+  const browser = async (url) => { opened.push(url); const r = await fetch(url, { redirect: 'manual' }); await fetch(r.headers.get('location')); };
+  expect(await signIn(s, { open: browser })).toEqual({ ok: true });
+  expect(new URL(opened[0]).pathname).toBe('/mcp/oauth/authorize');
+  expect(readSignin(s).client.client_id).toBe('client-1');
+  // without the second look it is what hearth's was: the root's /register, refused
+  signOut(s);
+  const plain = await signIn(s, { open: browser, fetchFn: (...a) => fetch(...a) });
+  expect(plain.ok).toBe(false);
+  expect(plain.error).toMatch(/405|jwks_uri|Registration/);
+  signOut(s);
+  expect(await signIn(s, { open: browser })).toEqual({ ok: true });
+  // it connects with the kept token, and a token that stops working is refreshed through the same discovery
+  const h = hub({ auth: (cfg) => oauthProvider(cfg) });
+  h.configure([s]);
+  await h.ready();
+  expect(h.status()[0].state).toBe('connected');
+  fake.forget();
+  await h.start('factory');
+  expect(h.status()[0].state).toBe('connected');
+  expect((await h.call('factory', 'echo', { text: 'ready' })).content[0].text).toBe('ready');
+  // two pages: the two sign-ins that worked (the one without the second look stopped before any page)
+  expect(opened.length).toBe(2);
+  signOut(s);
+}, 30_000);
+
+test('discoveryFetch: asks the issuer\'s own address only when the RFC one is not there; nothing else changes', async () => {
+  const { discoveryFetch } = await import('../src/tools/mcp-discovery.mjs');
+  const asked = [];
+  const base = async (input) => {
+    const u = String(input);
+    asked.push(u);
+    if (u === 'https://h.example/mcp/oauth/.well-known/oauth-authorization-server') return new Response('{"issuer":"x"}', { status: 200 });
+    if (u === 'https://h.example/.well-known/oauth-authorization-server/kept') return new Response('{"kept":1}', { status: 200 });
+    return new Response('no', { status: 404 });
+  };
+  const f = discoveryFetch(base);
+  expect(await (await f('https://h.example/.well-known/oauth-authorization-server/mcp/oauth')).json()).toEqual({ issuer: 'x' });
+  expect(asked).toEqual(['https://h.example/.well-known/oauth-authorization-server/mcp/oauth', 'https://h.example/mcp/oauth/.well-known/oauth-authorization-server']);
+  // there already: one ask; another 404: one ask; neither address there: the first 404 back
+  asked.length = 0;
+  expect((await f('https://h.example/.well-known/oauth-authorization-server/kept')).status).toBe(200);
+  expect((await f('https://h.example/mcp/tools')).status).toBe(404);
+  expect(asked.length).toBe(2);
+  expect((await f(new URL('https://h.example/.well-known/oauth-authorization-server/none'))).status).toBe(404);
+});
+
 test('a sign-in the service refuses, or one nobody finishes, says why and keeps nothing', async () => {
   const { signIn, readSignin } = await import('../src/app/mcp-auth.mjs');
   const deny = await startFakeMcp({ oauth: true, oauthDeny: true });

@@ -232,8 +232,20 @@ export async function startFakeMcp(spec = {}, { port = 0 } = {}) {
   const oauthRoute = (req, res, raw) => {
     const u = new URL(req.url, base);
     const json = (status, value) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)); };
-    if (u.pathname.startsWith('/.well-known/oauth-protected-resource')) return json(200, { resource: `${base}/mcp`, authorization_servers: [base] }), true;
-    if (u.pathname === '/.well-known/oauth-authorization-server') return json(200, { issuer: base, authorization_endpoint: `${base}/authorize`, token_endpoint: `${base}/token`, registration_endpoint: `${base}/register`, response_types_supported: ['code'], grant_types_supported: ['authorization_code', 'refresh_token'], code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['none'] }), true;
+    // spec.oauthAt ('/mcp/oauth', as hearth's): the sign-in server has a path, keeps its details under it
+    // (…/mcp/oauth/.well-known/…, its OpenID copy without jwks_uri), and the site's root has neither them nor /register.
+    const at = spec.oauthAt ?? '';
+    const issuer = `${base}${at}`;
+    const meta = { issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, registration_endpoint: `${issuer}/register`, response_types_supported: ['code'], grant_types_supported: ['authorization_code', 'refresh_token'], code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['none'] };
+    if (u.pathname.startsWith('/.well-known/oauth-protected-resource')) return json(200, { resource: `${base}/mcp`, authorization_servers: [issuer] }), true;
+    if (at) {
+      if (u.pathname === `${at}/.well-known/oauth-authorization-server` || u.pathname === `${at}/.well-known/openid-configuration`) return json(200, meta), true;
+      if (u.pathname.startsWith('/.well-known/')) return json(404, {}), true;
+      if (u.pathname === '/register') return json(405, {}), true;
+      if (!u.pathname.startsWith(`${at}/`)) return false;
+      u.pathname = u.pathname.slice(at.length);
+    }
+    if (u.pathname === '/.well-known/oauth-authorization-server') return json(200, meta), true;
     if (u.pathname === '/.well-known/openid-configuration') return json(404, {}), true;
     if (u.pathname === '/register' && req.method === 'POST') { const meta = JSON.parse(raw || '{}'); signin.clients += 1; return json(201, { ...meta, client_id: `client-${signin.clients}` }), true; }
     if (u.pathname === '/authorize') {
