@@ -78,12 +78,12 @@ export function slashPanels(self) {
         break;
       }
       case 'remote': {
-        // /remote alone: the form. claude / computer / service: straight to that
+        // /remote alone: the form. claude / computer / service / hearth: straight to that
         // service (the form, asking for its first row, when it is not set up);
         // here or off: back to this Mac; on: the last remote used.
         const w = arg.toLowerCase();
         const r = self.settings.remote ?? DEFAULT_REMOTE;
-        const to = { claude: 'claude', computer: 'machine', machine: 'machine', service: 'openai', openai: 'openai' }[w];
+        const to = { claude: 'claude', computer: 'machine', machine: 'machine', service: 'openai', openai: 'openai', hearth: 'hearth' }[w];
         if (to) { self.remoteFnRef.current.to(to); break; }
         // key: the form of the service in use (the Claude API when on this Mac), typing in its API key row.
         if (w === 'key') { self.remoteFnRef.current.openForm({ source: self.remoteRef.current.on && sourceOf(r) !== 'here' ? sourceOf(r) : 'claude', ask: 'key' }); break; }
@@ -100,7 +100,7 @@ export function slashPanels(self) {
           else self.push({ type: 'note', text: `Already on the remote (${remoteLabel(r)}).`, tone: 'dim' });
           break;
         }
-        if (w) { self.push({ type: 'note', text: '/remote alone opens the form; /remote claude, computer or service switches to one, /remote key changes the API key of the one in use, /remote here (or off) comes back to this Mac.', tone: 'dim' }); break; }
+        if (w) { self.push({ type: 'note', text: '/remote alone opens the form; /remote claude, computer, service or hearth switches to one, /remote key changes the API key of the one in use, /remote here (or off) comes back to this Mac.', tone: 'dim' }); break; }
         self.remoteFnRef.current.openForm();
         break;
       }

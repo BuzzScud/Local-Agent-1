@@ -28,8 +28,14 @@ export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
 const addressOf = (r) => String(r?.address ?? '').trim() || (r?.kind === 'claude' ? CLAUDE_HOST : '');
 export const CONNECTS = ['http', 'https', 'ssh'];
 // What a remote is, as /remote's Run on row names it: the Claude API, another
-// computer running llama.cpp (coding serve), or another OpenAI-compatible service.
-export const REMOTE_SOURCES = ['claude', 'machine', 'openai'];
+// computer running llama.cpp (coding serve), another OpenAI-compatible service, or
+// hearth (19 Nov 2026, the owner: "i want to be able to add hearth as an api, i can
+// only add claude"): hearth's own OpenAI-compatible door, its address and model filled
+// in, so only its key (hk_…, from hearth's Tools → API page) is typed, and the other
+// service keeps its own set-up.
+export const REMOTE_SOURCES = ['claude', 'machine', 'openai', 'hearth'];
+export const HEARTH_ADDRESS = 'https://employee.hearth.monster/door/v1';
+export const HEARTH_MODEL = 'hearth';
 // A remote saved before the Run on row has no source: its kind says which.
 export const sourceOf = (r) => (REMOTE_SOURCES.includes(r?.source) ? r.source : r?.kind === 'claude' ? 'claude' : r?.kind === 'openai' ? 'openai' : 'machine');
 // The name its key is kept under: its service's (a key saved before is under 'default').

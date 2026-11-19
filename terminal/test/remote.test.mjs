@@ -552,3 +552,30 @@ test('enter connects once a service has what Connect needs; Connect · Save only
     expect(formReady({ ...claude, keys: { ...claude.keys, claude: 'sk-ant-test-0123456789' } })).toBe(true);
   } finally { if (noEnv !== undefined) process.env.ANTHROPIC_API_KEY = noEnv; }
 });
+
+test('/remote hearth: its own service after Another service, address and model filled in, only its key to type, the other service kept', async () => {
+  const { formReady } = await import('../src/app/remote-form.mjs');
+  const service = { source: 'openai', address: 'http://203.0.113.7:60009', port: null, connect: 'http', kind: 'openai', model: 'qwen3-coder:30b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  const settings = { remotes: { openai: service } };
+  let f = openForm(settings, { source: 'hearth' });
+  expect(showValue(f, 'source')).toBe('hearth');
+  // the last service on the Run on row: → stays on it
+  expect(showValue(moveRow(moveRow(moveRow(moveRow(openForm(settings), 'source', 1), 'source', 1), 'source', 1), 'source', 1), 'source')).toBe('hearth');
+  expect(moveRow(f, 'source', 1)).toBe(f);
+  expect(rowsOf(f).map((r) => r.id)).toEqual(['source', 'key', 'model', 'more', 'go']);
+  expect(showValue(f, 'model')).toBe('hearth');
+  expect(showValue({ ...f, more: true }, 'address')).toBe('https://employee.hearth.monster/door/v1');
+  expect(rowNote(f, 'key')).toContain('hk_… from hearth → Tools → API');
+  // no key yet: not ready (its door turns every call away without one)
+  expect(formReady(f)).toBe(false);
+  f = { ...f, keys: { ...f.keys, hearth: 'hk_test0123456789' } };
+  expect(formReady(f)).toBe(true);
+  const plan = savePlan(f, settings, { connect: true });
+  expect(plan.remotes.hearth).toMatchObject({ source: 'hearth', kind: 'openai', connect: 'https', address: 'https://employee.hearth.monster/door/v1', model: 'hearth', key: true, keyId: 'hearth' });
+  expect(plan.remotes.openai).toMatchObject({ address: service.address, model: service.model });
+  expect(plan.keys).toEqual([{ op: 'save', id: 'hearth', key: 'hk_test0123456789', source: 'hearth' }]);
+  expect(plan.remote).toMatchObject({ source: 'hearth', use: true });
+  // saved: /model lists it by its model, and its row says it is hearth's
+  const choices = remoteChoices({ remotes: { ...settings.remotes, hearth: plan.remotes.hearth } });
+  expect(choices.map((c) => c.name)).toEqual(['Another service · qwen3-coder:30b', 'hearth · hearth']);
+});

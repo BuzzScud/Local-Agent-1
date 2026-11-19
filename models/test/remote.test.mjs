@@ -121,7 +121,7 @@ test('each service keeps its key under its own name (a key saved before Run on s
   // AGENTIC_REMOTE_KEY stands in for any remote's key, never a web search service's
   expect(run({ AGENTIC_REMOTE_KEY: 'from-env-key' })).toEqual({ claude: 'from-env-key', old: 'from-env-key', machine: 'from-env-key', search: null });
   const { sourceOf, keyIdOf, REMOTE_SOURCES } = await import('../index.mjs');
-  expect(REMOTE_SOURCES).toEqual(['claude', 'machine', 'openai']);
+  expect(REMOTE_SOURCES).toEqual(['claude', 'machine', 'openai', 'hearth']);
   expect([sourceOf({ kind: 'claude' }), sourceOf({ kind: 'openai' }), sourceOf({ kind: 'llama' }), sourceOf({ kind: 'openai', source: 'machine' })]).toEqual(['claude', 'openai', 'machine', 'machine']);
   expect([keyIdOf({ key: true }), keyIdOf({ keyId: 'claude' })]).toEqual(['default', 'claude']);
   // connecting reads the key under the remote's own name (saved here only in a throwaway home:

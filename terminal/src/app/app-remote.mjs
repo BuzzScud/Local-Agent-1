@@ -306,7 +306,7 @@ export function remotePart(self) {
   // Save only: kept, not connected. The note says where the window stays (this Mac by its name when
   // another Mac shows it), then, when the service has what Connect needs, the app asks whether to
   // connect now (the owner's pick, 3 Oct 2026: "Another service saved" read as something else using it).
-  const remoteWord = (src) => (src === 'machine' ? 'computer' : src === 'openai' ? 'service' : 'claude');
+  const remoteWord = (src) => (src === 'machine' ? 'computer' : src === 'openai' ? 'service' : src === 'hearth' ? 'hearth' : 'claude');
   const saveOnlyForm = (pk) => {
     const plan = keepForm(pk, { connect: false });
     if (!plan) return;
@@ -353,12 +353,12 @@ export function remotePart(self) {
     if (r.jump) { self.setPicker(null); await jumpTo(r.jump); return; }
     self.setPicker(r.box);
   };
-  // /remote claude, /remote computer, /remote service: straight to that saved
-  // service; one not set up yet opens the form on it, typing in its first row.
+  // /remote claude, /remote computer, /remote service, /remote hearth: straight to that saved
+  // service; one not set up yet opens the form on it, typing in its first row (the key's, for hearth).
   const remoteTo = (source) => {
     followSaved(self.settings);
     const r = remotesOf(self.settings)[source];
-    if (!readyRemote(r)) { openRemoteForm({ source, ask: source === 'claude' ? 'key' : 'address' }); return; }
+    if (!readyRemote(r)) { openRemoteForm({ source, ask: source === 'claude' || source === 'hearth' ? 'key' : 'address' }); return; }
     if (self.remoteRef.current.on && self.remoteRef.current.conn && sourceOf(self.settings.remote) === source) { self.push({ type: 'note', text: `Already on ${sourceWord(source)} (${remoteLabel(self.settings.remote)}).`, tone: 'dim' }); return; }
     self.settings.remote = saveUse(r, true).remote;
     useRemote(self.settings.remote);

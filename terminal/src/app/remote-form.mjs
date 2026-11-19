@@ -12,7 +12,7 @@
 // ←→ moves a choice row; typing (or ←→) on a text row edits it in place, and
 // enter does too while the service is not ready to connect.
 // A key never leaves the Keychain except to go in a request's header.
-import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf, ollamaCatalog } from '../../../models/index.mjs';
+import { DEFAULT_REMOTE, REMOTE_SOURCES, HEARTH_ADDRESS, HEARTH_MODEL, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf, ollamaCatalog } from '../../../models/index.mjs';
 import { groupsOf, suggestModel } from './remote-models.mjs';
 import { readTryouts } from './tryouts.mjs';
 import { MEMORY_TO } from '../agent/opening.mjs';
@@ -43,10 +43,12 @@ const LAYOUT = {
   claude: { main: ['key', 'model'], more: ['address', 'context', 'memory', 'cleanAt'] },
   machine: { main: ['address', 'connect', 'key'], more: ['port', 'kind', 'model', 'context', 'memory', 'cleanAt'] },
   openai: { main: ['address', 'key', 'model'], more: ['connect', 'port', 'context', 'memory', 'cleanAt'] },
+  // hearth: its address and model come filled in, so its key is the one row to type.
+  hearth: { main: ['key', 'model'], more: ['address', 'context', 'memory', 'cleanAt'] },
 };
 const CHOICES = { connect: ['http', 'https', 'ssh'], kind: ['llama', 'openai'], context: CONTEXTS };
 const WORDS = {
-  source: (v) => ({ here: 'This Mac', claude: 'Claude API', machine: 'My other computer', openai: 'Another service' })[v] ?? v,
+  source: (v) => ({ here: 'This Mac', claude: 'Claude API', machine: 'My other computer', openai: 'Another service', hearth: 'hearth' })[v] ?? v,
   connect: (v) => ({ http: 'Home network (http)', https: 'Internet (https)', ssh: 'SSH tunnel' })[v] ?? v,
   kind: (v) => ({ llama: 'llama.cpp', openai: 'OpenAI-compatible', claude: 'Claude API' })[v] ?? v,
   context: (v) => (v ? `${Math.round(v / 1024)}k` : 'from server'),
@@ -65,6 +67,7 @@ const FRESH = {
   claude: { ...DEFAULT_REMOTE, source: 'claude', kind: 'claude', connect: 'https', model: DEFAULT_CLAUDE_MODEL },
   machine: { ...DEFAULT_REMOTE, source: 'machine', kind: 'llama', connect: 'http' },
   openai: { ...DEFAULT_REMOTE, source: 'openai', kind: 'openai', connect: 'https' },
+  hearth: { ...DEFAULT_REMOTE, source: 'hearth', kind: 'openai', connect: 'https', address: HEARTH_ADDRESS, model: HEARTH_MODEL },
 };
 const strip = ({ use, ...rest }) => rest;
 
@@ -84,7 +87,8 @@ export function remotesOf(settings) {
 
 // Whether a saved service can be switched to as it is (/remote claude, /model):
 // an address, or for the Claude API a key (its own, or ANTHROPIC_API_KEY).
-export const readyRemote = (r) => Boolean(r) && !remoteProblem(r) && (r.kind !== 'claude' || Boolean(r.key || process.env.ANTHROPIC_API_KEY));
+// hearth always needs its key (its door turns every call away without one).
+export const readyRemote = (r) => Boolean(r) && !remoteProblem(r) && (r.kind !== 'claude' || Boolean(r.key || process.env.ANTHROPIC_API_KEY)) && (r.source !== 'hearth' || Boolean(r.key));
 
 // The saved services as /model rows, the one in use marked by the caller. Another
 // service is named by its model (it has many), its address going to the row's note.
@@ -92,10 +96,10 @@ export function remoteChoices(settings) {
   const all = remotesOf(settings);
   return REMOTE_SOURCES.filter((s) => readyRemote(all[s])).map((s) => {
     const r = all[s];
-    return { id: `remote-${s}`, remoteRow: true, source: s, kind: r.kind, profile: r, name: `${WORDS.source(s)} · ${s === 'claude' ? claudeName(r.model || DEFAULT_CLAUDE_MODEL) : s === 'openai' && r.model ? r.model : remoteLabel(r)}` };
+    return { id: `remote-${s}`, remoteRow: true, source: s, kind: r.kind, profile: r, name: `${WORDS.source(s)} · ${s === 'claude' ? claudeName(r.model || DEFAULT_CLAUDE_MODEL) : (s === 'openai' || s === 'hearth') && r.model ? r.model : remoteLabel(r)}` };
   });
 }
-export const remoteRowDesc = (x) => (x.source === 'claude' ? 'Anthropic · billed to your key' : x.source === 'openai' ? `${x.profile?.model ? `${remoteLabel(x.profile)} · ` : ''}OpenAI-compatible service` : `${WORDS.kind(x.kind)} · another computer`);
+export const remoteRowDesc = (x) => (x.source === 'claude' ? 'Anthropic · billed to your key' : x.source === 'hearth' ? `${remoteLabel(x.profile ?? {})} · hearth’s API` : x.source === 'openai' ? `${x.profile?.model ? `${remoteLabel(x.profile)} · ` : ''}OpenAI-compatible service` : `${WORDS.kind(x.kind)} · another computer`);
 
 // The form as it opens: on the service in use (This Mac when no remote is),
 // or on `source`. keys: null = the saved key stays; '' = none; a string = a
@@ -259,7 +263,7 @@ export function showValue(form, id) {
 // The line after a row: what it means, or what the last check found.
 export function rowNote(form, id) {
   const t = form.test && !form.test.running ? form.test : null;
-  if (id === 'source') return ({ here: 'the model loads on this Mac · nothing leaves it', claude: 'Anthropic’s models · billed to your API key', machine: 'running coding serve or a llama-server', openai: 'OpenRouter, OpenAI, Ollama, LM Studio, vLLM…' })[form.source];
+  if (id === 'source') return ({ here: 'the model loads on this Mac · nothing leaves it', claude: 'Anthropic’s models · billed to your API key', machine: 'running coding serve or a llama-server', openai: 'OpenRouter, OpenAI, Ollama, LM Studio, vLLM…', hearth: 'hearth Lite, hearth or hearth Code, on your hearth key' })[form.source];
   if (id === 'go') {
     // While it runs: what was found so far, what it waits for, and for how long (a model loading
     // on a service can take minutes, and a line that never changes reads as stuck).
@@ -288,12 +292,12 @@ export function rowNote(form, id) {
       const set = LAYOUT[form.source].more.filter((r) => (r === 'memory' ? (form.memory ?? 'mine') !== 'mine' : r === 'cleanAt' ? Boolean(form.cleanAt) : r === 'model' && v.kind === 'llama' ? v.model : v[r] !== fresh[r]));
       return set.length ? set.map((r) => `${ROW[r].label.toLowerCase()} ${showValue(form, r)}`).join(' · ') : LAYOUT[form.source].more.map((r) => ROW[r].label.toLowerCase()).join(', ');
     }
-    case 'address': return claude ? `blank: ${CLAUDE_HOST} · a proxy’s address works too` : ssh ? 'user@host, or a name from ~/.ssh/config' : form.source === 'openai' ? 'the whole address, https:// and its path included' : 'its IP or name (a Tailscale name works too)';
+    case 'address': return claude ? `blank: ${CLAUDE_HOST} · a proxy’s address works too` : ssh ? 'user@host, or a name from ~/.ssh/config' : form.source === 'openai' || form.source === 'hearth' ? 'the whole address, https:// and its path included' : 'its IP or name (a Tailscale name works too)';
     case 'connect': return ssh ? 'through ssh: nothing open to the network' : v.connect === 'https' ? 'encrypted, across the internet' : 'plain http: a home network or Tailscale';
     case 'key': {
       const pending = form.keys[form.source] !== null ? ' · • not saved yet' : '';
       if (claude) return `sk-ant-… from console.anthropic.com → API keys · kept in the ${store}${process.env.ANTHROPIC_API_KEY ? ' · blank: ANTHROPIC_API_KEY' : ''}${pending}`;
-      return `${form.source === 'machine' ? 'the one coding serve printed' : 'the service’s key'} · kept in the ${store}${pending}`;
+      return `${form.source === 'machine' ? 'the one coding serve printed' : form.source === 'hearth' ? 'hk_… from hearth → Tools → API → Keys' : 'the service’s key'} · kept in the ${store}${pending}`;
     }
     case 'kind': return v.kind === 'llama' ? 'coding serve, or a llama-server you started' : 'Ollama, LM Studio, vLLM… on that computer';
     case 'model': {
@@ -325,7 +329,7 @@ const typedKeyId = (source, old) => (source === 'claude' && old?.key && /^claude
 // contexts: an Ollama service's context by model, set in /effort, kept as it was.
 export function toProfile(form, source = form.source) {
   const v = form.profiles[source];
-  const k = form.keys[source];
+  const k = form.keys[source] ?? null;
   const hasKey = k === null ? Boolean(v.key) : Boolean(k);
   return {
     source, address: String(v.address ?? '').trim(), port: v.port ?? null,
@@ -373,7 +377,7 @@ export function savePlan(form, settings, { connect = false } = {}) {
   const remotes = { ...(settings?.remotes ?? {}) };
   const keys = [];
   for (const s of REMOTE_SOURCES) {
-    const k = form.keys[s];
+    const k = form.keys[s] ?? null;
     const changed = k !== null || LAYOUT[s].main.concat(LAYOUT[s].more).some((id) => id !== 'memory' && id !== 'cleanAt' && (form.profiles[s][id] ?? null) !== ((form.saved[s] ?? FRESH[s])[id] ?? null));
     if (!changed && s !== form.source) {
       if (!remotes[s] && file[s]) remotes[s] = savedProfile(file[s], s);

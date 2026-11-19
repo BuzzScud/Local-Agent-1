@@ -14,7 +14,7 @@ import { HOME, REAL_HOME, isRealHome, REMOTE_SOURCES, DEFAULT_CLAUDE_MODEL, sour
 import { loadSettings, saveSettings, readCopies, SETTINGS_FILE, writeWhole } from './store.mjs';
 
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-const WORD = { claude: 'Claude API', openai: 'other service', machine: 'other computer' };
+const WORD = { claude: 'Claude API', openai: 'other service', machine: 'other computer', hearth: 'hearth' };
 
 // What a window follows of the file, and what it keeps of the service it uses: the model it runs and whether it is on.
 // claudeKeys (19 Nov 2026): the Claude API keys' list, names and all (claude-keys.mjs).
