@@ -68,13 +68,23 @@ function appCommand(args, env) {
 // Files dropped on the window (main.rs hands the page their paths): typed as Terminal types a drop, each path
 // with its spaces and marks escaped by \ and a space after, so the app makes each one a chip (app/attach.mjs).
 export const dropText = (paths) => paths.filter((p) => typeof p === 'string' && p).map((p) => `${p.replace(/[\s!"#$&'()*,;<>?[\\\]^`{|}~=]/g, '\\$&')} `).join('');
+// Another window, a program of its own (19 Nov 2026, the owner: "open more than 1 chat and use more than
+// 1 agentic coder at a time"): `coding window --folder <at>` started detached, so this window closing leaves it open.
+function openAnother(at, args, env) {
+  const [cmd, ...rest] = appCommand(['window', '--folder', at, ...args], env);
+  const child = spawn(cmd, rest, { cwd: at, env: { ...env, AGENTIC_WINDOW_DETACH: '1' }, detached: true, stdio: 'ignore' });
+  child.on('error', () => {}); // a program that cannot start must not take this window down with it
+  child.unref();
+}
+// A saved conversation's id as the Chats list gives it: letters, digits, . _ -, never a leading - (not an option).
+const chatId = (id) => typeof id === 'string' && /^[A-Za-z0-9._][A-Za-z0-9._-]{0,159}$/.test(id);
 const tilde = (p) => String(p ?? '').replace(homedir(), '~');
 const clamp = (n, a, b) => Math.max(a, Math.min(b, Math.round(Number(n) || a)));
 const bot = (pose) => trimmed(rigPixels(pose)).px.map((row) => row.map((c) => (c == null ? null : xterm(c))));
 const BOT = { ready: bot({ size: 'full', state: 'ready' }), work: bot({ size: 'full', state: 'ready', arms: 'type', armPhase: 0.5, eyes: 'half', look: { x: 0, y: 1 } }), happy: bot({ size: 'full', state: 'ready', arms: 'up', eyes: 'happy' }) };
 
 // One window on one folder. Resolves with the app's exit code once both are gone.
-export async function runWindow({ folder = process.cwd(), args = [], env = process.env, open = true, port = 0, cols = 140, rows = 44, onUrl = null, say = (t) => process.stdout.write(t), command = null } = {}) {
+export async function runWindow({ folder = process.cwd(), args = [], env = process.env, open = true, port = 0, cols = 140, rows = 44, onUrl = null, say = (t) => process.stdout.write(t), command = null, another = (at, more) => openAnother(at, more, env) } = {}) {
   const key = randomBytes(18).toString('hex');
   const dir = join(HOME, 'window');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -158,10 +168,16 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
         return new Promise((resolve) => execFile('osascript', ['-e', 'POSIX path of (choose folder with prompt "Open Agentic Coder in which folder?")'], (err, out) => {
           const at = String(out ?? '').trim();
           if (err || !at) return resolve(Response.json({ ok: false }));
-          const [cmd, ...rest] = appCommand(['window', '--folder', at], env);
-          Bun.spawn([cmd, ...rest], { cwd: at, env: { ...env, AGENTIC_WINDOW_DETACH: '1' }, stdio: ['ignore', 'ignore', 'ignore'] }).unref();
+          another(at, []);
           resolve(Response.json({ ok: true, folder: tilde(at) }));
         }));
+      }
+      if (u.pathname === '/new-window') {
+        // Another window on this folder, beside this one: a new conversation, or a saved one (?resume=<id>).
+        const id = u.searchParams.get('resume');
+        if (id != null && !chatId(id)) return Response.json({ ok: false }, { status: 400 });
+        try { another(folder, id ? ['--resume', id] : []); } catch { return Response.json({ ok: false }, { status: 500 }); }
+        return Response.json({ ok: true, folder: tilde(folder) });
       }
       return new Response('Not here.', { status: 404 });
     },

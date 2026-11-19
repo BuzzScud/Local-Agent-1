@@ -229,6 +229,9 @@ button { font: inherit; color: inherit; }
 .row.static { cursor: default; } .row.static:hover { background: transparent; }
 .row .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 13px var(--sans); color: #dcdce0; }
 .row .a { color: var(--faint); font-size: 11.5px; white-space: nowrap; }
+/* a conversation's "open in a new window" button: faint, clear on the row's hover */
+.row .nw { flex-shrink: 0; align-self: center; border: 0; background: transparent; color: var(--faint); opacity: .45; padding: 0 4px; border-radius: 6px; cursor: pointer; font: 13px var(--sans); line-height: 20px; }
+.row:hover .nw, .row:focus .nw { opacity: 1; } .row .nw:hover { background: var(--hair2); color: var(--text); }
 .drop { position: absolute; top: 58px; right: 14px; width: min(440px, calc(100% - 28px)); background: #202023; border: 1px solid var(--hair2); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.5); padding: 10px; z-index: 7; }
 .drop.left { right: auto; }
 .search { height: 34px; border-radius: 8px; background: var(--raise); border: 1px solid var(--hair2); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--faint); }
@@ -252,7 +255,7 @@ button:focus-visible, .row:focus-visible, .card:focus-visible { outline: 2px sol
 <div class="tb" id="tb" data-tauri-drag-region>
   <div class="l" data-tauri-drag-region>
     <button class="bb" data-act="side" title="Chats ⌘B">ICON_SIDE<span class="tx">Chats</span><span class="k">⌘B</span></button>
-    <button class="bb" data-run="/clear" title="New conversation">ICON_PLUS<span class="tx">New</span></button>
+    <button class="bb" data-act="newwin" title="New chat in a new window, this one keeps going ⌘N">ICON_PLUS<span class="tx">New</span></button>
     <div class="seg"><button data-run="/remote" title="Remote">ICON_REMOTE<span class="tx">Remote</span></button><button data-run="/loop" title="Loops">ICON_LOOP<span class="tx">Loops</span></button><button data-run="/help" title="Help">ICON_HELP<span class="tx">Help</span></button></div>
   </div>
   <div class="c" data-tauri-drag-region><span class="pill" id="pill" data-run="/model"><span class="dot" id="pilldot"></span><span id="pillname">Agentic Coder</span></span><span id="uslot"></span></div>
@@ -798,7 +801,7 @@ function renderSide() {
   const done = todos.filter((t) => t.status === 'done' || t.status === 'completed').length;
   // Only a conversation opens on a click; the files and to-dos are lists to read (row static: no hand, no hover).
   const h = '<div class="in"><div class="search">' + I.search + '<input id="sq" placeholder="Search conversations" value="' + esc(S.q) + '"></div>'
-    + '<div class="sect"><span class="lbl">Conversations</span><span class="r">' + chats.length + '</span></div>' + (chats.length ? chats.map((c) => '<div class="row" tabindex="0" role="button" data-resume="' + esc(c.id) + '"><span class="t">' + esc(c.title) + '</span><span class="a">' + esc(ago(c.updated)) + '</span></div>').join('') : '<div class="row static"><span class="t" style="color:var(--faint)">' + (S.sessions == null ? 'Loading…' : q ? 'None match “' + esc(S.q.trim()) + '”' : 'None saved in this folder yet') + '</span></div>')
+    + '<div class="sect"><span class="lbl">Conversations</span><span class="r">' + chats.length + '</span></div>' + (chats.length ? chats.map(chatRow).join('') : '<div class="row static"><span class="t" style="color:var(--faint)">' + (S.sessions == null ? 'Loading…' : q ? 'None match “' + esc(S.q.trim()) + '”' : 'None saved in this folder yet') + '</span></div>')
     + '<div class="sect"><span class="lbl">Files changed</span><span class="r">' + files.length + '</span></div>' + (files.length ? files.map((f) => '<div class="row static"><span class="t">✎ ' + esc(f.name) + '</span><span class="a"><span style="color:var(--accent)">+' + f.add + '</span> <span style="color:var(--bad)">−' + f.del + '</span></span></div>').join('') : '<div class="row static"><span class="t" style="color:var(--faint)">None in this conversation yet</span></div>')
     + '<div class="sect"><span class="lbl">To-do</span><span class="r">' + done + '/' + todos.length + '</span></div>' + (todos.length ? todos.map((t) => { const ok = t.status === 'done' || t.status === 'completed'; return '<div class="row static"><span class="a" style="color:' + (ok ? 'var(--accent)' : 'var(--faint)') + '">' + (ok ? '✓' : t.status === 'in_progress' ? '◐' : '○') + '</span><span class="t">' + esc(t.text) + '</span></div>'; }).join('') : '<div class="row static"><span class="t" style="color:var(--faint)">No to-do list yet</span></div>') + '</div>';
   if (h === sideHtml) return;
@@ -812,7 +815,7 @@ function renderDrops() {
     const chats = (S.sessions ?? []).filter((c) => !q || String(c.title).toLowerCase().includes(q)).slice(0, q ? 12 : 6);
     const files = (S.last?.files ?? []).filter((f) => !q || f.name.toLowerCase().includes(q)).slice(0, 6);
     h += '<div class="drop"><div class="search">' + I.search + '<input id="fq" placeholder="Search conversations, files…" value="' + esc(S.q) + '"><span style="color:var(--faint);font-size:11px">esc</span></div><div class="list">'
-      + '<div class="lbl" style="padding:10px 8px 4px">' + (q ? 'Conversations' : 'Recent conversations') + '</div>' + (chats.length ? chats.map((c) => '<div class="row" tabindex="0" role="button" data-resume="' + esc(c.id) + '"><span class="t">' + esc(c.title) + '</span><span class="a">' + esc(ago(c.updated)) + '</span></div>').join('') : '<div class="row static"><span class="t" style="color:var(--faint)">' + (S.sessions == null ? 'Loading…' : q ? 'None match “' + esc(S.q.trim()) + '”' : 'None saved in this folder yet') + '</span></div>')
+      + '<div class="lbl" style="padding:10px 8px 4px">' + (q ? 'Conversations' : 'Recent conversations') + '</div>' + (chats.length ? chats.map(chatRow).join('') : '<div class="row static"><span class="t" style="color:var(--faint)">' + (S.sessions == null ? 'Loading…' : q ? 'None match “' + esc(S.q.trim()) + '”' : 'None saved in this folder yet') + '</span></div>')
       + (files.length ? '<div class="lbl" style="padding:10px 8px 4px">Files changed</div>' + files.map((f) => '<div class="row static"><span class="t">✎ ' + esc(f.name) + '</span></div>').join('') : '') + '</div></div>';
   }
   if (S.folderMenu) h += '<div class="drop" style="width:360px"><div class="lbl" style="padding:4px 8px 6px">This window works in</div><div class="row static"><span class="t" style="font-family:var(--mono)">' + esc(S.folder) + '</span></div><div class="row" tabindex="0" role="button" data-act="reveal"><span class="t">Show in Finder</span></div><div class="row" tabindex="0" role="button" data-act="other"><span class="t">Open another folder…</span><span class="a">a new window</span></div></div>';
@@ -829,6 +832,19 @@ function renderDrops() {
   placeModeMenu();
 }
 async function loadSessions() { try { S.sessions = await (await fetch('/sessions?t=' + T)).json(); } catch { S.sessions = []; } }
+// A saved conversation in the lists: a click picks it up here; ↗ (or ⌘Enter on the row) opens it in a window of its own.
+function chatRow(c) {
+  return '<div class="row" tabindex="0" role="button" data-resume="' + esc(c.id) + '"><span class="t">' + esc(c.title) + '</span><span class="a">' + esc(ago(c.updated)) + '</span>'
+    + '<button class="nw" tabindex="-1" data-newwin="' + esc(c.id) + '" title="Open in a new window (⌘Enter)">↗</button></div>';
+}
+// Another window on this folder (19 Nov 2026, the owner: "open more than 1 chat and use more than 1 agentic coder at a
+// time"): a new chat, or a saved one, each its own Agentic Coder, while this one keeps going (server.mjs /new-window).
+function newWindow(id) {
+  S.find = false; S.side = false; S.folderMenu = false; S.q = ''; renderSide();
+  fetch('/new-window?t=' + T + (id ? '&resume=' + encodeURIComponent(id) : '')).then((r) => r.json())
+    .then((r) => toast(r.ok ? (id ? 'Opening that conversation in a new window' : 'Opening a new chat in a new window') : 'A new window could not open'))
+    .catch(() => toast('A new window could not open'));
+}
 
 // ---- keys and clicks ----------------------------------------------------------------------------------
 const ARROW = { ArrowUp: 'A', ArrowDown: 'B', ArrowRight: 'C', ArrowLeft: 'D' };
@@ -853,6 +869,7 @@ addEventListener('keydown', (e) => {
   if (e.isComposing) return;
   const inField = document.activeElement?.tagName === 'INPUT';
   if (e.metaKey && e.key.toLowerCase() === 'b') { e.preventDefault(); S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }
+  if (e.metaKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newWindow(); return; }
   if (e.metaKey && e.key.toLowerCase() === 'k') { e.preventDefault(); S.find = !S.find; S.folderMenu = false; if (S.find) loadSessions().then(renderDrops); renderDrops(); return; }
   if (S.modeMenu && !e.metaKey) {
     const n = MODE_MENU.length;
@@ -867,6 +884,11 @@ addEventListener('keydown', (e) => {
   // space) opens the one you are on, and Enter in the box opens the first match. Everywhere else Tab still goes to the
   // app (shift-Tab picks the mode).
   const here = document.activeElement, panel = here?.closest?.('.side, .drop');
+  if (panel && e.metaKey && e.key === 'Enter') {
+    const row = inField ? panel.querySelector('[data-resume]') : here.closest('[data-resume]');
+    if (row) { e.preventDefault(); newWindow(row.dataset.resume); return; }
+  }
+
   if (panel && !e.metaKey && (e.key === 'Enter' || (e.key === ' ' && !inField))) {
     const row = inField ? panel.querySelector('[role="button"]') : here.matches('[role="button"]') ? here : null;
     if (row) { e.preventDefault(); row.click(); return; }
@@ -917,6 +939,8 @@ document.addEventListener('click', (e) => {
   if (act === 'other') { S.folderMenu = false; renderDrops(); fetch('/other-folder?t=' + T).then((r) => r.json()).then((r) => { if (r.ok) toast('Opening ' + r.folder + ' in a new window'); }); return; }
   if (act === 'modes') { openModeMenu(!S.modeMenu); return; }
   if (act === 'send') { if (S.last?.input?.value) keys('\r'); return; }
+  if (act === 'newwin') { newWindow(); return; }
+  const nw = t.closest('[data-newwin]'); if (nw) { newWindow(nw.dataset.newwin); return; }
   const res = t.closest('[data-resume]'); if (res) { send({ t: 'act', do: 'resume', id: res.dataset.resume }); S.find = false; S.side = false; S.q = ''; renderDrops(); renderSide(); return; }
   const md_ = t.closest('[data-mode]'); if (md_) { pickMode(md_.dataset.mode); return; }
   if (t.closest(LIVE_TOGGLES)) return; // done on the press (liveToggle)

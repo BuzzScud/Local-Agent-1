@@ -410,3 +410,32 @@ test('what is printed is worked out once a list of items; the bridge makes an it
     expect(made).toEqual(['user', 'note', 'note']);
   } finally { JSON.stringify = json; bridge.close(); srv.close(); }
 });
+
+// More than one chat at a time (19 Nov 2026, the owner: "open more than 1 chat and use more than 1 agentic coder at a
+// time"): the page's + New, ⌘N and a chat's ↗ ask the server for another window on the same folder, this one kept.
+test('the window server opens another window on its folder: a new chat, or a saved one, never with a bad id or without the key', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'window-another-'));
+  const stand = join(dir, 'stand-in.mjs');
+  writeFileSync(stand, `process.stdin.setRawMode?.(true); process.stdin.on('data', (d) => { if (String(d).includes('q')) process.exit(0); });`);
+  const opened = [];
+  let url = null;
+  const done = runWindow({ folder: dir, open: false, command: [process.execPath, stand], onUrl: (u) => { url = u; }, say: () => {}, another: (at, more) => opened.push([at, more]) });
+  for (let i = 0; i < 80 && !url; i++) await Bun.sleep(25);
+  const base = url.split('?')[0], key = url.split('?t=')[1];
+  expect((await fetch(`${base}new-window`)).status).toBe(403);
+  expect(opened).toEqual([]);
+  const fresh = await fetch(`${base}new-window?t=${key}`);
+  expect(await fresh.json()).toMatchObject({ ok: true });
+  const saved = await fetch(`${base}new-window?t=${key}&resume=2026-10-03T02-52-20-782Z`);
+  expect(await saved.json()).toMatchObject({ ok: true });
+  for (const bad of ['--mode', '../x', 'a b', '']) expect((await fetch(`${base}new-window?t=${key}&resume=${encodeURIComponent(bad)}`)).status).toBe(400);
+  expect(opened).toEqual([[dir, []], [dir, ['--resume', '2026-10-03T02-52-20-782Z']]]);
+  const page = await (await fetch(url)).text();
+  expect(page).toContain('data-act="newwin"');
+  expect(page).toContain('data-newwin=');
+  const ws = new WebSocket(url.replace('http://', 'ws://').replace('/?', '/ws?'));
+  await new Promise((r) => { ws.onopen = r; });
+  ws.send(JSON.stringify({ t: 'keys', data: 'q' }));
+  expect(await done).toBe(0);
+  ws.close();
+});

@@ -41,7 +41,9 @@ async function openPage() {
   let n = 0;
   const say = async (st) => { writeFileSync(stateFile, JSON.stringify({ ...st, n: ++n })); await Bun.sleep(150); };
   let url = null;
-  const done = runWindow({ folder, open: false, command: [process.execPath, standIn], env: { ...process.env, AUDIT_LOG: log, AUDIT_STATE: stateFile }, onUrl: (u) => { url = u; }, say: () => {} });
+  // Another window asked for (+ New, ⌘N, a chat's ↗) is written down here, never opened.
+  const opened = [];
+  const done = runWindow({ folder, open: false, command: [process.execPath, standIn], env: { ...process.env, AUDIT_LOG: log, AUDIT_STATE: stateFile }, onUrl: (u) => { url = u; }, say: () => {}, another: (at, more) => opened.push([at, more]) });
   for (let i = 0; i < 200 && !url; i++) await Bun.sleep(25);
   // The graphics chip in the browser's own process: a sandboxed run has no GPU process of its own.
   const chrome = Bun.spawn([findChrome(), '--headless', '--no-sandbox', '--disable-gpu', '--use-gl=swiftshader', '--in-process-gpu', '--single-process', `--user-data-dir=${mkdtempSync(join(tmpdir(), 'window-page-chrome-'))}`, '--remote-debugging-port=0', 'about:blank'], { stderr: 'pipe', stdout: 'ignore' });
@@ -73,7 +75,7 @@ async function openPage() {
   const press = async (key, code, shift = false) => { for (const t of ['rawKeyDown', 'keyUp']) await on('Input.dispatchKeyEvent', { type: t, key, windowsVirtualKeyCode: code, modifiers: shift ? 8 : 0 }); await Bun.sleep(150); };
   const got = () => readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const close = async () => { ws.close(); chrome.kill(); writeFileSync(stateFile, '{}'); process.emit('SIGTERM'); await done; };
-  return { say, js, click, type, press, on, got, errors, close, folder };
+  return { say, js, click, type, press, on, got, errors, close, folder, opened };
 }
 
 const items = {
@@ -100,7 +102,18 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the search box type
     const rows = await p.js(`[...document.querySelectorAll('#side .row')].map((e) => ({ t: e.textContent.slice(0, 30), hand: getComputedStyle(e).cursor === 'pointer', does: Boolean(e.dataset.resume || e.dataset.act) }))`);
     expect(rows.map((r) => r.t)).toEqual(['Write the README install steps', 'Fix the tax rounding in checko', '✎ cart.mjs+3 −1', '◐Fix roundCents']);
     expect(rows.filter((r) => r.hand !== r.does)).toEqual([]);
-    await p.click('[data-act="side"]');
+    // More than one chat at a time (19 Nov 2026): a chat's ↗ opens it in a window of its own, this one keeps its own
+    // (no resume here), and the side bar closes; + New opens a new chat in another window, not /clear here.
+    const resumesBefore = p.got().filter((m) => m.do === 'resume').length;
+    await p.click('#side [data-newwin]', 1);
+    for (let i = 0; i < 40 && !p.opened.length; i++) await Bun.sleep(50);
+    expect(p.opened).toEqual([[p.folder, ['--resume', 'conv-tax']]]);
+    expect(p.got().filter((m) => m.do === 'resume').length).toBe(resumesBefore);
+    expect(await p.js(`document.getElementById('side').classList.contains('open')`)).toBe(false);
+    await p.click('[data-act="newwin"]');
+    for (let i = 0; i < 40 && p.opened.length < 2; i++) await Bun.sleep(50);
+    expect(p.opened[1]).toEqual([p.folder, []]);
+    expect(p.got().filter((m) => m.from === 'keys').map((m) => m.data).join('')).not.toContain('/clear');
     // A streamed answer: the earlier items keep their elements (and a selection in them); the new words come in.
     await p.js(`(() => { window.__first = document.querySelector('.reply'); const r = document.createRange(); r.selectNodeContents(window.__first); getSelection().removeAllRanges(); getSelection().addRange(r); })()`);
     for (const text of ['The', 'The rounding', 'The rounding happens in roundCents.']) await p.say({ ...base, items: {}, live: { phase: 'working', turnStart: Date.now(), tokens: 3, text } });
