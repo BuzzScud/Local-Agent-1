@@ -15,9 +15,11 @@ export const MORE_TOOLS = 'MoreTools';
 // Agent (helpers) stays in the start set, so a big model hands work off as Claude Code does without
 // a step to ask for it first (app-remote.test.mjs, big-model mode).
 const TOOL_GROUPS = [
-  { id: 'code', about: 'a map of the project, the code search by meaning, renaming a name everywhere, and the test-first worker', tools: ['Map', 'CodeSearch', 'Rename', 'TestFirst'] },
+  { id: 'code', about: 'a map of the project, the code search by meaning, the language server (definitions, uses, type errors), renaming a name everywhere, and the test-first worker', tools: ['Map', 'CodeSearch', 'LSP', 'Rename', 'TestFirst'] },
   { id: 'web', about: 'searching the web and reading a web page', tools: ['WebSearch', 'WebFetch'] },
   { id: 'screen', about: "a picture of the user's screen or of one app's window", tools: ['Screen'] },
+  { id: 'browser', about: 'a real browser: open a page, click, type, take a picture, read its console', tools: ['Browser'] },
+  { id: 'data', about: 'looking into a database, read only (SQLite, PostgreSQL)', tools: ['Database'] },
   { id: 'app', about: 'driving Agentic Coder itself: its slash commands, its settings, a restart', tools: ['App'] },
 ];
 const GROUP_OF = new Map(TOOL_GROUPS.flatMap((g) => g.tools.map((t) => [t, g.id])));

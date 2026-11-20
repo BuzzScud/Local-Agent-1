@@ -125,6 +125,46 @@ export const MODEL_TOOL_DEFS = [
       cell_type: { type: 'string', enum: ['code', 'markdown'], description: 'For insert, or to change a cell\'s kind: code or markdown' },
     }, required: ['path'] },
   },
+  // Code understanding, a real browser and databases (the owner's picks, 20 Nov 2026): tools/lsp.mjs,
+  // tools/browser.mjs, tools/database.mjs. Offered where they fit (agent.mjs ownTools).
+  {
+    name: 'LSP',
+    description: 'Ask the language server what the code means, as an editor knows it (TypeScript, JavaScript, Python, Swift, C/C++, Rust, Go). operation: definition (where a name is defined), references (every place it is used, in every file), hover (its type and documentation), implementation, callers / callees (who calls a function, what it calls), symbols (a file\'s outline), find (a name anywhere in the project: query), diagnostics (the type errors and warnings in a file). Point at a name with line (from 1) and name (the name as written on that line). Surer than Search for a name used in many places; diagnostics finds type errors without running the build. Once it has run for a file, an Edit of that file also says its new errors.',
+    parameters: { type: 'object', properties: {
+      operation: { type: 'string', enum: ['definition', 'references', 'hover', 'implementation', 'callers', 'callees', 'symbols', 'find', 'diagnostics'] },
+      path: str('The file (for find: any file of that language)'),
+      line: { type: 'integer', description: 'The line the name is on, from 1 (definition, references, hover, implementation, callers, callees)' },
+      name: str('The name as written on that line, like parseConfig'),
+      query: str('For find: the name or part of it'),
+    }, required: ['operation', 'path'] },
+  },
+  {
+    name: 'Browser',
+    description: 'A real browser (headless Chrome) to use a page as a person would: open a page (an address, a dev server like http://localhost:5173, or a file in the project), read its text and numbered controls, click, type into a field, press a key, take a picture (shot), see the console\'s errors and failed requests, or run a line of JavaScript in it. Each step after open answers with the page as it is then. To check that a page you made or changed works, not only that its code looks right. It has none of the user\'s sign-ins.',
+    parameters: { type: 'object', properties: {
+      action: { type: 'string', enum: ['open', 'read', 'click', 'type', 'press', 'shot', 'console', 'run', 'close'] },
+      url: str('For open: the address or the file'),
+      ref: { type: 'integer', description: 'click, type: the control\'s number from the last answer, like 3 for [3]' },
+      selector: str('click, type, read: a CSS selector instead of ref (read: only that part\'s text)'),
+      text: str('click: the words on what to click (instead of ref); type: what to type'),
+      submit: { type: 'boolean', description: 'type: press Enter after' },
+      key: str('press: Enter, Tab, Escape, ArrowDown, Backspace, or one letter'),
+      script: str('run: a JavaScript expression; its value comes back'),
+      size: { type: 'string', enum: ['desktop', 'mobile'], description: 'open, shot: the window, desktop (1280×800, the default) or mobile (390×844)' },
+      full: { type: 'boolean', description: 'shot: the whole page, not only the window; open, read: all the text' },
+    }, required: ['action'] },
+  },
+  {
+    name: 'Database',
+    description: 'Look into a database, read only: a SQLite file (.db, .sqlite) or a PostgreSQL address (postgres://…). action tables lists its tables (with row counts on SQLite), schema shows a table\'s columns and indexes, query runs one SELECT and shows the rows (50 by default, limit up to 500). The database itself refuses any change. For questions about the data, or to check what code wrote.',
+    parameters: { type: 'object', properties: {
+      action: { type: 'string', enum: ['tables', 'schema', 'query'] },
+      database: str('The SQLite file (data/app.db) or the PostgreSQL address'),
+      table: str('schema: the table'),
+      sql: str('query: the SQL to run'),
+      limit: { type: 'integer', description: 'query: the most rows to show (default 50, at most 500)' },
+    }, required: ['action', 'database'] },
+  },
 ];
 // The web (/web): WebSearch when a search service is set, WebFetch when reading pages is on.
 // What a page or a search brings back is data, never instructions: each result says so.
@@ -195,7 +235,7 @@ export const APP_TOOL_DEF = {
 // or wait for a key of the user's. restart is the App tool's own action.
 export const APP_NOT = new Set(['clear', 'exit', 'quit', 'compact', 'resume', 'rewind', 'update', 'agents', 'loop', 'loops', 'jumptomac', 'btw', 'math', 'design', 'init', 'morning', 'test', 'start', 'stop']);
 // The tools an explore helper is given (the others are left out of its list and refused).
-export const EXPLORE_TOOLS = new Set(['Read', 'List', 'Search', 'Map', 'CodeSearch', 'WebFetch', 'WebSearch', 'TodoWrite']);
+export const EXPLORE_TOOLS = new Set(['Read', 'List', 'Search', 'Map', 'CodeSearch', 'LSP', 'Database', 'WebFetch', 'WebSearch', 'TodoWrite']);
 
 // Read as the model sees it on Model: a path, or several paths at once.
 const READ_MANY = {

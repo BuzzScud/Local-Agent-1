@@ -152,7 +152,8 @@ export const ONE_AT_A_TIME = '- Call one tool at a time and wait for its result.
 export const MODEL_TOOL_LINES = `- You decide how to do the task. Map shows how a project is laid out; CodeSearch finds code by meaning; Search finds exact words.
 - You can send several tool calls in one reply when none needs another's result (read two files, or a Search and a List): they run in order. Read takes several paths at once too. Otherwise call one tool and wait for its result.
 - For a bug fix or a code change in a project with tests, TestFirst can do the work and report back; Rename renames one name everywhere. Or do it yourself with Read and Edit.
-- When you learn something that will matter in later conversations (a preference of the user, how this project is run), save it with Remember, in one sentence.`;
+- When you learn something that will matter in later conversations (a preference of the user, how this project is run), save it with Remember, in one sentence.
+- LSP asks the language server what the code means (definitions, uses, type errors). Browser uses a page as a person would (click, type, a picture, the console). Database looks into a SQLite or PostgreSQL database, read only.`;
 // The same lines naming only the tools offered (names: a Set), as each request sends them
 // (agent-checks.mjs withTurnNotes): the prompt keeps MODEL_TOOL_LINES whole, so wayPrompt still
 // finds them. 15 Oct 2026: in the home folder on the Claude API they named Map, CodeSearch,
@@ -160,7 +161,12 @@ export const MODEL_TOOL_LINES = `- You decide how to do the task. Map shows how 
 export function offeredToolLines(names) {
   const finders = [names.has('Map') && 'Map shows how a project is laid out', names.has('CodeSearch') && 'CodeSearch finds code by meaning', 'Search finds exact words'].filter(Boolean);
   const helpers = [names.has('TestFirst') && 'TestFirst can do the work and report back', names.has('Rename') && 'Rename renames one name everywhere'].filter(Boolean);
-  const [first, several, helper, remember] = MODEL_TOOL_LINES.split('\n');
+  const extra = [
+    names.has('LSP') && 'LSP asks the language server what the code means (definitions, uses, type errors)',
+    names.has('Browser') && 'Browser uses a page as a person would (click, type, a picture, the console)',
+    names.has('Database') && 'Database looks into a SQLite or PostgreSQL database, read only',
+  ].filter(Boolean);
+  const [first, several, helper, remember, extraFull] = MODEL_TOOL_LINES.split('\n');
   return [
     finders.length === 3 ? first : `- You decide how to do the task. ${finders.join('; ')}.`,
     several,
@@ -168,6 +174,7 @@ export function offeredToolLines(names) {
       : names.has('TestFirst') ? '- For a bug fix or a code change in a project with tests, TestFirst can do the work and report back. Or do it yourself with Read and Edit.'
       : names.has('Rename') ? '- To rename one name everywhere, Rename does it. Or do it yourself with Read and Edit.' : null,
     names.has('Remember') ? remember : null,
+    extra.length === 3 ? extraFull : extra.length ? `- ${extra.join('. ')}.` : null,
   ].filter(Boolean).join('\n');
 }
 export const ANSWER_HABIT = '- When you answer a question, add the one thing that helps next, in a line: where it is used, or a short worked example.';

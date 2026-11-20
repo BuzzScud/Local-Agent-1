@@ -13,6 +13,8 @@ import { closeWorktree, openWorktree, worktreeNote } from './helper-worktree.mjs
 import { claudeModelOf } from './auto-check.mjs';
 import { homedir } from 'node:os';
 import { isCodeProject } from '../flows/index.mjs';
+import { findChrome } from '../flows/layoutcheck.mjs';
+import { hasDatabase } from '../tools/database.mjs';
 import { LEAN_AUTO, LEAN_AUTO_NOTE, OPT_IN_HOOKS, hooksOn, leanForModel, leanPrompt, wayOf, wayPrompt } from './way.mjs';
 import { SeenFiles } from './seen.mjs';
 import { MCP_GROUP, groupOfTool, groupsOffered, moreToolsAnswer, onDemandOf, onDemandTools } from './tool-groups.mjs';
@@ -197,10 +199,14 @@ export class Agent extends EventEmitter {
     // The same for the four never called in 40 runs on a service (5 Oct 2026): Map not in the home
     // folder, Rename and TestFirst in a folder of code, Remember with a memory. The folder is looked at
     // once a conversation, so the list does not move under it; a call to one left out still runs.
-    const here = this.toolPlace?.cwd === this.cwd ? this.toolPlace : (this.toolPlace = { cwd: this.cwd, home: isHomeFolder(this.cwd), code: isCodeProject(this.cwd), notebooks: !isHomeFolder(this.cwd) && hasNotebook(this.cwd) });
+    const here = this.toolPlace?.cwd === this.cwd ? this.toolPlace : (this.toolPlace = { cwd: this.cwd, home: isHomeFolder(this.cwd), code: isCodeProject(this.cwd), notebooks: !isHomeFolder(this.cwd) && hasNotebook(this.cwd), chrome: Boolean(findChrome()), db: !isHomeFolder(this.cwd) && hasDatabase(this.cwd) });
     const off = new Set([
       // NotebookEdit where there is a notebook (a .ipynb in the folder or the one below it).
       ...(here.notebooks ? [] : ['NotebookEdit']),
+      // LSP in a folder of code; Browser where there is a Chrome; Database in a folder of code or one with a database file.
+      ...(here.code ? [] : ['LSP']),
+      ...(here.chrome ? [] : ['Browser']),
+      ...(here.code || here.db ? [] : ['Database']),
       ...(this.codeSearchOff() ? ['CodeSearch'] : []),
       ...(here.home ? ['Map'] : []),
       ...(here.code ? [] : ['Rename', 'TestFirst']),

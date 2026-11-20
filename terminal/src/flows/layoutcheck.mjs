@@ -622,9 +622,11 @@ async function fetchFor(url, ms) {
   finally { clearTimeout(t); }
 }
 // Chrome with its debugging connection on a free port: send(method, params, session) → result.
-export async function devtools(chrome, scratch) {
+// onEvent: each event Chrome sends ({ method, params, sessionId }), for the Browser tool (tools/browser.mjs).
+// flags: more of Chrome's own switches.
+export async function devtools(chrome, scratch, { onEvent = null, flags = [] } = {}) {
   const proc = spawn(chrome, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--mute-audio',
-    `--user-data-dir=${join(scratch, 'profile-address')}`, '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', ...(platform() === 'linux' ? ['--no-sandbox'] : []), 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    `--user-data-dir=${join(scratch, 'profile-address')}`, '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', ...(platform() === 'linux' ? ['--no-sandbox'] : []), ...flags, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const kill = () => { try { proc.kill('SIGKILL'); } catch {} };
   const wsUrl = await new Promise((resolve) => {
     let err = '';
@@ -641,6 +643,7 @@ export async function devtools(chrome, scratch) {
   ws.onmessage = (e) => {
     let m;
     try { m = JSON.parse(String(e.data)); } catch { return; }
+    if (!m.id && m.method) { onEvent?.(m); return; }
     const w = m.id && waiting.get(m.id);
     if (!w) return;
     waiting.delete(m.id);
@@ -651,7 +654,7 @@ export async function devtools(chrome, scratch) {
     waiting.set(id, { resolve, reject });
     ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
   });
-  return { send, close() { try { ws.close(); } catch {} kill(); } };
+  return { send, proc, close() { try { ws.close(); } catch {} kill(); } };
 }
 // One look at an address at one size, in a tab of its own.
 async function addressPass(dt, url, p, probe) {

@@ -320,7 +320,7 @@ export const NOTES_MAX = 1000;
 export const cleanNotes = (v) => (typeof v === 'string' ? v.trim().slice(0, NOTES_MAX) : '');
 // The tools a model may go without (27 Oct 2026, the hub's Bonsai tab: each tool's description is read with every
 // fresh prompt, Ask alone 561 tokens). Reading, searching, changing files and commands always stay.
-export const TOOLS_SWITCHABLE = ['TodoWrite', 'Ask', 'Jobs', 'WebFetch', 'WebSearch', 'Screen', 'Map', 'CodeSearch', 'Rename', 'TestFirst', 'Remember'];
+export const TOOLS_SWITCHABLE = ['TodoWrite', 'Ask', 'Jobs', 'WebFetch', 'WebSearch', 'Screen', 'Map', 'CodeSearch', 'LSP', 'Browser', 'Database', 'Rename', 'TestFirst', 'Remember'];
 export const cleanToolsOff = (v) => (Array.isArray(v) ? [...new Set(v.filter((t) => TOOLS_SWITCHABLE.includes(t)))] : []);
 
 // The values in use: the defaults, with what settings.json holds on top, and a

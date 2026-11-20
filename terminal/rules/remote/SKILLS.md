@@ -127,3 +127,58 @@ skill is also in the list, so the model can open one the words missed.
 2. Group the changes as the users see them: new, changed, fixed. Leave out internal moves.
 3. One line each, in plain words. Match the project's CHANGELOG style when it has one.
 4. Answer with the notes, or say which file they went in.
+
+## Fix a hearth report
+- Words: hearth report, fix the hearth report, fix this report, the reporter, customer reported
+- About: read a hearth problem report and its chat, make it happen, fix it, and open a pull request
+
+1. Read the report with hearth's tools: get_report, then get_report_chat (a report without its chat: list_reporter_chats, then tie_report_chat with the likely one). Note what was asked, what came back, and what was expected.
+2. Decide where it lives. A wrong answer the team rules can steer: try_fix with a draft of the rules, get_try, and set_team_rules only when the draft does what was expected. Hearth's own code: go on.
+3. Make it happen first: a test or a command that fails the way the report says, in a branch of hearth's code (list_repos names it), never on main.
+4. Fix the cause, then run that test and the tests near it.
+5. Push the branch and open_pull_request; a big change goes to start_coding_job instead. Never merge.
+6. set_report_status (triaged or planned) with a note the reporter can read; done only once the fix has shipped.
+7. Answer with the cause, the fix, the pull request and the status you set.
+
+## Ship through the Code Factory
+- Words: code factory, the factory, factory status, what can ship, shipping queue, ready list
+- About: see what the Code Factory can ship, get the rest ready, and say what is left for a person
+
+1. factory_status: the pull requests ready to ship, the ones not ready with why, and how the last Get ready went.
+2. Those Get ready can fix (a label, an update, a rerun): get_ready with their numbers, then factory_status once more after a minute or so, not in a tight loop.
+3. A failed check it cannot fix: fix_pull_request with what is wrong in a sentence (someone else's), or the Get a pull request ready skill (one in this folder). A clash with graphite-ui: start_coding_job with pr.
+4. Never merge or ship yourself: shipping is the operator's own button, unless the user says to.
+5. Answer with three lists: ready to ship, made ready now, still blocked (why, and who must act).
+
+## Upgrade a package safely
+- Words: upgrade the package, update the package, update packages, bump the version, update dependencies, outdated packages, new version of
+- About: move one package to a newer version at a time, with the tests run before and after
+- Fence: check
+
+1. Run the tests first and keep the result: what already fails is not the upgrade's doing.
+2. See what is out of date with the project's own tool (bun outdated, npm outdated, pip list --outdated, cargo outdated). Read the release notes of each one to move (WebFetch) for breaking changes.
+3. A new major version, or many packages at once: ask the user first. Otherwise one package at a time, with the project's own tool, so the lock file changes with it.
+4. Run the tests and the build. A failure: change the code for the new version, or go back to the old version and say why.
+5. Answer with each package from version to version, what changed in the code, and the test runs before and after.
+
+## Make it faster
+- Words: make it faster, too slow, speed up, performance, takes too long, slow page, slow query, profile it
+- About: measure where the time goes, change the one thing that costs most, measure again
+- Fence: check
+
+1. Find a run that shows the slowness and time it the same way each time: the command with time, a small script in SCRIPTS, a page's timings with the Browser tool (run: performance.getEntriesByType('navigation')), a query with the Database tool.
+2. Find where the time goes before changing anything: a profiler (bun --cpu-prof, python -m cProfile, EXPLAIN for a query) or timings around the parts. LSP callers shows who calls a slow function.
+3. Change the one thing that costs most and keep what it does: run the tests.
+4. Time it again the same way, three runs each side, and compare.
+5. Answer with the numbers before and after, what changed, and the tests' result. A change that did not help is taken back.
+
+## Save skills from my work
+- Words: learn from my sessions, learn from my work, skills from my work, skills from my sessions, what do i repeat, what i keep doing
+- About: find work the user repeats and save it as a skill, once they agree
+
+1. Gather the recent work: hearth's learn_collect when hearth is on (then get_conversation for the likely ones), or the sessions the user points at. Look at the Skills list first, so none is saved twice.
+2. Find a kind of task done three times or more: the same steps, or the same correction after a mistake.
+3. Draft each as a skill: ## Name, - Words: (phrases only that task uses), - About: one line, then at most six numbered steps from what worked.
+4. Show the drafts and ask the user (Ask) which to keep. Nothing is saved without their yes.
+5. Save each one kept with Write to SKILLS/<name>, which keeps it for every project, then Read it back.
+6. Answer with the skills saved and the words that bring each one.

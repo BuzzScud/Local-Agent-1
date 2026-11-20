@@ -8,7 +8,7 @@ import { wrap, Diff, diffParts } from '../ui/parts.jsx';
 import { MENU_ROWS } from './screen-footer.jsx';
 import { diffW, fitPath } from './screen-items.jsx';
 
-const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page', Screen: 'Look at the screen', Mcp: 'MCP tool', McpProject: 'A project brings its own MCP servers', HooksProject: 'A project brings its own hooks' };
+const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page', Screen: 'Look at the screen', Browser: 'Open a page in the browser', Database: 'Look into a database', Mcp: 'MCP tool', McpProject: 'A project brings its own MCP servers', HooksProject: 'A project brings its own hooks' };
 
 // What each permission question offers: permission-options.mjs (plain, so the app's logic needs no screen).
 
@@ -78,6 +78,11 @@ export function PermissionPrompt({ app }) {
           <Text wrap="truncate-end">{screenWhat(req.args)}</Text>
           <Text color={C.dim} wrap="truncate-end">a picture, sent to {app.modelState?.remote ? `${app.modelState.name} on ${app.modelState.where}` : 'the model on this Mac'} · it only looks: nothing is clicked or typed</Text>
         </Box>
+      ) : req.name === 'Browser' || req.name === 'Database' ? (
+        <Box flexDirection="column" paddingX={2} marginY={1}>
+          <Text wrap="truncate-end">{req.name === 'Browser' ? req.args.url : String(req.rule ?? '').replace(/^Database\((.*)\)$/, '$1')}</Text>
+          <Text color={C.dim} wrap="truncate-end">{req.name === 'Browser' ? 'opened in a headless Chrome with none of your sign-ins; it may click and type on it next' : 'each query runs read only, in a transaction that is rolled back'}</Text>
+        </Box>
       ) : req.name === 'WebSearch' || req.name === 'WebFetch' ? (
         <Box flexDirection="column" paddingX={2} marginY={1}>
           <Text wrap="truncate-end">{req.name === 'WebSearch' ? `“${req.args.query}”` : req.args.url}</Text>
@@ -118,6 +123,8 @@ export function PermissionPrompt({ app }) {
         : req.name === 'Bash' ? <Text>Do you want to proceed?</Text>
         : req.name === 'WebSearch' ? <Text>Search the web for this?</Text>
         : req.name === 'WebFetch' ? <Text>Read this page from <Text bold>{String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1')}</Text>?</Text>
+        : req.name === 'Browser' ? <Text>Open this page from <Text bold>{String(req.rule ?? '').replace(/^Browser\((.*)\)$/, '$1')}</Text>?</Text>
+        : req.name === 'Database' ? <Text>Let the model query this database?</Text>
         : req.name === 'Screen' ? <Text>Let the model look at <Text bold>{String(req.args?.app ?? '').trim() || 'the whole screen'}</Text>?</Text>
         : req.name === 'Mcp' ? <Text>Let <Text bold>{req.mcp.server}</Text> run <Text bold>{req.mcp.tool}</Text>?</Text>
         : req.name === 'McpProject' ? <Text>Start this project’s server{req.servers.length === 1 ? '' : 's'}?</Text>

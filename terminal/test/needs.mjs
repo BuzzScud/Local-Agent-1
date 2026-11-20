@@ -18,6 +18,7 @@ export const REASONS = {
   pictures: 'no picture helper',
   playwright: 'no Playwright',
   sandbox: 'no macOS sandbox',
+  lsp: 'no language server',
 };
 const CHECKS = {
   python3: () => spawnSync('python3', ['-c', 'pass'], { timeout: 20_000 }).status === 0,
@@ -29,6 +30,8 @@ const CHECKS = {
   // The file's own finder again: a folder that holds Playwright; whether sandbox-exec works here.
   playwright: (find) => Boolean(find?.()),
   sandbox: (find) => Boolean(find?.()),
+  // The file's own finder: a language server's command for a file (tools/lsp.mjs SERVERS), or nothing.
+  lsp: (find) => Boolean(find?.()),
 };
 const known = new Map();
 export const hiddenTools = (env = process.env) => String(env.AGENTIC_TEST_HIDE ?? '').split(',').map((s) => s.trim()).filter(Boolean);

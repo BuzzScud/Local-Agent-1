@@ -13,6 +13,7 @@ import { applyChanges, readFacts } from '../src/agent/facts.mjs';
 import { AutoSave } from '../src/app/autosave.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
+import { findChrome } from '../src/flows/layoutcheck.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const Q = "Which function computes tax in this project, and what is its default rate? Don't change any files.";
@@ -66,7 +67,7 @@ test('the prompt on Model: its own tool lines and the answer habit; back to App 
 });
 
 test('the tool lines name only the tools offered (the home folder on the Claude API named four that were not)', () => {
-  const all = new Set(['Map', 'CodeSearch', 'TestFirst', 'Rename', 'Remember']);
+  const all = new Set(['Map', 'CodeSearch', 'TestFirst', 'Rename', 'Remember', 'LSP', 'Browser', 'Database']);
   expect(offeredToolLines(all)).toBe(MODEL_TOOL_LINES);
   const home = offeredToolLines(new Set(['Read', 'Search', 'Remember']));
   expect(home.split('\n')).toEqual([
@@ -77,10 +78,11 @@ test('the tool lines name only the tools offered (the home folder on the Claude 
   expect(offeredToolLines(new Set(['CodeSearch', 'TestFirst']))).toContain('- You decide how to do the task. CodeSearch finds code by meaning; Search finds exact words.\n');
   expect(offeredToolLines(new Set(['TestFirst']))).toContain('TestFirst can do the work and report back. Or do it yourself with Read and Edit.');
   expect(offeredToolLines(new Set(['Rename']))).toContain('- To rename one name everywhere, Rename does it. Or do it yourself with Read and Edit.');
-  expect(offeredToolLines(new Set())).not.toMatch(/Map|CodeSearch|TestFirst|Rename|Remember/);
+  expect(offeredToolLines(new Set(['LSP', 'Database']))).toContain('LSP asks the language server what the code means (definitions, uses, type errors). Database looks into a SQLite or PostgreSQL database, read only.');
+  expect(offeredToolLines(new Set())).not.toMatch(/Map|CodeSearch|TestFirst|Rename|Remember|LSP|Browser|Database/);
 });
 
-test('the tools: nine on App, fourteen on Model, Read with paths only on Model', () => {
+test('the tools: nine on App, the model\'s own plus Jobs on Model, Read with paths only on Model', () => {
   const names = (w) => toolSchemas(w).map((t) => t.function.name);
   expect(names('app')).toEqual(['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask', 'Jobs']);
   // Jobs (background commands, 3 Oct 2026) after each way's own tools.
@@ -352,7 +354,9 @@ test('switching the way mid-conversation changes the prompt and the tools for th
   await fake.close();
   const [a, b] = chats(fake).slice(-2);
   expect(a.tools.length).toBe(9);
-  expect(b.tools.length).toBe(14); // the app's eight, the model's own four (no CodeSearch: the code search is off here; no Remember: no memory; MultiEdit; no NotebookEdit: no notebook), Jobs, and Agent (a helper)
+  // the app's eight, the model's own four (no CodeSearch: the code search is off here; no Remember: no memory; MultiEdit; no NotebookEdit: no notebook),
+  // LSP and Database (a folder of code), Browser where there is a Chrome, Jobs, and Agent (a helper)
+  expect(b.tools.length).toBe(16 + (findChrome() ? 1 : 0));
   expect(b.tools.map((t) => t.function.name)).toContain('MultiEdit');
   expect(b.tools.at(-1).function.name).toBe('Agent');
   agent.setWay('app');

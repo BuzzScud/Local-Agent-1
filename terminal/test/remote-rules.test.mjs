@@ -282,7 +282,7 @@ test('the hub: the remote files read, saved and checked like the others, each in
   const g = fileInfo('remote:GIT', proj, { state });
   expect(g).toMatchObject({ name: 'remote/GIT.md', guide: 'GIT', about: 'before any git command that changes something (commit, branch, merge, checkout)' });
   expect(fileInfo('remote:tools', proj, { state }).toolUse).toBe(toolUseFor('remote'));
-  expect(fileInfo('remote:skills', proj, { state }).skills.map((s) => s.slug)).toEqual(['write-a-test', 'review-code', 'refactor', 'flaky-test', 'fix-a-failing-check', 'get-a-pull-request-ready', 'open-a-pull-request', 'commit-my-changes', 'security-review', 'explain-the-project', 'update-the-docs', 'release-notes']);
+  expect(fileInfo('remote:skills', proj, { state }).skills.map((s) => s.slug)).toEqual(['write-a-test', 'review-code', 'refactor', 'flaky-test', 'fix-a-failing-check', 'get-a-pull-request-ready', 'open-a-pull-request', 'commit-my-changes', 'security-review', 'explain-the-project', 'update-the-docs', 'release-notes', 'fix-a-hearth-report', 'ship-through-the-code-factory', 'upgrade-a-package-safely', 'make-it-faster', 'save-skills-from-my-work']);
   expect(() => validateFile('remote:harness', '# H\n\n## Who you are\n\nx\n')).toThrow('"## How you work", "## Rules the app enforces" parts');
   expect(() => validateFile('remote:GIT', '# Git\n\nno parts here\n')).toThrow('needs at least one "## " part');
   expect(() => validateFile('remote:tools', '# T\n\n- no section\n')).toThrow('needs its "## Tool use" section');
@@ -311,7 +311,7 @@ test('as shipped: twelve files in terminal/rules/remote, each guide with a "Read
   for (const part of ['Who you are', 'How you work', 'Guides', 'Rules the app enforces']) expect(PF.sectionOf(h, part)).toBeTruthy();
   // The last line asks for a step's reads together (3 Oct 2026): a model on another machine runs every call of a reply.
   expect(PF.sectionOf(readFileSync(join(dir, 'TOOLS.md'), 'utf8'), 'Tool use').split('\n').at(-1)).toStartWith("- Send the reads and searches a step needs together, in one reply");
-  expect(PF.parseSkills(readFileSync(join(dir, 'SKILLS.md'), 'utf8')).map((s) => s.name)).toEqual(['Write a test', 'Review code', 'Refactor', 'Flaky test', 'Fix a failing check', 'Get a pull request ready', 'Open a pull request', 'Commit my changes', 'Security review', 'Explain the project', 'Update the docs', 'Release notes']);
+  expect(PF.parseSkills(readFileSync(join(dir, 'SKILLS.md'), 'utf8')).map((s) => s.name)).toEqual(['Write a test', 'Review code', 'Refactor', 'Flaky test', 'Fix a failing check', 'Get a pull request ready', 'Open a pull request', 'Commit my changes', 'Security review', 'Explain the project', 'Update the docs', 'Release notes', 'Fix a hearth report', 'Ship through the Code Factory', 'Upgrade a package safely', 'Make it faster', 'Save skills from my work']);
 });
 
 test('a helper (the Agent tool) under a forced row keeps its parent\'s set: remote guides and the helper part, on a model of this Mac', async () => {

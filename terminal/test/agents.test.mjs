@@ -32,7 +32,7 @@ const names = (req) => (req.tools ?? []).map((t) => t.function?.name ?? t.name);
 test('the Agent tool is offered when the model decides, and on the Claude API; not on App, not inside a helper, not with "subagents": false', () => {
   expect(toolDefs('model', null, { agents: true }).map((d) => d.name)).toContain('Agent');
   expect(toolDefs('app').map((d) => d.name)).not.toContain('Agent');
-  expect([...EXPLORE_TOOLS]).toEqual(['Read', 'List', 'Search', 'Map', 'CodeSearch', 'WebFetch', 'WebSearch', 'TodoWrite']);
+  expect([...EXPLORE_TOOLS]).toEqual(['Read', 'List', 'Search', 'Map', 'CodeSearch', 'LSP', 'Database', 'WebFetch', 'WebSearch', 'TodoWrite']);
 });
 
 test('an explore helper: its own conversation (none of yours), read-only tools, the side slot; its report comes back and shows as one step', async () => {

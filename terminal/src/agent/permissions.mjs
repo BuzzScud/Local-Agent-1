@@ -1,5 +1,8 @@
-import { resolve, basename, join } from 'node:path';
+import { resolve, basename, join, relative } from 'node:path';
 import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { isLocalAddress } from '../flows/layoutcheck.mjs';
+import { bareSite } from '../tools/browser.mjs';
 import { isMcpCall, mcpRule, parseMcpRule } from './mcp.mjs';
 import { BLOCKED, CMD, at, blockedReason, isReadOnly, outsidePaths, readerPart, shellText, shellWords, splitCommand } from './command-words.mjs';
 export { BLOCKED, blockedReason, isReadOnly, outsidePath, runsTests, splitCommand, testRunOf } from './command-words.mjs';
@@ -252,6 +255,11 @@ export function checkRule(kind, text, { protect = [] } = {}) {
   // A screen rule: Screen(TextEdit), or Screen(whole screen).
   const scr = SCREEN_RULE.exec(t);
   if (scr) return { rule: `Screen(${scr[1].trim()})` };
+  // A browser rule, Browser(site), and a database rule, Database(host/name).
+  const br = BROWSER_RULE.exec(t);
+  if (br) return { rule: `Browser(${br[1].toLowerCase().replace(/^www\./, '')})` };
+  const dbr = DATABASE_RULE.exec(t);
+  if (dbr) return { rule: `Database(${dbr[1]})` };
   // An MCP rule: Mcp(server:tool) for one tool; Mcp(server:*) for a whole server, on the never-list only
   // (to let a server's tools run unasked, mark them as reading in /mcp, one by one).
   if (/^mcp\(/i.test(t)) {
@@ -297,6 +305,31 @@ const WEB_RULE = /^(WebSearch|WebFetch\((?:www\.)?([a-z0-9.-]+\.[a-z0-9-]+)\))$/
 const screenTarget = (args) => String(args?.app ?? '').trim().replace(/\s+/g, ' ').slice(0, 60) || 'whole screen';
 const screenRule = (args) => `Screen(${screenTarget(args)})`;
 const SCREEN_RULE = /^Screen\(([^()]{1,60})\)$/i;
+// The Browser tool (tools/browser.mjs): a page on the internet is asked about by its site, as WebFetch's
+// are, "Browser(site)"; a file in the project and a page on this Mac or your own network never ask. The
+// Database tool (tools/database.mjs): a PostgreSQL database is asked about by host and name,
+// "Database(host/name)" (never its password); a SQLite file is read as Read reads files.
+const BROWSER_RULE = /^Browser\(((?:www\.)?[a-z0-9.-]+\.[a-z0-9-]+)\)$/i;
+const DATABASE_RULE = /^Database\(([^()\s]{1,100})\)$/i;
+const browserNeeds = (args, cwd) => {
+  if (String(args?.action ?? '').toLowerCase() !== 'open') return { page: true };
+  const t = String(args?.url ?? '').trim();
+  if (/^https?:\/\//i.test(t) || /^localhost(?::\d+)?(?:\/|$)/i.test(t) || (bareSite(t) && !existsSync(resolve(cwd ?? '.', t)))) {
+    const url = /^https?:\/\//i.test(t) ? t : /^localhost/i.test(t) ? `http://${t}` : `https://${t}`;
+    if (isLocalAddress(url)) return { local: true };
+    const site = siteOf(url);
+    return site ? { rule: `Browser(${site})`, site } : { bad: true };
+  }
+  if (/^(?:about|data):/i.test(t)) return { local: true };
+  const p = t.replace(/^file:\/\//i, '');
+  const abs = p.startsWith('~/') ? join(homedir(), p.slice(2)) : resolve(cwd ?? '.', p);
+  return { file: abs, inside: Boolean(cwd) && !relative(cwd, abs).startsWith('..') };
+};
+const databaseRule = (args) => {
+  const t = String(args?.database ?? args?.path ?? args?.url ?? '').trim();
+  if (!/^postgres(?:ql)?:\/\//i.test(t)) return null;
+  try { const u = new URL(t); return `Database(${u.hostname}${u.port ? `:${u.port}` : ''}${u.pathname.replace(/\/$/, '') || ''})`; } catch { return 'Database(?)'; }
+};
 const hasRule = (list, rule) => [...(list ?? [])].some((r) => String(r).toLowerCase() === rule.toLowerCase());
 
 // The decision for one tool call, with the reason (the /permissions test
@@ -335,6 +368,46 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
   // The model's own tools when it decides (agent/way.mjs): two read, one writes to the memory,
   // and two run a focused path, whose every change asks as your mode says (so plan mode refuses them).
   if (name === 'Map' || name === 'CodeSearch') return { decision: 'allow', why: 'it only reads' };
+  // The language server (tools/lsp.mjs): it reads the code, as Read does.
+  // A database (tools/database.mjs): opened read only. A file is read as Read reads one; a server is asked about once.
+  if (name === 'LSP' || (name === 'Database' && !databaseRule(args))) {
+    const p = String(args?.path ?? args?.database ?? '').trim();
+    const abs = p.startsWith('~/') ? join(homedir(), p.slice(2)) : resolve(cwd ?? '.', p);
+    const there = !cwd || !relative(cwd, abs).startsWith('..');
+    if (there) return { decision: 'allow', why: name === 'LSP' ? 'it only reads the code' : 'it opens the database read only' };
+    if (bypass && !secretBy([abs])) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
+    return { decision: 'deny', reason: bypass ? 'that is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach' : 'that is outside the project folder; only files inside it may be read' };
+  }
+  if (name === 'Database') {
+    const rule = databaseRule(args);
+    if (hasRule(rules?.never, rule)) return { decision: 'deny', reason: `blocked by your rule "${rule}" (/permissions)` };
+    const saved = hasRule(rules?.allow, rule);
+    if (saved || hasRule(allowedPrefixes, rule)) return { decision: 'allow', why: `"${rule}" is allowed (${saved ? 'saved' : 'this session'})` };
+    if (bypass) return { decision: 'allow', why: 'Bypass permissions is on (the database is opened read only)' };
+    return { decision: 'ask', rule, why: 'it connects to a database server; each query runs read only' };
+  }
+  // A real browser (tools/browser.mjs). Opening a page on the internet asks by site; clicking, typing and
+  // running script on the open page can set off what the page does, so plan mode leaves them out.
+  if (name === 'Browser') {
+    const need = browserNeeds(args, cwd);
+    if (need.page) {
+      if (mode === 'plan' && ['click', 'type', 'press', 'run'].includes(String(args?.action ?? '').toLowerCase())) return { decision: 'deny', reason: 'plan mode is on: the browser may open, read and look, but not click, type or run script' };
+      return { decision: 'allow', why: 'a step on the page already opened' };
+    }
+    if (need.bad) return { decision: 'deny', reason: 'that is not a web address or a file' };
+    if (need.local) return { decision: 'allow', why: 'a page on this Mac or your own network' };
+    if (need.file) {
+      if (need.inside) return { decision: 'allow', why: 'a file in the project' };
+      if (bypass && !secretBy([need.file])) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
+      return { decision: 'deny', reason: 'that file is outside the project folder' };
+    }
+    if (hasRule(rules?.never, need.rule)) return { decision: 'deny', reason: `blocked by your rule "${need.rule}" (/permissions)` };
+    const saved = hasRule(rules?.allow, need.rule);
+    if (saved || hasRule(allowedPrefixes, need.rule)) return { decision: 'allow', why: `"${need.rule}" is allowed (${saved ? 'saved' : 'this session'})` };
+    if (bypass) return { decision: 'allow', why: 'Bypass permissions is on' };
+    if (mode === 'auto') return { decision: 'check', rule: need.rule, why: 'Auto: the model checks that it fits your request' };
+    return { decision: 'ask', rule: need.rule, why: `no rule allows opening ${need.site} in the browser yet` };
+  }
   // A helper: the call itself changes nothing; each thing it does is asked about as your mode says.
   if (name === 'Agent') return { decision: 'allow', why: args?.kind === 'general' ? 'each change the helper makes asks as your mode says' : 'the helper only reads' };
   if (name === 'Remember') return { decision: 'allow', why: 'it writes to the memory, not to the project' };
@@ -487,6 +560,11 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [], sel
     ['git commit', STEPS.commit[m]],
     ['git push (only when the user asks; a force push is refused)', m === 'plan' || m === DONT_ASK ? 'refused' : m === 'bypass' && self ? 'runs' : 'asks first, every time (it then reaches GitHub)'],
     ['WebSearch and WebFetch (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the site' : ''}`],
+    ['LSP (when offered)', 'runs (it only reads the code)'],
+    ['Browser on a file in the project or a page on this Mac (when offered)', m === 'plan' ? 'open, read and look run; click, type and run script are refused' : 'runs'],
+    ['Browser opening a site on the internet (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the site' : ''}`],
+    ['Database a SQLite file in the project (when offered)', 'runs (read only)'],
+    ['Database a PostgreSQL server (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the host' : ''}`],
     ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${ruled ? ', or a rule allows it' : ''}`],
     ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
     ['Other files or commands outside the project, the internet from a command', m === 'bypass' ? 'runs (Bypass lifts the fence), except secrets outside the project (keys, .ssh, .env); ssh, scp and rsync still log in with this Mac\'s saved keys; what already runs on this Mac stays out of reach' : 'refused (the sandbox)'],

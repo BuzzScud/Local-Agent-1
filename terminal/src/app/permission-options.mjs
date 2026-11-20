@@ -19,6 +19,11 @@ export function permissionOptions(req, prefix, saveRule = null) {
     const what = req.name === 'WebSearch' ? 'web searches' : String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1');
     return req.rule ? [yes, { label: `Yes, and don't ask again for ${what} this session`, choice: 'always' }, { label: `Yes, and always allow ${what} in this folder`, choice: 'save' }, no] : [yes, no];
   }
+  // The browser opening a site, a database server: as the web, by its rule (Browser(site), Database(host/name)).
+  if (req.name === 'Browser' || req.name === 'Database') {
+    const what = String(req.rule ?? '').replace(/^(?:Browser|Database)\((.*)\)$/, '$1');
+    return req.rule ? [yes, { label: `Yes, and don't ask again for ${what} this session`, choice: 'always' }, { label: `Yes, and always allow ${what} in this folder`, choice: 'save' }, no] : [yes, no];
+  }
   // A tool of an MCP server: this once, this session, or saved for this folder (with the tool's fingerprint).
   if (req.name === 'Mcp') {
     const what = `${req.mcp?.server}:${req.mcp?.tool}`;

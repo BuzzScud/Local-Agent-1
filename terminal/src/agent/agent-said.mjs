@@ -232,7 +232,7 @@ export function asksForWork(text) {
 //   aboutTheCode   a question that names something of the code ("where is…", a file, a name()), or
 //                  a request for work. Small talk and general questions ("what is 2+2") are not.
 //   filesInAnswer  the files an answer names, as paths or names with a code or text extension
-export const LOOK_TOOLS = new Set(['Read', 'Search', 'List', 'Map', 'CodeSearch', 'Agent']);
+export const LOOK_TOOLS = new Set(['Read', 'Search', 'List', 'Map', 'CodeSearch', 'LSP', 'Database', 'Browser', 'Agent']);
 const CODE_WORDS = /\b(code|codebase|file|files|function|method|class|module|folder|repo|project|app|page|test|tests|component|endpoint|route|script|config|setting|bug|error|import|export|variable|defined|implemented|handled|called|where (?:is|are|does|do)|which file|in this)\b/i;
 const NAMEY = /`[^`]+`|\b[\w-]+\.(?:m?[jt]sx?|cjs|py|json|md|sh|css|html|sql|ya?ml|swift|go|rs)\b|\b[a-z]+[A-Z]\w*\b|\b\w+_\w+\b|\b\w+\(\)/;
 export function aboutTheCode(text) {

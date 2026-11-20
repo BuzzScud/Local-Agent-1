@@ -174,6 +174,9 @@ const NEEDS = {
   pattern: 'the regular expression to look for',
   todos: 'the whole plan, as a list of steps',
   question: 'one short question',
+  operation: 'one of definition, references, hover, symbols, find, implementation, diagnostics, callers, callees',
+  action: 'what to do (Browser: open, read, click…; Database: tables, schema, query)',
+  database: 'the SQLite file or the PostgreSQL address',
 };
 export const needsText = (name, req) => `${name} needs "${req}"${NEEDS[req] ? `: ${NEEDS[req]}` : ''}. Send the ${name} call again with "${req}" set.`;
 
@@ -272,6 +275,9 @@ export function display(name, args = {}) {
     case 'WebSearch': return { label: 'Web Search', arg: `"${String(args.query ?? '').replace(/\s+/g, ' ').trim()}"` };
     case 'WebFetch': return { label: 'Fetch', arg: String(args.url ?? '') };
     case 'Screen': return { label: 'Screen', arg: String(args.app ?? '').trim() || 'whole screen' };
+    case 'LSP': return { label: 'LSP', arg: `${args.operation ?? ''} ${args.name ?? args.query ?? ''}${args.path ? ` (${args.path}${args.line ? `:${args.line}` : ''})` : ''}`.replace(/\s+/g, ' ').trim() };
+    case 'Browser': return { label: 'Browser', arg: `${args.action ?? ''} ${args.url ?? (args.ref != null ? `[${args.ref}]` : args.selector ?? args.text ?? args.key ?? '')}`.trim() };
+    case 'Database': return { label: 'Database', arg: `${args.action ?? ''} ${args.action === 'query' ? String(args.sql ?? '').replace(/\s+/g, ' ').slice(0, 60) : args.table ?? ''}`.trim() };
     case 'App': return { label: 'App', arg: args.action === 'command' ? String(args.command ?? '').trim() : args.action === 'setting' ? `setting ${args.key ?? '(all)'}${args.value !== undefined ? ' = ' + JSON.stringify(args.value) : ''}` : 'restart on the new code' };
     case 'Agent': { const d = String(args.description || args.prompt || '').replace(/\s+/g, ' ').trim(); const k = String(args.kind ?? '').toLowerCase(); return { label: k === 'general' ? 'Agent' : !k || k === 'explore' ? 'Explore' : k, arg: d.length > 70 ? `${d.slice(0, 69)}…` : d }; }
     default: return { label: name, arg: '' };

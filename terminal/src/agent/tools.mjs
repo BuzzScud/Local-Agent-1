@@ -6,6 +6,9 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync } from 'no
 import { readFile } from '../tools/read.mjs';
 import { isImage, isPdf, preparedImage, pdfText, pdfPageImage } from '../tools/media.mjs';
 import { takeScreen } from '../tools/screen.mjs';
+import { errorsAfterEdit, lspTool } from '../tools/lsp.mjs';
+import { browserTool } from '../tools/browser.mjs';
+import { databaseTool } from '../tools/database.mjs';
 import { outlineText } from '../tools/outline.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -388,8 +391,10 @@ export async function execute(name, args, prepared, env) {
       // out of the folder ("../Shared/Desktop/x.html" was read as a guess at where it went, 5 Oct 2026).
       const h = env.home ?? homedir();
       const named = prepared.rel.startsWith('..') ? (prepared.abs.startsWith(`${h}/`) ? `~${prepared.abs.slice(h.length)}` : prepared.abs) : prepared.rel;
+      // The type errors in the file now, when a language server is already warm for it (tools/lsp.mjs; one is never started for this).
+      const typeErrors = await errorsAfterEdit(prepared.abs, env.cwd);
       return {
-        text: `${verb} ${named} (+${prepared.additions} −${prepared.removals} lines).`,
+        text: `${verb} ${named} (+${prepared.additions} −${prepared.removals} lines).${typeErrors}`,
         view: { kind: 'diff', path: prepared.rel, created: prepared.created, hunk: prepared.hunk, additions: prepared.additions, removals: prepared.removals, lines: prepared.after.split('\n').length },
       };
     }
@@ -445,6 +450,22 @@ export async function execute(name, args, prepared, env) {
     case 'App': return appTool(args, env, max);
     case 'WebSearch': return webSearch(args, env);
     case 'WebFetch': return webFetch(args, env, max);
+    case 'LSP': {
+      const r = await lspTool(args, { cwd: env.cwd, signal: env.signal });
+      const said = `${args.operation ?? ''} ${args.name ?? args.query ?? ''}`.trim();
+      return { text: cut(r.text, max), ...(r.error ? { error: true, view: { kind: 'error', message: r.text.split(/[.:]\s/)[0] } } : { view: { kind: 'answer', question: `LSP ${said}`, text: r.text } }) };
+    }
+    case 'Browser': {
+      const r = await browserTool(args, { cwd: env.cwd });
+      const said = `${args.action ?? ''} ${args.url ?? (args.ref != null ? `[${args.ref}]` : '') ?? ''}`.trim();
+      if (r.error) return { text: r.text, error: true, view: { kind: 'error', message: r.text.split(/\.\s/)[0] } };
+      return { text: cut(r.text, max), ...(r.images ? { images: r.images } : {}), view: r.images ? { kind: 'screen', what: `the browser page`, size: `${r.images[0].w}×${r.images[0].h}` } : { kind: 'answer', question: `Browser ${said}`, text: r.text } };
+    }
+    case 'Database': {
+      const r = await databaseTool(args, { cwd: env.cwd });
+      if (r.error) return { text: r.text, error: true, view: { kind: 'error', message: r.text.split(/\.\s/)[0] } };
+      return { text: cut(r.text, max), view: { kind: 'answer', question: `Database ${args.action ?? ''}`, text: r.text } };
+    }
     case 'Screen': {
       const r = takeScreen({ app: String(args.app ?? '').trim() || undefined });
       if (r.error === 'setup') { env.onScreenSetup?.(); return { text: `${r.why} Tell the user to type /screen setup in Agentic Coder; until then you cannot look at the screen.`, error: true, view: { kind: 'error', message: 'Screen Recording is off for this terminal: /screen setup' } }; }

@@ -92,6 +92,9 @@ export function lookSaid(name, args = {}) {
     case 'Search': return `everywhere "${clip(args.pattern ?? args.query ?? '', 40)}" appears`;
     case 'CodeSearch': return `the code for "${clip(args.query ?? '', 40)}"`;
     case 'Map': return 'a map of the project';
+    case 'LSP': return `what the language server knows of ${args.name ? `"${clip(args.name, 40)}"` : fileSaid(path) || 'the code'}`;
+    case 'Database': return 'the database';
+    case 'Browser': return 'a page in the browser';
     case 'WebSearch': return `the web for "${clip(args.query ?? '', 40)}"`;
     case 'WebFetch': { try { return `a web page on ${new URL(args.url).hostname}`; } catch { return 'a web page'; } }
     case 'Bash': return 'the output of a command';
@@ -211,7 +214,7 @@ export function sameStepNote(name, outText = '', next = '') {
   if ((name === 'Write' || name === 'Edit') && /\(\+0 −0 lines\)/.test(outText)) return `(That ${name === 'Write' ? 'write' : 'change'} changed nothing: the file already holds exactly this, and it is saved. Do not send it again.${go})`;
   if (name === 'Read') return '';
   if (name === 'Bash') return '(The same command gave the same result as before: nothing has changed since. Change something first, or do something else. Do not run it again as it is.)';
-  if (['List', 'Search', 'Map', 'CodeSearch', 'WebFetch', 'WebSearch'].includes(name)) return '(You asked exactly this before and the answer is the same; it is above. Use it, or look somewhere else.)';
+  if (['List', 'Search', 'Map', 'CodeSearch', 'LSP', 'Database', 'Browser', 'WebFetch', 'WebSearch'].includes(name)) return '(You asked exactly this before and the answer is the same; it is above. Use it, or look somewhere else.)';
   return '(You already did exactly this step, and nothing changed. Do something different, or finish.)';
 }
 
