@@ -280,6 +280,8 @@ export class StepPart {
 
   async runStep(call, signal) {
     call = { ...call, name: toolNameOf(call.name, this.way) };
+    const early = this.earlyStep(call, signal); // MoreTools, MultiEdit, NotebookEdit (agent-edits.mjs)
+    if (early) return early;
     // A tool of an MCP server: by its name here, through Mcp, or by the tool's own name when
     // that is no tool of the app's and only one server has it (runMcp).
     if (this.mcpFrozen && (isMcpCall(call.name) || (!this.tools().some((t) => t.function.name === call.name) && findEntry(this.mcpEntries(), call.name).entry))) return this.runMcp(call, signal);

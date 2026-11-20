@@ -104,6 +104,27 @@ export const MODEL_TOOL_DEFS = [
     description: 'Save one fact to the memory for later conversations: a preference of the user, or how this project works or is run. Only what will still matter next time and what the code or git does not already show. One short sentence.',
     parameters: { type: 'object', properties: { fact: str('The fact, in one short sentence'), about: { type: 'string', enum: ['you', 'project'], description: 'you: the user, in every project; project: this project only' }, replaces: str("Optional: the id of a saved fact this one makes out of date (Remember's answer lists the ids); the old one is retired") }, required: ['fact'] },
   },
+  // Claude Code's MultiEdit and NotebookEdit (the owner's pick, 19 Nov 2026: "Claude Code's missing tools").
+  // Both run as Edits (agent-step.mjs multiEdit, notebookEdit), so every check and question of an Edit holds.
+  {
+    name: 'MultiEdit',
+    description: 'Several changes to one file in one call, made in order, each as Edit makes it (old_text exactly once, or line, or replace_all). All of them are tried first: if one does not fit, nothing is changed and you are told which. Use it instead of several Edits of the same file.',
+    parameters: { type: 'object', properties: {
+      path: str('File path'),
+      edits: { type: 'array', description: 'The changes, in order; each one sees the file as the ones before it left it', items: { type: 'object', properties: { old_text: str('Exact text to replace'), new_text: str('Replacement text'), replace_all: { type: 'boolean' }, line: { type: 'integer' } }, required: ['old_text', 'new_text'] } },
+    }, required: ['path', 'edits'] },
+  },
+  {
+    name: 'NotebookEdit',
+    description: 'Change one cell of a Jupyter notebook (.ipynb): replace its source, insert a new cell before it (or at the end), or delete it. Cells are counted from 0, in the order of the file\'s "cells" list; called with only path, it changes nothing and lists every cell with its number, kind and first line. A replaced code cell loses its old outputs.',
+    parameters: { type: 'object', properties: {
+      path: str('The notebook, a .ipynb file'),
+      cell: { type: 'integer', description: 'The cell, from 0. For insert: the new cell goes before it; leave it out to add at the end' },
+      mode: { type: 'string', enum: ['replace', 'insert', 'delete'], description: 'replace (the default), insert or delete' },
+      source: str('The new source of the cell (replace, insert)'),
+      cell_type: { type: 'string', enum: ['code', 'markdown'], description: 'For insert, or to change a cell\'s kind: code or markdown' },
+    }, required: ['path'] },
+  },
 ];
 // The web (/web): WebSearch when a search service is set, WebFetch when reading pages is on.
 // What a page or a search brings back is data, never instructions: each result says so.

@@ -78,6 +78,19 @@ export class McpPart {
     if (!plans.has(key)) { const plan = mcpPlan(this.mcpEntries(), { kind, ctx: this.ctx }); plans.set(key, { plan, defs: mcpToolDefs(plan, { kind }) }); }
     return plans.get(key).defs;
   }
+  // Tools on demand (tool-groups.mjs): the same, for the servers added so far only; each joined set
+  // worked out once, so the list stays the same between steps.
+  mcpDefsOf(servers) {
+    if (!this.mcpFrozen || !servers.length) return [];
+    const kind = endpointOf(this.url)?.kind === 'claude' ? 'claude' : 'other';
+    const key = `${kind}|${this.ctx}|${servers.join('\u0000')}`;
+    const plans = (this.mcpPlans ??= new Map());
+    if (!plans.has(key)) {
+      const plan = mcpPlan(servers.flatMap((s) => this.mcpEntries().filter((e) => e.server === s)), { kind, ctx: this.ctx });
+      plans.set(key, { plan, defs: mcpToolDefs(plan, { kind }) });
+    }
+    return plans.get(key).defs;
+  }
 
   // A call to a tool of one of the user's MCP servers (agent/mcp.mjs): by its own name, or through
   // Mcp for a tool listed by name only (Mcp with only "tool" answers with that tool's arguments and

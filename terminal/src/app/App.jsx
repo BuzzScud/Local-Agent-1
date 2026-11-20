@@ -611,6 +611,8 @@ export function App({ opts, win, onRestart }) {
   // Whether this model on this Mac can turn its vision on (the Screen tool is offered then too).
   agent.mayLook = () => !model.remote && !opts.url && Boolean(model.vision) && existsSync(visionPath(model));
   agent.screen = settings.screen !== false;
+  // Tools on demand (agent/tool-groups.mjs): "auto" unless settings.json's "toolsOnDemand" says "on" or "off".
+  agent.toolsOnDemand = settings.toolsOnDemand ?? 'auto';
   agent.visionOn = async () => {
     if (!agent.mayLook()) return false;
     push({ type: 'note', text: `${model.name} wants to look at a picture: turning on its vision (a reload of about 20 s, the conversation stays).`, tone: 'dim' });

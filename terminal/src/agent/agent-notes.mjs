@@ -18,6 +18,7 @@ import { wantsDesktop } from '../flows/words.mjs';
 import { checkInText } from '../flows/fix.mjs';
 import { alwaysRules } from './facts.mjs';
 import { requestHits, requestNote } from './mcp.mjs';
+import { MCP_GROUP } from './tool-groups.mjs';
 import { BYPASS_OPEN, CORRECTS, SELF_OPEN, asksForWork, tokensOf, webAddresses } from './agent-said.mjs';
 import { sshNamed, sshNote } from '../tools/ssh.mjs';
 
@@ -29,6 +30,8 @@ export class NotesPart {
     // that is a server's own prompt (/server:prompt).
     const mcpSays = this.mcpFrozen && request?.role === 'user' && typeof request.content === 'string' && !this.fromServer && !/<resource server="/.test(text) ? requestNote(text, this.mcpEntries(), { listed: this.mcpListed() }) : '';
     if (mcpSays) this.turn.mcp = { request, notes: mcpSays, hits: requestHits(text, this.mcpEntries(), { listed: this.mcpListed() }) };
+    // Tools on demand (tool-groups.mjs): a server the request points at joins now, so the tools the note names are on the list.
+    if (mcpSays && this.onDemand()) for (const h of this.turn.mcp.hits) this.joinTools(`${MCP_GROUP}${h.server}`);
     // Look first (look.mjs): a minimum of looking before the answer, on every task that goes step
     // by step here; not a follow-up (it continues a turn that already looked), not in the home
     // folder (a general question there needs no files), not for a helper (it is part of the looking),

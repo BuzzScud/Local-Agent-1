@@ -15,6 +15,20 @@ import { homedir } from 'node:os';
 import { isCodeProject } from '../flows/index.mjs';
 import { LEAN_AUTO, LEAN_AUTO_NOTE, OPT_IN_HOOKS, hooksOn, leanForModel, leanPrompt, wayOf, wayPrompt } from './way.mjs';
 import { SeenFiles } from './seen.mjs';
+import { MCP_GROUP, groupOfTool, groupsOffered, moreToolsAnswer, onDemandOf, onDemandTools } from './tool-groups.mjs';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+// A Jupyter notebook in the folder or one folder down (not in node_modules, .git or another hidden folder).
+function hasNotebook(dir) {
+  const look = (d, depth) => {
+    let items = [];
+    try { items = readdirSync(d, { withFileTypes: true }); } catch { return false; }
+    if (items.some((e) => e.isFile() && e.name.endsWith('.ipynb'))) return true;
+    return depth > 0 && items.some((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules' && look(join(d, e.name), depth - 1));
+  };
+  return look(dir, 1);
+}
 import { upFrontFor } from './room.mjs';
 import { readResults, testsFailed } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -33,6 +47,7 @@ import { PagesPart } from './agent-pages.mjs';
 import { ChecksPart } from './agent-checks.mjs';
 import { RoomPart } from './agent-room.mjs';
 import { StepPart } from './agent-step.mjs';
+import { EditsPart } from './agent-edits.mjs';
 import { UndoPart } from './agent-undo.mjs';
 import { ModelPart } from './agent-model.mjs';
 import { WorkPart } from './agent-work.mjs';
@@ -163,6 +178,18 @@ export class Agent extends EventEmitter {
   setSystem(system) { this.messages[0] = { role: 'system', content: leanPrompt(wayPrompt(system, this.way), this.lean) }; }
   // The tools the model is offered: the app's eight, and its own five when it decides.
   tools() {
+    const own = this.ownTools();
+    // Tools on demand (tool-groups.mjs): the start set, MoreTools, and the groups added so far.
+    if (this.onDemand()) {
+      const servers = this.toolsJoined.filter((id) => id.startsWith(MCP_GROUP)).map((id) => id.slice(MCP_GROUP.length));
+      return onDemandTools(own, this.mcpDefsOf(servers), this.toolsJoined, this.toolGroups(own));
+    }
+    // The tools of the user's MCP servers go last, in one order, so the list above them never moves.
+    const mcp = this.mcpDefs();
+    return mcp.length ? [...own, ...mcp] : own;
+  }
+  // The app's own tools this agent would offer, all of them (on demand or not).
+  ownTools() {
     const agents = this.agentsOn();
     const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [], self: this.selfOn() && !this.isHelper });
     // CodeSearch only when it can run (4 Oct 2026: qwen3-coder-next called it twice, was told twice
@@ -170,8 +197,10 @@ export class Agent extends EventEmitter {
     // The same for the four never called in 40 runs on a service (5 Oct 2026): Map not in the home
     // folder, Rename and TestFirst in a folder of code, Remember with a memory. The folder is looked at
     // once a conversation, so the list does not move under it; a call to one left out still runs.
-    const here = this.toolPlace?.cwd === this.cwd ? this.toolPlace : (this.toolPlace = { cwd: this.cwd, home: isHomeFolder(this.cwd), code: isCodeProject(this.cwd) });
+    const here = this.toolPlace?.cwd === this.cwd ? this.toolPlace : (this.toolPlace = { cwd: this.cwd, home: isHomeFolder(this.cwd), code: isCodeProject(this.cwd), notebooks: !isHomeFolder(this.cwd) && hasNotebook(this.cwd) });
     const off = new Set([
+      // NotebookEdit where there is a notebook (a .ipynb in the folder or the one below it).
+      ...(here.notebooks ? [] : ['NotebookEdit']),
       ...(this.codeSearchOff() ? ['CodeSearch'] : []),
       ...(here.home ? ['Map'] : []),
       ...(here.code ? [] : ['Rename', 'TestFirst']),
@@ -180,10 +209,36 @@ export class Agent extends EventEmitter {
       ...(this.model?.toolsOff ?? []),
     ]);
     const can = (t) => !off.has(t.function.name);
-    const own = (this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all).filter(can);
-    // The tools of the user's MCP servers go last, in one order, so the list above them never moves.
-    const mcp = this.mcpDefs();
-    return mcp.length ? [...own, ...mcp] : own;
+    return (this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all).filter(can);
+  }
+  // ---- Tools on demand (tool-groups.mjs) ----
+  // "toolsOnDemand" (settings.json, set by the app): "auto", "on" or "off"; null (a test, a practice
+  // run, a helper's own list) is off. Looked at each request, so a change counts at the next step.
+  toolsOnDemand = null;
+  toolsJoined = []; // the groups added in this conversation, in the order they joined
+  onDemand() { return !this.isHelper && !this.toolFilter && onDemandOf(this.toolsOnDemand, endpointOf(this.url)); }
+  // The groups there are: the app's that hold a tool it would offer, then each MCP server on.
+  toolGroups(own) { return groupsOffered((own ?? this.ownTools()).map((t) => t.function.name), this.mcpEntries()); }
+  joinTools(id) {
+    if (!id || this.toolsJoined.includes(id)) return false;
+    this.toolsJoined = [...this.toolsJoined, id];
+    this.emit('note', { text: `Tools added: ${id}, for the rest of this conversation.`, tone: 'dim', fold: true });
+    return true;
+  }
+  // A tool of a group not added yet, called by name: its group joins (a tool this agent would not offer, never).
+  joinGroupOf(name) {
+    const id = groupOfTool(name, this.mcpEntries());
+    if (!id || this.toolsJoined.includes(id)) return;
+    if (this.toolGroups().some((g) => g.id === id && g.tools.includes(name))) this.joinTools(id);
+  }
+  runMoreTools(call) {
+    let args = {};
+    try { args = JSON.parse(call.args || '{}'); } catch { /* said as no group */ }
+    const groups = this.toolGroups();
+    const out = moreToolsAnswer(args, groups, this.toolsJoined);
+    if (out.joined) this.joinTools(out.joined);
+    this.emit('tool', { id: call.id, name: call.name, label: 'More tools', arg: String(args.group ?? ''), view: out.error ? { kind: 'error', message: out.text } : { kind: 'answer', question: 'More tools', text: out.text }, error: Boolean(out.error) });
+    return { text: out.text, ...(out.error ? { error: true } : {}) };
   }
   // ---- MCP tools (agent/mcp.mjs; the servers themselves: tools/mcp.mjs) ----
   // A conversation's MCP tools are taken once, before its first message, and kept until the next
@@ -369,7 +424,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.toolPlace = null; this.timedTo = 0; this.cardsGiven = new Set(); this.task = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.toolPlace = null; this.toolsJoined = []; this.timedTo = 0; this.cardsGiven = new Set(); this.task = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.
@@ -710,7 +765,7 @@ export class Agent extends EventEmitter {
 // The Agent's other methods are in the agent-*.mjs files beside this one, a part each (7 Oct 2026: this file
 // had grown to 5,221 lines, more than a model can read at once). They are put on Agent.prototype here, as
 // they were written (getters stay getters), so every this.x() and every test works as before.
-for (const part of [McpPart, MemoryPart, ReadPart, PagesPart, ChecksPart, RoomPart, StepPart, UndoPart, ModelPart, WorkPart, AnswerPart, NotesPart, StartPart]) {
+for (const part of [McpPart, MemoryPart, ReadPart, PagesPart, ChecksPart, RoomPart, StepPart, EditsPart, UndoPart, ModelPart, WorkPart, AnswerPart, NotesPart, StartPart]) {
   for (const [name, d] of Object.entries(Object.getOwnPropertyDescriptors(part.prototype))) {
     if (name === 'constructor') continue;
     if (Object.hasOwn(Agent.prototype, name)) throw new Error(`Agent.${name} is in two places`);

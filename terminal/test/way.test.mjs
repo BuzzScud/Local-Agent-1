@@ -352,7 +352,8 @@ test('switching the way mid-conversation changes the prompt and the tools for th
   await fake.close();
   const [a, b] = chats(fake).slice(-2);
   expect(a.tools.length).toBe(9);
-  expect(b.tools.length).toBe(13); // the app's eight, the model's own three (no CodeSearch: the code search is off here; no Remember: no memory), Jobs, and Agent (a helper)
+  expect(b.tools.length).toBe(14); // the app's eight, the model's own four (no CodeSearch: the code search is off here; no Remember: no memory; MultiEdit; no NotebookEdit: no notebook), Jobs, and Agent (a helper)
+  expect(b.tools.map((t) => t.function.name)).toContain('MultiEdit');
   expect(b.tools.at(-1).function.name).toBe('Agent');
   agent.setWay('app');
   expect(agent.messages[0].content).toContain(ONE_AT_A_TIME);
