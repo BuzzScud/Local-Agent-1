@@ -140,6 +140,25 @@ export const CUT_MARK = '[… cut here by Agentic Coder for this check; the rest
 export const auto = (text) => `${AUTO} ${text}`;
 // The same call again: after the second, and with "Keep going" to the stuck question.
 export const SAME_STEP = 'You already did exactly this step. Do something different, or finish.';
+// A few steps going round (20 Nov 2026: hearth code read RULES/MCP.md, RULES/ANSWERS.md and the
+// memory index in turn 36 times; each step differed from the one before, so the same-step count
+// above never rose). steps: this message's steps, oldest first, each { key, out, bash, paged }.
+// → { size: the 2 or 3 steps it goes round, rounds: how many times they came round again }.
+// A command that said something new, or a Read moved on to a long file's next part, is not the same.
+export function goingRound(steps, sizes = [2, 3]) {
+  const sameWords = (a, b) => String(a).replace(/\d+(?:\.\d+)?/g, '#') === String(b).replace(/\d+(?:\.\d+)?/g, '#');
+  for (const k of sizes) {
+    let run = 0;
+    for (let i = steps.length - 1; i - k >= 0; i--) {
+      const a = steps[i], b = steps[i - k];
+      if (a.key !== b.key || a.paged || (a.bash && !sameWords(a.out, b.out))) break;
+      run++;
+    }
+    if (run >= k && new Set(steps.slice(-k).map((s) => s.key)).size > 1) return { size: k, rounds: Math.floor(run / k) };
+  }
+  return { size: 0, rounds: 0 };
+}
+export const ROUND_NOTE = (said) => `You are going round in circles: your last steps (${said}) are the same ones you sent just before, and they gave nothing new. Do not send them again. Use what they gave you, or take the step you meant to take.`;
 // With the request while Bypass permissions is on (see send()).
 // The ssh line (18 Oct 2026): with only "Still refused: secrets … .ssh", Qwen3.6 argued for 42 s whether it
 // might run the ssh the user asked for at all (tools/ssh.mjs).

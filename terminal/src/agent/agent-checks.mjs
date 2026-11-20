@@ -412,9 +412,10 @@ export class ChecksPart {
 
   // Stuck: the same step again and again, or three tool errors in a row. One question that says what it is
   // working on, what it tried and what came of it; a way out picked, or a hint, goes straight to the model.
-  async stuckAsk(why, call, out, signal, { tries = 3 } = {}) {
+  // why 'cycle': a few steps going round; round is those steps in words (goingRound, agent-work.mjs).
+  async stuckAsk(why, call, out, signal, { tries = 3, round = '' } = {}) {
     const t = this.turn;
-    const step = stepSaid(call.name, parseArgs(call.name, call.args).args ?? {});
+    const step = why === 'cycle' ? round : stepSaid(call.name, parseArgs(call.name, call.args).args ?? {});
     const err = errorSaid(call.name, out?.text);
     const plan = t?.planAt != null ? this.todos ?? [] : [];
     const next = plan.find((x) => x.status === 'pending')?.text ?? '';
@@ -435,8 +436,8 @@ export class ChecksPart {
     this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text } });
     // The ways out: stop; another way ("Keep going" means that too: the same again is what it was doing); skip.
     if (/^stop( here)?\W*$/i.test(text)) return { stop: 'declined' };
-    const was = why === 'repeat' ? `You sent the same step ${tries} times (${step}) and nothing changed` : `Three steps in a row failed (the last: ${step})`;
-    if (/^(try (a|an)?\s*(different|other|another) way|keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return { text: `[Stuck] ${was}. The user says: try a different way. Do not send that step again; reach what it was for another way, or go on to the next step.` };
+    const was = why === 'repeat' ? `You sent the same step ${tries} times (${step}) and nothing changed` : why === 'cycle' ? `You went through the same steps ${tries} times (${step}) and nothing changed` : `Three steps in a row failed (the last: ${step})`;
+    if (/^(try (a|an)?\s*(different|other|another) way|keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return { text: `[Stuck] ${was}. The user says: try a different way. Do not send ${why === 'cycle' ? 'those steps' : 'that step'} again; reach what it was for another way, or go on to the next step.` };
     if (/^skip( (this|that|the) step| it)?\W*$/i.test(text)) return { text: `[Stuck] ${was}. The user says: skip this step. Leave it and go on with the rest of the request${next ? `; next in your plan: ${next}` : ''}. In your final answer, say that this step was skipped.` };
     return { text: `[Stuck] You were going round in circles and asked the user for a hint. The user answered: ${text}\nFollow that.` };
   }

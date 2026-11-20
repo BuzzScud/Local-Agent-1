@@ -1,7 +1,7 @@
 // The Agent's loop (agent.mjs): one message worked through, step after step, until it answers.
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
 import { endpointOf } from '../../../models/index.mjs';
-import { sameStepNote } from './questions.mjs';
+import { sameStepNote, stepSaid } from './questions.mjs';
 import { oldSteps, parseArgs } from './tools.mjs';
 import { isReadOnly } from './permissions.mjs';
 import { isHomeFolder } from './prompt.mjs';
@@ -15,7 +15,7 @@ import { isMemoryRequest } from './memory.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { RESTARTED_PROMPT } from './self.mjs';
 import { MCP_TOOL, callHint, isMcpCall, mcpCallInText } from './mcp.mjs';
-import { CALL_MARK, EXPLAIN, LOOK_TOOLS, MAX_CALLS, MCP_BACKS, READ_TIP, SAME_STEP, asksTheUserDirectly, auto, bareCallInText, beforeCall, cutCallNote, kTok, keptPart, keptWriteNote, keyLines, safeArgs, toolCallInText, endsReply, OUTSIDE_RESULTS } from './agent-said.mjs';
+import { CALL_MARK, EXPLAIN, LOOK_TOOLS, MAX_CALLS, MCP_BACKS, READ_TIP, ROUND_NOTE, SAME_STEP, asksTheUserDirectly, goingRound, auto, bareCallInText, beforeCall, cutCallNote, kTok, keptPart, keptWriteNote, keyLines, safeArgs, toolCallInText, endsReply, OUTSIDE_RESULTS } from './agent-said.mjs';
 
 export class WorkPart {
   async work(text, { signal, images, wake = false } = {}) {
@@ -128,6 +128,8 @@ export class WorkPart {
     let repeatKey = null;
     let repeatOut = '';
     let repeats = 0;
+    let stepsGone = []; // this message's steps, for a few going round (goingRound)
+    let roundsSeen = 0;
     let errorsInRow = 0;
     let nudges = 0;
     let stopBacks = 0; // your Stop hooks' send-backs this message
@@ -440,6 +442,11 @@ export class WorkPart {
         repeats = key === repeatKey && !paged && !saidNew ? repeats + 1 : 0;
         repeatKey = key;
         repeatOut = outText;
+        stepsGone.push({ key, out: outText, bash: calls.some((c) => c.name === 'Bash'), paged, said: call ? stepSaid(call.name, parseArgs(call.name, call.args).args ?? {}) : '' });
+        const round = goingRound(stepsGone);
+        const newRound = round.rounds > roundsSeen;
+        roundsSeen = round.rounds;
+        const roundSaid = stepsGone.slice(-round.size).map((s) => s.said).join(', ');
         // Looking again is not being stuck yet: a model reads a file twice to have it fresh, and the third Read
         // gives the text again (runTool). For looks the question, and the stop after it, come one step later.
         const askAt = calls.length && calls.every((c) => LOOK_TOOLS.has(c.name)) ? 3 : 2;
@@ -447,6 +454,22 @@ export class WorkPart {
         // wrong shape harms no work (4 Oct 2026: Qwen3.6 was stopped by five of them, the repeat stop still holds).
         errorsInRow = landed ? 0 : calls.length && calls.every((c) => c.name === 'TodoWrite') ? errorsInRow : errorsInRow + 1;
         this.turn.errorsInRow = errorsInRow;
+        // A few steps going round: told the first time they come round again, asked about the second, stopped
+        // the third. Stricter than one step again (a model reads one file twice to have it fresh; a whole
+        // round twice is not that): the hearth code loop (agent-said.mjs goingRound) would have been asked about at its 9th step.
+        if (newRound && round.rounds > 2) {
+          reason = 'stuck';
+          this.emit('note', { text: 'It kept going round the same few steps, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });
+          await this.lastWord('you kept going round the same few steps', signal);
+          break;
+        }
+        if (newRound && round.rounds === 1) this.messages.push({ role: 'user', content: auto(ROUND_NOTE(roundSaid)) });
+        if (newRound && round.rounds === 2) {
+          const s3 = this.checkIns && !checkedIn && this.hook('stuck') ? await this.stuckAsk('cycle', call, out, signal, { tries: 3, round: roundSaid }) : null;
+          if (s3?.stop) { reason = s3.stop; break; }
+          if (s3?.text) { this.messages.push({ role: 'user', content: s3.text }); stepsGone = []; roundsSeen = 0; repeats = 0; repeatKey = null; }
+          else this.messages.push({ role: 'user', content: auto(ROUND_NOTE(roundSaid)) });
+        }
         if (repeats > askAt || errorsInRow >= 5) {
           reason = 'stuck';
           this.emit('note', { text: repeats > askAt ? 'It kept repeating the same step, so it stopped. Try rephrasing the task, or give it a hint.' : 'Five tool errors in a row, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });

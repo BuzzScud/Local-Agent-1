@@ -6,6 +6,7 @@ import { Agent, safeArgs, claimsAlreadyThere, asksForWork, claimsDone, wantsDesk
 // Agentic Coder's "go ahead" nudge, as it reads now (labelled as automatic).
 const isNudge = (c) => c.startsWith(AUTO) && c.includes('did not do it');
 import { systemPrompt } from '../src/agent/prompt.mjs';
+import { goingRound } from '../src/agent/agent-said.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { demoReplies } from './demo-script.mjs';
@@ -58,6 +59,42 @@ test('repeating the same call stops as stuck', async () => {
   const { reason, events } = await run([same, same, same, same, same, same]);
   expect(reason).toBe('stuck');
   expect(events.find((e) => e.type === 'note').text).toContain('kept repeating');
+});
+
+// 20 Nov 2026: hearth code read three files in turn 36 times; no step was the same as the one before it,
+// so the check above never fired. A few steps going round: told, then asked, then stopped.
+test('a few steps going round: told the first time round again, asked the second, stopped the third', async () => {
+  const a = { tool: { name: 'Read', args: { path: 'export.mjs' } } };
+  const b = { tool: { name: 'List', args: { path: '.' } } };
+  const c = { tool: { name: 'Search', args: { pattern: 'argv' } } };
+  const said = 'I kept reading the same three things. Tell me what to look for.';
+  const { reason, events, agent, fake } = await run([a, b, c, a, b, c, a, b, c, a, b, c, { text: said }, a, a]);
+  expect(reason).toBe('stuck');
+  expect(fake.requests.length).toBe(13); // 12 steps and the last word, not one more
+  expect(events.filter((e) => e.type === 'tool' && ['Read', 'List', 'Search'].includes(e.name)).length).toBe(12);
+  const told = agent.messages.filter((m) => m.role === 'user' && String(m.content).includes('You are going round in circles'));
+  expect(told.length).toBe(2); // after the 6th step, and after the 9th (the answer gave no hint)
+  expect(told[0].content).toStartWith(AUTO);
+  expect(told[0].content).toContain('export.mjs');
+  expect(events.filter((e) => e.type === 'ask' && e.name === 'Ask').length).toBe(1);
+  expect(events.some((e) => e.type === 'note' && String(e.text).includes('kept going round the same few steps'))).toBe(true);
+  expect(events.filter((e) => e.type === 'assistant' && e.final).at(-1).text).toBe(said);
+});
+
+test('going round: two or three steps; one step again, a command that says something new, or a long file paged, is not', () => {
+  const s = (key, more = {}) => ({ key, out: 'same', ...more });
+  expect(goingRound(['A', 'B', 'C', 'A', 'B', 'C'].map((k) => s(k)))).toEqual({ size: 3, rounds: 1 });
+  expect(goingRound(['A', 'B', 'C', 'A', 'B', 'C', 'A', 'B', 'C'].map((k) => s(k)))).toEqual({ size: 3, rounds: 2 });
+  expect(goingRound(['A', 'B', 'A', 'B'].map((k) => s(k)))).toEqual({ size: 2, rounds: 1 });
+  expect(goingRound(['A', 'B', 'C', 'A', 'B'].map((k) => s(k)))).toEqual({ size: 0, rounds: 0 });
+  expect(goingRound(['A', 'A', 'A', 'A', 'A', 'A'].map((k) => s(k)))).toEqual({ size: 0, rounds: 0 });
+  // A test run watched between edits: the run says something new each time round.
+  const watched = [s('E'), s('T', { bash: true, out: 'fail: parse' }), s('E'), s('T', { bash: true, out: 'fail: export' })];
+  expect(goingRound(watched).rounds).toBe(0);
+  // The same failing run, its times apart, is the same step.
+  const same = [s('E'), s('T', { bash: true, out: '3 fail in 1.2 s' }), s('E'), s('T', { bash: true, out: '3 fail in 1.4 s' })];
+  expect(goingRound(same).rounds).toBe(1);
+  expect(goingRound([s('A'), s('B'), s('A'), s('B', { paged: true })]).rounds).toBe(0);
 });
 
 // Since 5 Oct 2026 (the owner's picks): the second time the model is told why nothing changed and you are not

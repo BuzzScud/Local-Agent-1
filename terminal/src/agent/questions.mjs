@@ -176,6 +176,8 @@ export function stuckQuestion(why, step, err, { tries = 3, goal = '', result = '
   return {
     question: why === 'repeat'
       ? `I am going round in circles${goal ? ` on "${clip(goal, 70)}"` : ''}: I tried ${step} ${tries} times and nothing changed${result ? ` (${result})` : ''}. What should I do?`
+      : why === 'cycle'
+      ? `I am going round in circles${goal ? ` on "${clip(goal, 70)}"` : ''}: I went through the same steps (${step}) ${tries} times and nothing changed. What should I do?`
       : `Three steps in a row did not work. The last one (${step}) ${err ? `ended with: ${err}${end}` : 'gave no error words.'} What should I do?`,
     options: ['Try a different way', 'Skip this step', 'Stop here'],
     about: ['I drop this approach and take another.', 'I leave this step and go on with the rest.', 'I stop and tell you where things stand.'],
