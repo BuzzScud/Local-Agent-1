@@ -482,7 +482,9 @@ if (opts.print) {
     const levels = remote.model.thinkingLevels ?? [];
     const lv = (levels.length > 1 ? levels.find((l) => l.id === ownOf(settings, remote.model.remote?.model)?.level) : null)
       ?? thinkingLevel(remote.model, remote.model.thinkingDefault ?? true, remote.model.thinkingEffort);
-    if (opts.thinking === undefined) { opts.thinking = Boolean(lv.effort); if (lv.effort) opts.effort ??= lv.id; }
+    // lv.effort is what turns thinking on (a level with no effort is Off). A fallback On with effort
+    // null used to make coding -p send think: false on hearth (20 Nov 2026).
+    if (opts.thinking === undefined) { opts.thinking = Boolean(lv.effort); if (lv.effort && lv.effort !== true) opts.effort ??= lv.id; }
     runModel = modelWithLimits(remote.model, limits);
     canSee = Boolean(remote.vision);
     if (remote.slots > 1) slots = { main: 0, side: 1 };

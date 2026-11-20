@@ -404,6 +404,8 @@ export function remotePart(self) {
     const name = conn?.info?.model;
     if (!name || !conn.info.ollama) return;
     noteModels(conn);
+    // hearth's door keeps its own copies: nothing is let go or tried out there (each would be a job in its line).
+    if (conn.hearth) return;
     if (back && back !== name && !modelsInUseOn(conn.url).has(back)) {
       unloadOllama({ url: conn.url, model: back }).then((ok) => { if (ok) { self.push({ type: 'note', text: `${back} let go on the service, so ${name} has its room.`, tone: 'dim' }); refreshCatalog(conn); } });
     }
@@ -422,7 +424,7 @@ export function remotePart(self) {
   const leaveService = async (conn, { only = null } = {}) => {
     if (!conn) return;
     noteModels(null);
-    if (conn.info?.ollama && process.env.AGENTIC_UNLOAD !== 'off') {
+    if (conn.info?.ollama && !conn.hearth && process.env.AGENTIC_UNLOAD !== 'off') {
       const names = usedHere(conn).filter((n) => !only || only.includes(n));
       // A renewal already on its way would load the model again after it was let go: it lands first.
       await self.renewRef.current;
@@ -456,7 +458,7 @@ export function remotePart(self) {
   };
   const preloadRemote = (conn, { back = null, skip = new Set() } = {}) => {
     const o = conn?.info?.ollama;
-    if (!o || (o.loaded && (!conn.numCtx || o.loadedCtx === conn.numCtx))) { afterLoad(conn, { back }); return false; }
+    if (!o || conn.hearth || (o.loaded && (!conn.numCtx || o.loadedCtx === conn.numCtx))) { afterLoad(conn, { back }); return false; }
     const my = (self.remoteRef.current.loads = (self.remoteRef.current.loads ?? 0) + 1);
     const mine = () => self.remoteRef.current.loads === my && self.remoteRef.current.conn === conn;
     const name = conn.info.model;

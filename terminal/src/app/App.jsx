@@ -569,7 +569,8 @@ export function App({ opts, win, onRestart }) {
   // its stdin, never on its command line.
   remoteFnRef.current.unloadOnQuit = () => {
     const conn = remoteRef.current.conn;
-    if (!conn?.info?.ollama || process.env.AGENTIC_UNLOAD === 'off') return;
+    // hearth's door keeps its own copies (and an unload there would be one more job in its line).
+    if (!conn?.info?.ollama || conn.hearth || process.env.AGENTIC_UNLOAD === 'off') return;
     const names = usedHere(conn);
     if (!names.length) return;
     const head = { ...remoteRef.current.headers, ...authHeaders(conn.url) };

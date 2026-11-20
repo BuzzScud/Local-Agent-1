@@ -2184,3 +2184,33 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **The names AGENTS.md uses.** The test record is `~/.agentic-coder/tests/record.jsonl` (what
   ran, and whether it counted). The Arena is the eval comparison described above. The memory is
   the owner's store under `AGENTIC_HOME`, never the real one in a test.
+
+## hearth, as hearth (20 Nov 2026)
+
+- **What and why.** The owner connected Agentic Coder to hearth's API with their hearth key (`/remote hearth`): a task took
+  about 5 minutes, then failed with "A newer job from this key took its place". Its own request log (activity/
+  requests.jsonl) showed why: 82% of what hearth's 27b wrote was thinking nobody had set (hearth's door answered `/api/show`
+  with `capabilities: ["completion"]` for every model, so the app took it for a model that neither thinks nor takes tools
+  and sent no `think`), every side job ended at its 600-token cap while still thinking, and twice a side job took the
+  conversation's step's place (the door runs one job at a time a key, the newest winning). Their picks: both sides
+  (hearth's door too, its PR #1481), thinking Medium said on every call, a 128k window, side jobs on hearth's 2b, the
+  second opinion on its 9b, helpers on its 4b; then "ensure that 2b,4b, 9b and 27b are all used, based on avaiblilty …
+  there should be no waiting".
+- **How** (models/runtime/remote.mjs `HEARTH_*`, `hearthList`, `hearthAbilities`; connectRemote): a hearth remote is an
+  Ollama-shaped endpoint with `hearth: true` and `hearthSizes` (the sizes its door lists in /api/tags: `hearth-2b`,
+  `hearth-4b`, `hearth-9b`; none on a door from before them). Its 27b is taken as thinking and using tools whatever the
+  door says, starts on Medium with four levels (Off, Low, Medium, High = hearth's xhigh), and works in `HEARTH_CTX`
+  (131,072) at most, even when `/api/show` says the model cannot think and even when the name is `hearth@poseidon`.
+  `coding -p` takes that Medium (`thinkingLevel` then `Boolean(lv.effort)`). client.mjs streamOllama on hearth: `think` always said (the level, or false), no keep_alive (the door
+  keeps its own), a size sent as its list first choice first (`HEARTH_ORDER`: the door takes whichever is free), and a
+  call that is not the conversation's step (no `conversation`, or a `use` of another model: side jobs and helpers' steps)
+  sends `X-Hearth-Job: side`, at most `HEARTH_SIDE_JOBS` (4) at once (`withTurn`). On a door without sizes every call to
+  it goes one at a time (`withTurn(url, 1)`), so nothing is taken over. The door's "why it waits" piece becomes a
+  `queued` event, and the working line says "in hearth's line: …" until the first word.
+- **Which job where** (agent.mjs `hearthUse`, `onHearth`; `HEARTH_JOBS`): on hearth with sizes, side jobs and /btw go to
+  the 2b, the second opinion to the 9b, the Agent tool's helpers to the 4b (offered on hearth even without profiles), unless
+  a profile sends the job to hearth by name; a profile pointing elsewhere is left aside while the conversation is on hearth.
+  No load, unload, keep-warm, try-out or quit-time unload is sent to hearth (each would be a job in its line).
+- **Tests**: `terminal/test/hearth-door.test.mjs` (a stand-in door as live has it and with sizes), and the Arena's
+  **hearth door check** (`models/evals/tools/hearth-door-check.mjs`, `/test hearth`, its page by `-page.mjs`): one small
+  change through `coding -p` on the owner's key, GitHub's main and then this code, on `hearth@poseidon`.

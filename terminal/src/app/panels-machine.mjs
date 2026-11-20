@@ -37,7 +37,7 @@ export function panelsMachine(self, own) {
       // this Mac (leaveService) would load the model it has just let go.
       const ep = endpointOf(self.psConn.url);
       const left = p?.loaded && p.until ? Date.parse(p.until) - Date.now() : NaN;
-      if (self.remoteRef.current.conn === self.psConn && ep?.keepAlive === OPEN_KEEP && (left < OPEN_KEEP_MS * 2 / 3 || left > 24 * 3600_000)) {
+      if (self.remoteRef.current.conn === self.psConn && ep?.keepAlive === OPEN_KEEP && !ep.hearth && (left < OPEN_KEEP_MS * 2 / 3 || left > 24 * 3600_000)) {
         self.renewRef.current = preloadOllama({ url: self.psConn.url, model: name, numCtx: ep.numCtx ?? null, keepAlive: OPEN_KEEP, timeoutMs: 10_000 }).catch(() => {}).finally(() => { self.renewRef.current = null; });
       }
     };

@@ -36,6 +36,43 @@ export const CONNECTS = ['http', 'https', 'ssh'];
 export const REMOTE_SOURCES = ['claude', 'machine', 'openai', 'hearth'];
 export const HEARTH_ADDRESS = 'https://employee.hearth.monster/door/v1';
 export const HEARTH_MODEL = 'hearth';
+// hearth, as hearth (20 Nov 2026, the owner, after a task took 5 minutes and failed: "ensure that 2b,4b, 9b and 27b are
+// all used, based on avaiblilty ... there should be no waiting"; picks: thinking Medium, a 128k window, side jobs on the
+// 2b, a second opinion on the 9b, helpers on the 4b). Its door answers like Ollama, so it is talked to that way, but:
+// - it said every model could only do plain completion (an older door), so its own 27b is taken as one that thinks and
+//   uses tools whatever it says, and every call says how much to think (82% of what it wrote was thinking nobody set);
+// - its small models go by size (hearth-2b, hearth-4b, hearth-9b, listed by a door that has them), and a call names a
+//   list, first choice first: the door gives it whichever is free, so it waits only when all of them are busy;
+// - a side job or a helper's step says so (X-Hearth-Job: side) and runs beside the conversation's step instead of in its
+//   place (one job at a time a key, the newest winning, took the conversation's steps twice in one evening);
+// - the window is HEARTH_CTX, so a conversation the 27b no longer holds is read again in about 4 minutes at worst, not 6.
+export const HEARTH_CTX = 131_072;
+export const HEARTH_SIZES = ['hearth-2b', 'hearth-4b', 'hearth-9b'];
+// The order the door tries for a first choice: the owner's picks lead, then whichever is next best for that kind of job.
+export const HEARTH_ORDER = {
+  'hearth-2b': ['hearth-2b', 'hearth-4b', 'hearth-9b', HEARTH_MODEL],
+  'hearth-4b': ['hearth-4b', 'hearth-9b', 'hearth-2b', HEARTH_MODEL],
+  'hearth-9b': ['hearth-9b', HEARTH_MODEL, 'hearth-4b'],
+};
+// Which size does each helper job on hearth (client.mjs `use`), when no profile sends the job to hearth by name.
+export const HEARTH_JOBS = { side: 'hearth-2b', btw: 'hearth-2b', review: 'hearth-9b', helpers: 'hearth-4b' };
+// A model as the door is asked for it: a size becomes its list (only the sizes this door has, and hearth's own name), any
+// other name stays as it is. sizes: the sizes the door listed (ep.hearthSizes).
+export function hearthList(model, sizes = HEARTH_SIZES) {
+  const order = HEARTH_ORDER[String(model ?? '').toLowerCase()];
+  if (!order) return model;
+  return order.filter((n) => n === HEARTH_MODEL || sizes.includes(n)).join(',');
+}
+// What hearth's 27b does: thinks and uses tools. An older door said "completion" only, for every model.
+// hearth's levels (its door takes off, low, medium and high; its High is the model's xhigh), by the connection, not the
+// model's name ("hearth@poseidon" is hearth too: matched by name, it fell to the generic Off/On and ran with no thinking).
+export const HEARTH_LEVELS = [
+  { id: 'off', label: 'Off', effort: null, note: 'answers straight away' },
+  { id: 'low', label: 'Low', effort: 'low', note: 'thinks briefly first' },
+  { id: 'medium', label: 'Medium', effort: 'medium', note: "thinks for a while first · hearth's own default" },
+  { id: 'high', label: 'High', effort: 'high', note: "thinks longest first · hearth's xhigh, the slowest" },
+];
+export const hearthAbilities = (o) => (o ? { ...o, known: true, chat: true, tools: true, thinking: true } : o);
 // A remote saved before the Run on row has no source: its kind says which.
 export const sourceOf = (r) => (REMOTE_SOURCES.includes(r?.source) ? r.source : r?.kind === 'claude' ? 'claude' : r?.kind === 'openai' ? 'openai' : 'machine');
 // The name its key is kept under: its service's (a key saved before is under 'default').
@@ -313,6 +350,15 @@ async function getJson(url, path, { key, signal, timeoutMs }) {
   return { status: res.status, ok: res.ok, body };
 }
 
+// The sizes hearth's door lists (hearth-2b …: its /api/tags), [] on a door from before them or one that does not answer.
+async function hearthSizesOf(url, key, signal) {
+  try {
+    const t = await getJson(url, '/api/tags', { key, signal, timeoutMs: 5000 });
+    const names = (t.body?.models ?? []).map((m) => String(m.name ?? m.model ?? '').toLowerCase());
+    return HEARTH_SIZES.filter((s) => names.includes(s));
+  } catch { return []; }
+}
+
 // Why an Ollama service gave no word in time, from what it has loaded now (/api/ps).
 const GB = (b) => (b ? `${(b / 1e9).toFixed(0)} GB` : '');
 async function notLoaded({ url, key, model, bytes, limit, out }) {
@@ -545,6 +591,8 @@ export function remoteLevels(o) {
   if (!o?.known) return GENERIC_REMOTE.thinkingLevels;
   if (!o.thinking) return [{ ...low, label: 'None', note: 'answers straight away: this model cannot think first' }];
   if (/gpt-?oss/i.test(`${o.family} ${o.id}`)) return [{ ...low, note: 'thinks briefly first: gpt-oss always thinks, this is its least' }, { id: 'medium', label: 'Medium', effort: 'medium', note: 'thinks for a while first · gpt-oss has three levels' }, { ...high, note: 'thinks longest first · slow, and it can loop' }];
+  // hearth's 27b (20 Nov 2026): its door takes off, low, medium and high, and its High is the model's xhigh.
+  if (/^hearth(-\d+b)?(@[\w.-]+)?$/i.test(String(o.id ?? ''))) return HEARTH_LEVELS;
   if (/laguna/i.test(`${o.family} ${o.id}`)) return [{ ...low, label: 'Off' }, { ...high, label: 'Max', note: 'thinks between its tool calls for as long as it needs: Laguna has only off and max' }];
   return [{ ...low, label: 'Off' }, { ...high, label: 'On', note: 'thinks first: this model has no steps, only on or off' }];
 }
@@ -596,12 +644,18 @@ export function remoteModel(r, info = {}) {
     ?? null;
   const where = remoteLabel(r);
   const ctx = r?.context || (r?.kind === 'claude' && info.ctx ? Math.min(info.ctx, CLAUDE_CTX) : info.ctx) || null;
-  const o = info.ollama ?? null;
+  const hearth = sourceOf(r) === 'hearth';
+  // hearth's door said "completion" only: still a model that thinks and uses tools (hearthAbilities). coding -p
+  // reads thinkingDefault and thinkingEffort here, so this cannot wait on connectRemote having patched ollama first
+  // ("hearth@poseidon" on a completion-only door sent think: false on every step, 20 Nov 2026).
+  const o = hearth ? (hearthAbilities(info.ollama) ?? { known: true, chat: true, tools: true, thinking: true }) : (info.ollama ?? null);
   const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r), model: info.model || r?.model || null, ollama: o?.version ?? null, mine: ownMachine(r), here: onThisMac(r) }, bytes: 0, draft: null, slots: info.slots ?? 1 };
-  if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx, thinkingDefault: canThink(base) };
+  if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx, thinkingDefault: hearth || canThink(base) };
   // On, at the model's own level (gpt-oss: Medium, its maker's default; its High is slow and can loop),
   // unless the service says it cannot think.
-  const levels = o?.known ? { thinkingLevels: remoteLevels(o), thinkingEffort: o.thinking ? (/gpt-?oss/i.test(`${o.family} ${o.id}`) ? 'medium' : 'high') : 'low', thinkingDefault: Boolean(o.thinking) } : {};
+  // hearth's 27b starts on Medium (the owner's pick, 20 Nov 2026: today's speed, now said on every call): its High is xhigh.
+  const levels = hearth ? { thinkingLevels: HEARTH_LEVELS, thinkingEffort: 'medium', thinkingDefault: true }
+    : o?.known ? { thinkingLevels: remoteLevels(o), thinkingEffort: o.thinking ? (/gpt-?oss/i.test(`${o.family} ${o.id}`) ? 'medium' : 'high') : 'low', thinkingDefault: Boolean(o.thinking) } : {};
   // An Ollama model's longest context is its own (/effort's Context row goes up to it).
   // A big one carries big-model mode (bigHarness).
   const harness = bigHarness(o);
@@ -639,6 +693,15 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined, s
   try {
     const info = await probe({ url, kind: r.kind, key: secret, model: r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, signal });
     if (!info.ok) throw new Error(info.error);
+    // hearth (HEARTH_CTX above): its 27b thinks and takes tools whatever an older door says, it works in HEARTH_CTX at
+    // most, and its small models are the sizes its door lists (none on a door from before them: no helper goes there).
+    const hearth = sourceOf(r) === 'hearth';
+    if (hearth && info.ollama) {
+      info.ollama = hearthAbilities(info.ollama);
+      if (info.ollama.loadedCtx) info.ollama.loadedCtx = Math.min(info.ollama.loadedCtx, HEARTH_CTX);
+      if (info.ollama.ctx) info.ollama.ctx = Math.min(info.ollama.ctx, HEARTH_CTX);
+    }
+    const hearthSizes = hearth ? await hearthSizesOf(url, secret, signal) : null;
     const model = remoteModel(r, info);
     const o = info.ollama ?? null;
     // Every request names the context, so the model is never loaded again behind the agent's back:
@@ -646,7 +709,9 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined, s
     // (floorCtx). Before, a cold model (coding -p, the bench) was named nothing and loaded at the
     // service's own 4k while the agent planned for 32k, and one loaded at 4k stayed at 4k.
     const loadedOk = o?.loaded && o.loadedCtx >= floorCtx(o) ? o.loadedCtx : null;
-    const numCtx = o ? ollamaCtxOf(r, info.model) || loadedOk || (serviceSize && !o.loaded ? null : floorCtx(o)) : null;
+    const numCtx0 = o ? ollamaCtxOf(r, info.model) || loadedOk || (serviceSize && !o.loaded ? null : floorCtx(o)) : null;
+    // hearth: its door picks the copy and its window, so the room is the door's own (at most HEARTH_CTX), loaded or not.
+    const numCtx = hearth && o ? Math.min(ollamaCtxOf(r, info.model) || o.loadedCtx || o.ctx || HEARTH_CTX, HEARTH_CTX) : numCtx0;
     // Claude: the server's own (1M today), kept to CLAUDE_CTX unless the form asks for more.
     const ctx = numCtx || r.context || (r.kind === 'claude' ? Math.min(info.ctx ?? CLAUDE_CTX, CLAUDE_CTX) : info.ctx) || 32_768;
     // price: dollars a million tokens, in and out (the cost meter, terminal spend.mjs); free: a service of your own.
@@ -654,10 +719,10 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined, s
     const free = !price && (Boolean(o) || r.kind === 'llama' || isPrivateHost(parseAddress(r.address ?? '')?.host ?? ''));
     // OPEN_KEEP: the service keeps the model while the window is open (it asks again before that runs
     // out, and lets it go as it closes), not Ollama's 5 idle minutes (the user's pick, 2 Oct 2026).
-    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), price, free, ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family, keepAlive: OPEN_KEEP } : {}) });
+    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), price, free, ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family, keepAlive: OPEN_KEEP } : {}), ...(hearth ? { hearth: true, hearthSizes: hearthSizes ?? [] } : {}) });
     return {
       // vision: it can take a picture (a llama.cpp server says so; OpenAI-compatible and Claude: yes)
-      url, ctx, numCtx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel, vision: info.vision !== false,
+      url, ctx, numCtx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel, vision: info.vision !== false, hearth,
       stop: () => { dropEndpoint(url); tunnel?.stop(); },
     };
   } catch (e) {
