@@ -57,18 +57,19 @@ skill is also in the list, so the model can open one the words missed.
 5. Answer with the cause in one line, the fix, and the run that now passes.
 
 ## Get a pull request ready
-- Words: get it ready, get ready, gets ready, not ready, make it ready, ready to ship, stuck pull request, stuck pr, pr is stuck, keeps failing
+- Words: get it ready, get ready, gets ready, not ready, make it ready, ready to ship, stuck pull request, stuck pr, pr is stuck, keeps failing, does not merge, doesn't merge, merge conflict, merge conflicts, clashes with
 - About: find what really blocks a pull request's checks, fix that, push it safely and wait for green
 - Fence: check
 
 1. A saved skill for this project in the list (one named for it) knows its checks and its traps: open it and follow it instead.
 2. Read every run, not the newest only: coding pr <number> on a Gitea or Forgejo pull request (gh pr checks and gh run list on GitHub). A part that passed on every run is not the blocker, whatever a card or summary says.
-3. Take the REAL failures first (they fail on the newest commit). A test that failed once and not since is likely random: say so and leave it, unless it fails again.
-4. Work in the pull request's own branch or worktree. Run each failing test file here with the check's own tool versions; a fix that passes only here is not a fix.
-5. Fix the cause (Fix a failing check), never by skipping or loosening a test. A comment or a name can break a test too.
-6. Push in one command with the guard: coding pr guard <number> && git push origin HEAD:<branch> (add --hold <branch start> when the project names one, such as a release train). Never force; if the branch moved, merge it first.
-7. Wait with coding pr watch <number> as a background command (Bash with background: true, then Jobs with wait), never a tight loop of your own. Its end says ready, or the next failure with why.
-8. Answer with what blocked it, what you changed, and the checks' result on the newest commit.
+3. It does not merge cleanly: coding pr clash <number> shows each clash's three sides and why each side changed the file (on GitHub, git merge-tree the same way). In the pull request's own branch, merge the base branch and keep what each side meant: when the pull request moved or took out lines the base branch changed, the base's change goes where the pull request put that code, even far from the clash. Run every test that reads a clashing file, then go on from step 7.
+4. Take the REAL failures first (they fail on the newest commit). A test that failed once and not since is likely random: say so and leave it, unless it fails again.
+5. Work in the pull request's own branch or worktree. Run each failing test file here with the check's own tool versions; a fix that passes only here is not a fix.
+6. Fix the cause (Fix a failing check), never by skipping or loosening a test. A comment or a name can break a test too.
+7. Push in one command with the guard: coding pr guard <number> && git push origin HEAD:<branch> (add --hold <branch start> when the project names one, such as a release train). Never force; if the branch moved, merge it first.
+8. Wait with coding pr watch <number> as a background command (Bash with background: true, then Jobs with wait), never a tight loop of your own. Its end says ready, or the next failure with why.
+9. Answer with what blocked it, what you changed, and the checks' result on the newest commit.
 
 ## Open a pull request
 - Words: open a pull request, open a pr, make a pr, create a pull request, send a pr

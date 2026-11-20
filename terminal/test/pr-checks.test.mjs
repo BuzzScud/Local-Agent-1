@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { remoteOf, partOf, failLines, partsOn, makeApi, readPr, verdicts, prText, guard, watch, MIN_EVERY } from '../src/app/pr-checks.mjs';
+import { remoteOf, partOf, failLines, partsOn, makeApi, readPr, verdicts, prText, guard, watch, clashes, clashText, MIN_EVERY } from '../src/app/pr-checks.mjs';
 
 const PARTS = ['tests1', 'tests2', 'tests3', 'tests4', 'tests', 'web', 'phone', 'practice'];
 const GAP = 108; // a run's id is its number + 108, as on the forge that evening
@@ -53,7 +53,7 @@ const forge = ({ commits = COMMITS, head = commits.at(-1).sha, pending = {}, ope
       if (req.headers.get('authorization') !== 'token k') return new Response('no', { status: 401 });
       const p = u.pathname.replace('/api/v1/repos/o/r/', '');
       const json = (v) => Response.json(v);
-      if (p === 'pulls/7') return json({ number: 7, title: 'one menu in the box', state: state.closed ? 'closed' : 'open', merged: false, head: { ref: 'box-one-menu', sha: state.head }, labels: [{ name: 'factory-ready' }], mergeable: true });
+      if (p === 'pulls/7') return json({ number: 7, title: 'one menu in the box', state: state.closed ? 'closed' : 'open', merged: false, head: { ref: 'box-one-menu', sha: state.head }, base: { ref: 'main' }, labels: [{ name: 'factory-ready' }], mergeable: state.mergeable ?? true });
       if (p === 'pulls/7/commits') return json(state.closed ? [] : [...state.commits].reverse().map((c) => ({ sha: c.sha, commit: { message: `commit ${c.sha.slice(0, 1)}\n\nbody` } })));
       if (p === 'pulls') return json(state.open);
       let m = p.match(/^commits\/(\w+)\/statuses$/);
@@ -215,4 +215,55 @@ test('watch: out of time says what is still running', async () => {
   let t = 0;
   const w = await watch({ api, n: 7, need: ['phone'], minutes: 2, now: () => t, sleep: async (s) => { t += s * 1000; } });
   expect(w).toEqual({ code: 3, why: 'Still running after 2 min: phone.' });
+});
+
+test('a pull request that does not merge cleanly says so and points to coding pr clash', async () => {
+  const { api, state } = stand();
+  state.mergeable = false;
+  expect(prText(await readPr(api, 7))).toContain('It does not merge cleanly with main: coding pr clash 7 shows each clash and why each side changed it.');
+});
+
+// 19 Nov 2026, #1461 against #1456: the pull request moved the tabs to the top of the box and took the old line out; main had added a
+// rule to that line. The clash shows both, with why each side changed the file, and how to join it.
+test('coding pr clash: each clash\'s three sides and both sides\' reasons, read without touching the folder', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pr-clash-'));
+  const origin = join(dir, 'origin.git');
+  sh(dir, 'init', '-q', '--bare', origin);
+  const w = join(dir, 'w');
+  sh(dir, 'clone', '-q', origin, w);
+  sh(w, 'config', 'user.email', 't@example.org'); sh(w, 'config', 'user.name', 't');
+  sh(w, 'checkout', '-q', '-b', 'main');
+  const page = (top, dock) => ['<Composer', `  top={${top}}`, '/>', '<div class="dock">', ...(dock ? [`  {${dock}}`] : []), '  <button>Recents</button>', '</div>', ''].join('\n');
+  writeFileSync(join(w, 'page.jsx'), page('null', 'fin.can ? <Tabs /> : null'));
+  sh(w, 'add', 'page.jsx'); sh(w, 'commit', '-q', '-m', 'tabs under the box'); sh(w, 'push', '-q', 'origin', 'main');
+  sh(w, 'checkout', '-q', '-b', 'finance-tabs');
+  writeFileSync(join(w, 'page.jsx'), page('fin.can ? <Tabs /> : null', null));
+  sh(w, 'commit', '-q', '-am', 'Finance on a phone: General | Finance at the top of the box');
+  sh(w, 'push', '-q', 'origin', 'HEAD:refs/pull/7/head');
+  sh(w, 'checkout', '-q', 'main');
+  writeFileSync(join(w, 'page.jsx'), page('null', 'fin.can && !oneMenu ? <Tabs /> : null'));
+  sh(w, 'commit', '-q', '-am', 'hearth window: one menu holds the tabs');
+  sh(w, 'push', '-q', 'origin', 'main');
+  const before = sh(w, 'status', '--porcelain');
+  const { api } = stand();
+  const c = await clashes({ cwd: w, api, n: 7 });
+  expect(c.files.map((f) => f.path)).toEqual(['page.jsx']);
+  const f = c.files[0];
+  expect(f.why).toEqual({ pr: ['Finance on a phone: General | Finance at the top of the box'], base: ['hearth window: one menu holds the tabs'] });
+  expect(f.clashes).toHaveLength(1);
+  expect(f.clashes[0]).toMatchObject({ base: ['  {fin.can ? <Tabs /> : null}'], pr: [], branch: ['  {fin.can && !oneMenu ? <Tabs /> : null}'] });
+  const text = clashText(c);
+  expect(text).toContain('1 file clashes with main:');
+  expect(text).toContain('  Why main changed it since:\n    - hearth window: one menu holds the tabs');
+  expect(text).toContain('  the pull request:\n    (nothing: this side took the lines out)');
+  expect(text).toContain("main's change goes where the pull request put that code");
+  expect(text).toContain('coding pr guard 7 && git push origin HEAD:box-one-menu');
+  // nothing in the folder changed: no merge started, the same branch, the same files
+  expect(sh(w, 'status', '--porcelain')).toBe(before);
+  expect(sh(w, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('main');
+  // once it is joined, it merges cleanly
+  sh(w, 'checkout', '-q', '-b', 'joined', 'refs/remotes/origin/pull/7');
+  sh(w, 'merge', '-q', '-X', 'theirs', '-m', 'join', 'main');
+  sh(w, 'push', '-q', '-f', 'origin', 'HEAD:refs/pull/7/head');
+  expect(clashText(await clashes({ cwd: w, api, n: 7 }))).toBe('#7 merges cleanly into main.');
 });

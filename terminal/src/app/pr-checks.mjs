@@ -9,6 +9,10 @@
 //   coding pr guard <n> [--hold p]   before a push, in the same command (coding pr guard 12 && git push …): the
 //                                    branch fetched, this copy has everything on it (so the push needs no force), and
 //                                    no open pull request whose branch starts with p (a release train at its checks)
+//   coding pr clash <n>              when it does not merge cleanly: each clash with its three sides (the base, the pull request's,
+//                                    the base branch's) and why each side changed that file (its commits since they parted), from
+//                                    git merge-tree, so no folder's files or branch change (19 Nov 2026: #1461's clash with #1456,
+//                                    where the base branch's change belonged where the pull request had moved the lines)
 //   coding pr watch <n> [--need a,b] [--every s] [--for m]
 //                                    looks every 60 s or more (a forge's task list is heavy; a tighter loop helped one
 //                                    run out of memory) and ends when the needed parts pass (0), one fails (1, with
@@ -132,7 +136,7 @@ export const readPr = async (api, n, { commits = 12, cwd = null } = {}) => {
     }
     runs.push({ ...c, parts });
   }
-  return { pr: { number: pr.number, title: pr.title, state: pr.merged ? 'merged' : pr.state, branch: pr.head?.ref, head: pr.head?.sha, labels: (pr.labels ?? []).map((l) => l.name), mergeable: pr.mergeable }, runs };
+  return { pr: { number: pr.number, title: pr.title, state: pr.merged ? 'merged' : pr.state, branch: pr.head?.ref, base: pr.base?.ref, head: pr.head?.sha, labels: (pr.labels ?? []).map((l) => l.name), mergeable: pr.mergeable }, runs };
 };
 
 const PASS = new Set(['success', 'skipped']);
@@ -175,7 +179,8 @@ export const prText = (read) => {
   const { pr, runs } = read;
   const v = verdicts(read);
   const lines = [`#${pr.number} ${pr.title}`, `${pr.state} · ${pr.branch} · newest ${String(pr.head).slice(0, 8)}${pr.labels.length ? ` · ${pr.labels.join(', ')}` : ''}${pr.mergeable === false ? ' · does not merge cleanly' : ''}`];
-  if (!runs.length) return [...lines, 'No checks have run on its newest commits.'].join('\n');
+  if (!runs.length) return [...lines, ...(pr.mergeable === false ? [`It does not merge cleanly with ${pr.base ?? 'its base'}: coding pr clash ${pr.number} shows each clash.`] : []), 'No checks have run on its newest commits.'].join('\n');
+  if (pr.mergeable === false) lines.push(`It does not merge cleanly with ${pr.base ?? 'its base'}: coding pr clash ${pr.number} shows each clash and why each side changed it.`);
   if (runs[0].sha !== pr.head) lines.push(`The newest commit has no checks yet; below is ${runs[0].sha.slice(0, 8)}.`);
   lines.push(`${runs.length} commit${runs.length === 1 ? '' : 's'} with checks read, newest first.`, '');
   for (const p of v) {
@@ -212,6 +217,65 @@ export const guard = async ({ cwd, api, n, hold = [] }) => {
   return { ok: true, branch, why: `OK to push to ${branch}: git push origin HEAD:${branch}` };
 };
 
+// The clashes a merge of the pull request into its base would leave, read with git merge-tree in diff3 style (nothing in the folder
+// changes): per file, each clash's three sides and the lines around it, and each side's commits for that file since they parted.
+// → { pr, clean: true } or { pr, files: [{ path, why: { pr, base }, clashes: [{ line, before, base, ours, theirs, after }] }] }
+const AROUND = 4;
+export const clashes = async ({ cwd, api, n }) => {
+  const pr = await api(`pulls/${n}`);
+  const base = pr.base?.ref;
+  if (!base) throw new Error(`#${n} names no base branch`);
+  // each into a ref of its own: with two in one fetch, FETCH_HEAD is the first (the base), and the base merges cleanly into itself
+  const f = git(cwd, ['fetch', '-q', 'origin', `+refs/heads/${base}:refs/remotes/origin/${base}`, `+refs/pull/${n}/head:refs/remotes/origin/pull/${n}`]);
+  if (!f.ok) throw new Error(`git fetch: ${f.err.split('\n')[0]}`);
+  const head = git(cwd, ['rev-parse', `refs/remotes/origin/pull/${n}`]).out;
+  const theirs = `origin/${base}`;
+  const m = spawnSync('git', ['-c', 'merge.conflictStyle=diff3', 'merge-tree', '--write-tree', '--name-only', theirs, head], { cwd, encoding: 'utf8' });
+  const [tree, ...rest] = (m.stdout ?? '').split('\n');
+  const info = { number: pr.number, title: pr.title, base, branch: pr.head?.ref, head };
+  if (m.status === 0) return { pr: info, clean: true };
+  if (m.status !== 1 || !/^[0-9a-f]{40}$/.test(tree)) throw new Error(`git merge-tree: ${(m.stderr || '').split('\n')[0] || 'it did not run'} (git 2.38 or newer is needed)`);
+  const paths = rest.slice(0, rest.indexOf('') < 0 ? rest.length : rest.indexOf('')).filter(Boolean);
+  const fork = git(cwd, ['merge-base', theirs, head]).out;
+  const said = (range, path) => git(cwd, ['log', '--no-merges', '-n', '5', '--format=%s', range, '--', path]).out.split('\n').filter((l) => l && !l.startsWith('Run the checks again'));
+  const files = paths.map((path) => {
+    const text = git(cwd, ['cat-file', '-p', `${tree}:${path}`]);
+    const lines = text.ok ? text.out.split('\n') : [];
+    const found = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (!/^<{7}( |$)/.test(lines[i])) continue;
+      const part = { ours: [], base: [], theirs: [] };
+      let into = part.ours;
+      let j = i + 1;
+      for (; j < lines.length && !/^>{7}( |$)/.test(lines[j]); j++) {
+        if (/^\|{7}( |$)/.test(lines[j])) into = part.base;
+        else if (/^={7}$/.test(lines[j])) into = part.theirs;
+        else into.push(lines[j]);
+      }
+      // merge-tree's first side is the base branch, its second the pull request
+      found.push({ line: i + 1, before: lines.slice(Math.max(0, i - AROUND), i), base: part.base, branch: part.ours, pr: part.theirs, after: lines.slice(j + 1, j + 1 + AROUND) });
+      i = j;
+    }
+    return { path, why: { pr: fork ? said(`${fork}..${head}`, path) : [], base: fork ? said(`${fork}..${theirs}`, path) : [] }, clashes: found, whole: !text.ok || !found.length };
+  });
+  return { pr: info, files };
+};
+
+export const clashText = ({ pr, clean, files }) => {
+  if (clean) return `#${pr.number} merges cleanly into ${pr.base}.`;
+  const out = [`#${pr.number} ${pr.title}`, `${files.length} file${files.length === 1 ? '' : 's'} clash${files.length === 1 ? 'es' : ''} with ${pr.base}:`];
+  const block = (name, ls) => [`  ${name}:`, ...(ls.length ? ls.map((l) => `    | ${l}`) : ['    (nothing: this side took the lines out)'])];
+  for (const f of files) {
+    out.push('', `── ${f.path}`);
+    if (f.why.pr.length) out.push('  Why the pull request changed it:', ...f.why.pr.map((l) => `    - ${l}`));
+    if (f.why.base.length) out.push(`  Why ${pr.base} changed it since:`, ...f.why.base.map((l) => `    - ${l}`));
+    if (f.whole) out.push('  The whole file clashes (deleted, renamed or not text on one side).');
+    for (const c of f.clashes) out.push('', `  At line ${c.line}:`, ...block('before both (the base)', c.base), ...block('the pull request', c.pr), ...block(pr.base, c.branch));
+  }
+  out.push('', `To join: in the pull request's own folder, git merge origin/${pr.base}, and keep what each side meant. When the pull request moved or took out lines that ${pr.base} changed, ${pr.base}'s change goes where the pull request put that code (git diff origin/${pr.base}...HEAD -- <file> shows where). Run every test that reads those files, then coding pr guard ${pr.number} && git push origin HEAD:${pr.branch}.`);
+  return out.join('\n');
+};
+
 export const MIN_EVERY = 60;
 // Wait for the newest commit's checks. sleep is given in tests; the command never looks more often than MIN_EVERY.
 export const watch = async ({ api, n, need = [], every = MIN_EVERY, minutes = 60, sleep = (s) => new Promise((r) => setTimeout(r, s * 1000)), say = () => {}, now = () => Date.now() }) => {
@@ -243,16 +307,17 @@ export const watch = async ({ api, n, need = [], every = MIN_EVERY, minutes = 60
 };
 
 const flag = (args, name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
-const HELP = 'coding pr <number> · coding pr guard <number> [--hold <branch start>] · coding pr watch <number> [--need a,b] [--every 60] [--for 60]';
+const HELP = 'coding pr <number> · coding pr clash <number> · coding pr guard <number> [--hold <branch start>] · coding pr watch <number> [--need a,b] [--every 60] [--for 60]';
 
 export async function prCommand(args, { cwd = process.cwd(), out = (t) => process.stdout.write(`${t}\n`) } = {}) {
   const sub = /^\d+$/.test(args[0] ?? '') ? 'show' : args[0];
   const n = Number(sub === 'show' ? args[0] : args[1]);
-  if (!Number.isInteger(n) || n <= 0 || !['show', 'guard', 'watch'].includes(sub)) { out(HELP); return 1; }
+  if (!Number.isInteger(n) || n <= 0 || !['show', 'clash', 'guard', 'watch'].includes(sub)) { out(HELP); return 1; }
   const forge = forgeOf(cwd);
   if (forge.error) { out(forge.error); return 1; }
   try {
     if (sub === 'show') { out(prText(await readPr(forge.api, n, { cwd }))); return 0; }
+    if (sub === 'clash') { const c = await clashes({ cwd, api: forge.api, n }); out(clashText(c)); return c.clean ? 0 : 1; }
     if (sub === 'guard') {
       const g = await guard({ cwd, api: forge.api, n, hold: String(flag(args, '--hold') ?? '').split(',').filter(Boolean) });
       out(g.why);

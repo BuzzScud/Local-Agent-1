@@ -2094,6 +2094,13 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   `origin` (`remoteOf`), the certificate from git's `http.sslCAInfo` for it, the key from `git credential fill`, held
   in memory and sent as a header, never printed. Every list is asked with `page=1` (a forge's task list without it
   returns all ~3,000 tasks).
+- **Clashes** (19 Nov 2026, the owner: "add it to both and send it", after a pull request that moved some lines clashed with one that had
+  added a rule to them): `coding pr clash <n>` fetches the base and `refs/pull/<n>/head` into refs of their own (two refs in one fetch
+  leave FETCH_HEAD on the first, the base, which merges cleanly into itself), runs `git merge-tree --write-tree` in diff3 style (git 2.38
+  or newer) and reads each clashing file from the tree it wrote, so nothing in the folder changes: each clash's three sides (merge-tree's
+  first side is the base branch), each side's commit subjects for that file since they parted, and how to join it (a change the base made
+  to lines the pull request moved goes where it moved them). `coding pr <n>` points to it when the forge says it does not merge cleanly.
+  Get a pull request ready has the step, and its Words take "merge conflict" and "does not merge".
 - **Skills and a loop.** The remote SKILLS.md has **Get a pull request ready** (read every run, fix what is REAL, the
   guard and the push in one command, `coding pr watch` as a background command), and Fix a failing check names `coding
   pr`. A project's own traps go in a saved skill (`~/.agentic-coder/skills/`, private), which the general one says to
