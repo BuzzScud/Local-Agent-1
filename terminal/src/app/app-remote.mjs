@@ -22,6 +22,8 @@ import { loopsLine } from './loops-draw.mjs';
 import { modelWithLimits } from './limits.mjs';
 import { IDLE, remoteConfOf } from './app-common.mjs';
 import { remoteNote } from './start-notes.jsx';
+import { readServers } from './mcp-store.mjs';
+import { offerHearthTools } from './hearth-tools.mjs';
 
 export function remotePart(self) {
   // scope: 'all' makes the model Main (every window follows), 'window' runs only this window there
@@ -109,6 +111,8 @@ export function remotePart(self) {
     refreshCatalog(conn);
     const risk = remoteRisk(r);
     if (risk) self.push({ type: 'note', text: `⚠ ${risk}.`, tone: 'warn' });
+    // On hearth's API: its key is the model only, so its own tools are asked about (hearth-tools.mjs), not at a start.
+    if (!atStart && sourceOf(r) === 'hearth' && self.mcpHub && offerHearthTools({ servers: readServers().servers, settings: self.settings })) setTimeout(() => self.openChoice('hearth-tools'), 300);
     const q = self.queuedRef.current;
     if (q && loading) { /* sent by preloadRemote */ }
     else if (q) { self.queuedRef.current = null; self.setQueued(null); setTimeout(() => self.remoteFnRef.current.send?.(q), 50); }

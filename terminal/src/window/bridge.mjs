@@ -193,7 +193,7 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
       mode: app.mode, modelName: app.modelName, modelOff: Boolean(app.modelOff), starting: Boolean(app.starting), cwd: app.cwd, cwdShort: app.cwdShort,
       model: modelNowOf(app.modelState),
       hold: Boolean(app.hold), start: app.hold ? { model: app.start?.model, effort: effortWords(knownOf(app.start).effort), cwd: app.start?.cwd, git: app.start?.git ?? null, recent: (app.start?.recent ?? []).slice(0, 12).map((r) => ({ id: r.id, title: String(r.title ?? '').replace(/\s+/g, ' ').slice(0, 140), updated: r.updated ?? null, turns: r.turns ?? 0 })) } : null,
-      queued: app.queued?.length ? app.queued.join(' · ') : null, notice: app.notice ?? null, tip: app.tip ?? null, usageText, usage, meter, files, todos, spend: app.spend ?? '', loopsBadge: app.loopsBadge ?? null,
+      queued: app.queued?.length ? app.queued.join(' · ') : null, notice: app.notice ?? null, tip: app.tip ?? null, usageText, usage, meter, acct: app.acct ?? null, files, todos, spend: app.spend ?? '', loopsBadge: app.loopsBadge ?? null,
       stats: { ctxUsed: app.stats?.ctxUsed ?? null, ctx: app.ctx ?? null },
     };
   }

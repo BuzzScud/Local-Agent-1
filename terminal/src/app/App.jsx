@@ -54,6 +54,7 @@ import { appBridge } from './app-self.mjs';
 import { keysPart } from './app-keys.mjs';
 import { usagePart } from './app-usage.mjs';
 import { claudeKeysPart } from './app-claude-keys.mjs';
+import { hearthAccount } from './hearth-tools.mjs';
 import { watchPart } from './app-watch.mjs';
 import { promptMenu } from './app-menu.mjs';
 import { windowBridge } from '../window/bridge.mjs';
@@ -90,7 +91,7 @@ export function App({ opts, win, onRestart }) {
     mouseRef: () => mouseRef, onRestart: () => onRestart, onService: () => onService,
     openAgentsTree: () => openAgentsTree, openChoice: () => openChoice, openEffortLimits: () => openEffortLimits,
     openHub: () => openHub, openJumpBox: () => openJumpBox, openLoops: () => openLoops,
-    openMcpPicker: () => openMcpPicker, openModelPicker: () => openModelPicker, openOwnSettings: () => openOwnSettings,
+    openMcpPicker: () => openMcpPicker, connectHearthTools: () => connectHearthTools, openModelPicker: () => openModelPicker, openOwnSettings: () => openOwnSettings,
     openPermissions: () => openPermissions, openRemoteForm: () => openRemoteForm, openRewind: () => openRewind,
     openSettings: () => openSettings, askUsage: () => askUsage, saveUsageEdit: () => saveUsageEdit, keyCommand: () => keyCommand, keyChoice: () => keyChoice, applyKeyChoice: () => applyKeyChoice, addPasted: () => addPasted, followKey: () => followKey, keysNow: () => keysNow, openProfilesPanel: () => openProfilesPanel, profilesKey: () => profilesKey, openProfileStep: () => openProfileStep, profileStepKey: () => profileStepKey, saveProfileStep: () => saveProfileStep, applyProfiles: () => applyProfiles, onRoute: () => onRoute, lendConn: () => lendConn, closeProfiles: () => closeProfiles, mainToRemote: () => mainToRemote, windowToRemote: () => windowToRemote, mainMoves: () => mainMoves, mainNow: () => mainNow, ownLevel: () => ownLevel, openWebPicker: () => openWebPicker,
     opts: () => opts, othersRef: () => othersRef, pageRef: () => pageRef, pastedRef: () => pastedRef,
@@ -576,7 +577,7 @@ export function App({ opts, win, onRestart }) {
     const one = (name) => [`url = ${q(`${conn.url.replace(/\/+$/, '')}/api/generate`)}`, `header = ${q('Content-Type: application/json')}`, ...Object.entries(head).map(([k, v]) => `header = ${q(`${k}: ${v}`)}`), `data = ${q(JSON.stringify({ model: name, keep_alive: 0 }))}`, 'output = "/dev/null"'].join('\n');
     try { spawnSync('curl', ['-s', '-Z', '--connect-timeout', '1', '-m', '2', '-K', '-'], { input: names.map(one).join('\nnext\n'), timeout: 2500, stdio: ['pipe', 'ignore', 'ignore'] }); } catch { /* the service lets them go by itself later */ }
   };
-  const { applyHelpers, serviceOf, serviceProps, pickHere, openWebPicker, runWebTest, saveWeb, offerList, openMcpPicker, mcpKeys, hooksList, hooksKeys, mcpNews, seeingModels, needVision, openSettings, openRewind, chooseRewind, applyRewind, openPermissions, memoryForRestart, openEffortLimits, openOwnSettings, fillSuggested, sharedValues, saveOwnSettings, keepOwnSettings, applyChoice, sayEffort, saveEffortLimits, setThinkingFn, readMacMemory, readServicePs, saveNowFn } = panelsPart(self);
+  const { applyHelpers, serviceOf, serviceProps, pickHere, openWebPicker, runWebTest, saveWeb, offerList, openMcpPicker, mcpKeys, hooksList, hooksKeys, mcpNews, seeingModels, needVision, openSettings, openRewind, chooseRewind, applyRewind, openPermissions, memoryForRestart, openEffortLimits, openOwnSettings, fillSuggested, sharedValues, saveOwnSettings, keepOwnSettings, applyChoice, sayEffort, saveEffortLimits, setThinkingFn, readMacMemory, readServicePs, saveNowFn, connectHearthTools } = panelsPart(self);
   const { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles, mainToRemote, windowToRemote, mainMoves, mainNow } = profilesPart(self);
   followProfilesRef.current = followProfiles;
   useEffect(() => { applyHelpers(catalog); }, [catalog, model]);
@@ -928,6 +929,8 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, pageRef, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, homeFocus: holdRef.current ? homeFocus : null, walk: holdRef.current && !/^(off|0|false|no)$/i.test(process.env.AGENTIC_BOT_WALK ?? '') && !starting && !modelOff ? walkStep : null, tip: tipOnPage ? null : tip,
     // The Claude API's usage (usage-bar.mjs): the bar under the footer, and /usage; the shine runs while a reply does.
     usage: claudeModel ? usage : null, usageLive: live.phase === 'working',
+    // The account box's hearth rows (hearth-tools.mjs): hearth's saved key, whether this window runs on it, its tools.
+    acct: (() => { try { return hearthAccount({ settings, source: model.remote?.source ?? null, hub: mcpHub }); } catch { return null; } })(),
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'profiles' || picker?.kind === 'profile-step' || picker?.own?.profile ? { profilesCtx: { models: catalog?.models ?? [], busy: agent.busy, where: model.remote?.label ?? '' } } : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,

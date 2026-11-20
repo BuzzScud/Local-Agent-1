@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { permissionOptions } from './permission-options.mjs';
 import { pasteField, editField } from './remote-form.mjs';
 import { reloadMcp } from './mcp-start.mjs';
-import { readProject, serverKey, saveServer, removeServerKey, saveServerKey, mcpLogFile, saveMarks, removeServer, commandLine, answerProject } from './mcp-store.mjs';
+import { readProject, readServers, serverKey, saveServer, removeServerKey, saveServerKey, mcpLogFile, saveMarks, removeServer, commandLine, answerProject } from './mcp-store.mjs';
+import { hearthServerIn, hearthToolsServer, hearthAddressOf } from './hearth-tools.mjs';
 import { openMcpList, mcpWarning, formServer, savedNote as mcpSavedNote, listRows as mcpListRows, toggleTool, formRows as mcpFormRows, startMcpEdit, commitMcpEdit, moveMcpRow, openMcpForm, openMcpTools } from './mcp-form.mjs';
 import { whereOf as mcpWhere } from '../tools/mcp.mjs';
 import { signIn as mcpSignIn, signedIn as mcpSignedIn, signOut as mcpSignOut } from './mcp-auth.mjs';
@@ -201,5 +202,34 @@ export function panelsMcp(self, own) {
     const t = p?.servers.length && p.answer === null ? setTimeout(() => askMcpProject(mcpProjectNow()), 50) : null;
     return () => { self.mcpHub.off('state', onState); self.mcpHub.off('changed', onChanged); clearTimeout(t); };
   };
-  return { offerList, runMcpSignIn, mcpProjectNow, mcpList, openMcpPicker, applyMcp, runMcpTest, saveMcp, mcpKeys, askMcpProject, mcpNews };
+  // hearth's tools (hearth-tools.mjs; the account box's row, the question after a switch to hearth, /remote hearth tools):
+  // its /mcp saved as a server you sign in to, the sign-in in your browser, then the server started. Already saved: only
+  // the sign-in, when it is missing.
+  const connectHearthTools = () => {
+    const note = (text, tone = 'dim') => self.push({ type: 'note', text, tone });
+    if (!self.mcpHub) { note('MCP is switched off for this window (AGENTIC_MCP=off where it started), so hearth’s tools cannot join.', 'warn'); return; }
+    const { servers, broken } = readServers();
+    if (broken) { note(`hearth’s tools were not added: ${broken}.`, 'warn'); return; }
+    const address = hearthAddressOf(self.settings);
+    const have = hearthServerIn(servers, address);
+    const server = have ?? hearthToolsServer(servers, address);
+    if (!have) {
+      const r = saveServer(server);
+      if (!r.ok) { note(`hearth’s tools were not added: ${r.error}`, 'warn'); return; }
+      applyMcp();
+    }
+    if (mcpSignedIn(server)) { note(`hearth’s tools are here already (MCP server ${server.name}): /mcp lists them.`); return; }
+    if (self.mcpSigning.current) { note('A sign-in is already waiting in your browser: finish it there (or esc in /mcp stops it).'); return; }
+    const ac = new AbortController();
+    self.mcpSigning.current = ac;
+    note('Opening hearth’s sign-in page in your browser: choose what Agentic Coder may do there (Read or Change for each job), then Allow.');
+    mcpSignIn(server, { open: self.signinOpen, signal: ac.signal }).then(async (r) => {
+      self.mcpSigning.current = null;
+      if (!r.ok) { note(`Not signed in to hearth: ${r.error}. /remote hearth tools tries again.`, 'warn'); return; }
+      if (self.mcpHub.has(server.name)) await self.mcpHub.start(server.name).catch(() => {});
+      self.agent.mcpStale = true;
+      note(`Signed in to hearth: its tools join at your next message, in every folder (MCP server ${server.name}; /mcp lists them).`);
+    });
+  };
+  return { offerList, runMcpSignIn, mcpProjectNow, mcpList, openMcpPicker, applyMcp, runMcpTest, saveMcp, mcpKeys, askMcpProject, mcpNews, connectHearthTools };
 }

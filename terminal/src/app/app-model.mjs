@@ -214,6 +214,15 @@ export function modelPart(self) {
     // A Claude API key switched to (/key use, the window's account box): this window only, or every window; a key
     // to remove, yes or no (app-claude-keys.mjs).
     if (id === 'key-scope' || id === 'key-remove') return self.keyChoice(id);
+    // On hearth's API now, without hearth's own tools (hearth-tools.mjs): bring them too?
+    if (id === 'hearth-tools') {
+      // (A question asked this way shows its title and each choice's note, not a blurb: what it means goes in those.)
+      return { ask: true, title: 'hearth’s key brings its model only. Bring hearth’s own tools too?', blurb: '', what: 'hearth’s tools', current: null, escWord: 'not now', options: [
+        { id: 'connect', label: 'Sign in and add them', recommended: true, note: 'your conversations, people, notes, reports, the Code Factory…: a sign-in in your browser, where you pick Read or Change for each job; they join at your next message, in every folder' },
+        { id: 'later', label: 'Not now', note: 'asked again at the next switch to hearth; /remote hearth tools any time' },
+        { id: 'never', label: 'Never ask', note: 'hearth stays the model only; /remote hearth tools still adds them' },
+      ] };
+    }
     // A connect that would move Main (9 Oct 2026, the owner's pick): this window only, or every window.
     if (id === 'remote-scope') {
       const r = self.remoteRef.current.pendingScope ?? {};

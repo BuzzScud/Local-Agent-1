@@ -122,6 +122,17 @@ export function panelsSettings(self, own) {
       return;
     }
     if (id === 'key-scope' || id === 'key-remove') { self.applyKeyChoice(id, value); return; }
+    if (id === 'hearth-tools') {
+      if (value === 'connect') { own.connectHearthTools(); return; }
+      if (value === 'never') {
+        saveSettings({ hearthTools: 'never' });
+        self.settings.hearthTools = 'never';
+        self.push({ type: 'note', text: 'Not asked again: hearth stays the model only. /remote hearth tools adds its tools any time.', tone: 'dim' });
+        return;
+      }
+      self.push({ type: 'note', text: 'hearth is the model; its own tools were not added. /remote hearth tools adds them any time.', tone: 'dim' });
+      return;
+    }
     if (id === 'remote-scope') {
       const r = self.remoteRef.current.pendingScope;
       self.remoteRef.current.pendingScope = null;

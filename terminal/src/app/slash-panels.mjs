@@ -81,8 +81,10 @@ export function slashPanels(self) {
         // /remote alone: the form. claude / computer / service / hearth: straight to that
         // service (the form, asking for its first row, when it is not set up);
         // here or off: back to this Mac; on: the last remote used.
-        const w = arg.toLowerCase();
+        const w = arg.toLowerCase().trim().replace(/\s+/g, ' ');
         const r = self.settings.remote ?? DEFAULT_REMOTE;
+        // hearth's tools (hearth-tools.mjs): its MCP server, signed in to; the API alone is hearth's model only.
+        if (w === 'hearth tools') { self.connectHearthTools(); break; }
         const to = { claude: 'claude', computer: 'machine', machine: 'machine', service: 'openai', openai: 'openai', hearth: 'hearth' }[w];
         if (to) { self.remoteFnRef.current.to(to); break; }
         // key: the form of the service in use (the Claude API when on this Mac), typing in its API key row.
@@ -100,7 +102,7 @@ export function slashPanels(self) {
           else self.push({ type: 'note', text: `Already on the remote (${remoteLabel(r)}).`, tone: 'dim' });
           break;
         }
-        if (w) { self.push({ type: 'note', text: '/remote alone opens the form; /remote claude, computer, service or hearth switches to one, /remote key changes the API key of the one in use, /remote here (or off) comes back to this Mac.', tone: 'dim' }); break; }
+        if (w) { self.push({ type: 'note', text: '/remote alone opens the form; /remote claude, computer, service or hearth switches to one, /remote hearth tools brings hearth’s own tools (a sign-in), /remote key changes the API key of the one in use, /remote here (or off) comes back to this Mac.', tone: 'dim' }); break; }
         self.remoteFnRef.current.openForm();
         break;
       }

@@ -238,6 +238,7 @@ button { font: inherit; color: inherit; }
 .kpop .add { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; background: none; color: var(--accent); font: 13px var(--sans); border-radius: 8px; cursor: pointer; text-align: left; } .kpop .add:hover { background: var(--accent-bg); }
 .kpop input.rn { height: 24px; border-radius: 6px; border: 1px solid var(--accent-line); background: var(--win); color: var(--text); padding: 0 8px; font: 13px var(--sans); width: 100%; min-width: 0; }
 .kpop .ft { line-height: 1.45; }
+.kpop .kt { padding: 8px 10px; color: var(--dim); font: 12.5px var(--sans); }
 /* a question: a card in the prompt's place */
 .perm { border: 1px solid var(--accent-line); border-radius: 12px; background: #1b1d22; padding: 14px 16px; margin: 8px 0 10px; }
 .perm .h { font: 600 13px var(--sans); color: #afafff; margin-bottom: 8px; }
@@ -754,7 +755,7 @@ function renderUsage(st) {
   const u = st?.usage, m = st?.meter;
   const h = u ? usagePill(u, st.live?.phase === 'working') : m ? meterPill(m) : '';
   // The account box left of the model: on the Claude API with a key of the list (bridge.mjs usageOf keys).
-  const aslot = document.getElementById('aslot'), ah = u ? accountBoxHtml(u) : '';
+  const aslot = document.getElementById('aslot'), ah = accountBoxHtml(u, st?.acct);
   let moved = false;
   if (aslot.dataset.h !== ah) { aslot.dataset.h = ah; aslot.innerHTML = ah; moved = true; }
   if (slot.dataset.h !== h) { slot.dataset.h = h; slot.innerHTML = h; moved = true; }
@@ -767,7 +768,11 @@ function renderUsage(st) {
 // amber while a new key is checked. A click lists your keys: a row switches (the app asks: this window or every
 // window), Name names it in place, Remove asks in the app, Add another key opens the app's row that hides the key.
 // The page never holds a key: the rows are names, the keys' last four and the accounts' ends.
-function accountBoxHtml(u) {
+function accountBoxHtml(u, acct) {
+  const attrsOf = () => ' role="button" tabindex="0" data-act="keys" aria-haspopup="menu" aria-expanded="' + (S.keyMenu ? 'true' : 'false') + '"';
+  // On hearth's API (20 Nov 2026, the owner: "can we add the ability to switch to a hearth api key here?"): its key's end.
+  if (acct?.on && acct.hearth) return '<span class="abox' + (S.keyMenu ? ' open' : '') + '"' + attrsOf() + ' title="hearth · key ••••' + esc(acct.hearth.end) + (acct.tools?.state === 'connected' ? ' · with hearth’s tools' : '') + '"><span class="nm">hearth</span><span class="id">••••' + esc(acct.hearth.end) + '</span><span class="cv">▾</span></span>';
+  if (!u) return '';
   const k = (u.keys || []).find((x) => x.inUse);
   if (!k) return '';
   const a = u.account || {};
@@ -778,7 +783,28 @@ function accountBoxHtml(u) {
   const title = (k.name || 'No name yet') + (org ? ' · account …' + org : '') + ' · key ••••' + k.end + (a.own ? ' · this window only' : '');
   return '<span class="abox' + (S.keyMenu ? ' open' : '') + '"' + attrs + ' title="' + esc(title) + '"><span class="nm">' + name + '</span>' + (org ? '<span class="id">…' + esc(org) + '</span>' : '') + '<span class="cv">▾</span></span>';
 }
-function keyMenuHtml(u) {
+// hearth's part of the list (hearth-tools.mjs hearthAccount): its key, a row that switches to it (or adds it), and its
+// tools, which its key does not bring: a row that signs in to them (/remote hearth tools), or how many came.
+function hearthRowsHtml(acct, on) {
+  const h = acct?.hearth;
+  const row = h ? '<div class="it' + (on ? ' cur' : '') + '" role="menuitemradio" tabindex="0" aria-checked="' + Boolean(on) + '" data-khearth="1"><span class="c">' + (on ? '✓' : '') + '</span><span class="l">hearth</span><span class="m"><span style="color:var(--faint)">model</span></span>'
+      + '<span class="d"><span>key ••••' + esc(h.end || '????') + '</span><span>hearth’s API</span></span></div>'
+    : '<button class="add" data-khearth="1">＋ Add hearth’s API</button>';
+  const t = acct?.tools;
+  const tools = t?.state === 'connected' ? '<div class="kt">hearth’s tools · ' + t.count + ' tool' + (t.count === 1 ? '' : 's') + ' here</div>'
+    : '<button class="add" data-ktools="1">＋ ' + (t ? 'Sign in to hearth’s tools' : 'Bring hearth’s tools') + '</button>';
+  return row + tools;
+}
+function keyMenuHtml(u, acct) {
+  // On hearth: its rows first, then the Claude API's saved key to go back to.
+  if (!u) {
+    const c = acct?.claude;
+    const back = c ? '<div class="it" role="menuitemradio" tabindex="0" aria-checked="false" data-kclaude="1"><span class="c"></span><span class="l' + (c.name ? '' : ' un') + '">' + esc(c.name || 'No name yet') + '</span><span class="m"><span style="color:var(--faint)">Claude</span></span>'
+      + '<span class="d"><span>key ••••' + esc(c.end || '????') + '</span><span>Claude API</span></span></div>' : '<button class="add" data-kclaude="1">＋ Claude API</button>';
+    return '<div class="mpop kpop" id="kpop" role="menu"><div class="hd">API keys · hearth<span>click one to switch</span></div>' + hearthRowsHtml(acct, true)
+      + '<div class="sep"></div>' + back
+      + '<div class="ft">hearth’s key is its model only: Agentic Coder keeps its own tools, and hearth’s come with a sign-in. Back on Claude, its other keys are here again.</div></div>';
+  }
   const keys = u.keys || [];
   const rows = keys.map((k) => {
     const renaming = S.keyRename === k.id;
@@ -792,8 +818,9 @@ function keyMenuHtml(u) {
   const earlier = u.account?.earlier > 0.005 ? ' ' + money(u.account.earlier) + ' from earlier this month came before keys were told apart: not counted.' : '';
   return '<div class="mpop kpop" id="kpop" role="menu"><div class="hd">API keys · Claude API<span>click one to switch</span></div>' + rows
     + '<div class="sep"></div><button class="add" data-kadd="1">＋ Add another key</button>'
-    // hearth's API (19 Nov 2026): not a Claude key, so /remote hearth, its address and model filled in, asks for its key.
-    + '<button class="add" data-khearth="1">＋ Add hearth’s API</button>'
+    // hearth's API (19 Nov 2026): not a Claude key, so /remote hearth, its address and model filled in, asks for its key;
+    // once saved, a row that switches to it, and its tools (20 Nov 2026).
+    + '<div class="sep"></div>' + hearthRowsHtml(acct, false)
     + '<div class="ft">Each key counts only its own account’s dollars, this month on this Mac. Switching asks: this window, or every window.' + earlier + '</div></div>';
 }
 // Under the box, its left edge with the box's, inside the window.
@@ -993,7 +1020,7 @@ function renderDrops() {
   if (S.usageCard && S.last?.usage) h += usageCardHtml(S.last.usage, S.last.live?.phase === 'working');
   else if (S.usageCard && S.last?.meter) h += meterCardHtml(S.last.meter);
   if (S.modeMenu && S.last) h += modeMenuHtml();
-  if (S.keyMenu && S.last?.usage?.keys?.length) h += keyMenuHtml(S.last.usage);
+  if (S.keyMenu && (S.last?.usage?.keys?.length || S.last?.acct?.on)) h += keyMenuHtml(S.last?.acct?.on ? null : S.last.usage, S.last?.acct);
   if (S.toast) h += '<div class="toast">' + esc(S.toast) + '</div>';
   if (h !== dropsHtml) {
     dropsHtml = h;
@@ -1052,7 +1079,7 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (S.keyMenu && e.key === 'Escape') { e.preventDefault(); openKeyMenu(false); document.querySelector('#aslot .abox')?.focus(); return; }
-  if ((e.key === 'Enter' || e.key === ' ') && !e.metaKey && (fo?.dataset?.kuse || fo?.dataset?.act === 'keys')) { e.preventDefault(); fo.click(); return; }
+  if ((e.key === 'Enter' || e.key === ' ') && !e.metaKey && (fo?.dataset?.kuse || fo?.dataset?.khearth || fo?.dataset?.kclaude || fo?.dataset?.act === 'keys')) { e.preventDefault(); fo.click(); return; }
   const inField = document.activeElement?.tagName === 'INPUT';
   if (e.metaKey && e.key.toLowerCase() === 'b') { e.preventDefault(); S.side = !S.side; if (S.side) loadSessions().then(renderSide); renderSide(); return; }
   if (e.metaKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newWindow(); return; }
@@ -1133,7 +1160,9 @@ document.addEventListener('click', (e) => {
   const kn = t.closest('[data-kname]'); if (kn) { if (S.keyRename === kn.dataset.kname) saveKeyName(); else { S.keyRename = kn.dataset.kname; S.krnValue = null; S.krnOpening = true; renderDrops(); } return; }
   const kd = t.closest('[data-kdel]'); if (kd) { openKeyMenu(false); run('/key remove ' + kd.dataset.kdel); return; }
   if (t.closest('[data-kadd]')) { openKeyMenu(false); run('/key add'); return; }
-  if (t.closest('[data-khearth]')) { openKeyMenu(false); run('/remote hearth'); return; }
+  if (t.closest('[data-khearth]')) { openKeyMenu(false); if (!S.last?.acct?.on) run('/remote hearth'); return; }
+  if (t.closest('[data-ktools]')) { openKeyMenu(false); run('/remote hearth tools'); return; }
+  if (t.closest('[data-kclaude]')) { openKeyMenu(false); run('/remote claude'); return; }
   if (t.closest('#krn')) return;
   const ku = t.closest('[data-kuse]'); if (ku) { const k = (S.last?.usage?.keys || []).find((x) => x.id === ku.dataset.kuse); openKeyMenu(false); if (k && !k.inUse) run('/key use ' + k.id); return; }
   if (t.closest('[data-act="keys"]')) { openKeyMenu(!S.keyMenu); return; }

@@ -392,6 +392,50 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the account box lef
   } finally { await p.close(); }
 }, 60_000);
 
+// 20 Nov 2026, the owner: "can we add the ability to switch to a hearth api key here? … does it automatically have its
+// tools?", picked "Add it, and bring hearth's tools". hearth's key in the same list: a row that switches to it, its tools
+// (which its key does not bring) a row that signs in, and on hearth the box names it and the list goes back to Claude.
+test.skipIf(needs('chrome', findChrome))('in a real browser: the account list switches to hearth\'s key and brings its tools; on hearth the box says so and goes back to Claude', async () => {
+  const p = await openPage();
+  try {
+    const keys = [{ n: 1, id: 'claude', name: 'Personal', end: 'FwAA', orgEnd: '284a', month: 1.66, inUse: true, checking: false }];
+    const usage = { spent: 1.66, cap: null, resetsOn: Date.UTC(2026, 11, 1), month: 'November', today: 1.66, window: 0, last14: Array(14).fill(0), modelName: 'Opus 5.5', account: { pending: false, orgEnd: '284a', earlier: 0, name: 'Personal', own: false }, keys };
+    const sent = () => p.got().filter((m) => m.from === 'keys').map((m) => m.data).join('');
+    // on Claude, no hearth key yet: Add hearth's API, Bring hearth's tools
+    await p.say({ ...base, usage, acct: { on: false, hearth: null, tools: null, claude: { name: 'Personal', end: 'FwAA' } } });
+    await p.click('#aslot .abox');
+    expect(await p.js(`[...document.querySelectorAll('#kpop .add')].map((b) => b.textContent)`)).toEqual(['＋ Add another key', '＋ Add hearth’s API', '＋ Bring hearth’s tools']);
+    await p.click('#kpop [data-ktools]');
+    expect(sent()).toContain('/remote hearth tools\r');
+    // its key saved: a row of the list, by its last four, that switches to it
+    await p.say({ ...base, usage, acct: { on: false, hearth: { end: 'h9Zq' }, tools: null, claude: { name: 'Personal', end: 'FwAA' } } });
+    await p.click('#aslot .abox');
+    expect(await p.js(`document.querySelector('#kpop .it[data-khearth]').textContent`)).toBe('hearthmodelkey ••••h9Zqhearth’s API');
+    await p.click('#kpop .it[data-khearth]');
+    expect(sent()).toContain('/remote hearth\r');
+    // on hearth, with its 57 tools: the box names it; the list ticks it, counts its tools and goes back to Claude
+    await p.say({ ...base, usage: null, acct: { on: true, hearth: { end: 'h9Zq' }, tools: { name: 'hearth', state: 'connected', count: 57 }, claude: { name: 'Personal', end: 'FwAA' } } });
+    expect(await p.js(`document.querySelector('#aslot .abox').textContent`)).toBe('hearth••••h9Zq▾');
+    await p.click('#aslot .abox');
+    expect(await p.js(`document.querySelector('#kpop .hd').textContent`)).toBe('API keys · hearthclick one to switch');
+    expect(await p.js(`document.querySelector('#kpop .it[data-khearth]').getAttribute('aria-checked')`)).toBe('true');
+    expect(await p.js(`document.querySelector('#kpop .kt').textContent`)).toBe('hearth’s tools · 57 tools here');
+    expect(await p.js(`document.querySelector('#kpop [data-ktools]')`)).toBe(null);
+    // the one in use does nothing; Claude's row goes back
+    const before = sent();
+    await p.click('#kpop .it[data-khearth]');
+    expect(sent()).toBe(before);
+    await p.click('#aslot .abox');
+    await p.click('#kpop [data-kclaude]');
+    expect(sent()).toContain('/remote claude\r');
+    // nothing scrolls sideways, at the narrowest window too
+    await p.on('Emulation.setDeviceMetricsOverride', { width: 900, height: 860, deviceScaleFactor: 1, mobile: false });
+    await p.click('#aslot .abox');
+    expect(await p.js(`(() => { const k = document.getElementById('kpop').getBoundingClientRect(); return { sideways: document.documentElement.scrollWidth > innerWidth, inside: k.right <= innerWidth }; })()`)).toEqual({ sideways: false, inside: true });
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
 // The window's first seconds on a model on the service (18 Oct 2026, the owner, from pictures of the real window taken
 // as it opened): it said Ready with a green dot for the ~12 s the model was still loading there, "ctx 17% of 32k" until
 // it jumped to "2% of 256k", and "on effort". The states are the bridge's own (meterOf, modelNowOf, effortWords with start.jsx knownOf).

@@ -45,7 +45,8 @@ test('a group runs its own command: /help opens the Help page', async () => {
 test('the panels put together give the App every name it had, each a function', async () => {
   const { panelsPart } = await import(join(app, 'app-panels.mjs'));
   const p = panelsPart({});
-  expect(Object.keys(p).length).toBe(34);
+  // 35: connectHearthTools (20 Nov 2026, hearth's tools with hearth's key: hearth-tools.mjs)
+  expect(Object.keys(p).length).toBe(35);
   expect(Object.entries(p).filter(([, v]) => typeof v !== 'function').map(([k]) => k)).toEqual([]);
 });
 
