@@ -346,6 +346,12 @@ if (process.argv[2] === 'loops') {
   const pid = Number(process.argv[3]);
   process.exit(await runBoard({ pid: Number.isInteger(pid) && pid > 0 ? pid : null }));
 }
+// coding pr <n> | guard <n> | watch <n>: a Gitea pull request's checks run by run, the check before a push, and a wait
+// for its checks that looks every minute at most (app/pr-checks.mjs).
+if (process.argv[2] === 'pr') {
+  const { prCommand } = await import('./app/pr-checks.mjs');
+  process.exit(await prCommand(process.argv.slice(3)));
+}
 // coding status: which Agentic Coder runs here and on your other Macs, against GitHub's main (app/status.mjs).
 if (process.argv[2] === 'status') {
   const { statusRows, statusText } = await import('./app/status.mjs');

@@ -2071,6 +2071,37 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   Writing hidden by a press and kept so), `web.test.mjs` (the query and sources, the input whole or in pieces:
   fake-anthropic's `search.whole`), `timing.test.mjs` (a thought that comes whole timed from the request).
 
+## coding pr: a pull request's checks, run by run (19 Nov 2026)
+
+- **What and why.** A hearth pull request sat on Code Factory's Not ready list for an evening while its card said
+  "phone failure". Phone had passed on every one of about 20 runs; the real failures were in tests4 and changed from
+  run to run (a 200 KB budget, then a banned word in a comment), and one run's tests3 failed at random. Finding that
+  took reading every run's statuses and logs from the forge by hand, and a wait that looked more than once a minute.
+  The owner asked for the Agentic Coder to have the tools and skills for it; their picks: the full build, this Mac's
+  forge key from git's credential helper, and fix and push only after the push question (which every push asks).
+- **The command** (`terminal/src/app/pr-checks.mjs`, cli.jsx `pr`, a help row): `coding pr <n>` reads the pull
+  request's newest 12 commits (newest first, as the forge lists them; a closed one's from `refs/pull/<n>/head`, first
+  parents), each commit's statuses (a part's newest state; its run number is in the status's address), a failed part's
+  log (`actions/runs/<id>/jobs`, the id found from the number: ids run ahead of numbers by a gap that only grows) and
+  its `(fail)` and `::error::` lines (`failLines`). `verdicts` says each failed test as REAL (fails on the newest
+  commit, or nothing newer shows it gone), fixed (failed several runs, gone from newer ones) or once (one failure, gone
+  since: random, or fixed). `coding pr guard <n> [--hold ship/]` fetches the branch and passes only when this copy has
+  all of it (no force needed), there is something to push, and no open pull request's branch starts with a held
+  prefix: it is meant to run in the same command as the push (`coding pr guard 7 && git push origin HEAD:x`), so the
+  push still asks. `coding pr watch <n> [--need a,b]` looks every `MIN_EVERY` (60) seconds at most and ends 0 ready,
+  1 failed (with why), 2 the newest commit moved, 3 out of time (`--for`, 60 min).
+- **Nothing about one forge is in the repo** (it is public): the address and the owner/repo come from the folder's
+  `origin` (`remoteOf`), the certificate from git's `http.sslCAInfo` for it, the key from `git credential fill`, held
+  in memory and sent as a header, never printed. Every list is asked with `page=1` (a forge's task list without it
+  returns all ~3,000 tasks).
+- **Skills and a loop.** The remote SKILLS.md has **Get a pull request ready** (read every run, fix what is REAL, the
+  guard and the push in one command, `coding pr watch` as a background command), and Fix a failing check names `coding
+  pr`. A project's own traps go in a saved skill (`~/.agentic-coder/skills/`, private), which the general one says to
+  open first. The ready-made loops have a 16th, **Watch a pull request** (every 5 min, until 4 h, Manual).
+- **Tests**: `terminal/test/pr-checks.test.mjs` (a stand-in forge replaying that evening: the verdicts, the text, a
+  closed pull request, page=1, the guard on real git repositories, watch's gap, a failure, a moved commit, out of
+  time); the loop and skill lists in loop-library, loops, app-loops and remote-rules.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

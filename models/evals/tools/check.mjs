@@ -82,7 +82,9 @@ export function riskyName(path) {
 // api.search.brave.com and api.tavily.com: the web search services /web offers, used only with your key (30 Sep 2026).
 // api.anthropic.com: the Claude API's own address, named in full for its Admin API's cost report (/usage, 9 Oct
 // 2026), read only with an Admin key you add.
-const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'codeload.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'www.apple.com', 'host', 'api.search.brave.com', 'api.tavily.com', 'api.anthropic.com'];
+// employee.hearth.monster: the owner's own hearth, as an API service on /remote (its door) and its Code Factory's MCP
+// sign-in (19 Nov 2026), used only with a key you add.
+const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'codeload.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'www.apple.com', 'host', 'api.search.brave.com', 'api.tavily.com', 'api.anthropic.com', 'employee.hearth.monster'];
 export const hostsIn = (text) => [...new Set([...text.matchAll(/\bhttps?:\/\/([A-Za-z0-9][A-Za-z0-9.-]*)/g)].map((m) => m[1].toLowerCase().replace(/\.$/, '')))];
 export const newHosts = (text, known = KNOWN_HOSTS) => hostsIn(text).filter((h) => !known.includes(h));
 // A server open to the network instead of this Mac only.

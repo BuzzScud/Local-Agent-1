@@ -44,7 +44,7 @@ function windowIn({ projectLoop = true } = {}) {
 
 test('the fifteen ready-made loops: files that read back, each a loop the rules take, with four steps of its own', () => {
   const ready = F.libraryOf({ home: join(root, 'nobody') });
-  expect(ready.map((l) => l.name)).toEqual(['Watch the tests', 'Fix until green', 'Build and lint guard', 'Flaky test hunter', 'Watch CI', 'Release watch', 'Dev server check', 'Log watcher', 'Work digest', 'Docs keeper', 'Layout watch', 'Polish until clean', 'Theme guard', 'Accessibility pass', 'Design review']);
+  expect(ready.map((l) => l.name)).toEqual(['Watch the tests', 'Fix until green', 'Build and lint guard', 'Flaky test hunter', 'Watch CI', 'Release watch', 'Dev server check', 'Log watcher', 'Work digest', 'Docs keeper', 'Layout watch', 'Polish until clean', 'Theme guard', 'Accessibility pass', 'Design review', 'Watch a pull request']);
   for (const l of ready) {
     expect(l.from).toBe('ready');
     expect(l.about.length).toBeGreaterThan(20);
@@ -110,7 +110,7 @@ test('the Library: /loop with no loop opens it, cards in sections at every size,
   expect(B.openFromChat(ui, '', m.snapshot())).toBe(true);
   expect(ui.view).toBe('shelf');
   let f = frame();
-  expect(f).toMatch(/Running 0 {3}Library 16/); // the 15 ready-made (Loops 11–15 came 9 Oct 2026) and the project's one
+  expect(f).toMatch(/Running 0 {3}Library 17/); // the 16 ready-made (Loops 11–15 came 9 Oct 2026, Watch a pull request 19 Nov) and the project's one
   expect(f).toMatch(/Yours {2}kept for you, in every project[\s\S]*\+ New loop/);
   expect(f).toMatch(/Projects {2}kept in a project, shared through git[\s\S]*TASK {2}Check the export[\s\S]*trades-export · asks once/);
   expect(f).toMatch(/Ready-made {2}come with the app[\s\S]*TEST {2}Watch the tests[\s\S]*RUN › READ › FIND › TELL/);
@@ -151,7 +151,7 @@ test('the Library: /loop with no loop opens it, cards in sections at every size,
   expect(ui.view).toBe('main');
   press('tab');
   expect(ui.view).toBe('shelf');
-  expect(frame()).toMatch(/Running 1 {3}Library 17[\s\S]*Yours[\s\S]*WEB {2}News watch/);
+  expect(frame()).toMatch(/Running 1 {3}Library 18[\s\S]*Yours[\s\S]*WEB {2}News watch/);
   press('tab');
   expect(ui.view).toBe('main');
   m.close();
@@ -226,7 +226,7 @@ test('the Library\'s ↑↓ go to the card drawn below or above it, at 100 and a
     const where = (f, name) => { const lines = f.split('\n'); const y = lines.findIndex((l) => l.includes(name)); return [y, lines[y]?.lastIndexOf('╭', lines[y].indexOf(name))]; };
     const picked = (f) => /^ {2}(.+?) {2}· {2}(ready-made|yours|from )/m.exec(f.split('\n').slice(-4).join('\n'))?.[1];
     frame(cols, 44);
-    // + New loop, the project's loop, then the 15 ready-made from item 2: "Watch the tests" starts their first row.
+    // + New loop, the project's loop, then the 16 ready-made from item 2: "Watch the tests" starts their first row.
     press('right', 'right');
     let f = frame(cols, 44);
     expect(picked(f)).toBe('Watch the tests');

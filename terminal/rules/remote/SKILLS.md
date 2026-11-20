@@ -50,11 +50,25 @@ skill is also in the list, so the model can open one the words missed.
 - About: read why a CI check failed, make it fail here, and fix the cause
 - Fence: check
 
-1. Find the failed check's log (the user's tools, gh run view --log-failed, or the file they give) and the first real error in it, not the last line.
+1. Find the failed check's log (the user's tools, gh run view --log-failed, coding pr <number> on a Gitea or Forgejo pull request, or the file they give) and the first real error in it, not the last line.
 2. Run the same command here and see it fail the same way. If it passes here, look for what differs: versions, env, order, files not committed.
 3. Fix the cause in the code (or in the check's setup when that is what is wrong), never by skipping or loosening the test.
 4. Run the failing command again, then the tests near it.
 5. Answer with the cause in one line, the fix, and the run that now passes.
+
+## Get a pull request ready
+- Words: get it ready, get ready, gets ready, not ready, make it ready, ready to ship, stuck pull request, stuck pr, pr is stuck, keeps failing
+- About: find what really blocks a pull request's checks, fix that, push it safely and wait for green
+- Fence: check
+
+1. A saved skill for this project in the list (one named for it) knows its checks and its traps: open it and follow it instead.
+2. Read every run, not the newest only: coding pr <number> on a Gitea or Forgejo pull request (gh pr checks and gh run list on GitHub). A part that passed on every run is not the blocker, whatever a card or summary says.
+3. Take the REAL failures first (they fail on the newest commit). A test that failed once and not since is likely random: say so and leave it, unless it fails again.
+4. Work in the pull request's own branch or worktree. Run each failing test file here with the check's own tool versions; a fix that passes only here is not a fix.
+5. Fix the cause (Fix a failing check), never by skipping or loosening a test. A comment or a name can break a test too.
+6. Push in one command with the guard: coding pr guard <number> && git push origin HEAD:<branch> (add --hold <branch start> when the project names one, such as a release train). Never force; if the branch moved, merge it first.
+7. Wait with coding pr watch <number> as a background command (Bash with background: true, then Jobs with wait), never a tight loop of your own. Its end says ready, or the next failure with why.
+8. Answer with what blocked it, what you changed, and the checks' result on the newest commit.
 
 ## Open a pull request
 - Words: open a pull request, open a pr, make a pr, create a pull request, send a pr
