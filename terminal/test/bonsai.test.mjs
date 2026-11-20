@@ -12,8 +12,8 @@ import { recorded, activeRequests, recentRequests, activityDir } from '../src/ag
 import { streamChat } from '../src/agent/client.mjs';
 import { readGguf, modelFacts, layerParts, q2Patch, ollamaBlobOf, halfToFloat } from '../src/app/bonsai-gguf.mjs';
 import { readLimits, modelWithLimits, cleanToolsOff, TOOLS_SWITCHABLE } from '../src/app/limits.mjs';
-import { canAct, settingsOf, envOf, stopOllama, restartOllama, setLogin } from '../src/app/ollama-control.mjs';
-import { speedTest, readSpeeds } from '../src/app/bonsai-speed.mjs';
+import { canAct, settingsOf, envOf, stopOllama, restartOllama, setLogin, KV_NOTE } from '../src/app/ollama-control.mjs';
+import { speedTest, readSpeeds, lowPowerOn } from '../src/app/bonsai-speed.mjs';
 import { COMMANDS, WHEN_ROOM, matchCommands } from '../src/app/commands.mjs';
 import { TOOLS_COMMANDS } from '../src/app/slash-tools.mjs';
 
@@ -35,7 +35,7 @@ beforeAll(async () => {
       if (req.url === '/api/generate') return json({ done: true });
       if (req.url === '/api/chat') {
         const n = body.messages?.length ?? 0;
-        const fig = { prompt_eval_count: n > 2 ? 4600 : 4482, prompt_eval_duration: n > 2 ? 2e8 : 21.4e9, eval_count: 120, eval_duration: 4.3e9, load_duration: 1e7 };
+        const fig = { prompt_eval_count: n > 2 ? 4600 : 4482, prompt_eval_duration: n > 2 ? 2e8 : 21.4e9, eval_count: 120, eval_duration: 4.3e9, load_duration: 1e7, ...(n > 2 ? { prompt_eval_cached_count: 4482 } : {}) };
         if (!body.stream) return json({ model: B, message: { role: 'assistant', content: 'I can read and change files.' }, done: true, ...fig });
         res.writeHead(200, { 'content-type': 'application/x-ndjson' });
         res.write(`${JSON.stringify({ message: { role: 'assistant', content: '', thinking: 'Hmm.' }, done: false })}\n`);
@@ -52,14 +52,14 @@ afterAll(async () => { await svc?.close(); });
 
 test('a request to an Ollama service is recorded while it runs and when it ends: who asked, its phase, the service’s own figures', async () => {
   // a stream of its own: under way it is in the "now" list, done it is a line
-  async function* slow() { yield { type: 'reasoning', text: 'a' }; await Bun.sleep(30); yield { type: 'text', text: 'b' }; yield { type: 'done', finish: 'stop', timings: { prompt_n: 4482, prompt_ms: 21400, predicted_n: 120, predicted_ms: 4300, load_ms: 10 } }; }
+  async function* slow() { yield { type: 'reasoning', text: 'a' }; await Bun.sleep(30); yield { type: 'text', text: 'b' }; yield { type: 'done', finish: 'stop', usage: { prompt_tokens: 4482, cached_tokens: 4000 }, timings: { prompt_n: 4482, prompt_ms: 21400, predicted_n: 120, predicted_ms: 4300, load_ms: 10, cache_n: 4000 } }; }
   const seen = [];
   for await (const ev of recorded(slow(), { model: B, url: 'x', who: 'conversation', messages: [{ role: 'user', content: '  what is   2+2?  ' }], tools: 9, think: true })) seen.push([ev.type, activeRequests({ model: B }).map((n) => n.phase)]);
   expect(seen[0]).toEqual(['reasoning', ['thinking']]);
   expect(seen[1]).toEqual(['text', ['writing']]);
   expect(activeRequests({ model: B })).toEqual([]);
   const [last] = recentRequests({ model: B, limit: 1 });
-  expect(last).toMatchObject({ model: B, who: 'conversation', ask: 'what is 2+2?', tools: 9, think: true, readTok: 4482, readMs: 21400, wroteTok: 120, writeMs: 4300, thinkTok: 1, end: 'stop' });
+  expect(last).toMatchObject({ model: B, who: 'conversation', ask: 'what is 2+2?', tools: 9, think: true, readTok: 4482, readMs: 21400, wroteTok: 120, writeMs: 4300, thinkTok: 1, end: 'stop', keptTok: 4000, promptTok: 4482, reused: 'reused 4k of 4.5k' });
   // a request that fails is a line too, and its "now" file goes
   async function* broken() { yield { type: 'text', text: 'x' }; throw new Error('model server: gone'); }
   await expect(drain(recorded(broken(), { model: B, url: 'x', who: 'the second look' }))).rejects.toThrow('gone');
@@ -163,12 +163,19 @@ test('Ollama’s controls never act in a test run; its settings read from its en
   expect(settingsOf({})).toEqual({ flash: false, kv: 'f16', ctx: 0 });
   expect(envOf({ flash: false, kv: 'q4_0', ctx: 32768 })).toEqual({ OLLAMA_FLASH_ATTENTION: '0', OLLAMA_KV_CACHE_TYPE: 'q4_0', OLLAMA_CONTEXT_LENGTH: '32768' });
   expect(envOf({ flash: true, kv: 'nonsense', ctx: 0 })).toEqual({ OLLAMA_FLASH_ATTENTION: '1', OLLAMA_KV_CACHE_TYPE: 'q8_0' });
+  expect(KV_NOTE.q4_0).toBe('a memory tool: slower, and less accurate without the calibration step');
+  expect(lowPowerOn({ AGENTIC_LOW_POWER: 'on' })).toBe(true);
+  expect(lowPowerOn({ AGENTIC_LOW_POWER: 'off' })).toBe(false);
+  const page = readFileSync(new URL('../src/app/bonsai.html', import.meta.url), 'utf8');
+  expect(page).toContain('Low Power Mode on: answers will be slow');
+  expect(page).toContain('kvNote');
+  expect(page).toContain('t.reused');
 });
 
 test('the speed test: a fresh prompt read from the start, then a later step that keeps it; asked at the context it is loaded at, kept', async () => {
   const from = svc.seen.length;
   const r = await speedTest({ url: svc.url, model: B, record: false });
-  expect(r).toMatchObject({ model: B, ctx: 65536, readTokS: 209, writeTokS: 27.9, freshTok: 4482, freshSecs: 21.4, writeTok: 120, laterSecs: 4.5 });
+  expect(r).toMatchObject({ model: B, ctx: 65536, readTokS: 209, writeTokS: 27.9, freshTok: 4482, freshSecs: 21.4, writeTok: 120, laterSecs: 4.5, keptTok: 4482, promptTok: 4600 });
   const chats = svc.seen.slice(from).filter((x) => x.path === '/api/chat');
   expect(chats).toHaveLength(2);
   expect(chats[0].body.options.num_ctx).toBe(65536); // never another size: that would load it again
@@ -180,8 +187,9 @@ test('the speed test: a fresh prompt read from the start, then a later step that
 });
 
 test('the hub’s Bonsai routes: the whole page, what changes by the second, tools switched off for it, the controls refused here', async () => {
-  const was = process.env.AGENTIC_OLLAMA_URL, wasModels = process.env.OLLAMA_MODELS;
+  const was = process.env.AGENTIC_OLLAMA_URL, wasModels = process.env.OLLAMA_MODELS, wasLP = process.env.AGENTIC_LOW_POWER;
   process.env.AGENTIC_OLLAMA_URL = svc.url;
+  process.env.AGENTIC_LOW_POWER = 'on';
   process.env.OLLAMA_MODELS = mkdtempSync(join(tmpdir(), 'agentic-models-')); // never the Mac's own Ollama folder
   tinyGguf(process.env.OLLAMA_MODELS);
   const r0 = { source: 'machine', kind: 'openai', connect: 'http', address: svc.url, model: B, key: false, contexts: { [B]: 65536 }, tuned: { [B]: { limits: { steps: 120 } } } };
@@ -195,6 +203,8 @@ test('the hub’s Bonsai routes: the whole page, what changes by the second, too
     const d = await get('/bonsai.json');
     expect(d.service).toEqual({ id: 'machine', inUse: true });
     expect(d.ollama).toMatchObject({ running: true, version: '0.40.11' });
+    expect(d.ollama.kvNote.q4_0).toBe('a memory tool: slower, and less accurate without the calibration step');
+    expect(d.lowPower).toBe(true);
     expect(d.live.loaded).toMatchObject({ gpuPct: 100, ctx: 65536 });
     expect(d.ctxOwn).toBe(65536);
     expect(d.own.rows).toEqual({ steps: 120 });
@@ -228,6 +238,7 @@ test('the hub’s Bonsai routes: the whole page, what changes by the second, too
   } finally {
     if (was === undefined) delete process.env.AGENTIC_OLLAMA_URL; else process.env.AGENTIC_OLLAMA_URL = was;
     if (wasModels === undefined) delete process.env.OLLAMA_MODELS; else process.env.OLLAMA_MODELS = wasModels;
+    if (wasLP === undefined) delete process.env.AGENTIC_LOW_POWER; else process.env.AGENTIC_LOW_POWER = wasLP;
   }
 });
 

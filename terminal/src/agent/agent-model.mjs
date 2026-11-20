@@ -7,7 +7,7 @@ import { isBusy } from './busy.mjs';
 import { display } from './tools.mjs';
 import { SERVICE_REPLY } from './room.mjs';
 import { oldThinking } from '../flows/llm.mjs';
-import { replyTiming } from './timing.mjs';
+import { replyTiming, keptOf, reusedWords } from './timing.mjs';
 import { COOL_MS } from './profile-spill.mjs';
 import { CALL_STOPS, CALL_UNREADABLE, STEP_DOWN_CAP, STUCK_WORD, auto, beforeCall, isLooping, kTok, leakedThinking, replyRoom, tokensOf, toolCallInText } from './agent-said.mjs';
 
@@ -165,7 +165,7 @@ export class ModelPart {
       text = `I stopped because ${why}, before I had an answer.${did.length ? `\nThe last steps:\n${did.join('\n')}` : ''}\nTell me where to look or what to try, or rephrase the task.`;
     }
     this.messages.push({ role: 'assistant', content: text });
-    this.emit('assistant', { text, reasoning: turn?.reasoning ?? '', secs: turn?.secs ?? 0, thinkSecs: turn?.thinkSecs ?? 0, tokens: turn?.tokens ?? 0, final: true });
+    this.emit('assistant', { text, reasoning: turn?.reasoning ?? '', secs: turn?.secs ?? 0, thinkSecs: turn?.thinkSecs ?? 0, tokens: turn?.tokens ?? 0, final: true, reused: turn?.reused });
   }
 
   // A greeting or thanks: one short reply, no tools, no focused paths. On an Ollama service with no thinking first
@@ -181,7 +181,7 @@ export class ModelPart {
       if (turn.aborted) {
         reason = 'interrupted';
         // Keep what it had written so far on screen, as the loop does.
-        if (turn.reasoning || turn.text) this.emit('assistant', { text: turn.text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false, partial: true });
+        if (turn.reasoning || turn.text) this.emit('assistant', { text: turn.text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false, partial: true, reused: turn.reused });
       } else {
         // It should not call a tool here; if it writes one out anyway, or
         // nothing at all, keep a plain greeting instead.
@@ -189,7 +189,7 @@ export class ModelPart {
         let text = beforeCall(turn.text).trim();
         if (turn.calls.length || toolCallInText(text) || !text) text = /\b(thanks|thank you|thx|ty)\b/i.test(said) ? 'You’re welcome.' : 'Hello! What would you like to work on?';
         this.messages.push({ role: 'assistant', content: text });
-        this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: true });
+        this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: true, reused: turn.reused });
       }
     } catch (e) {
       if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
@@ -240,7 +240,7 @@ export class ModelPart {
     const fresh = this.messages.slice(since).filter((m) => m.role !== 'assistant').reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')), 0);
     this.timedTo = this.messages.length;
     this.timedLast = this.messages.at(-1);
-    const clock = (cut = null) => this.emit('timing', replyTiming({ start: t0, firstToken, timings: served, fresh, cut,
+    const clock = (cut = null) => this.emit('timing', replyTiming({ start: t0, firstToken, timings: served, fresh, cut, kept: turn.kept,
       out: served?.predicted_n || written || tokensOf(turn.reasoning + turn.text + turn.calls.filter(Boolean).map((c) => c.args).join('')),
       think: turn.reasoning ? tokensOf(turn.reasoning) : 0, thinkSecs: thinkTime() }));
     const local = new AbortController();
@@ -309,6 +309,13 @@ export class ModelPart {
             this.stats.tps = ev.timings.predicted_per_second ?? this.stats.tps;
             if ((ev.timings.prompt_n ?? 0) > 50) this.stats.pps = ev.timings.prompt_per_second;
             turn.tokens = ev.timings.predicted_n ?? 0;
+          }
+          const k = keptOf({ usage: ev.usage, timings: served });
+          if (k) {
+            turn.kept = k.kept;
+            turn.promptTok = k.prompt;
+            turn.reused = reusedWords(k);
+            if (!Number.isFinite(served?.cache_n)) served = { ...(served ?? {}), cache_n: k.kept };
           }
         }
       }

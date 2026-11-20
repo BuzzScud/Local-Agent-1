@@ -217,7 +217,7 @@ export class WorkPart {
         }
         if (turn.aborted) {
           // Keep what it had written so far on screen (not in the conversation).
-          if (turn.reasoning || turn.text) this.emit('assistant', { text: turn.text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false, partial: true });
+          if (turn.reasoning || turn.text) this.emit('assistant', { text: turn.text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false, partial: true, reused: turn.reused });
           reason = 'interrupted';
           break;
         }
@@ -316,7 +316,7 @@ export class WorkPart {
           const theirs = hits.length === 1 ? 'its' : 'their';
           if (mcpBacks < MCP_BACKS) {
             mcpBacks++;
-            this.emit('assistant', { text: '', reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false });
+            this.emit('assistant', { text: '', reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false, reused: turn.reused });
             this.emit('note', { text: `It answered without calling the MCP tool the request is about (that answer is not shown); asked it ${mcpBacks === 1 ? 'again' : 'a second time'}, with only that tool and thinking on.`, tone: 'dim' });
             this.turn.mcpFocus = hits;
             const how = hits.flatMap((h) => h.tools.map((e) => callHint(e, { gated: h.gated })));
@@ -330,7 +330,7 @@ export class WorkPart {
           assistant.content = text;
           this.emit('note', { text: 'Its own answer is not shown: it did not come from your MCP server.', tone: 'warn' });
         }
-        this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: !calls.length });
+        this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: !calls.length, reused: turn.reused });
         if (!calls.length) {
           const st = { reason, nudges, stopBacks, checks, cuts, lookBacks, verified, doneUnchanged, unlooked, unreal, lostChecked, layoutSends, layoutDone, looked, pageReads, reviewed, desktopSent, correctedAlready, blankRetry, leakBacks };
           let next;

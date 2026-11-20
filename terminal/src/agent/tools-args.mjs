@@ -78,6 +78,8 @@ const ALIASES = {
   prompt: ['prompt', 'task', 'instructions', 'request', 'message'],
   description: ['description', 'title', 'summary', 'name'],
   find: ['find', 'search', 'look_for'],
+  size: ['size', 'max', 'side', 'detail'],
+  crop: ['crop', 'box', 'region'],
   app: ['app', 'application', 'app_name', 'window', 'program'],
   // Claude Code's names too: timeout (milliseconds there; see secsOf), run_in_background, shell_id.
   timeout: ['timeout', 'timeout_secs', 'timeout_seconds', 'seconds', 'timeout_ms'],

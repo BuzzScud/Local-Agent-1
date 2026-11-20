@@ -15,8 +15,8 @@ export const PART_MAX = 400;
 export const TOOL_DEFS = [
   {
     name: 'Read',
-    description: 'Read a text file, a picture (png, jpg…: you see it) or a PDF (its text, page by page). Returns its exact text, ready to copy into Edit. A long file first comes back as a list of its parts with line numbers; then pass find (a word or name) to see the lines around it, or offset (first line, from 1) and limit (number of lines) to read the part you need.',
-    parameters: { type: 'object', properties: { path: str('File path, relative to the project folder'), find: str('A word or name: shows the lines of the file around each place it appears'), offset: { type: 'integer' }, limit: { type: 'integer' }, page: { type: 'integer', description: 'For a PDF: that page as a picture (a scan or a figure)' } }, required: ['path'] },
+    description: 'Read a text file, a picture (png, jpg…: you see it) or a PDF (its text, page by page). Returns its exact text, ready to copy into Edit. A long file first comes back as a list of its parts with line numbers; then pass find (a word or name) to see the lines around it, or offset (first line, from 1) and limit (number of lines) to read the part you need. A picture is sent at 1280 px on its long side; pass size 2048 for small print, or crop (x, y, w, h in the picture’s own pixels) for one rectangle.',
+    parameters: { type: 'object', properties: { path: str('File path, relative to the project folder'), find: str('A word or name: shows the lines of the file around each place it appears'), offset: { type: 'integer' }, limit: { type: 'integer' }, page: { type: 'integer', description: 'For a PDF: that page as a picture (a scan or a figure)' }, size: { type: 'integer', description: 'For a picture: long side in pixels (2048 for small print; 1280 is the usual)' }, crop: { type: 'object', properties: { x: { type: 'integer' }, y: { type: 'integer' }, w: { type: 'integer' }, h: { type: 'integer' } }, description: 'For a picture: a rectangle in its own pixels, sent instead of shrinking the whole' } }, required: ['path'] },
   },
   {
     name: 'List',

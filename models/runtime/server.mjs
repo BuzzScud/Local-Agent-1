@@ -10,6 +10,17 @@ import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { serverBinOf, engineOf, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, DEFAULT_MODEL, modelPath, draftPath, visionPath } from '../registry.mjs';
 import { setEndpoint } from './remote.mjs';
+import { availableBytes } from './memory.mjs';
+
+// With this much free the server keeps more of what it read (32 checkpoints, a 4 GB prompt store,
+// idle slots). Under it: today's 3 and none, which is right on a 16 GB Mac.
+export const CACHE_ROOM = 32 * 2 ** 30;
+
+export function cacheFlags(model, available) {
+  const free = available ?? availableBytes();
+  if ((model.checkpoints ?? 3) === 0 || free < CACHE_ROOM) return { checkpoints: model.checkpoints ?? 3, cacheRam: 0, idle: false };
+  return { checkpoints: 32, cacheRam: 4096, idle: true };
+}
 
 // The server's log: every start appends to it and llama-server writes a few lines a request, so it
 // only grew (24.6 MB by 14 Oct 2026). Once past LOG_MAX it is cut at a start to its newest LOG_KEEP,
@@ -132,7 +143,7 @@ export const hasDraft = (model) => Boolean(model?.draft && process.env.AGENTIC_H
 
 // host: where it listens ('127.0.0.1', this Mac only; `coding serve` opens it wider, serve.mjs).
 // key: this Mac's own key for the server (local-key.mjs); `coding serve` passes its own instead.
-export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1', key = true }) {
+export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1', key = true, available } = {}) {
   const keyArgs = key ? ['--api-key-file', localKeyFile()] : [];
   // A model that only compares meanings: the engine's embedding mode, one
   // slot, room for a few short texts at once.
@@ -154,6 +165,7 @@ export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1'
     return [mlxServerScript(), '--pack', modelPath(model), '--host', host, '--port', String(port), '-c', String(ctx),
       '--reasoning-budget', String(model.thinkingBudget ?? 2048), '--reasoning-budget-message', BUDGET_MESSAGE];
   }
+  const cache = cacheFlags(model, available);
   return [
     '-m', modelPath(model),
     '--host', host, '--port', String(port), ...keyArgs,
@@ -188,9 +200,11 @@ export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1'
     : model.spec ? ['--spec-type', model.spec.type, '--spec-ngram-simple-size-n', String(model.spec.n), '--spec-ngram-simple-size-m', String(model.spec.m)] : []),
     // Its vision add-on, once a picture is attached (withVision in registry.mjs).
     ...(model.visionOn && model.vision && existsSync(visionPath(model)) ? ['--mmproj', visionPath(model), ...(model.vision.minTokens ? ['--image-min-tokens', String(model.vision.minTokens)] : [])] : []),
-    // Cap the saved states (see checkpoints in models.mjs).
-    '--ctx-checkpoints', String(model.checkpoints ?? 3),
-    '--cache-ram', '0',
+    // Cap the saved states (see checkpoints in models.mjs). With 32 GB free: more of
+    // what it read kept; on a smaller Mac today's 3 and none, which grew less.
+    '--ctx-checkpoints', String(cache.checkpoints),
+    '--cache-ram', String(cache.cacheRam),
+    ...(cache.idle ? ['--cache-idle-slots'] : []),
     // Where the read-in instructions are saved and restored (warmup.mjs).
     '--slot-save-path', SLOT_DIR,
   ];

@@ -217,13 +217,13 @@ export function runPart(self) {
       // textAt: when the answer began to come (the window's line under way times it from there, not from the thinking)
       on('text', ({ all }) => self.setLive((l) => stream(l, { text: all, textAt: l.text ? l.textAt : Date.now() }))),
       on('tool-writing', ({ name, args, tokens }) => self.setLive((l) => stream(l, { writing: { name, args, tokens } }, Math.max(1, (tokens ?? 0) - (l.writing?.name === name ? l.writing.tokens ?? 0 : 0))))),
-      on('assistant', ({ text, reasoning, thinkSecs }) => {
+      on('assistant', ({ text, reasoning, thinkSecs, reused }) => {
         const add = [];
         if (reasoning?.trim()) {
-          add.push({ type: 'thinking', text: reasoning.trim(), secs: thinkSecs || 0.1, tokens: Math.ceil(reasoning.length / 3.6), at: Date.now() - Math.round((thinkSecs || 0) * 1000) });
+          add.push({ type: 'thinking', text: reasoning.trim(), secs: thinkSecs || 0.1, tokens: Math.ceil(reasoning.length / 3.6), at: Date.now() - Math.round((thinkSecs || 0) * 1000), ...(reused ? { reused } : {}) });
           self.fold({ title: `Thinking (${Math.round(thinkSecs)}s)`, text: reasoning.trim() });
         }
-        if (text?.trim()) add.push({ type: 'text', text: text.trim(), at: Date.now() });
+        if (text?.trim()) add.push({ type: 'text', text: text.trim(), at: Date.now(), ...(reasoning?.trim() || !reused ? {} : { reused }) });
         if (add.length) self.push(...add);
         self.setLive((l) => ({ ...l, thinking: null, text: null, writing: null }));
       }),

@@ -13,12 +13,48 @@
 
 const tenths = (secs) => Math.round(secs * 10) / 10;
 const secsOf = (ms) => tenths(ms / 1000);
+const finite = (n) => (Number.isFinite(n) ? n : null);
+
+// 38000 → "38k"; 2500 → "2.5k". Integer thousands stay whole, so the step row can say "reused 38k of 40k".
+export function compactTok(n) {
+  const x = Math.round(Number(n));
+  if (!Number.isFinite(x)) return '';
+  if (Math.abs(x) < 1000) return String(x);
+  const k = x / 1000;
+  return Number.isInteger(k) ? `${k}k` : `${k.toFixed(1)}k`;
+}
+
+// What of a prompt the service reused: Ollama's prompt_eval_cached_count, llama.cpp's cache_n, the
+// Claude API's cached_tokens. Silent when the service sent no count (including a field that is not a number).
+// prompt_eval_count / prompt_n is the whole prompt when it is at least the kept count (hearth's seats, MLX
+// Ollama, Claude); llama.cpp's prompt_n is only the newly read part, so kept + prompt_n is the whole.
+export function keptOf({ usage, timings } = {}) {
+  const kept = finite(usage?.cached_tokens) ?? finite(timings?.cache_n);
+  if (kept == null) return null;
+  const promptTokens = finite(usage?.prompt_tokens);
+  const promptN = finite(timings?.prompt_n);
+  const cacheN = finite(timings?.cache_n);
+  let prompt;
+  if (cacheN != null && promptN != null && (promptTokens == null || kept > promptTokens)) prompt = cacheN + promptN;
+  else if (promptTokens != null) prompt = kept > promptTokens ? kept + promptTokens : promptTokens;
+  else if (promptN != null) prompt = kept > promptN ? kept + promptN : promptN;
+  else prompt = kept;
+  return { kept, prompt };
+}
+
+export function reusedWords(k) {
+  if (!k || !Number.isFinite(k.kept)) return null;
+  const prompt = Number.isFinite(k.prompt) ? k.prompt : k.kept;
+  return `reused ${compactTok(k.kept)} of ${compactTok(prompt)}`;
+}
 
 // One reply or side call. start and end: Date.now() values. fresh: the tokens added to the conversation since
 // the model's last reply (the tool results and notes, not its own reply), all a perfect cache would read.
-export function replyTiming({ kind = 'reply', what = null, start, end = Date.now(), firstToken = null, timings = null, out = 0, think = 0, thinkSecs = 0, fresh = null, cut = null }) {
+// kept: tokens the service reused of this prompt (Ollama, llama.cpp, Claude); omitted when it sent no count.
+export function replyTiming({ kind = 'reply', what = null, start, end = Date.now(), firstToken = null, timings = null, out = 0, think = 0, thinkSecs = 0, fresh = null, cut = null, kept = null }) {
   const secs = secsOf(end - start);
-  const e = { kind, ...(what ? { what } : {}), start, secs, out, ...(fresh != null ? { fresh } : {}), ...(think ? { think, thinkSecs: tenths(thinkSecs) } : {}), ...(cut ? { cut } : {}) };
+  const keptN = finite(kept) ?? finite(timings?.cache_n);
+  const e = { kind, ...(what ? { what } : {}), start, secs, out, ...(fresh != null ? { fresh } : {}), ...(think ? { think, thinkSecs: tenths(thinkSecs) } : {}), ...(cut ? { cut } : {}), ...(keptN != null ? { kept: keptN } : {}) };
   if (Number.isFinite(timings?.prompt_ms) && Number.isFinite(timings?.predicted_ms)) {
     const load = secsOf(timings.load_ms ?? 0);
     const read = secsOf(timings.prompt_ms);

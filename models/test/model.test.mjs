@@ -4,7 +4,7 @@
 // test material (fixtures/), the measured models the memory math is checked on.
 import { test, expect } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, modelPath, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
+import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, modelPath, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder, cacheFlags, CACHE_ROOM } from '../index.mjs';
 import bonsai27b from './fixtures/bonsai-2-27b.mjs';
 import gemma12b from './fixtures/gemma-4-12b.mjs';
 
@@ -81,7 +81,7 @@ test('memory: only 16 layers keep a per-token cache; the estimate covers what wa
 });
 
 test("the server uses the model's own chat template, an 8-bit cache, a thinking budget and capped saved states", () => {
-  const a = serverArgs(m, { ctx: 32_768, port: 17_600 });
+  const a = serverArgs(m, { ctx: 32_768, port: 17_600, available: 12e9 });
   expect(a).toContain('--jinja');
   expect(a).not.toContain('--chat-template-file');
   expect(a[a.indexOf('--reasoning-budget') + 1]).toBe('2048');
@@ -90,6 +90,7 @@ test("the server uses the model's own chat template, an 8-bit cache, a thinking 
   // saved states capped: the defaults grew to 9 GB in 13 prompts
   expect(a[a.indexOf('--ctx-checkpoints') + 1]).toBe('3');
   expect(a[a.indexOf('--cache-ram') + 1]).toBe('0');
+  expect(a).not.toContain('--cache-idle-slots');
   expect(a).not.toContain('--cache-reuse');
   // two slots sharing one cache (conversation + side requests), and a folder for saved warm-ups
   expect(a[a.indexOf('-np') + 1]).toBe('2');
@@ -97,6 +98,25 @@ test("the server uses the model's own chat template, an 8-bit cache, a thinking 
   expect(a[a.indexOf('--slot-save-path') + 1]).toMatch(/slots$/);
   // n-gram speculative decoding from the prompt (measured 25-35% faster on rewrites)
   expect(a[a.indexOf('--spec-type') + 1]).toBe('ngram-simple');
+});
+
+test('with 32 GB free the server keeps more of what it read; a 16 GB Mac stays at 3 + 0; a model with no checkpoints stays at 0', () => {
+  expect(CACHE_ROOM).toBe(32 * 2 ** 30);
+  expect(cacheFlags(m, CACHE_ROOM)).toEqual({ checkpoints: 32, cacheRam: 4096, idle: true });
+  expect(cacheFlags(m, 12e9)).toEqual({ checkpoints: 3, cacheRam: 0, idle: false });
+  expect(cacheFlags(MODELS.k2, CACHE_ROOM)).toEqual({ checkpoints: 0, cacheRam: 0, idle: false });
+  const roomy = serverArgs(m, { ctx: 32_768, port: 17_600, available: CACHE_ROOM });
+  expect(roomy[roomy.indexOf('--ctx-checkpoints') + 1]).toBe('32');
+  expect(roomy[roomy.indexOf('--cache-ram') + 1]).toBe('4096');
+  expect(roomy).toContain('--cache-idle-slots');
+  const tight = serverArgs(m, { ctx: 32_768, port: 17_600, available: 12e9 });
+  expect(tight[tight.indexOf('--ctx-checkpoints') + 1]).toBe('3');
+  expect(tight[tight.indexOf('--cache-ram') + 1]).toBe('0');
+  expect(tight).not.toContain('--cache-idle-slots');
+  const k2 = serverArgs(MODELS.k2, { ctx: 16_384, port: 17_600, available: CACHE_ROOM });
+  expect(k2[k2.indexOf('--ctx-checkpoints') + 1]).toBe('0');
+  expect(k2[k2.indexOf('--cache-ram') + 1]).toBe('0');
+  expect(k2).not.toContain('--cache-idle-slots');
 });
 
 test('with its helper the server guesses one word ahead and checks it in the same pass; without it, n-grams', () => {

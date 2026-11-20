@@ -29,8 +29,9 @@ import { systemPrompt } from '../agent/prompt.mjs';
 import { readSkills } from '../agent/prompt-files.mjs';
 import { memoryStatus, statusWords } from '../agent/memory-home.mjs';
 import { ollamaBlobOf, readGguf, modelFacts, layerParts, q2Patch } from './bonsai-gguf.mjs';
-import { ollamaStatus, logTail, restartOllama, stopOllama, startOllama, setLogin, loadModel, unloadModel, keptSettings, OLLAMA_URL, CTX_STEPS, KV_TYPES } from './ollama-control.mjs';
-import { speedTest, readSpeeds } from './bonsai-speed.mjs';
+import { ollamaStatus, logTail, restartOllama, stopOllama, startOllama, setLogin, loadModel, unloadModel, keptSettings, OLLAMA_URL, CTX_STEPS, KV_TYPES, KV_NOTE } from './ollama-control.mjs';
+import { speedTest, readSpeeds, lowPowerOn } from './bonsai-speed.mjs';
+import { reusedWords } from '../agent/timing.mjs';
 
 const BONSAI = 'bonsai-2:9b';
 const noStore = { 'cache-control': 'no-store' };
@@ -113,7 +114,8 @@ const convsOf = every(30_000, () => {
 function testsOf() {
   const since = '2026-10-27';
   return readRecord().filter((r) => String(r.at ?? '') >= since && /bonsai-2|bonsai 2/i.test(`${r.model ?? ''} ${r.name ?? ''}`))
-    .slice(-12).reverse().map((r) => ({ at: r.at, name: r.name, passed: r.passed ?? null, total: r.total ?? null, result: r.result, secs: r.secs ?? null, note: r.note ?? '' }));
+    .slice(-12).reverse().map((r) => ({ at: r.at, name: r.name, passed: r.passed ?? null, total: r.total ?? null, result: r.result, secs: r.secs ?? null, note: r.note ?? '',
+      reused: Number.isFinite(r.kept) ? reusedWords({ kept: r.kept, prompt: r.prompt ?? r.kept }) : null }));
 }
 
 export function bonsaiHub({ cwd = process.cwd() } = {}) {
@@ -140,12 +142,12 @@ export function bonsaiHub({ cwd = process.cwd() } = {}) {
     return {
       model: BONSAI, service: svc ? { id: svc.source, inUse: svc.inUse } : null,
       mac: { chip, ramGB: Math.round(totalmem() / 2 ** 30), freePct: lv.mac.freePct },
-      ollama: { ...ollama, kept: keptSettings(), ctxSteps: CTX_STEPS, kvTypes: KV_TYPES, logTail: logTail(8) },
+      ollama: { ...ollama, kept: keptSettings(), ctxSteps: CTX_STEPS, kvTypes: KV_TYPES, kvNote: KV_NOTE, logTail: logTail(8) },
       file: file ? { gb: statSync(file).size / 1e9 } : null, facts: g ? modelFacts(g) : null,
       own: own ? { rows: Object.fromEntries(OWN_ROWS.map((id) => [id, own.limits?.[id]]).filter(([, v]) => v !== undefined)), level: own.level ?? null, notes: own.notes ?? '', toolsOff: cleanToolsOff(own.toolsOff) } : null,
       ctxOwn: svc ? Number(svc.profile.contexts?.[BONSAI]) || 0 : 0,
       reads: readsOf(own), memory: mem, uses: usesOf(s), convs: await convsOf(), tests: testsOf(), speed: readSpeeds().slice(-5).reverse(),
-      live: lv, last: jobs.last,
+      live: lv, last: jobs.last, lowPower: lowPowerOn(),
     };
   }
   const act = async (fn) => {

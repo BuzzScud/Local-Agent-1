@@ -61,8 +61,8 @@ const flatAll = (list) => (list ?? []).flatMap((x) => (x.type === 'looks' ? x.li
 const lines = (t, n) => String(t ?? '').split('\n').filter(Boolean).slice(0, n).map((l) => tilde(l).slice(0, 200));
 export function stepView(x) {
   const s = { key: x.key, at: x.at ?? null };
-  if (x.type === 'thinking') return { ...s, k: 'think', text: tilde(x.text), tokens: x.tokens ?? 0, ms: x.secs >= 0.05 ? Math.round(x.secs * 1000) : null };
-  if (x.type === 'text') return { ...s, k: 'said', text: tilde(x.text) };
+  if (x.type === 'thinking') return { ...s, k: 'think', text: tilde(x.text), tokens: x.tokens ?? 0, ms: x.secs >= 0.05 ? Math.round(x.secs * 1000) : null, ...(x.reused ? { reused: x.reused } : {}) };
+  if (x.type === 'text') return { ...s, k: 'said', text: tilde(x.text), ...(x.reused ? { reused: x.reused } : {}) };
   if (x.type === 'note') return { ...s, k: 'note', text: short(x.text, 600), tone: x.tone ?? 'dim' };
   if (x.type === 'machine') {
     const notes = (x.contexts ?? []).flatMap((c) => (c.items ?? []).map((i) => ({ from: i.from, text: short(i.text, 400), tokens: i.tokens ?? 0 })));

@@ -2109,6 +2109,35 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   closed pull request, page=1, the guard on real git repositories, watch's gap, a failure, a moved commit, out of
   time); the loop and skill lists in loop-library, loops, app-loops and remote-rules.
 
+## Cache reuse on each step, pictures at 2048, and Low Power (20 Nov 2026)
+
+- **What of a prompt the service kept.** Ollama's `prompt_eval_cached_count` and llama.cpp's `timings.cache_n` now count
+  the same way the Claude API's `cached_tokens` already did. The client copies a finite count onto `usage.cached_tokens`
+  (and onto `timings.cache_n` for Ollama). `keptOf` in `timing.mjs` reads that count; `reusedWords` turns it into
+  `reused 38k of 40k` (integer thousands stay whole: 38k, not 38.0k). The step row shows it (a thought's right column,
+  or a dim line under the reply when there was no thought). The hub's Tests table shows it when the test record has
+  `kept`. A service that sent no count (a missing field, or a field that is not a number) stays silent: not
+  `reused 0`. A count of 0 is shown (`reused 0 of 40k`). Hearth's seats and MLX Ollama report `prompt_eval_count` as
+  the whole prompt, with the kept count inside it; llama.cpp's `prompt_n` is only the newly read part, so the whole is
+  `cache_n + prompt_n` when kept is larger than `prompt_tokens`.
+- **llama-server cache flags sized to memory.** With 32 GiB free (`CACHE_ROOM`) a chat model starts with
+  `--ctx-checkpoints 32 --cache-ram 4096 --cache-idle-slots`. Under that, today's 3 and none, which is right on a
+  16 GB Mac. A model with `checkpoints: 0` (K2 Horizon) stays 0 even when the Mac is roomy. Embedding, rerank and MLX
+  keep today's flags. `cacheFlags` is exported from `models/index.mjs` (the two-part seam). Tests pass `available` so
+  they do not depend on this Mac. The memory-tool / #1481 work is left alone.
+- **q4_0 in the hub's Ollama panel.** `KV_NOTE.q4_0` is `a memory tool: slower, and less accurate without the
+  calibration step`, shown as the Context memory note when that type is on.
+- **Read of a picture.** Default long side is still 1280. Pass `size` 2048 for small print, or `crop` `{x, y, w, h}`
+  in the picture's own pixels (taken first, then scaled; never made larger). The Swift helper takes the extra four
+  numbers. A PDF page asked for as a picture takes `size` only.
+- **Low Power Mode.** The hub's speed panel says `Low Power Mode on: answers will be slow` when `pmset -g` reports
+  `lowpowermode 1`. `AGENTIC_LOW_POWER=on|off` stands in, so a test never depends on this Mac's setting.
+- **Tests**: `timing.test.mjs` (compact thousands, a stand-in Ollama reply with a kept count on the step, one without
+  says nothing), `remote.test.mjs` (Ollama `prompt_eval_cached_count` and llama.cpp `cache_n` on the done line),
+  `rail.test.mjs` and `window.test.mjs` (the words on a thought and in the window), `activity` in `bonsai.test.mjs`
+  (`keptTok`), `model.test.mjs` (32 GiB vs 12 GB vs K2), `vision.test.mjs` and `step3.test.mjs` (2048 and a crop),
+  `bonsai.test.mjs` (the q4_0 note, Low Power, a later speed step's kept count).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

@@ -29,6 +29,11 @@ test.skipIf(needs('pictures', media.mediaTool))('the helper, built on first use 
   const img = media.preparedImage(shot);
   expect([img.mime, img.srcW, img.srcH, img.w, img.h]).toEqual(['image/jpeg', 2400, 900, media.MAX_SIDE, 480]);
   expect(Buffer.from(img.data, 'base64').subarray(0, 2).toString('hex')).toBe('ffd8'); // a JPEG
+  expect(media.DETAIL_SIDE).toBe(2048);
+  const hi = media.preparedImage(shot, { max: media.DETAIL_SIDE });
+  expect([hi.w, hi.h]).toEqual([2048, 768]);
+  const box = media.preparedImage(shot, { crop: { x: 0, y: 0, w: 800, h: 800 } });
+  expect([box.w, box.h, box.srcW, box.srcH]).toEqual([800, 800, 2400, 900]);
   media.textPdf(pdf, ['Invoice 7731\nTotal due: 1,240 dollars', '', 'Last page.']);
   expect(media.pdfText(pdf)).toEqual(['Invoice 7731\nTotal due: 1,240 dollars', '', 'Last page.']);
   const page = media.pdfPageImage(pdf, 2);
@@ -115,6 +120,11 @@ test.skipIf(needs('pictures', media.mediaTool))('Read of a picture: shown to the
   const seen = await execute('Read', { path: 'shot.png' }, {}, env(true));
   expect(seen.text).toBe(`The picture shot.png (2400×900, shown at ${media.MAX_SIDE}×480) is attached for you to look at.`);
   expect(seen.images).toHaveLength(1);
+  const detail = await execute('Read', { path: 'shot.png', size: 2048 }, {}, env(true));
+  expect(detail.text).toContain('shown at 2048×768');
+  const cropped = await execute('Read', { path: 'shot.png', crop: { x: 0, y: 0, w: 800, h: 800 } }, {}, env(true));
+  expect(cropped.text).toContain('shown at 800×800');
+  expect([cropped.images[0].w, cropped.images[0].h]).toEqual([800, 800]);
   const blind = await execute('Read', { path: 'shot.png' }, {}, env(false));
   expect(blind.text).toMatch(/is a picture \(2400×900, shown at \d+×480\)\. This model is not looking at pictures in this conversation: ask the user to attach it/);
   expect(blind.images).toBeUndefined();

@@ -17,6 +17,7 @@ export const LABEL = 'com.agentic-coder.ollama';
 export const OLLAMA_URL = () => process.env.AGENTIC_OLLAMA_URL || 'http://127.0.0.1:11434';
 const PORT = () => Number(new URL(OLLAMA_URL()).port || 11434);
 export const KV_TYPES = ['f16', 'q8_0', 'q4_0'];
+export const KV_NOTE = { q4_0: 'a memory tool: slower, and less accurate without the calibration step' };
 export const CTX_STEPS = [8192, 16384, 32768, 65536, 131072];
 const agentsDir = () => process.env.AGENTIC_LAUNCH_AGENTS || join(homedir(), 'Library', 'LaunchAgents');
 export const plistPath = () => join(agentsDir(), `${LABEL}.plist`);

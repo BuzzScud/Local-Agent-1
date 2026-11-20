@@ -16,6 +16,8 @@ export const isPdf = (p) => /\.pdf$/i.test(String(p ?? ''));
 // screenshot (2880 px) would otherwise cost thousands of tokens, and the text
 // on it stays readable at this size.
 export const MAX_SIDE = 1280;
+// Read with size 2048 for small print (a screenshot's text). Crop sends a rectangle instead.
+export const DETAIL_SIDE = 2048;
 
 // The Swift source, read the way terminal/src/agent/rules.mjs reads its rules:
 // under Bun an import the one-file app carries inside it, under Node the file.
@@ -82,10 +84,13 @@ function run(args, { timeout = 60_000 } = {}) {
 const scratch = (ext) => join(tmpdir(), `agentic-media-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`);
 
 // A picture ready for the model: a JPEG no larger than MAX_SIDE, as base64.
+// crop: { x, y, w, h } in the picture's own pixels, taken first, then scaled to max.
 // { path, mime, data, w, h, srcW, srcH }
-export function preparedImage(path, { max = MAX_SIDE } = {}) {
+export function preparedImage(path, { max = MAX_SIDE, crop } = {}) {
   const out = scratch('jpg');
-  const r = run(['image', path, out, String(max)]);
+  const args = ['image', path, out, String(max)];
+  if (crop && [crop.x, crop.y, crop.w, crop.h].every(Number.isFinite)) args.push(String(Math.round(crop.x)), String(Math.round(crop.y)), String(Math.round(crop.w)), String(Math.round(crop.h)));
+  const r = run(args);
   try {
     if (r.code !== 0) throw new Error(r.err || 'macOS could not open the picture');
     const meta = JSON.parse(r.out);

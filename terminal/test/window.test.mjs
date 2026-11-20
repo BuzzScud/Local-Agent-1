@@ -125,6 +125,8 @@ test('the timeline: every step whole with its time, a reply in parts by its line
   expect(Object.keys(steps)).toEqual(['p1', 'r1', 'k1', 'p2', 'e1', 'b1']);
   // each with when it started and how long it took; the thought's time is its own
   expect(steps.k1).toEqual({ key: 'k1', at: 1300, k: 'think', text: 'It floors. It should round.', tokens: 12, ms: 2500 });
+  expect(stepView({ ...TURN[4], reused: 'reused 38k of 40k' })).toEqual({ key: 'k1', at: 1300, k: 'think', text: 'It floors. It should round.', tokens: 12, ms: 2500, reused: 'reused 38k of 40k' });
+  expect(stepView({ key: 'a1', type: 'text', text: 'ok', reused: 'reused 38k of 40k' })).toMatchObject({ k: 'said', reused: 'reused 38k of 40k' });
   expect(steps.r1).toMatchObject({ k: 'read', at: 1200, ms: 4, lines: 3, total: 3, content: ['a', 'b', 'c'] });
   expect(steps.p2.items).toEqual([{ text: 'Find the bug', done: true, now: false }, { text: 'Fix and test it', done: false, now: true }]);
   expect(steps.e1).toMatchObject({ k: 'diff', path: 'cart.mjs', add: 1, del: 1, hunk: [['-', 2, null, 'Math.floor(x)'], ['+', null, 2, 'Math.round(x)']], more: 0 });

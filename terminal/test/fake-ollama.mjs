@@ -130,7 +130,8 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
         }
       }
       res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: a.content, ...(a.tool_calls ? { tool_calls: a.tool_calls } : {}) }, done: false })}\n`);
-      res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: 900, prompt_eval_duration: 1e9, eval_count: 40, eval_duration: 1e9 })}\n`);
+      const fig = { prompt_eval_count: opts.promptEval ?? 900, prompt_eval_duration: 1e9, eval_count: 40, eval_duration: 1e9, ...(Number.isFinite(opts.cached) ? { prompt_eval_cached_count: opts.cached } : {}) };
+      res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', ...fig })}\n`);
       return res.end();
     }
     json(404, { error: 'not found' });

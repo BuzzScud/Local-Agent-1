@@ -136,6 +136,8 @@ test('the reranker runs in the engine\'s reranking mode, on its own server', () 
   expect(args).toContain('--rerank');
   expect(args.slice(args.indexOf('-c'), args.indexOf('-c') + 2)).toEqual(['-c', String(m.ctx)]);
   expect(args).not.toContain('--jinja');
+  expect(args).not.toContain('--ctx-checkpoints');
+  expect(args).not.toContain('--cache-ram');
 });
 
 test('the reranker: with too little memory free it stays off and says why; a server that is gone is started again; one another window uses is left running', async () => {

@@ -175,6 +175,8 @@ test('thinking, live: a meter against its cap and the last three lines with its 
   expect(gist('I need to look into this further. Let me check the details.\n\nMy notes claim that Desktop/countdown-card.html has already been created. But wait')).toBe('My notes claim that Desktop/countdown-card.html has already been created');
   expect(gist('I have thought enough. Now I act on it.')).toBe('');
   expect(plain(draw(h(ThoughtNode, { it: { text: 'countdown-card.html already exists in the Desktop. Let me check it.', secs: 4.2 } })))).toBe('  ◇ countdown-card.html already exists in the Desktop  4s');
+  expect(plain(draw(h(ThoughtNode, { it: { text: 'countdown-card.html already exists in the Desktop. Let me check it.', secs: 4.2, reused: 'reused 38k of 40k' } })))).toBe('  ◇ countdown-card.html already exists in the Desktop  reused 38k of 40k  4s');
+  expect(plain(draw(h(ThoughtNode, { it: { text: 'countdown-card.html already exists in the Desktop. Let me check it.', secs: 4.2 } })))).not.toContain('reused');
   // A ? inside quotes does not end the sentence (8 Oct 2026: 'The app tests all wait for the "').
   expect(gist('The app tests all wait for the "? for shortcuts" hint. Inside a window it may never show.')).toBe('The app tests all wait for the "? for shortcuts" hint');
   // A long one is cut to its row; its seconds stay whole.

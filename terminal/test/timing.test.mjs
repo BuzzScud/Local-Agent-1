@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-timing-home-'));
 process.env.AGENTIC_MEMORY_SAVE = 'off';
-const { replyTiming, toolTiming, timeOf, timeLine, slowReads, timelineFrom } = await import('../src/agent/timing.mjs');
+const { replyTiming, toolTiming, timeOf, timeLine, slowReads, timelineFrom, compactTok, reusedWords, keptOf } = await import('../src/agent/timing.mjs');
 const { Agent } = await import('../src/agent/agent.mjs');
 const { runHeadless } = await import('../src/headless.mjs');
 const { complete, timers } = await import('../src/flows/llm.mjs');
@@ -27,6 +27,22 @@ const onService = async (opts = {}) => {
   return svc;
 };
 const remote = (extra = {}) => ({ ...local, remote: { model: 'coder:30b' }, ...extra });
+
+test('compact thousands, reused words, and what of a prompt the service kept', () => {
+  expect(compactTok(38000)).toBe('38k');
+  expect(compactTok(40000)).toBe('40k');
+  expect(compactTok(2500)).toBe('2.5k');
+  expect(compactTok(40)).toBe('40');
+  expect(reusedWords({ kept: 38000, prompt: 40000 })).toBe('reused 38k of 40k');
+  expect(reusedWords({ kept: 0, prompt: 40000 })).toBe('reused 0 of 40k');
+  expect(reusedWords({})).toBe(null);
+  expect(keptOf({ usage: { prompt_tokens: 40000, cached_tokens: 38000 } })).toEqual({ kept: 38000, prompt: 40000 });
+  expect(keptOf({ timings: { cache_n: 38000, prompt_n: 2000 } })).toEqual({ kept: 38000, prompt: 40000 });
+  expect(keptOf({ usage: { prompt_tokens: 2000, cached_tokens: 38000 }, timings: { cache_n: 38000, prompt_n: 2000 } })).toEqual({ kept: 38000, prompt: 40000 });
+  expect(keptOf({ usage: { prompt_tokens: 900 } })).toBe(null);
+  expect(replyTiming({ start: 0, end: 1000, timings: { prompt_n: 40000, prompt_ms: 10, predicted_ms: 10, cache_n: 38000 } }).kept).toBe(38000);
+  expect(replyTiming({ start: 0, end: 1000, timings: { prompt_n: 900, prompt_ms: 10, predicted_ms: 10 } }).kept).toBeUndefined();
+});
 
 test('a reply: what the service says it spent, and the rest as waiting; without its numbers, up to the first word and after', () => {
   const served = replyTiming({ start: 0, end: 10_000, timings: { prompt_n: 61_200, prompt_ms: 3000, predicted_ms: 5000, load_ms: 500 }, out: 200, fresh: 900, think: 120, thinkSecs: 2.04 });
@@ -109,6 +125,29 @@ test('a side call says what it was for and what it spent', async () => {
     await complete({ url: svc.url, model: remote(), system: 'You answer.', user: 'hi' });
   } finally { timers.delete(timer); dropEndpoint?.(svc.url); await svc.close(); }
   expect(got.map((e) => [e.kind, e.what, e.read, e.write])).toEqual([['call', 'listing the cases', 1, 1], ['call', 'a side call', 1, 1]]);
+});
+
+test('a stand-in Ollama reply with a kept count shows reused on the step; one without says nothing', async () => {
+  const withKept = await onService({ cached: 38000, promptEval: 40000 });
+  try {
+    const a = new Agent({ url: withKept.url, model: remote(), cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], thinking: false, ctx: 32768 });
+    const said = [], timing = [];
+    a.on('assistant', (e) => said.push(e));
+    a.on('timing', (e) => timing.push(e));
+    await a.send('hello');
+    expect(said.some((e) => e.reused === 'reused 38k of 40k')).toBe(true);
+    expect(timing.filter((e) => e.kind === 'reply').every((e) => e.kept === 38000)).toBe(true);
+  } finally { dropEndpoint?.(withKept.url); await withKept.close(); }
+  const none = await onService();
+  try {
+    const a = new Agent({ url: none.url, model: remote(), cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], thinking: false, ctx: 32768 });
+    const said = [], timing = [];
+    a.on('assistant', (e) => said.push(e));
+    a.on('timing', (e) => timing.push(e));
+    await a.send('hello');
+    expect(said.some((e) => e.reused)).toBe(false);
+    expect(timing.filter((e) => e.kind === 'reply').every((e) => e.kept === undefined)).toBe(true);
+  } finally { dropEndpoint?.(none.url); await none.close(); }
 });
 
 test('coding -p and the bench: the run gives its timeline from its start and the sums', async () => {

@@ -26,6 +26,17 @@ const LLAMA_ONLY = ['cache_prompt', 'id_slot', 'chat_template_kwargs', 'thinking
 // Standard fields a server may still refuse (an older one, or a model that
 // cannot think): named in its error, they are left out of the next call to it.
 const OPTIONAL = ['usage', 'reasoning_effort', 'parallel_tool_calls', 'stream_options', 'presence_penalty', 'frequency_penalty', 'top_p', 'temperature', 'seed'];
+// llama.cpp's timings.cache_n (and OpenAI's prompt_tokens_details.cached_tokens) as usage.cached_tokens,
+// the same field the Claude API already sets, so a step can show "reused 38k of 40k".
+function usageWithCache(usage, timings) {
+  const cached = Number.isFinite(usage?.cached_tokens) ? usage.cached_tokens
+    : Number.isFinite(timings?.cache_n) ? timings.cache_n
+    : Number.isFinite(usage?.prompt_tokens_details?.cached_tokens) ? usage.prompt_tokens_details.cached_tokens
+    : null;
+  if (cached == null) return usage;
+  return { ...(usage ?? {}), cached_tokens: cached };
+}
+
 // Ollama names the ability, not the field: "\"llama3.2:3b\" does not support thinking".
 // Only those words leave the tools out (a 400 about one tool's name must not):
 // the model is then asked without them, and answers in words.
@@ -284,7 +295,7 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
       if (ch.finish_reason) finish = ch.finish_reason;
     }
   }
-  yield { type: 'done', finish, usage, timings };
+  yield { type: 'done', finish, usage: usageWithCache(usage, timings), timings };
 }
 
 // A conversation's own first line on an Ollama service (conversation: the agent's id for it, new with
@@ -377,8 +388,12 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
     if (j.done) {
       finish = j.done_reason === 'length' ? 'length' : calls ? 'tool_calls' : 'stop';
       usage = { prompt_tokens: j.prompt_eval_count ?? 0, completion_tokens: j.eval_count ?? 0 };
+      // prompt_eval_cached_count is what of the prompt the service already held. Absent: leave it off,
+      // so a step row that never got a count says nothing (not "reused 0").
+      if (Number.isFinite(j.prompt_eval_cached_count)) usage.cached_tokens = j.prompt_eval_cached_count;
       // With what it spent, as llama.cpp names it (agent/timing.mjs): reading the conversation, writing, loading the model.
       timings = { prompt_n: j.prompt_eval_count, prompt_per_second: per(j.prompt_eval_count, j.prompt_eval_duration), predicted_n: j.eval_count, predicted_per_second: per(j.eval_count, j.eval_duration), prompt_ms: ms(j.prompt_eval_duration), predicted_ms: ms(j.eval_duration), load_ms: ms(j.load_duration) };
+      if (Number.isFinite(j.prompt_eval_cached_count)) timings.cache_n = j.prompt_eval_cached_count;
     }
     return evs;
   };

@@ -14,7 +14,7 @@ import { createServer } from 'node:http';
 export const FAKE_PROPS = { default_generation_settings: { n_ctx: 32768 }, total_slots: 2, model_path: '/models/Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf' };
 // vision: its /props says it can look at pictures (as llama-server with --mmproj does).
 // timings: false sends no speed with the answer, as the Claude API and OpenRouter do.
-export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null, key = null, props = false, vision = false, timings = true } = {}) {
+export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null, key = null, props = false, vision = false, timings = true, cache = null } = {}) {
   const queue = [...replies];
   const requests = [];
   const seen = [];
@@ -51,7 +51,8 @@ export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null,
       for (const p of pieces(args)) { send({ tool_calls: [{ index: i, function: { arguments: p } }] }); n++; await wait(); }
     }
     send({}, reply.finish ?? (calls.length ? 'tool_calls' : 'stop'));
-    res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 900 + requests.length * 150, completion_tokens: reply.tokens ?? n }, ...(timings ? { timings: { prompt_n: 120, prompt_per_second: 233.4, predicted_n: reply.tokens ?? n, predicted_per_second: 41.9 } } : {}) })}\n\n`);
+    const t = timings ? { prompt_n: 120, prompt_per_second: 233.4, predicted_n: reply.tokens ?? n, predicted_per_second: 41.9, ...(Number.isFinite(cache) ? { cache_n: cache } : {}) } : null;
+    res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 900 + requests.length * 150, completion_tokens: reply.tokens ?? n }, ...(t ? { timings: t } : {}) })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
   });

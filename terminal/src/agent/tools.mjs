@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync } from 'node:fs';
 import { readFile } from '../tools/read.mjs';
-import { isImage, isPdf, preparedImage, pdfText, pdfPageImage } from '../tools/media.mjs';
+import { isImage, isPdf, preparedImage, pdfText, pdfPageImage, MAX_SIDE, DETAIL_SIDE } from '../tools/media.mjs';
 import { takeScreen } from '../tools/screen.mjs';
 import { errorsAfterEdit, lspTool } from '../tools/lsp.mjs';
 import { browserTool } from '../tools/browser.mjs';
@@ -112,11 +112,37 @@ function matchLines(lines, want, { regex = false } = {}) {
   return first.length ? first : regex ? asText() : asPattern();
 }
 
+function cropOf(v) {
+  if (v == null) return null;
+  if (typeof v === 'string') {
+    const p = v.split(/[,\s]+/).map(Number);
+    if (p.length >= 4 && p.slice(0, 4).every(Number.isFinite) && p[2] > 0 && p[3] > 0) return { x: p[0], y: p[1], w: p[2], h: p[3] };
+    return null;
+  }
+  if (Array.isArray(v) && v.length >= 4) {
+    const [x, y, w, h] = v.map(Number);
+    if ([x, y, w, h].every(Number.isFinite) && w > 0 && h > 0) return { x, y, w, h };
+    return null;
+  }
+  if (typeof v === 'object') {
+    const x = Number(v.x), y = Number(v.y), w = Number(v.w ?? v.width), h = Number(v.h ?? v.height);
+    if ([x, y, w, h].every(Number.isFinite) && w > 0 && h > 0) return { x, y, w, h };
+  }
+  return null;
+}
+
+function pictureOpts(args = {}, { crop = true } = {}) {
+  const box = crop ? cropOf(args.crop) : null;
+  const raw = args.size === true || args.size === 'full' ? DETAIL_SIDE : Number(args.size);
+  const max = Number.isFinite(raw) && raw > 0 ? Math.min(Math.round(raw), 4096) : MAX_SIDE;
+  return box ? { max, crop: box } : { max };
+}
+
 // Read of a picture: attached for the model to look at, when this conversation
 // can see (the model's vision add-on is loaded, or a remote that takes pictures).
-function readPicture(p, note, env) {
+function readPicture(p, note, env, args = {}) {
   let img;
-  try { img = preparedImage(p.abs); } catch (e) { return { text: `${note}${p.rel} is a picture macOS could not open (${e.message}).`, error: true, view: { kind: 'error', message: 'Not a picture it can open' } }; }
+  try { img = preparedImage(p.abs, pictureOpts(args)); } catch (e) { return { text: `${note}${p.rel} is a picture macOS could not open (${e.message}).`, error: true, view: { kind: 'error', message: 'Not a picture it can open' } }; }
   const size = `${img.srcW}×${img.srcH}${img.w !== img.srcW ? `, shown at ${img.w}×${img.h}` : ''}`;
   if (!env.canSee) {
     return { text: `${note}${p.rel} is a picture (${size}). This model is not looking at pictures in this conversation: ask the user to attach it (drag it into the window, or paste it with ctrl+v), which lets it see.`, view: { kind: 'read', lines: 1, total: 1, content: `a picture, ${size} (not shown to the model)` } };
@@ -154,7 +180,7 @@ function readPdf(p, args, note, env, max) {
     if (!env.canSee) return { text: `${note}Page ${args.page} of ${p.rel} as text (this model is not looking at pictures in this conversation):
 ${pages[args.page - 1] || '(no text on this page: a scan or a picture)'}`, view: { kind: 'read', lines: 1, total: 1, content: `page ${args.page} of ${pages.length}` } };
     let img;
-    try { img = pdfPageImage(p.abs, args.page); } catch (e) { return { text: `${note}${p.rel}: ${e.message}.`, error: true, view: { kind: 'error', message: e.message } }; }
+    try { img = pdfPageImage(p.abs, args.page, pictureOpts(args, { crop: false })); } catch (e) { return { text: `${note}${p.rel}: ${e.message}.`, error: true, view: { kind: 'error', message: e.message } }; }
     return { text: `${note}Page ${args.page} of ${p.rel} (${pages.length} pages) is attached as a picture for you to look at.`, images: [{ ...img, path: `${p.rel}, page ${args.page}` }], view: { kind: 'read', lines: 1, total: 1, content: `page ${args.page} of ${pages.length}, shown as a picture` } };
   }
   const lines = pages.flatMap((t, i) => [`--- page ${i + 1} of ${pages.length} ---`, ...(t.trim() ? t.replace(/\s+$/, '').split('\n') : ['(no text on this page: a scan or a picture)'])]);
@@ -246,7 +272,7 @@ export async function execute(name, args, prepared, env) {
         return { text: `${note}${p.rel} is a folder, not a file. What is in it:\n${r.lines.join('\n') || '(nothing)'}${more}\nRead the files you need; several can come together with "paths".`, view: { kind: 'list', count: r.total, content: r.lines.join('\n') } };
       }
       // A picture is shown to the model (when it can see: env.canSee); a PDF comes back as its text.
-      if (isImage(p.abs)) return readPicture(p, note, env);
+      if (isImage(p.abs)) return readPicture(p, note, env, args);
       if (isPdf(p.abs)) return readPdf(p, args, note, env, max);
       // A small file comes back whole: small models otherwise read it 5 lines
       // at a time. A long one first comes back as an outline (its parts with

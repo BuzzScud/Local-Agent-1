@@ -32,6 +32,17 @@ test('a remote llama.cpp gets the same body as this Mac’s, with its key in the
   } finally { dropEndpoint(fake.url); await fake.close(); }
 });
 
+test('llama.cpp timings.cache_n is copied onto usage.cached_tokens', async () => {
+  const fake = await startFakeServer([{ text: 'hi' }], { key: 'test-remote-0123456789', cache: 38000 });
+  setEndpoint(fake.url, { remote: true, kind: 'llama', key: 'test-remote-0123456789', model: 'x.gguf', label: 'box' });
+  try {
+    const evs = await drain(streamChat({ url: fake.url, messages: [{ role: 'user', content: 'hi' }], model: MODELS.qwen, sampling: MODELS.qwen.sampling, thinking: false, maxTokens: 50, slot: 1 }));
+    const d = evs.find((e) => e.type === 'done');
+    expect(d.timings.cache_n).toBe(38000);
+    expect(d.usage.cached_tokens).toBe(38000);
+  } finally { dropEndpoint(fake.url); await fake.close(); }
+});
+
 test('an OpenAI-compatible remote: its model name, the standard fields only, the effort as reasoning_effort, thinking read from "reasoning"', async () => {
   const seen = [];
   const s = createServer(async (req, res) => {
@@ -174,6 +185,8 @@ test('an Ollama service is asked in its own chat: the context with every request
     expect(evs.map((e) => e.type)).toEqual(['reasoning', 'tool', 'done']);
     expect(evs[1]).toMatchObject({ index: 0, name: 'Read', args: '{"path":"a.mjs"}' });
     expect(evs[2]).toMatchObject({ finish: 'tool_calls', usage: { prompt_tokens: 900, completion_tokens: 40 }, timings: { prompt_n: 900, prompt_per_second: 450, predicted_n: 40, predicted_per_second: 40 } });
+    expect(evs[2].usage.cached_tokens).toBeUndefined();
+    expect(evs[2].timings.cache_n).toBeUndefined();
     const b = f.bodies[0];
     expect(b).toMatchObject({ model: 'thinker:35b', stream: true, think: true, tools, options: { num_ctx: 65536, num_predict: 2048, temperature: 0.6, top_k: 20, stop: ['</x>'] } });
     expect('other' in b.options).toBe(false);
@@ -199,6 +212,20 @@ test('an Ollama service is asked in its own chat: the context with every request
     // a JSON answer asked for: Ollama's format
     await drain(streamChat({ url: f.url, messages: [], model: oss, sampling: {}, thinking: false, maxTokens: 9, extra: { response_format: { type: 'json_schema', json_schema: { name: 'answer', schema: { type: 'object' } } } } }));
     expect(f.bodies.at(-1).format).toEqual({ type: 'object' });
+  } finally { dropEndpoint(f.url); await f.close(); }
+});
+
+test('an Ollama done line with prompt_eval_cached_count is kept on usage and timings', async () => {
+  const f = await fakeOllamaChat(() => ({ lines: [
+    { message: { role: 'assistant', content: 'Four.' }, done: false },
+    done({ prompt_eval_count: 40000, prompt_eval_cached_count: 38000, eval_count: 40 }),
+  ] }));
+  try {
+    setEndpoint(f.url, { remote: true, kind: 'openai', key: null, model: 'thinker:35b', label: 'svc', ollama: true, numCtx: 65536, thinks: true, tools: true, family: 'qwen35moe' });
+    const evs = await drain(streamChat({ url: f.url, messages: [{ role: 'user', content: 'hi' }], model: { ...GENERIC_REMOTE }, sampling: {}, thinking: false, maxTokens: 9 }));
+    const d = evs.find((e) => e.type === 'done');
+    expect(d.usage).toMatchObject({ prompt_tokens: 40000, cached_tokens: 38000 });
+    expect(d.timings.cache_n).toBe(38000);
   } finally { dropEndpoint(f.url); await f.close(); }
 });
 

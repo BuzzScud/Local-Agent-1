@@ -11,6 +11,7 @@
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
+import { keptOf, reusedWords } from './timing.mjs';
 
 export const activityDir = () => join(HOME, 'activity');
 const nowDir = () => join(activityDir(), 'now');
@@ -66,9 +67,10 @@ export async function* recorded(stream, { model, url, who, messages, tools = 0, 
       else if (ev.type === 'done') {
         const t = ev.timings ?? {};
         end = ev.finish ?? 'stop';
+        const k = keptOf({ usage: ev.usage, timings: t });
         append({ at: new Date().toISOString(), pid: st.pid, model, who: st.who, ask: st.ask, tools, think: st.think, secs: (Date.now() - st.started) / 1000,
           readTok: t.prompt_n ?? null, readMs: t.prompt_ms ?? null, wroteTok: t.predicted_n ?? null, writeMs: t.predicted_ms ?? null, loadMs: t.load_ms ?? null,
-          thinkTok: st.thinkTok, end });
+          thinkTok: st.thinkTok, end, ...(k ? { keptTok: k.kept, promptTok: k.prompt, reused: reusedWords(k) } : {}) });
       }
       yield ev;
     }

@@ -121,7 +121,7 @@ export const ThoughtNode = ({ it }) => {
     <Node g="◇" c={C.think}>
       <Box flexDirection="row">
         <Box flexShrink={1}><Text color={C.dim} italic wrap="truncate-end">{g || `thought${it.tokens ? ` · ${plural(it.tokens, 'token')}` : ''}`}</Text></Box>
-        <Box flexShrink={0}><Text color={C.faint}>  {fmtSecs(Math.max(1, it.secs))}</Text></Box>
+        <Box flexShrink={0}><Text color={C.faint}>  {it.reused ? `${it.reused}  ` : ''}{fmtSecs(Math.max(1, it.secs))}</Text></Box>
       </Box>
     </Node>
   );

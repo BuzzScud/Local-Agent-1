@@ -12,7 +12,7 @@
 //   - the Arena: starting its runner, and whether a run there holds the memory;
 //   - the Test builder: making tests of your own (the hub's Test builder, over the Arena).
 export { HOME, REAL_HOME, isRealHome, ENGINE, ENGINES, DEFAULT_ENGINE, engineOf, serverBinOf, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, thinkingLevel, thinkingKwargs, modelPath, onDiskBytes, draftPath, visionPath, withVision, modelFolder } from './registry.mjs';
-export { ModelServer, scanServers, serverArgs, mlxServerScript, SERVER_PROCESS, BUDGET_MESSAGE, hasDraft, stopIdleServers, stopServer, otherCopies, serverProcesses, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
+export { ModelServer, scanServers, serverArgs, cacheFlags, CACHE_ROOM, mlxServerScript, SERVER_PROCESS, BUDGET_MESSAGE, hasDraft, stopIdleServers, stopServer, otherCopies, serverProcesses, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
 export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes, freeWithHandBack, freeAfterQuit, loadedBytesOf, searchBytes, visionBytes, chooseContext, contextCheck, topMemoryUsers, appName, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
 // The key of this Mac's own model servers, sent with every request to 127.0.0.1 (local-key.mjs).

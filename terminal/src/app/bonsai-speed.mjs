@@ -6,11 +6,25 @@
 // Asked at the context the model is loaded at (another would load it again), thinking off, so it measures reading and
 // writing, not how long it chooses to think. Each run is kept (<home>/bonsai/speed.json, newest last) and recorded.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { HOME, recordTest } from '../../../models/index.mjs';
 import { systemPrompt } from '../agent/prompt.mjs';
 import { toolSchemas } from '../agent/tools.mjs';
+import { keptOf } from '../agent/timing.mjs';
+
+// Whether this Mac is on Low Power Mode (pmset). AGENTIC_LOW_POWER=on|off stands in, so a test never
+// depends on this Mac's setting.
+export function lowPowerOn(env = process.env) {
+  const v = String(env.AGENTIC_LOW_POWER ?? '').toLowerCase();
+  if (['1', 'on', 'true', 'yes'].includes(v)) return true;
+  if (['0', 'off', 'false', 'no'].includes(v)) return false;
+  try {
+    const r = spawnSync('/usr/bin/pmset', ['-g'], { encoding: 'utf8', timeout: 3000 });
+    return /lowpowermode\s+1\b/.test(r.stdout ?? '');
+  } catch { return false; }
+}
 
 const speedFile = () => join(HOME, 'bonsai', 'speed.json');
 export const readSpeeds = () => { try { return JSON.parse(readFileSync(speedFile(), 'utf8')); } catch { return []; } };
@@ -47,11 +61,14 @@ export async function speedTest({ url = 'http://127.0.0.1:11434', model, ctx = n
     wallSecs: r1((Date.now() - t0) / 1000),
     answered: Boolean(a.message?.content?.trim() && b.message?.content?.trim()),
   };
+  const later = keptOf({ usage: { prompt_tokens: b.prompt_eval_count, cached_tokens: b.prompt_eval_cached_count } });
+  if (later) { out.keptTok = later.kept; out.promptTok = later.prompt; }
   try {
     mkdirSync(join(HOME, 'bonsai'), { recursive: true });
     writeFileSync(speedFile(), JSON.stringify([...readSpeeds(), out].slice(-50), null, 1));
   } catch { /* kept when it can be */ }
   if (record) recordTest({ kind: 'other', name: `Speed test: ${model} on this Mac's Ollama`, model: `remote:${model}`, ctx: numCtx, result: 'pass', secs: out.wallSecs,
-    note: `reads ${out.readTokS} tokens/s, writes ${out.writeTokS}/s; a fresh prompt of ${out.freshTok.toLocaleString()} tokens ${out.freshSecs} s; a later step ${out.laterSecs} s (what it read kept); loading ${out.loadSecs} s` });
+    note: `reads ${out.readTokS} tokens/s, writes ${out.writeTokS}/s; a fresh prompt of ${out.freshTok.toLocaleString()} tokens ${out.freshSecs} s; a later step ${out.laterSecs} s (what it read kept); loading ${out.loadSecs} s`,
+    ...(later ? { kept: later.kept, prompt: later.prompt } : {}) });
   return out;
 }

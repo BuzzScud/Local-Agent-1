@@ -3,7 +3,7 @@
 // macOS has: PDFKit for PDFs, ImageIO for pictures, AppKit for the clipboard.
 //   pdf-text <file.pdf>                       → JSON {"pages": ["text of page 1", …]}
 //   pdf-page <file.pdf> <page> <out.png> <max> → that page as a PNG, its long side at most <max> px
-//   image <in> <out.jpg> <max>                → a JPEG, long side at most <max> px → JSON {"w","h"}
+//   image <in> <out.jpg> <max> [x y w h]      → a JPEG, long side at most <max> px (optional crop in the picture's own pixels) → JSON {"w","h"}
 //   clipboard <out.png>                       → the clipboard's image as a PNG (exit 3: none there)
 //   thumb <in> <cols> <rows>                  → JSON {"w","h","srcW","srcH","px"}: the picture as at most cols × rows·2 dots,
 //                                               px = 6 hex digits a dot, row by row from the top ("------": see-through)
@@ -30,6 +30,15 @@ func writePNG(_ image: CGImage, to path: String) {
   guard let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, UTType.png.identifier as CFString, 1, nil) else { fail("cannot write \(path)") }
   CGImageDestinationAddImage(dest, image, nil)
   if !CGImageDestinationFinalize(dest) { fail("cannot write \(path)") }
+}
+
+// A rectangle of the picture in its own pixels (clamped), origin at the top left.
+func cropped(_ image: CGImage, x: Int, y: Int, w: Int, h: Int) -> CGImage {
+  let ix = max(0, min(x, image.width - 1))
+  let iy = max(0, min(y, image.height - 1))
+  let iw = max(1, min(w, image.width - ix))
+  let ih = max(1, min(h, image.height - iy))
+  return image.cropping(to: CGRect(x: ix, y: iy, width: iw, height: ih)) ?? image
 }
 
 // A picture no larger than `max` on its long side (never made larger).
@@ -92,9 +101,13 @@ case "pdf-page":
   print("{\"w\":\(cg.width),\"h\":\(cg.height),\"pages\":\(doc.pageCount)}")
 
 case "image":
-  guard args.count >= 5, let max = Int(args[4]) else { fail("usage: image <in> <out.jpg> <max>") }
+  guard args.count >= 5, let max = Int(args[4]) else { fail("usage: image <in> <out.jpg> <max> [x y w h]") }
   guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: args[2]) as CFURL, nil), let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { fail("not a picture macOS can open") }
-  let out = scaled(img, max: max)
+  var taken = img
+  if args.count >= 9, let x = Int(args[5]), let y = Int(args[6]), let w = Int(args[7]), let h = Int(args[8]) {
+    taken = cropped(img, x: x, y: y, w: w, h: h)
+  }
+  let out = scaled(taken, max: max)
   guard let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: args[3]) as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { fail("cannot write \(args[3])") }
   CGImageDestinationAddImage(dest, out, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
   if !CGImageDestinationFinalize(dest) { fail("cannot write \(args[3])") }
