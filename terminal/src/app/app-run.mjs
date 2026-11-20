@@ -193,7 +193,7 @@ export function runPart(self) {
       const first = l.firstTokenAt ?? t;
       const n = (l.streamTokens ?? 0) + add;
       const secs = (t - first) / 1000;
-      return { ...l, ...patch, waiting: false, tokens: (l.tokens ?? 0) + add, lastTokenAt: t, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
+      return { ...l, ...patch, waiting: false, queued: null, tokens: (l.tokens ?? 0) + add, lastTokenAt: t, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
     };
     // Each step keeps when it started and how long it took (27 Oct 2026, the owner's pick "Real time for every step":
     // only commands kept a time, 1,506 of 3,931 steps); the reply's tool calls are counted for its end line.
@@ -204,11 +204,13 @@ export function runPart(self) {
       on('side-job', helperEvent),
       // A busy service (busy.mjs): the spinner counts down to the next try.
       on('busy', ({ until }) => self.setLive((l) => (l.phase ? { ...l, busyUntil: until } : l))),
+      // hearth's door: why this reply still waits in its line (agent-model.mjs); the first word clears it (stream).
+      on('queued', ({ why, ahead }) => self.setLive((l) => (l.phase ? { ...l, queued: `${why}${ahead ? ` (${ahead} ahead)` : ''}` } : l))),
       // The conversation moved to another profile's model between steps (app-profiles.mjs onRoute).
       on('profile-route', (ev) => self.onRoute(ev)),
       on('turn-start', () => { calls = 0; try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend(); self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
-      on('waiting', ({ room, thinkCap, whole } = {}) => { stepSave(); self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null })); }),
+      on('waiting', ({ room, thinkCap, whole } = {}) => { stepSave(); self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null, queued: null })); }),
       // A reply that will not run as it was (cut off, repeating itself): its live lines go.
       on('reply-dropped', () => self.setLive((l) => ({ ...l, thinking: null, text: null, writing: null }))),
       // The app working between replies (notes, a summary): the working line says so.

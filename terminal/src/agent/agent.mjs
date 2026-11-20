@@ -2,7 +2,7 @@
 // back, run the tool it asks for (asking you first when needed), feed the
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
-import { endpointOf } from '../../../models/index.mjs';
+import { endpointOf, HEARTH_JOBS } from '../../../models/index.mjs';
 import { focusedInstructions, readInstructions, replaceInstructionBlock, withModelNotes } from './instructions.mjs';
 import { EXPLORE_TOOLS, resolvePath, toolSchemas } from './tools.mjs';
 import { DONT_ASK, isSelf, ownBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
@@ -264,10 +264,12 @@ export class Agent extends EventEmitter {
   // model is offered the Agent tool, the ones the app steers (the local set, App) too, and a helper runs there
   // (followProfile, ai 'helpers'). Looked at once a conversation, so the tools and the prompt stay as they are.
   helpersElsewhere() {
-    if (this.isHelper || this.subagents === false || !this.router?.active?.()) return false;
+    if (this.isHelper || this.subagents === false || (!this.router?.active?.() && !this.hearthUse('helpers'))) return false;
     if (this.helpersAway?.conv === this.conversation) return this.helpersAway.on;
     let call = null;
-    try { call = this.router.helper('helpers', { url: this.url, model: this.modelName() }) ?? null; } catch {}
+    try { call = this.router?.active?.() ? this.router.helper('helpers', { url: this.url, model: this.modelName() }) ?? null : null; } catch {}
+    // On hearth its own small models, unless a profile sends the helpers to hearth by name (hearthUse).
+    call = this.onHearth(call) ?? call;
     this.helpersAway = { conv: this.conversation, on: Boolean(call), model: call?.model ?? null };
     return this.helpersAway.on;
   }
@@ -302,13 +304,29 @@ export class Agent extends EventEmitter {
   // /subagents job on the same Ollama service. undefined: the conversation's own model does it.
   helperUse(id) {
     if (this.isHelper) return undefined;
-    if (this.router?.active()) return this.profileUse(id);
-    return endpointOf(this.url)?.ollama ? useOf(this.helperJobs?.[id], id) : undefined;
+    if (this.router?.active()) return this.onHearth(this.profileUse(id), id) ?? this.profileUse(id);
+    return this.onHearth(undefined, id) ?? (endpointOf(this.url)?.ollama ? useOf(this.helperJobs?.[id], id) : undefined);
+  }
+  // hearth (20 Nov 2026, the owner: "ensure that 2b,4b, 9b and 27b are all used, based on avaiblilty"; their picks: side
+  // jobs on the 2b, the second opinion on the 9b, helpers on the 4b): on hearth, with a door that lists its sizes, a job
+  // in HEARTH_JOBS goes to its size there (the door's list takes whichever is free, client.mjs), unless its profile sends
+  // it to hearth already (a size picked in /profiles). A profile pointing elsewhere (another service, this Mac) is left
+  // aside while the conversation is on hearth: those had not answered, so every such job ran on the 27b in its steps' place.
+  hearthUse(id) {
+    const ep = endpointOf(this.url);
+    const size = ep?.hearth && ep.hearthSizes?.length ? HEARTH_JOBS[id] : null;
+    return size ? { url: this.url, model: size, thinks: true, tools: true, family: '' } : undefined;
+  }
+  // A job's call on hearth: the profile's when it is on hearth too, else hearth's own size; undefined off hearth.
+  onHearth(call, id = 'helpers') {
+    const own = this.hearthUse(id);
+    if (!own) return undefined;
+    return call && endpointOf(call.url) === endpointOf(this.url) ? call : own;
   }
   profileUse(ai) { return this.router?.active() ? this.router.helper(ai, { url: this.url, model: this.modelName() }) : undefined; }
   sideUse() { return this.helperUse('side'); }
   // /btw has a row of its own in /profiles; without profiles it is a side job, as before.
-  btwUse() { return this.router?.active() ? this.profileUse('btw') : this.sideUse(); }
+  btwUse() { return this.hearthUse('btw') ? this.helperUse('btw') : this.router?.active() ? this.profileUse('btw') : this.sideUse(); }
   // The model's name as its server knows it (a model on this Mac: its id).
   modelName() { return this.model?.remote?.model ?? this.model?.id ?? null; }
   // /effort's Who decides row: the next message goes the new way. The prompt and the tools
@@ -677,7 +695,7 @@ export class Agent extends EventEmitter {
     // call names that model. Moved there by its profile, the helper connected that model at the same address, which
     // names one model, so the conversation went on on the helper's, and the service, asked for its own context, let the
     // main model go (28 Oct 2026, the Bonsai helpers check: 9B's answer and its next message came from 2B).
-    const away = !own && this.helpersElsewhere() ? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null;
+    const away = !own && this.helpersElsewhere() ? this.onHearth(this.router?.active?.() ? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null) ?? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null;
     const awayHere = away?.model && endpointOf(this.url)?.ollama && endpointOf(away.url) === endpointOf(this.url) ? away.model : null;
     // On the Claude API its Model line may name a Claude by Claude Code's words (haiku, sonnet, opus, fable) or its id (19 Nov 2026).
     const claudeOwn = own && endpointOf(this.url)?.kind === 'claude' ? claudeModelOf(own.model, this.modelName()) : null;

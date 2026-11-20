@@ -89,6 +89,9 @@ export const DEFAULT_RERANKER = 'qwen3-reranker-0.6b';
 export function thinkingLevel(model, thinking, effort) {
   const levels = model?.thinkingLevels ?? [];
   if (!thinking) return levels.find((l) => !l.effort) ?? { id: 'low', label: 'Low', effort: null };
+  // A model that cannot think has only Off/None/Low (no effort). Keep that level even when
+  // thinking was asked for, so coding -p and streamChat do not invent an On. hearth's own
+  // Medium is set on the model (remoteModel), so this path is not how hearth turns thinking on.
   return levels.find((l) => l.id === (effort ?? model?.thinkingEffort) && l.effort)
     ?? levels.find((l) => l.id === model?.thinkingEffort)
     ?? { id: 'on', label: 'On', effort: null };

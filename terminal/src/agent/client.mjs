@@ -10,7 +10,7 @@
 // timed out.", before the first word or mid-reply); a busy service or a long conversation
 // read again takes longer, so the model's requests turn that off (timeout: false). Esc
 // still stops them (signal).
-import { thinkingKwargs, thinkingLevel, endpointOf, authHeaders, isOutOfMemory } from '../../../models/index.mjs';
+import { thinkingKwargs, thinkingLevel, endpointOf, authHeaders, isOutOfMemory, hearthList } from '../../../models/index.mjs';
 import { streamClaude } from './claude.mjs';
 import { openAIMessages, ollamaMessages } from './images.mjs';
 import { splitThink } from './think-tags.mjs';
@@ -106,7 +106,7 @@ async function* metered(args, profile) {
   const t0 = Date.now();
   let first = null;
   for await (const ev of streamOne(args)) {
-    if (first === null && ev.type !== 'busy') first = Date.now();
+    if (first === null && ev.type !== 'busy' && ev.type !== 'queued') first = Date.now();
     if (ev.type === 'done') {
       const writing = first ? (Date.now() - first) / 1000 : 0;
       const n = ev.timings?.predicted_n ?? ev.usage?.completion_tokens ?? 0;
@@ -200,6 +200,33 @@ async function* streamOne(args) {
   }
 }
 
+// hearth's door runs at most this many side jobs of a key at once (its SIDE_JOBS): more wait their turn here, not as a
+// "busy" the whole service would wait out.
+export const HEARTH_SIDE_JOBS = 4;
+// Requests to one place, at most `limit` at a time, the rest in order; one stopped while it waits leaves the line.
+const turns = new Map(); // key → { running, waiting: [{ ok, dead }] }
+export async function* withTurn(key, limit, signal, make) {
+  const t = turns.get(key) ?? { running: 0, waiting: [] };
+  turns.set(key, t);
+  let held = false;
+  if (t.running < limit) { t.running++; held = true; }
+  else {
+    const w = { ok: null, dead: false, granted: false };
+    await new Promise((ok) => { w.ok = ok; t.waiting.push(w); signal?.addEventListener('abort', () => { if (!w.granted) { w.dead = true; ok(); } }, { once: true }); });
+    held = w.granted;
+  }
+  try {
+    if (!held) throw signal?.reason ?? new Error('The operation was aborted.');
+    yield* make();
+  } finally {
+    if (held) {
+      t.running--;
+      while (t.waiting.length && t.running < limit) { const w = t.waiting.shift(); if (w.dead) continue; t.running++; w.granted = true; w.ok(); }
+      if (!t.running && !t.waiting.length) turns.delete(key);
+    }
+  }
+}
+
 async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false, use, conversation, what }) {
   const ep = endpointFor(url, use);
   // The Claude API speaks its own Messages API (claude.mjs).
@@ -207,7 +234,12 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
   // On an Ollama service each request is recorded as it goes, for the hub's Bonsai tab (agent/activity.mjs):
   // your conversation's steps carry it (`conversation`), a side job its name (`what`, flows/llm.mjs).
   if (ep?.ollama) {
-    const stream = streamOllama({ url, ep, messages: ownStartOn(ep) ? ownStart(messages, conversation) : messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra });
+    // On hearth (models/runtime/remote.mjs HEARTH_CTX): a side job, or a step on another of its models (a helper's), says
+    // so and runs beside the conversation's step; a door without side jobs (it lists no sizes) takes one at a time from
+    // here, since each new job from a key took the running one's place there.
+    const side = Boolean(ep.hearth) && (!conversation || Boolean(use?.model && use.model !== endpointOf(url)?.model));
+    const make = () => streamOllama({ url, ep, side, messages: ownStartOn(ep) ? ownStart(messages, conversation) : messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra });
+    const stream = !ep.hearth ? make() : ep.hearthSizes?.length ? (side ? withTurn(`${url} side`, HEARTH_SIDE_JOBS, signal, make) : make()) : withTurn(url, 1, signal, make);
     yield* recorded(stream, { model: ep.model, url, who: conversation ? 'conversation' : what, messages, tools: tools?.length ?? 0, think: Boolean(thinking) });
     return;
   }
@@ -320,21 +352,24 @@ export function ownStart(messages, conversation) {
 // and so was the next one with them (27 Oct 2026, Bonsai 2 9B: 5,016 tokens, 24 s, after a "hello"). A call made
 // anyway is the caller's to catch (chat() keeps a plain greeting, the notes ask once more with none).
 const SAMPLING = ['temperature', 'top_p', 'top_k', 'min_p', 'repeat_penalty', 'presence_penalty', 'frequency_penalty', 'seed'];
-async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }) {
+async function* streamOllama({ url, ep, side = false, messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }) {
   const lv = thinkingLevel(model ?? {}, Boolean(thinking), effort);
   const gptoss = /gpt-?oss/i.test(`${ep.family ?? ''} ${ep.model}`);
   // A helper may say for itself whether it thinks (use.think: the second opinion does).
-  const think = ep.think !== undefined ? ep.think : gptoss ? (lv.effort ?? 'low') : lv.effort ? true : ep.thinks ? false : undefined;
+  // hearth: always said, by its level (low, medium, high) or false: left unsaid, its 27b thought at its own default on
+  // every call, side jobs too, which then spent their whole reply thinking (20 Nov 2026).
+  const think = ep.think !== undefined ? ep.think : ep.hearth ? (thinking ? lv.effort || 'medium' : false) : gptoss ? (lv.effort ?? 'low') : lv.effort ? true : ep.thinks ? false : undefined;
   const options = {};
   for (const k of SAMPLING) if (sampling?.[k] !== undefined) options[k] = sampling[k];
   if (maxTokens) options.num_predict = maxTokens;
   if (ep.numCtx) options.num_ctx = ep.numCtx;
   if (extra?.stop) options.stop = extra.stop;
   const body = {
-    model: ep.model, messages: ollamaMessages(messages), stream: true, options,
+    // hearth: a size goes as its list, first choice first, and the door gives the request whichever is free.
+    model: ep.hearth ? hearthList(ep.model, ep.hearthSizes ?? []) : ep.model, messages: ollamaMessages(messages), stream: true, options,
     // How long the service keeps it loaded after this request (connectRemote: the main model for
-    // as long as the window is open; a helper half an hour). Ollama's own is 5 minutes.
-    ...(ep.keepAlive !== undefined ? { keep_alive: ep.keepAlive } : {}),
+    // as long as the window is open; a helper half an hour). Ollama's own is 5 minutes. hearth's door keeps its own.
+    ...(ep.keepAlive !== undefined && !ep.hearth ? { keep_alive: ep.keepAlive } : {}),
     ...(think !== undefined ? { think } : {}),
     ...(tools?.length && ep.tools !== false ? { tools } : {}),
     ...(extra?.response_format?.json_schema?.schema ? { format: extra.response_format.json_schema.schema } : {}),
@@ -345,7 +380,7 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
   drop();
   let res;
   for (let tries = 0; ; tries++) {
-    res = await fetch(`${url}/api/chat`, { method: 'POST', signal, timeout: false, headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body) });
+    res = await fetch(`${url}/api/chat`, { method: 'POST', signal, timeout: false, headers: { 'content-type': 'application/json', ...authHeaders(url), ...(side ? { 'x-hearth-job': 'side' } : {}) }, body: JSON.stringify(body) });
     if (res.ok) break;
     const text = await res.text().catch(() => '');
     const field = tries < 2 ? refusedField(res.status, text, { reasoning_effort: body.think, tools: body.tools }) : null;
@@ -366,6 +401,8 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
     try { j = JSON.parse(line); } catch { return []; }
     if (j.error) { const why = typeof j.error === 'string' ? j.error : j.error.message ?? JSON.stringify(j.error); throw isOutOfMemory(why) ? roomError(ep, res.status) : serverError(`model server: ${why}`, res.status); }
     const evs = [];
+    // hearth's door, while the request waits in its line: why (the API page's own words).
+    if (ep.hearth && typeof j.hearth?.waiting === 'string') evs.push({ type: 'queued', why: j.hearth.waiting.slice(0, 300), ahead: Number(j.hearth.ahead) || 0 });
     const m = j.message ?? {};
     if (m.thinking) evs.push({ type: 'reasoning', text: m.thinking });
     if (m.content) evs.push({ type: 'text', text: m.content });

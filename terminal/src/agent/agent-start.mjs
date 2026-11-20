@@ -45,7 +45,8 @@ export class StartPart {
   // 2026, 14:01: 9B predicted at 6.4 GB with 5.1 free, after 2B). One load at a time; a refusal changes nothing.
   loadMainFirst() {
     const ep = endpointOf(this.url);
-    if (!ep?.ollama) return Promise.resolve();
+    // hearth's door loads nothing for a tool, and an empty request there is a job in its line like any other.
+    if (!ep?.ollama || ep.hearth) return Promise.resolve();
     return (this.mainLoading ??= preloadOllama({ url: this.url, key: ep.key, model: ep.model, numCtx: ep.numCtx ?? null, keepAlive: ep.keepAlive }).catch(() => {}).finally(() => { this.mainLoading = null; }));
   }
   // The helpers' smaller model on this conversation's own Ollama service, loaded while the conversation reads its
@@ -54,7 +55,7 @@ export class StartPart {
   warmHelper() {
     const call = this.router?.helper?.('helpers', { url: this.url, model: this.modelName() });
     const ep = endpointOf(this.url);
-    if (!call?.model || !ep?.ollama || endpointOf(call.url) !== ep || process.env.AGENTIC_WARM_HELPER === 'off') return;
+    if (!call?.model || !ep?.ollama || ep.hearth || endpointOf(call.url) !== ep || process.env.AGENTIC_WARM_HELPER === 'off') return;
     this.loadMainFirst().then(() => preloadOllama({ url: this.url, key: ep.key, model: call.model, numCtx: OWN_HELPER_CTX, keepAlive: '30m' })).catch(() => {});
   }
 

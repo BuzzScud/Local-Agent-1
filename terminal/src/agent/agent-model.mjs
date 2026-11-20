@@ -287,6 +287,9 @@ export class ModelPart {
           c.args += ev.args;
           this.emit('tool-writing', { name: c.name, args: c.args, tokens: tokensOf(c.args) });
           if (isLooping(c.args)) { turn.looping = true; local.abort(); break; }
+        } else if (ev.type === 'queued') {
+          // hearth's door says why this request still waits in its line (client.mjs): the working line shows it.
+          if (ev.why !== turn.queued) { turn.queued = ev.why; this.emit('queued', { why: ev.why, ahead: ev.ahead }); }
         } else if (ev.type === 'busy') {
           // The service said "too many requests": the client waits and asks again (busy.mjs).
           const secs = Math.max(1, Math.round(ev.waitMs / 1000));
