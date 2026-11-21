@@ -85,7 +85,9 @@ export function Spinner({ app }) {
   // written, and the line says so instead of a speed that stood still (4 Oct 2026: 4 minutes at "34.5 tok/s").
   const quiet = live.whole && live.lastTokenAt && !live.waiting ? (now - live.lastTokenAt) / 1000 : 0;
   // hearth's door: the request waits in its line, and why (app-run.mjs 'queued').
-  const pace = busy ? busy : live.waiting && live.queued ? ` · in hearth's line: ${live.queued}` : !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting ? ' · reading' : quiet >= 15 ? ` · writing its next step, sent whole when done (${fmtSecs(quiet)})` : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
+  // About how much of it is written: the quiet time at the last reply's speed (21 Nov 2026, the owner's pick).
+  const sofar = quiet >= 15 && live.wholeTps > 0 ? `, about ${fmtTok(quiet * live.wholeTps)} tokens so far` : '';
+  const pace = busy ? busy : live.waiting && live.queued ? ` · in hearth's line: ${live.queued}` : !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting ? ' · reading' : quiet >= 15 ? ` · writing its next step, sent whole when done (${fmtSecs(quiet)}${sofar})` : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
   const doing = live.rail ? '' : doingWords(live);
   // The tokens: every one written since the window opened, this request's as they stream. In a
   // narrow window " this session" goes first, then the count, so "esc to interrupt" stays whole.

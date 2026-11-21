@@ -210,7 +210,8 @@ export function runPart(self) {
       on('profile-route', (ev) => self.onRoute(ev)),
       on('turn-start', () => { calls = 0; try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend(); self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
-      on('waiting', ({ room, thinkCap, whole } = {}) => { stepSave(); self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, task: null, queued: null })); }),
+      // wholeTps: the last reply's writing speed, for the size of a call an Ollama service is still writing (screen-live.jsx).
+      on('waiting', ({ room, thinkCap, whole, tps } = {}) => { stepSave(); self.setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, whole, wholeTps: tps ?? l.wholeTps ?? null, task: null, queued: null })); }),
       // A reply that will not run as it was (cut off, repeating itself): its live lines go.
       on('reply-dropped', () => self.setLive((l) => ({ ...l, thinking: null, text: null, writing: null }))),
       // The app working between replies (notes, a summary): the working line says so.

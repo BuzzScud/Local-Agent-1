@@ -30,7 +30,7 @@ import { cut, webFetch, webSearch } from './tools-web.mjs';
 const READ_WHOLE_MAX = 50_000_000;
 import { writeWhole } from './write-whole.mjs';
 export { arrivedNote, display, needsText, normalizeArgs, parseArgs, patchOps, sentArgs } from './tools-args.mjs';
-export { AGENT_TOOL_DEF, agentToolDef, APP_NOT, APP_TOOL_DEF, EXPLORE_TOOLS, MODEL_TOOL_DEFS, oldSteps, TOOL_DEFS, toolDefs, toolNameOf, toolSchemas, WHOLE_MAX } from './tools-defs.mjs';
+export { AGENT_TOOL_DEF, agentToolDef, APP_NOT, APP_TOOL_DEF, EXPLORE_TOOLS, HEARTH_WRITE_DEF, MODEL_TOOL_DEFS, oldSteps, TOOL_DEFS, toolDefs, toolNameOf, toolSchemas, WHOLE_MAX } from './tools-defs.mjs';
 export { findEdit, pageScriptError, stripLineNumbers, syntaxError } from './tools-edit.mjs';
 export { didYouMean, resolvePath, settlePath } from './tools-paths.mjs';
 export { desktopDefault, plainFetch, plainRead, wallOf } from './tools-web.mjs';
@@ -52,6 +52,16 @@ export function prepare(name, args, env) {
     if (!exists && name === 'Edit') {
       const fix = settlePath(env.cwd, args.path, { work: env.workFolder });
       if (fix?.path) { Object.assign(p, resolvePath(env.cwd, fix.path)); args.path = fix.path; exists = true; }
+    }
+    // Added to the end (hearth's Write, tools-defs.mjs HEARTH_WRITE_DEF): a big file in parts, each shown as it lands.
+    // Only a file written or read in this conversation, so a part never lands on one the model has not seen; no
+    // syntax check, since a file in parts is unfinished until its last part.
+    if (name === 'Write' && onOff(args.append) && exists && statSync(p.abs).isFile()) {
+      if (!env.rewrite?.(p.abs)) return { error: `${p.rel} already exists and was not written or read in this conversation. Read it first, then add to its end.` };
+      const before = readFileSync(p.abs, 'utf8');
+      const part = String(args.content ?? '');
+      const after = `${before}${before && !before.endsWith('\n') && part && !part.startsWith('\n') ? '\n' : ''}${part}`;
+      return { abs: p.abs, rel: p.rel, before, after, ...diffLines(before, after), created: false, appended: true };
     }
     // Rewriting a whole existing file is how a small model breaks it, so only Edit may change one.
     // A model on another machine (the remote set) may, as Claude Code does: once it has read the file in
@@ -412,7 +422,7 @@ export async function execute(name, args, prepared, env) {
       }
       mkdirSync(dirname(prepared.abs), { recursive: true });
       writeWhole(prepared.abs, prepared.after);
-      const verb = prepared.created ? 'Created' : 'Updated';
+      const verb = prepared.appended ? 'Added to the end of' : prepared.created ? 'Created' : 'Updated';
       // A file outside the project is named to the model by its full path ("~/Desktop/x.html"), not as a climb
       // out of the folder ("../Shared/Desktop/x.html" was read as a guess at where it went, 5 Oct 2026).
       const h = env.home ?? homedir();
@@ -420,7 +430,7 @@ export async function execute(name, args, prepared, env) {
       // The type errors in the file now, when a language server is already warm for it (tools/lsp.mjs; one is never started for this).
       const typeErrors = await errorsAfterEdit(prepared.abs, env.cwd);
       return {
-        text: `${verb} ${named} (+${prepared.additions} −${prepared.removals} lines).${typeErrors}`,
+        text: `${verb} ${named} (+${prepared.additions} −${prepared.removals} lines${prepared.appended ? `; ${prepared.after.split('\n').length} lines now` : ''}).${typeErrors}`,
         view: { kind: 'diff', path: prepared.rel, created: prepared.created, hunk: prepared.hunk, additions: prepared.additions, removals: prepared.removals, lines: prepared.after.split('\n').length },
       };
     }

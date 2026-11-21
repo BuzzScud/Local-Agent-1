@@ -111,6 +111,8 @@ export function normalizeArgs(name, raw, way = 'model') {
     }
     if (out[key] === undefined) for (const alias of aliasesOf(key)) if (loose.get(flat(alias)) !== undefined) { out[key] = loose.get(flat(alias)); break; }
   }
+  // hearth's Write adds to the end (tools-defs.mjs HEARTH_WRITE_DEF); the shared definition does not list it.
+  if (name === 'Write' && raw?.append !== undefined) out.append = raw.append;
   // A plan sent as text (4 Oct 2026: qwen3-coder-next sent its list as a string of JSON three times,
   // Qwen3.6 a numbered plan, each told "must be a list"): JSON read as the list it is, else a step a line.
   if (name === 'TodoWrite' && typeof out.todos === 'string') out.todos = planOf(out.todos);

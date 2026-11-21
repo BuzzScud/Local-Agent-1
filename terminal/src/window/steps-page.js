@@ -8,7 +8,7 @@
 // server.mjs puts this file into ui.html; it uses the page's own esc, md, itemHtml, plural, SPIN, STILL, S and render.
 (() => {
   const FAM = { tools: '#7fb2e5', think: '#b7a2f2', write: '#e2c08d', app: '#7d8794', fail: 'var(--bad)' };
-  const fam = (d) => (d.err || d.k === 'error' ? FAM.fail : d.k === 'think' ? FAM.think : d.k === 'said' || d.k === 'writing' ? FAM.write : d.k === 'note' || d.k === 'machine' ? FAM.app : FAM.tools);
+  const fam = (d) => (d.err || d.k === 'error' ? FAM.fail : d.k === 'think' ? FAM.think : d.k === 'said' || d.k === 'writing' || d.k === 'whole' ? FAM.write : d.k === 'note' || d.k === 'machine' ? FAM.app : FAM.tools);
   const TESTY = /\b(test|tests|pytest|vitest|jest|lake build|check)\b/;
   const base = (p) => String(p ?? '').split('/').pop();
   const cut = (s, n) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
@@ -50,6 +50,11 @@
   const LABEL_VERB = { Read: 'Reading', Search: 'Searching', Grep: 'Searching', List: 'Listing', Edit: 'Editing', Write: 'Writing', WebSearch: 'Searching the web', WebFetch: 'Fetching', TodoWrite: 'Planning', Ask: 'Asking you', Agent: 'Asking a helper' };
   function liveStepOf(L) {
     const since = L.stepStart ?? L.turnStart ?? now();
+    // hearth (an Ollama service) sends a tool call in one piece once it is written: its words stop while a long one is
+    // written, so after 15 s of quiet the line says so, with about how much is written at the last reply's speed
+    // (21 Nov 2026: a dashboard file written for 5 minutes read "Writing… 16 words" the whole time)
+    const quiet = L.whole && L.lastTokenAt && !L.waiting && !L.running && !L.task ? (now() - L.lastTokenAt) / 1000 : 0;
+    if (quiet >= 15) return { key: 'live', k: 'whole', text: L.text, since: L.lastTokenAt, tps: L.wholeTps ?? null, verb: ['Writing its next step', 'sent in one piece when it is done'] };
     // the answer once it comes (the thought before it is still in the live state until the reply ends)
     if (L.text) return { key: 'live', k: 'said', text: L.text, since: L.textStart ?? since, verb: ['Writing', ''] };
     if (L.thinking) return { key: 'live', k: 'think', text: L.thinking, tokens: L.thinkTokens ?? 0, since: L.thinkStart ?? since, verb: ['Thinking', ''] };
@@ -147,15 +152,16 @@
     const so = ls.k === 'think' ? ls.tokens ?? 0 : ls.k === 'said' ? String(ls.text ?? '').split(/\s+/).filter(Boolean).length : null;
     const rate = ls.k === 'think' && secs > 0.5 && so ? Math.round(so / secs) : null;
     const think = turn.think + (ls.k === 'think' ? ls.tokens ?? 0 : 0);
-    const meta = [dur(now() - ls.since), so != null ? (ls.k === 'think' ? '↓ ' + ktok(so) + ' tokens' + (rate ? ' · ' + rate + '/s' : '') : plural(so, 'word')) : '', plural(turn.steps.filter(isCall).length, 'call'), think ? ktok(think) + ' thinking' : '', fails ? '<span class="bad">' + fails + ' failed</span>' : '', dur(now() - (turn.start ?? now())) + ' in all', 'esc to interrupt'].filter(Boolean).join(' · ');
+    const est = ls.k === 'whole' && ls.tps > 0 ? Math.round(secs * ls.tps) : null;
+    const meta = [dur(now() - ls.since), est ? 'about ' + ktok(est) + ' tokens so far' : so != null ? (ls.k === 'think' ? '↓ ' + ktok(so) + ' tokens' + (rate ? ' · ' + rate + '/s' : '') : plural(so, 'word')) : '', plural(turn.steps.filter(isCall).length, 'call'), think ? ktok(think) + ' thinking' : '', fails ? '<span class="bad">' + fails + ' failed</span>' : '', dur(now() - (turn.start ?? now())) + ' in all', 'esc to interrupt'].filter(Boolean).join(' · ');
     return '<div class="l7 live" data-tail7="1" style="--c:' + fam(ls) + '"><span class="b7 ac">' + (STILL.matches ? '✻' : GLYPHS[Math.floor(now() / 120) % GLYPHS.length]) + '</span><span class="nm vb">' + esc(vb) + '…</span>' + (tg ? '<span class="ar">' + esc(cut(tg, 160)) + '</span>' : '') + '<span class="mt">(' + meta + ')</span></div>';
   }
   // what streams: its newest words, at most five whole lines, starting at a whole word
   function tailHtml(d) {
-    let t = d.k === 'said' ? String(d.text ?? '') : plain(d.text);
+    let t = d.k === 'said' || d.k === 'whole' ? String(d.text ?? '') : plain(d.text);
     // 1,600 characters: five whole lines across a wide window, now that the lines start at the left (19 Nov 2026)
     if (t.length > 1600) { t = t.slice(-1600); t = '… ' + t.slice(t.search(/\s/) + 1); }
-    return '<div class="tail7' + (d.k === 'said' ? ' w' : '') + '"><div>' + esc(t) + '<span class="caret7"></span></div></div>';
+    return '<div class="tail7' + (d.k === 'said' || d.k === 'whole' ? ' w' : '') + '"><div>' + esc(t) + '<span class="caret7"></span></div></div>';
   }
   // the lines of a part: the model's line, each step (opened, its result under it), a web search's sources, the hidden
   // thoughts, the step under way
@@ -188,7 +194,7 @@
       i = j;
     }
     if (thoughts) out.push([p.key + '#thinks', '<div class="th7" data-thinks7="1">∴ ' + plural(thoughts, 'thought') + (thinkShown ? ' · hide thinking' : ' hidden · show thinking') + '</div>']);
-    if (ls) out.push(['live', liveLine(ls, turn) + (tailOpen && (ls.k === 'think' || ls.k === 'said') ? tailHtml(ls) : '')]);
+    if (ls) out.push(['live', liveLine(ls, turn) + (tailOpen && (ls.k === 'think' || ls.k === 'said' || (ls.k === 'whole' && ls.text)) ? tailHtml(ls) : '')]);
     return out;
   }
 
