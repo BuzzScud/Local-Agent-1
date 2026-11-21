@@ -11,7 +11,7 @@ process.env.AGENTIC_MEMORY_SAVE = 'off';
 const { Agent } = await import('../src/agent/agent.mjs');
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const { prepare } = await import('../src/agent/tools.mjs');
-const { CASES_ASK, casesOf, caseProbe, untested, isTestPath, casesFromList, gapCases, reviewWrong, reviewBack, signSample } = await import('../src/agent/cases.mjs');
+const { CASES_ASK, casesOf, caseProbe, untested, isTestPath, isProsePath, onlyProse, casesFromList, gapCases, reviewWrong, reviewBack, signSample } = await import('../src/agent/cases.mjs');
 const { MODEL_HOOKS } = await import('../src/agent/way.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
 const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
@@ -337,4 +337,34 @@ test('case review: all read right, or no answer, and the answer stands; off with
   expect(signSample('&&', ['cat notes.txt', 'ls src', 'cat a | b'])).toBe('cat notes.txt && ls src');
   expect(signSample('>', ['cat notes.txt'])).toBe('cat notes.txt > out.txt');
   expect(signSample('$(', ['cat notes.txt'])).toBe('cat $(echo notes.txt)');
+});
+
+// 21 Nov 2026, the hearth fit check on hearth's 27b: the list came back with `test suite`, `run the tests` and, for a
+// page of docs, `saying what it does`. None could ever stand in a test file as written, so finished work went back
+// twice and ran to its 12-minute limit, and a docs page asked for with "Do not change the code" got a test file.
+test('plain words are no case, and a message that changed only a page of words has none to test', async () => {
+  expect(casesFromList([{ example: 'test suite', expect: 'Run the whole test suite' }, { example: 'run the tests', expect: 'the tests are run' }, { example: 'saying what it does', expect: 'each line says what the function does' }, { example: 'applyDiscount(price, 150)', expect: 'never below 0' }]).map((c) => c.example)).toEqual(['applyDiscount(price, 150)']);
+  // a command with plain words, a bare command and a form with a capital are cases as before
+  expect(casesFromList([{ example: 'grep tax src' }, { example: 'ls' }, { example: 'cat FILE' }, { example: 'git status' }, { example: 'head -4 notes.txt' }]).map((c) => c.example)).toEqual(['grep tax src', 'ls', 'cat FILE', 'git status', 'head -4 notes.txt']);
+  expect(casesOf([{ text: '`run the tests` → they pass' }, { text: '`head -4 notes.txt` → 4 lines' }]).map((c) => c.example)).toEqual(['head -4 notes.txt']);
+  expect([isProsePath('docs/API.md'), isProsePath('README.txt'), isProsePath('src/a.mjs'), isProsePath('test/docs.test.mjs')]).toEqual([true, true, false, false]);
+  expect(onlyProse({ wrote: new Map([['docs/API.md', 'x']]) })).toBe(true);
+  expect(onlyProse({ wrote: new Map([['docs/API.md', 'x'], ['src/a.mjs', 'y']]) })).toBe(false);
+  expect(onlyProse({})).toBe(false);
+  // a page of docs: no list is asked for, nothing about cases is said, and the answer stands
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: 'docs/API.md', content: '# API\n\n- f(x): gives x back\n' } } },
+    { text: 'Done: docs/API.md lists f.' },
+  ]);
+  try {
+    const a = agentOn(fake.url);
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    await a.send('Write docs/API.md: one line for every function exported from lib.mjs. Do not change the code.');
+    expect(readFileSync(join(dir, 'docs', 'API.md'), 'utf8')).toContain('f(x)');
+    expect(results(a).some((t) => t.includes(CASES_ASK) || t.includes("The request's cases"))).toBe(false);
+    expect(notes.some((t) => /cases/i.test(t))).toBe(false);
+    expect(autoNotes(a).some((t) => /have no test yet/.test(t))).toBe(false);
+    expect(a.messages.at(-1).content).toBe('Done: docs/API.md lists f.');
+  } finally { await fake.close(); }
 });

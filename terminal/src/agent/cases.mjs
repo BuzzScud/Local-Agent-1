@@ -10,6 +10,12 @@
 export const CASES_ASK = '(Before more changes: write your plan with TodoWrite as the cases this request names, one item each, with an example in backticks and what it should give. For example: `slugify("Hello World")` → "hello-world". Every form the request lists is its own case, and so is each one that must stay as it is (`slugify("")` → "", unchanged). Each case will need a test that tries its example before you are done.)';
 export const CASES_FIX = '(Your plan has no examples. Write it again with TodoWrite: one case an item, each with an example in backticks and what it should give, as in `slugify("Hello World")` → "hello-world".)';
 
+// A page of words, by its path: a message that changed only these has no cases to test (21 Nov 2026: asked for
+// docs/API.md and "Do not change the code", the model was told each case needs a test and added a test file).
+export const isProsePath = (rel) => /\.(md|mdx|markdown|txt|rst|adoc)$/i.test(rel);
+// The message's changes are all pages of words (none recorded: not known, so not).
+export const onlyProse = (turn) => { const files = [...(turn?.wrote?.keys() ?? [])]; return files.length > 0 && files.every(isProsePath); };
+
 // A test file, by its path: in a test folder, or named *.test.*, *.spec.*, *_test.*, test_*.
 export const isTestPath = (rel) => /(^|\/)(tests?|__tests__|spec)\//i.test(rel) || /[._-](test|spec)\.[a-z]+$/i.test(rel) || /(^|\/)test_[\w-]+\.[a-z]+$/i.test(rel);
 
@@ -21,7 +27,15 @@ const ARROW = /\s*(?:→|->|=>)\s*/;
 // A command in lower case (cat, head, ls) or a call (slugify(…), a.b(…)); a step of the plan starts with a capital.
 // A sentence is no example ("agent.mjs step function output for a mapped plain read."): its test could never be found.
 const PROSE = /\b(the|an?|for|with|of|that|when|should|function|output|returns?|in|on|as|by|from|is|to|and|or)\b/gi;
-const codeLike = (ex) => { const w = ex.split(/\s+/); return w.length <= 10 && (/^[a-z_$][a-z0-9_.$-]*$/.test(w[0]) || /^[\w.$]+\(/.test(w[0])) && !/[a-z]\.$/i.test(ex) && (ex.replace(/"[^"]*"|'[^']*'/g, '').match(PROSE)?.length ?? 0) < 2; };
+// Plain words are no example either (21 Nov 2026, the hearth fit check on hearth's 27b: the list came back with
+// `test suite` for "run the whole test suite", `run the tests` and, for a page of docs, `saying what it does`; each had
+// to stand in a test file as written, so finished work went back twice and ran to its time limit, and the docs page got
+// a test file the request forbade). Two words or more, each only lower-case letters, are an example only when the
+// first is a command; anything with a sign of code in it (a call, a flag, a number, a dot or slash, a quote, a
+// capital as in FILE, a pipe) is one as before.
+const COMMAND = /^(?:cat|head|tail|ls|grep|rg|find|wc|sed|awk|sort|uniq|cut|tr|echo|printf|cd|pwd|cp|mv|rm|mkdir|touch|chmod|ln|diff|tee|xargs|which|env|export|kill|ps|du|df|tar|zip|unzip|curl|wget|ssh|scp|git|npm|npx|node|bun|deno|yarn|pnpm|python3?|pip3?|ruby|go|cargo|make|docker|kubectl|bash|sh|zsh)$/;
+const plainWords = (w) => w.length >= 2 && w.every((x) => /^[a-z]+$/.test(x)) && !COMMAND.test(w[0]);
+const codeLike = (ex) => { const w = ex.split(/\s+/); return w.length <= 10 && (/^[a-z_$][a-z0-9_.$-]*$/.test(w[0]) || /^[\w.$]+\(/.test(w[0])) && !/[a-z]\.$/i.test(ex) && (ex.replace(/"[^"]*"|'[^']*'/g, '').match(PROSE)?.length ?? 0) < 2 && !plainWords(w); };
 export function casesOf(todos = []) {
   const out = [];
   const add = (text, example) => {

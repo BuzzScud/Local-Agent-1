@@ -3,7 +3,7 @@
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
 import { endpointOf } from '../../../models/index.mjs';
 import { askedQuestions, checkInQuestion, errorSaid, limitQuestion, lookSaid, planQuestion, sameResultSaid, stepSaid, stuckQuestion } from './questions.mjs';
-import { CASES_ASK, CASES_FIX, MAX_CASES, REVIEW_CODE, REVIEW_MAX, REVIEW_SCHEMA, REVIEW_SYSTEM, addCase, casesFromList, casesOf, casesTold, gapCases, isTestPath, reviewAsk, reviewBack, reviewWrong, signSample } from './cases.mjs';
+import { CASES_ASK, CASES_FIX, MAX_CASES, REVIEW_CODE, REVIEW_MAX, REVIEW_SCHEMA, REVIEW_SYSTEM, addCase, casesFromList, casesOf, casesTold, gapCases, isTestPath, onlyProse, reviewAsk, reviewBack, reviewWrong, signSample } from './cases.mjs';
 import { display, parseArgs } from './tools.mjs';
 import { readFileSync } from 'node:fs';
 import { namesQuestion } from './folder.mjs';
@@ -159,7 +159,8 @@ export class ChecksPart {
     if (!t || this.isHelper || !this.model?.remote || !this.testCmd || !this.hook('cases') || !this.tools().some((x) => x.function?.name === 'TodoWrite')) return '';
     const wrotePlan = calls.some((c) => c.name === 'TodoWrite');
     if (wrotePlan) for (const c of casesOf(t.planAt != null ? this.todos ?? [] : [])) addCase(t, c);
-    if (!t.casesAsked && calls.some((c) => CHANGES.has(c.name))) {
+    // Not while the message has changed only pages of words (cases.mjs onlyProse): they have no cases to test.
+    if (!t.casesAsked && calls.some((c) => CHANGES.has(c.name)) && !onlyProse(t)) {
       t.casesAsked = true;
       t.toDoSent = true;
       // A big model (big-model mode, model.harness) skips the call of its own and writes the cases in its

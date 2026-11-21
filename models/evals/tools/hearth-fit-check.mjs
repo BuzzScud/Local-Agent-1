@@ -158,6 +158,8 @@ async function runOne(arm, checkout, task) {
     ok: judged.ok, why: judged.why, answer: run.out.trim().slice(-300), errTail: run.err.trim().split('\n').slice(-6).join('\n'), reqs,
   };
   r.thinkShare = r.wrote ? r.think / r.wrote : null;
+  // Everything the run printed, kept with the results (21 Nov 2026: the summary's last six lines did not say why a run was sent back).
+  try { mkdirSync(join(out, 'runs'), { recursive: true }); writeFileSync(join(out, 'runs', `${arm}-${task.id}.txt`), `${run.err}\n\n--- its answer ---\n${run.out}`); } catch {}
   console.log(`${arm} · ${task.id}: ${Math.round(secs)} s${run.killed ? ' (STOPPED at its limit)' : ''}, ${r.steps} steps, ${r.side} side (${r.sideWords} with words), ${r.offHearth.length} off hearth, thinking ${r.thinkShare == null ? '—' : Math.round(r.thinkShare * 100) + '%'}, work ${judged.ok ? 'right' : 'WRONG'} (${judged.why})`);
   return r;
 }

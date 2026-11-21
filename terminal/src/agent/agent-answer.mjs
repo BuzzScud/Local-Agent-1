@@ -4,7 +4,7 @@
 // can be read whole. Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the
 // agent's own.
 import { questionLines } from './questions.mjs';
-import { casesBack, isTestPath, untested } from './cases.mjs';
+import { casesBack, isTestPath, onlyProse, untested } from './cases.mjs';
 import { readFileSync } from 'node:fs';
 import { isHomeFolder } from './prompt.mjs';
 import { LOOK_BACKS, lookBackNote } from './look.mjs';
@@ -384,7 +384,7 @@ export class AnswerPart {
     }
     // The request's cases (cases.mjs): each case of its plan needs a test file changed in this message
     // that tries its example. Back twice with the ones still untested; then a line names them.
-    if (this.turn.changed && this.model?.remote && this.hook('cases') && !this.turn.casesDone && !signal?.aborted) {
+    if (this.turn.changed && this.model?.remote && this.hook('cases') && !this.turn.casesDone && !signal?.aborted && !onlyProse(this.turn)) {
       const cases = this.turn.cases ?? [];
       if (cases.length) {
         const tests = [...(this.turn.wrote?.keys() ?? [])].filter(isTestPath).map((rel) => { try { return readFileSync(join(this.cwd, rel), 'utf8'); } catch { return ''; } }).join('\n');
