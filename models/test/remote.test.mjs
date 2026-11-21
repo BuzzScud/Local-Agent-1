@@ -12,7 +12,7 @@ import { createServer } from 'node:http';
 // A throwaway home before the models part is loaded (it reads AGENTIC_HOME once): nothing here reaches the real ~/.agentic-coder.
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-remote-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { parseAddress, isPrivateHost, directUrl, remoteLabel, remoteProblem, remoteRisk, sshArgs, openTunnel, probe, pickRemoteModel, connectRemote, endpointOf, authHeaders, remoteModel, GENERIC_REMOTE, validSshDest, validKey, keyEnd, warmUp, serveArgs, lanAddresses, serverArgs, MODELS, HOME } = await import('../index.mjs');
+const { parseAddress, isPrivateHost, directUrl, remoteLabel, remoteProblem, remoteRisk, sshArgs, openTunnel, probe, pickRemoteModel, pickHearthModel, hearthModelsOf, connectRemote, endpointOf, authHeaders, remoteModel, GENERIC_REMOTE, validSshDest, validKey, keyEnd, warmUp, serveArgs, lanAddresses, serverArgs, MODELS, HOME } = await import('../index.mjs');
 const { serveHosts, relayTo } = await import('../runtime/serve.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
@@ -210,6 +210,7 @@ test('the check on an OpenAI-compatible server: its model list, the one it has p
     const picked = await probe({ url: `http://127.0.0.1:${many.address().port}`, kind: 'openai', reply: true });
     expect(picked.ok).toBe(true);
     expect(picked.model).toBe('coder:7b');
+    expect(picked.modelRows.map((m) => m.id)).toEqual(['llava:latest', 'coder:7b', 'tiny:3b']);
     expect(picked.steps.map((s) => s.text)).toEqual([
       expect.stringMatching(/^reached in \d+ ms$/),
       'using coder:7b of 3',
@@ -224,6 +225,34 @@ test('the check on an OpenAI-compatible server: its model list, the one it has p
     expect(listed.model).toBe(null);
     expect(listed.error).toMatch(/^pick a model: it has 3/);
   } finally { await new Promise((r) => many.close(r)); }
+  // hearth's door (20 Nov 2026): a key with no bound model lists hearth's agents beside the GPU tags. Connect (autoPick false,
+  // no model named) lists just the agents; a model picked from that list, or the CLI's autoPick, asks for it by name.
+  const door = createServer(async (req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/v1/models') { res.end(JSON.stringify({ data: ['hearth-lite', 'hearth', 'bonsai-2:27b', 'bonsai-2:9b', 'hearth/oto', 'hearth-2b', 'hearth-9b'].map((id) => ({ id })) })); return; }
+    let b = ''; for await (const c of req) b += c;
+    door.asked = JSON.parse(b || '{}').model;
+    res.end(JSON.stringify({ choices: [{ message: { content: 'ready' } }] }));
+  });
+  await new Promise((r) => door.listen(0, '127.0.0.1', r));
+  try {
+    const url = `http://127.0.0.1:${door.address().port}`;
+    const listed = await probe({ url, kind: 'openai', key: 'hk_test-0123456789', reply: true, autoPick: false, hearth: true });
+    expect(listed.needModel).toBe(true);
+    expect(listed.models).toEqual(['hearth-lite', 'hearth']);
+    const lite = await probe({ url, kind: 'openai', key: 'hk_test-0123456789', model: 'hearth-lite', reply: true, autoPick: false, hearth: true });
+    expect(lite.ok).toBe(true);
+    expect(lite.model).toBe('hearth-lite');
+    expect(door.asked).toBe('hearth-lite');
+    expect(lite.models.slice(0, 2)).toEqual(['hearth-lite', 'hearth']);
+    const cli = await probe({ url, kind: 'openai', key: 'hk_test-0123456789', reply: true, hearth: true });
+    expect(cli.model).toBe('hearth');
+  } finally { await new Promise((r) => door.close(r)); }
+  // An older door lists only hearth/<mode>: the agents map onto those, hearth first.
+  expect(hearthModelsOf(['bonsai-2:27b', 'hearth/lite', 'hearth/oto'])).toEqual(['hearth/lite', 'hearth/oto']);
+  expect(pickHearthModel(['bonsai-2:27b', 'hearth/lite', 'hearth/oto'])).toBe('hearth/oto');
+  expect(pickHearthModel(['hearth-lite', 'hearth'], 'hearth lite')).toBe('hearth-lite');
+  expect(pickHearthModel(['coder:7b', 'tiny:3b'])).toBe('coder:7b');
   // A port nothing listens on (taken and let go at once).
   const free = createServer();
   await new Promise((r) => free.listen(0, '127.0.0.1', r));

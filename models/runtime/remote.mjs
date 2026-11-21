@@ -48,6 +48,47 @@ export const HEARTH_MODEL = 'hearth';
 // - the window is HEARTH_CTX, so a conversation the 27b no longer holds is read again in about 4 minutes at worst, not 6.
 export const HEARTH_CTX = 131_072;
 export const HEARTH_SIZES = ['hearth-2b', 'hearth-4b', 'hearth-9b'];
+// hearth's agents as a tool asks for them (hearth's API page: hearth Lite, hearth, hearth Code). A key made for them
+// lists the `ask` names; a key without agents lists hearth/<mode> and the GPU tags. Connect maps both, and never asks
+// for a name the door did not list.
+export const HEARTH_AGENTS = [
+  { ask: 'hearth-lite', name: 'hearth Lite', aliases: ['hearth/lite'] },
+  { ask: 'hearth', name: 'hearth', aliases: ['hearth/oto'] },
+  { ask: 'hearth-code', name: 'hearth Code', aliases: ['hearth/code'] },
+];
+const foldHearth = (n) => String(n ?? '').trim().toLowerCase().replace(/:latest$/i, '').replace(/[\s_]+/g, '-');
+export function hearthAgentOf(id) {
+  const s = foldHearth(id);
+  return HEARTH_AGENTS.find((a) => foldHearth(a.ask) === s || a.aliases.some((x) => foldHearth(x) === s)) ?? null;
+}
+export function hearthName(id) {
+  const a = hearthAgentOf(id);
+  if (a) return a.name;
+  const size = foldHearth(id);
+  return HEARTH_SIZES.includes(size) ? size : String(id ?? '');
+}
+// The door's own ids that are hearth's agents, in HEARTH_AGENTS order. An alias is used only when the ask is not listed.
+export function hearthModelsOf(ids = []) {
+  const list = (ids ?? []).filter(Boolean);
+  const out = [];
+  for (const a of HEARTH_AGENTS) {
+    const exact = list.find((id) => foldHearth(id) === foldHearth(a.ask));
+    const alias = list.find((id) => a.aliases.some((x) => foldHearth(x) === foldHearth(id)));
+    const hit = exact || alias;
+    if (hit && !out.includes(hit)) out.push(hit);
+  }
+  return out;
+}
+export function pickHearthModel(ids = [], preferred = '') {
+  const agents = hearthModelsOf(ids);
+  const want = String(preferred ?? '').trim();
+  if (want) {
+    const mapped = agents.find((id) => foldHearth(id) === foldHearth(want) || hearthAgentOf(id) === hearthAgentOf(want));
+    if (mapped) return mapped;
+    if (ids.includes(want)) return want;
+  }
+  return agents.find((id) => hearthAgentOf(id)?.ask === HEARTH_MODEL) || agents[0] || pickRemoteModel(ids);
+}
 // The order the door tries for a first choice: the owner's picks lead, then whichever is next best for that kind of job.
 export const HEARTH_ORDER = {
   'hearth-2b': ['hearth-2b', 'hearth-4b', 'hearth-9b', HEARTH_MODEL],
@@ -435,7 +476,7 @@ export function pickRemoteModel(ids) {
 // replyMs: how long the one word may take (a test gives less).
 // busyMs: how long the one word may take from an Ollama model already loaded; after that it is still
 // loaded, so it is ready and only busy with a request ahead of it (it answers one at a time).
-export async function probe({ url, kind = 'llama', key = null, model = '', numCtx = null, reply = false, autoPick = true, signal, timeoutMs = 8000, onStep = null, replyMs = null, busyMs = 10_000 }) {
+export async function probe({ url, kind = 'llama', key = null, model = '', numCtx = null, reply = false, autoPick = true, signal, timeoutMs = 8000, onStep = null, replyMs = null, busyMs = 10_000, hearth = false }) {
   const steps = [];
   const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null, needModel: false, vision: kind !== 'llama' };
   const fail = (text) => { steps.push({ ok: false, text }); out.error = text; return out; };
@@ -465,16 +506,45 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
       if (!r.ok || !Array.isArray(r.body?.data)) return fail(`the address answered ${r.status} to /v1/models: is it an OpenAI-compatible server? (with a path like /api/v1 when it has one)`);
       steps.push({ ok: true, text: `reached in ${out.ms} ms${key ? ' · the key was accepted' : ''}` });
       out.models = r.body.data.map((m) => m.id).filter(Boolean);
+      out.modelRows = r.body.data.filter((m) => m?.id);
       const named = String(model ?? '').trim();
-      if (named && !out.models.includes(named) && out.models.length) steps.push({ ok: true, text: `"${named}" is not in its list of ${out.models.length}; it is asked for anyway` });
-      out.model = named || ((autoPick || out.models.length === 1) ? pickRemoteModel(out.models) : null);
-      if (!out.model) {
-        out.needModel = out.models.length > 0;
-        return fail(out.models.length
-          ? `pick a model: it has ${out.models.length} (${out.models.slice(0, 3).join(', ')}${out.models.length > 3 ? '…' : ''})`
-          : 'it listed no models');
+      if (hearth) {
+        const agents = hearthModelsOf(out.models);
+        const folded = out.models.map(foldHearth);
+        out.hearthAgents = agents;
+        out.hearthSizes = HEARTH_SIZES.filter((s) => folded.includes(s));
+        const pool = agents.length ? agents : out.models;
+        const mapped = named ? pickHearthModel(out.models, named) : null;
+        const listed = Boolean(mapped && out.models.includes(mapped));
+        // Connect lists the agents when none is named (the form sends none while its row is the default it never picked), or
+        // the named one is not on this door.
+        if (!autoPick && pool.length > 1 && (!named || !listed)) {
+          out.models = pool;
+          out.model = null;
+          out.needModel = true;
+          return fail(`pick a model: it has ${pool.length} (${pool.slice(0, 3).join(', ')}${pool.length > 3 ? '…' : ''})`);
+        }
+        out.model = listed ? mapped : ((autoPick || pool.length === 1) ? pickHearthModel(out.models, named) : null);
+        if (!out.model) {
+          out.needModel = pool.length > 0;
+          out.models = pool;
+          return fail(pool.length
+            ? `pick a model: it has ${pool.length} (${pool.slice(0, 3).join(', ')}${pool.length > 3 ? '…' : ''})`
+            : 'it listed no models');
+        }
+        if (agents.length) out.models = [...new Set([...agents, ...out.models.filter((id) => !agents.includes(id) && !HEARTH_SIZES.includes(foldHearth(id))) , ...out.hearthSizes])];
+        if (!named || named !== out.model) steps.push({ ok: true, text: `using ${out.model} of ${pool.length}` });
+      } else {
+        if (named && !out.models.includes(named) && out.models.length) steps.push({ ok: true, text: `"${named}" is not in its list of ${out.models.length}; it is asked for anyway` });
+        out.model = named || ((autoPick || out.models.length === 1) ? pickRemoteModel(out.models) : null);
+        if (!out.model) {
+          out.needModel = out.models.length > 0;
+          return fail(out.models.length
+            ? `pick a model: it has ${out.models.length} (${out.models.slice(0, 3).join(', ')}${out.models.length > 3 ? '…' : ''})`
+            : 'it listed no models');
+        }
+        if (!named && out.models.length > 1) steps.push({ ok: true, text: `using ${out.model} of ${out.models.length}` });
       }
-      if (!named && out.models.length > 1) steps.push({ ok: true, text: `using ${out.model} of ${out.models.length}` });
       const picked = r.body.data.find((m) => m.id === out.model);
       out.ctx = ctxOf(picked);
       // What it costs, when the list says (OpenRouter: dollars a token, as text): the cost meter's price.
@@ -691,7 +761,7 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined, s
     url = tunnel.url;
   } else url = directUrl(r);
   try {
-    const info = await probe({ url, kind: r.kind, key: secret, model: r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, signal });
+    const info = await probe({ url, kind: r.kind, key: secret, model: r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, signal, hearth: sourceOf(r) === 'hearth' });
     if (!info.ok) throw new Error(info.error);
     // hearth (HEARTH_CTX above): its 27b thinks and takes tools whatever an older door says, it works in HEARTH_CTX at
     // most, and its small models are the sizes its door lists (none on a door from before them: no helper goes there).

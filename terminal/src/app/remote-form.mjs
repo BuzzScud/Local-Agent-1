@@ -12,7 +12,7 @@
 // ←→ moves a choice row; typing (or ←→) on a text row edits it in place, and
 // enter does too while the service is not ready to connect.
 // A key never leaves the Keychain except to go in a request's header.
-import { DEFAULT_REMOTE, REMOTE_SOURCES, HEARTH_ADDRESS, HEARTH_MODEL, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf, ollamaCatalog } from '../../../models/index.mjs';
+import { DEFAULT_REMOTE, REMOTE_SOURCES, HEARTH_ADDRESS, HEARTH_MODEL, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, pickHearthModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf, ollamaCatalog } from '../../../models/index.mjs';
 import { groupsOf, suggestModel } from './remote-models.mjs';
 import { readTryouts } from './tryouts.mjs';
 import { MEMORY_TO } from '../agent/opening.mjs';
@@ -184,7 +184,7 @@ export function openModelPick(form, models = null, { tried = readTryouts(cur(for
   const ids = (models?.length ? models : modelChoices(form)).filter(Boolean);
   if (ids.length < 2) return form;
   const v = cur(form)?.model;
-  const suggested = (v && ids.includes(v) ? v : pickRemoteModel(ids)) || ids[0];
+  const suggested = (v && ids.includes(v) ? v : form.source === 'hearth' ? pickHearthModel(ids, v) : pickRemoteModel(ids)) || ids[0];
   const index = Math.max(0, ids.indexOf(suggested));
   const rows = rowsOf(form);
   return { ...form, pick: { models: ids, index, suggested }, index: Math.max(0, rows.findIndex((r) => r.id === 'model')) };
@@ -209,7 +209,7 @@ const pickedName = (p, i = p?.index) => { const id = p?.models[i]; return p?.cop
 export function commitPick(form) {
   const name = pickedName(form.pick);
   if (!name) return form;
-  return { ...withValues(form, { model: name }), pick: null };
+  return { ...withValues(form, { model: name }), pick: null, modelPicked: true };
 }
 export function closePick(form) {
   return form.pick ? { ...form, pick: null } : form;
@@ -483,9 +483,14 @@ export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000, 
       tunnel = await openTunnel({ dest: r.address, remotePort: r.port ?? SERVE_PORT, ssh });
       url = tunnel.url;
     } else url = directUrl(r);
-    const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, reply: true, autoPick, signal, timeoutMs, onStep, replyMs });
+    // hearth: the door's list says which of its agents this key reaches (hearth Lite, hearth, hearth Code). Its row starts
+    // as "hearth"; until a model is picked from that list, Connect asks the door instead of assuming it.
+    const hearth = sourceOf(r) === 'hearth';
+    const model = r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : hearth && !autoPick && !form.modelPicked && r.model === HEARTH_MODEL ? '' : r.model;
+    const res = await probe({ url, kind: r.kind, key, model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, reply: true, autoPick, signal, timeoutMs, onStep, replyMs, hearth });
     // An Ollama service with several models: its whole list, so the list Connect opens says what each can do.
-    if (r.kind === 'openai' && res.models?.length > 1) res.catalog = await ollamaCatalog({ url, key, signal, timeoutMs }).catch(() => null);
+    // (hearth's agents are listed by their own names, not the door's GPU tags.)
+    if (r.kind === 'openai' && res.models?.length > 1 && !res.hearthAgents?.length) res.catalog = await ollamaCatalog({ url, key, signal, timeoutMs }).catch(() => null);
     if (tunnel) res.steps.unshift({ ok: true, text: 'ssh tunnel open' });
     return res;
   } catch (e) {
