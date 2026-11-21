@@ -347,6 +347,9 @@ test('plain words are no case, and a message that changed only a page of words h
   // a command with plain words, a bare command and a form with a capital are cases as before
   expect(casesFromList([{ example: 'grep tax src' }, { example: 'ls' }, { example: 'cat FILE' }, { example: 'git status' }, { example: 'head -4 notes.txt' }]).map((c) => c.example)).toEqual(['grep tax src', 'ls', 'cat FILE', 'git status', 'head -4 notes.txt']);
   expect(casesOf([{ text: '`run the tests` → they pass' }, { text: '`head -4 notes.txt` → 4 lines' }]).map((c) => c.example)).toEqual(['head -4 notes.txt']);
+  // the command that runs the tests is how cases are tried, never one of them (a plan had `npm test` → all pass)
+  expect(casesOf([{ text: '`npm test` → all tests pass' }, { text: '`node --test` → 0 failures' }, { text: '`bun test ./a.test.mjs` → passes' }, { text: '`npm run test -- --watch` → runs' }, { text: '`python -m pytest tests` → green' }, { text: '`shippingFor(75)` → 0' }, { text: '`npm install` → installs' }]).map((c) => c.example)).toEqual(['shippingFor(75)', 'npm install']);
+  expect(casesFromList([{ example: 'npm test', expect: 'the suite passes' }, { example: 'cargo test', expect: 'passes' }, { example: 'withTax(100)', expect: '107' }]).map((c) => c.example)).toEqual(['withTax(100)']);
   expect([isProsePath('docs/API.md'), isProsePath('README.txt'), isProsePath('src/a.mjs'), isProsePath('test/docs.test.mjs')]).toEqual([true, true, false, false]);
   expect(onlyProse({ wrote: new Map([['docs/API.md', 'x']]) })).toBe(true);
   expect(onlyProse({ wrote: new Map([['docs/API.md', 'x'], ['src/a.mjs', 'y']]) })).toBe(false);

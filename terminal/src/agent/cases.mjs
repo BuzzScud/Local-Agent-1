@@ -34,8 +34,12 @@ const PROSE = /\b(the|an?|for|with|of|that|when|should|function|output|returns?|
 // first is a command; anything with a sign of code in it (a call, a flag, a number, a dot or slash, a quote, a
 // capital as in FILE, a pipe) is one as before.
 const COMMAND = /^(?:cat|head|tail|ls|grep|rg|find|wc|sed|awk|sort|uniq|cut|tr|echo|printf|cd|pwd|cp|mv|rm|mkdir|touch|chmod|ln|diff|tee|xargs|which|env|export|kill|ps|du|df|tar|zip|unzip|curl|wget|ssh|scp|git|npm|npx|node|bun|deno|yarn|pnpm|python3?|pip3?|ruby|go|cargo|make|docker|kubectl|bash|sh|zsh)$/;
+// Nor is the command that runs the tests (run 4 of the same check: with no list, the model wrote its plan as the cases
+// and "run the whole test suite" became `npm test`; no test file uses that, so the answer went back twice and the
+// model wrote a test that ran npm test inside the suite, which then failed). Running the tests is how cases are tried.
+const TEST_RUN = /^(?:(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?test\b|npx\s+(?:jest|vitest|mocha)\b|node\s+--test\b|(?:jest|vitest|mocha|pytest)\b|python3?\s+-m\s+(?:pytest|unittest)\b|(?:cargo|go|make|deno)\s+test\b)/;
 const plainWords = (w) => w.length >= 2 && w.every((x) => /^[a-z]+$/.test(x)) && !COMMAND.test(w[0]);
-const codeLike = (ex) => { const w = ex.split(/\s+/); return w.length <= 10 && (/^[a-z_$][a-z0-9_.$-]*$/.test(w[0]) || /^[\w.$]+\(/.test(w[0])) && !/[a-z]\.$/i.test(ex) && (ex.replace(/"[^"]*"|'[^']*'/g, '').match(PROSE)?.length ?? 0) < 2 && !plainWords(w); };
+const codeLike = (ex) => { const w = ex.split(/\s+/); return w.length <= 10 && (/^[a-z_$][a-z0-9_.$-]*$/.test(w[0]) || /^[\w.$]+\(/.test(w[0])) && !/[a-z]\.$/i.test(ex) && (ex.replace(/"[^"]*"|'[^']*'/g, '').match(PROSE)?.length ?? 0) < 2 && !plainWords(w) && !TEST_RUN.test(ex); };
 export function casesOf(todos = []) {
   const out = [];
   const add = (text, example) => {

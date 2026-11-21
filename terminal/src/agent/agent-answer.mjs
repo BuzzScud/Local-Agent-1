@@ -392,7 +392,7 @@ export class AnswerPart {
         if (!missing.length) this.turn.casesDone = true;
         else if ((this.turn.casesBacks ?? 0) < 2) {
           this.turn.casesBacks = (this.turn.casesBacks ?? 0) + 1;
-          this.emit('note', { text: `${missing.length} of the ${cases.length} cases in its plan have no test yet: sent back (${this.turn.casesBacks} of 2).`, tone: 'warn' });
+          this.emit('note', { text: `${missing.length} of the ${cases.length} cases in its plan have no test yet: sent back (${this.turn.casesBacks} of 2). ${missing.slice(0, 4).map((c) => c.example).join(' · ')}`, tone: 'warn' });
           this.messages.push({ role: 'user', content: auto(casesBack(missing)) });
           return 'continue';
         } else {
