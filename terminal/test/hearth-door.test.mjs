@@ -23,9 +23,12 @@ function door({ sizes = false, slowMs = 0, waitFirst = false } = {}) {
     if (req.headers.authorization !== `Bearer ${KEY}`) return json(401, { error: "That key isn't one of hearth's." });
     const p = req.url.replace(/^\/door/, '');
     const names = ['hearth', ...(sizes ? ['hearth-2b', 'hearth-4b', 'hearth-9b'] : [])];
+    const roleOf = (id) => (id === 'hearth' ? 'code' : 'fast');
+    const capsOf = (id) => (id === 'hearth' ? ['completion', 'tools', 'thinking'] : ['completion', 'tools']);
+    const paramsOf = (id) => (id === 'hearth' ? '27B' : id.replace(/^hearth-/, '').toUpperCase());
     if (p === '/api/version') return json(200, { version: '0.40.0' });
-    if (p === '/v1/models') return json(200, { object: 'list', data: names.map((id) => ({ id, object: 'model' })) });
-    if (p === '/api/tags') return json(200, { models: names.map((name) => ({ name, model: name, size: 0, digest: '', details: { format: 'gguf', family: '', parameter_size: '26.9B' } })) });
+    if (p === '/v1/models') return json(200, { object: 'list', data: names.map((id) => ({ id, object: 'model', owned_by: 'hearth', ...(sizes ? { role: roleOf(id), capabilities: capsOf(id) } : {}) })) });
+    if (p === '/api/tags') return json(200, { models: names.map((name) => ({ name, model: name, size: 0, digest: '', details: { format: 'gguf', family: '', parameter_size: paramsOf(name) }, ...(sizes ? { role: roleOf(name), capabilities: capsOf(name) } : {}) })) });
     if (p === '/api/ps') return json(200, { models: names.map((name) => ({ name, model: name, size: 0, digest: '', context_length: name === 'hearth' ? 200000 : 32768 })) });
     if (p === '/api/show') return json(200, { details: {}, model_info: { 'general.basename': 'hearth', 'general.context_length': 200000 }, capabilities: sizes ? ['completion', 'tools', 'thinking'] : ['completion'] });
     if (p === '/api/chat') {
@@ -104,6 +107,8 @@ test('on the door with sizes: side jobs and helpers go to their size with the si
   const c = await connectRemote(hearthRemote(d.base), { key: KEY });
   try {
     expect(endpointOf(c.url)).toMatchObject({ hearth: true, hearthSizes: ['hearth-2b', 'hearth-4b', 'hearth-9b'] });
+    expect(c.info.modelRows.find((m) => m.id === 'hearth')).toMatchObject({ role: 'code', capabilities: expect.arrayContaining(['completion', 'tools', 'thinking']) });
+    expect(c.info.modelRows.find((m) => m.id === 'hearth-2b')).toMatchObject({ role: 'fast', capabilities: expect.arrayContaining(['completion', 'tools']) });
     const model = remoteModel(hearthRemote(d.base), c.info);
     // Which size does which job (the owner's picks), as the agent asks for it.
     const me = { url: c.url, isHelper: false, router: null, helperJobs: {}, subagents: true, conversation: 'c1' };

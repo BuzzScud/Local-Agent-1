@@ -10,7 +10,7 @@ import { join } from 'node:path';
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-subagents-home-'));
 const { HOME, pickRemoteModel, setEndpoint, dropEndpoint, ollamaCatalog } = await import('../../models/index.mjs');
 const { groupsOf, copiesOf, suggestModel, isHelper } = await import('../src/app/remote-models.mjs');
-const { JOBS, MAIN, choicesFor, jobsOf } = await import('../src/app/subagents.mjs');
+const { JOBS, MAIN, choicesFor, jobsOf, entryFromName, fillEntry, catalogFromList, roleModels } = await import('../src/app/subagents.mjs');
 const { openForm, openModelPick, moveCopy, commitPick, movePick } = await import('../src/app/remote-form.mjs');
 const { readTryouts, saveTryout, triedWord, serviceKey } = await import('../src/app/tryouts.mjs');
 const { tryOut } = await import('../src/agent/tryout.mjs');
@@ -103,6 +103,33 @@ test('each job\'s model at first: llava looks, llama3.2 3b does the side jobs, e
   expect(saved.find((j) => j.id === 'review').model).toBe('gpt-oss:120b');
   expect(saved.find((j) => j.id === 'pictures').on).toBe(false);
   expect(saved.find((j) => j.id === 'side')).toMatchObject({ model: 'llama3.2:3b', missing: true });
+});
+
+test('a name is enough to rematch: llava sees, embed searches, 3b is Fast, Claude sees and Haiku is small', () => {
+  const llava = entryFromName('llava:latest');
+  expect(llava).toMatchObject({ id: 'llava:latest', vision: true, known: true, role: 'vision', chat: true });
+  expect(entryFromName('embed:latest')).toMatchObject({ embedding: true, chat: false, role: 'search' });
+  expect(entryFromName('tiny:3b')).toMatchObject({ params: '3B', known: true, chat: true });
+  expect(entryFromName('claude-haiku-4-5')).toMatchObject({ vision: true, params: '3B', known: true, role: 'vision' });
+  expect(entryFromName('claude-opus-5-5')).toMatchObject({ vision: true, params: '200B', role: 'vision' });
+  // a completion-only show of llava still sees; tools:false stays
+  expect(fillEntry({ id: 'llava:latest', known: true, chat: true, vision: false, tools: false })).toMatchObject({ vision: true, tools: false, role: 'vision' });
+  const fake = catalogFromList(['llava:latest', 'tiny:3b', 'embed:latest', 'thinker:35b', 'coder:30b']);
+  expect(roleModels(fake, 'coder:30b')).toEqual({ pictures: 'llava:latest', side: 'tiny:3b', search: 'embed:latest', review: 'thinker:35b' });
+  // explicit role wins over the size filter: a 27B tagged fast is Fast
+  expect(roleModels([{ id: 'oto:27b', role: 'fast', params: '27B', chat: true, known: true }, { id: 'hearth', params: '27B', chat: true, known: true }], 'hearth').side).toBe('oto:27b');
+  // Claude's list: Haiku is pictures and Fast; search has none; review would be Opus, which is Main, so skip
+  expect(roleModels(['claude-opus-5-5', 'claude-haiku-4-5'], 'claude-opus-5-5')).toEqual({ pictures: 'claude-haiku-4-5', side: 'claude-haiku-4-5', search: null, review: null });
+  // extras on /v1/models pass through
+  expect(entryFromName('hearth-2b', { role: 'fast', capabilities: ['completion', 'tools'] })).toMatchObject({ role: 'fast', tools: true });
+  // hearth's agents key: Fast is the 2b; pictures and search stay when the list has none
+  const hearth = catalogFromList([
+    { id: 'hearth', role: 'code', capabilities: ['completion', 'tools', 'thinking'] },
+    { id: 'hearth-2b', role: 'fast', capabilities: ['completion', 'tools'] },
+    { id: 'hearth-4b', role: 'fast', capabilities: ['completion', 'tools'] },
+    { id: 'hearth-9b', role: 'fast', capabilities: ['completion', 'tools'] },
+  ]);
+  expect(roleModels(hearth, 'hearth')).toEqual({ pictures: null, side: 'hearth-2b', search: null, review: null });
 });
 
 // The panel's own test went with the panel (8 Oct 2026): /profiles shows and sets the jobs now (profiles.test.mjs,

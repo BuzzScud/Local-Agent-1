@@ -1,11 +1,12 @@
 // An Ollama service (/remote, Another service): what each of its models is and
-// can do. Its OpenAI-style /v1/models gives names only, so Ollama's own API is
-// read too: /api/version says it is Ollama; /api/tags lists the models (size,
-// family, parameters, quantization); /api/ps the ones loaded now and the
-// context each runs at; /api/show each one's abilities (tools, thinking,
-// vision, completion, embedding) and its longest context. A model's /api/show
-// is read once per set of weights (its digest) and kept for the window.
-// Everything here is best-effort: a server that is not Ollama answers null.
+// can do. Its OpenAI-style /v1/models gives names, and may add role and
+// capabilities; Ollama's own API is read too: /api/version says it is Ollama;
+// /api/tags lists the models (size, family, parameters, quantization, and
+// role when the server sends it); /api/ps the ones loaded now and the context
+// each runs at; /api/show each one's abilities (tools, thinking, vision,
+// completion, embedding) and its longest context. A model's /api/show is read
+// once per set of weights (its digest) and kept for the window. Everything
+// here is best-effort: a server that is not Ollama answers null.
 import { authHeaders } from './remote.mjs';
 
 const norm = (url) => String(url ?? '').replace(/\/+$/, '');
@@ -49,6 +50,7 @@ export const floorCtx = (m) => Math.min(m?.ctx || COLD_CTX, COLD_CTX);
 const SHOWN = new Map();
 const shownOf = (s) => ({
   caps: Array.isArray(s?.capabilities) ? s.capabilities : null,
+  role: typeof s?.role === 'string' && s.role ? s.role : null,
   ctx: Object.entries(s?.model_info ?? {}).find(([k]) => k.endsWith('.context_length'))?.[1] ?? null,
   details: s?.details ?? {},
 });
@@ -57,14 +59,20 @@ const shownOf = (s) => ({
 // when not, it is taken as able to chat and use tools (as before this list).
 function entryOf(id, { tag = null, shown = null, ps = null } = {}) {
   const d = { ...(shown?.details ?? {}), ...(tag?.details ?? {}) };
-  const caps = shown?.caps ?? null;
-  const has = (c, otherwise) => (caps ? caps.includes(c) : otherwise);
+  const tagCaps = Array.isArray(tag?.capabilities) ? tag.capabilities : [];
+  const shownCaps = shown?.caps ?? [];
+  const caps = [...new Set([...shownCaps, ...tagCaps])];
+  const hasCaps = shown?.caps != null || tagCaps.length > 0;
+  const has = (c, otherwise) => (hasCaps ? caps.includes(c) : otherwise);
+  const role = tag?.role ?? shown?.role ?? null;
   return {
     id, family: d.family ?? '', params: d.parameter_size ?? '', quant: d.quantization_level ?? '',
     bytes: tag?.size ?? ps?.size ?? 0, digest: tag?.digest ?? ps?.digest ?? null, modified: tag?.modified_at ?? null,
-    ctx: shown?.ctx ?? null, known: Boolean(caps),
+    ctx: shown?.ctx ?? null, known: hasCaps,
     chat: has('completion', true), tools: has('tools', true), thinking: has('thinking', false), vision: has('vision', false), embedding: has('embedding', false),
     loaded: Boolean(ps), loadedCtx: ps?.context_length ?? null, sameAs: [],
+    ...(role ? { role } : {}),
+    ...(hasCaps ? { capabilities: caps } : {}),
   };
 }
 

@@ -174,6 +174,33 @@ export function withMain(data, r) {
   const backup = b && sameServer(b.server, server) && b.model === r.model ? null : p?.backup ?? null;
   return { name, was: p ?? null, data: { profiles: { ...data.profiles, [name]: { ...(p ?? { spillAfter: 30 }), server, model: r.model, backup } }, uses: { ...data.uses, 'ai:main': name } } };
 }
+// Connect rematch (20 Nov 2026): existing helper profiles move onto this server's matching models
+// (Vision / Fast / Search / Review). A profile that is not there yet is not made; Writer and unused
+// other-API rows (Claude) stay. picks: roleModels(). { data, changed } or null when nothing moved.
+export function withRoles(data, r, picks) {
+  if (!r || !picks) return null;
+  const server = serverOf(r);
+  const profiles = { ...data.profiles };
+  const uses = { ...data.uses };
+  const changed = [];
+  const apply = (job, model) => {
+    if (!model) return;
+    const keys = JOB_ROW[job] ?? [];
+    const name = keys.map((k) => uses[k]).find((n) => n && profiles[n]) || (profiles[JOB_PROFILE[job]] ? JOB_PROFILE[job] : null);
+    // A job that runs on the conversation's own profile (Side jobs on Main) follows Main, which Connect moves itself.
+    if (!name || name === (uses['ai:main'] ?? MAIN_PROFILE)) return;
+    const p = profiles[name];
+    if (p.model === model && sameServer(p.server, server)) return;
+    profiles[name] = { ...p, server, model };
+    if (!changed.includes(name)) changed.push(name);
+  };
+  apply('pictures', picks.pictures);
+  apply('side', picks.side);
+  apply('search', picks.search);
+  apply('review', picks.review);
+  if (!changed.length) return null;
+  return { data: { profiles, uses }, changed };
+}
 // The other way (9 Oct 2026): Main changed in /profiles, the hub or a window's route, so /remote's saved
 // set-up (where a window starts) names it too; else the next start put Main back. The set-up to save, from
 // the server's own saved one in /remote (its key's name, its address), or null when it already is.

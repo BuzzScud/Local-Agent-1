@@ -5,7 +5,7 @@
 // switch to another model?").
 // Its functions are put on App by profilesPart(self), as the other parts are.
 import { CLAUDE_MODELS } from '../../../models/index.mjs';
-import { readProfiles, writeProfiles, openProfiles, profileStepRows, listRows, stepUse, serverOf, sameServer, serverWord, validProfileName, SPILL_STEPS, spillWord, groupsNow, MAIN_PROFILE, profilesSaved, withMain, helpersAway, remoteOfMain } from './profiles.mjs';
+import { readProfiles, writeProfiles, openProfiles, profileStepRows, listRows, stepUse, serverOf, sameServer, serverWord, validProfileName, SPILL_STEPS, spillWord, groupsNow, MAIN_PROFILE, profilesSaved, withMain, withRoles, helpersAway, remoteOfMain } from './profiles.mjs';
 import { saveSettings } from './store.mjs';
 import { ProfileRouter, serverKey } from './profile-router.mjs';
 import { modelWithLimits, ownOf } from './limits.mjs';
@@ -164,27 +164,45 @@ export function profilesPart(self) {
 
   // /remote connected (or the window started on it): the conversation's profile is that server and model
   // now, in the file every window reads (9 Oct 2026, the owner's picks: "Connect makes the new model Main",
-  // the other windows follow from their next step, the helpers keep their own profiles). Before, the
-  // router moved the conversation back to Main at the next step: /remote looked as if it did nothing.
+  // the other windows follow from their next step). Helper profiles that already exist (Vision, Fast,
+  // Search, Review) move onto this server's matching models when picks is given (withRoles); a helper
+  // with no match stays where it is, and unused other-API rows (Claude) stay. Before, the router moved
+  // the conversation back to Main at the next step: /remote looked as if it did nothing.
   // Returns the helpers left on another server (helpersAway), which the line saying where the
   // conversation runs now names (app-remote.mjs, start-notes.jsx), and the note saying Main moved, said
   // after that line.
-  const mainToRemote = (r, model) => {
+  const mainToRemote = (r, model, picks = null) => {
     self.agent.pinned = null;
     router.setOwn(null);
     if (!profilesSaved()) return { away: [], note: null };
     const d = data();
     const moved = withMain(d, { ...r, model });
     const now = moved ? moved.data : d;
+    const roles = picks ? withRoles(now, r, picks) : null;
+    const final = roles ? roles.data : now;
     let note = null;
-    if (moved) {
-      writeProfiles(now);
+    if (moved || roles) {
+      writeProfiles(final);
       router.seenStamp = router.stamp();
-      const was = moved.was ? `${moved.was.model} · ${serverWord(moved.was.server)}` : 'none';
-      note = { type: 'note', tone: 'dim', text: `${moved.name} → ${model} · ${serverWord(serverOf(r))} (was ${was}): your conversation, and every other window on this Mac from its next step. /profiles changes it.` };
+      if (moved) {
+        const was = moved.was ? `${moved.was.model} · ${serverWord(moved.was.server)}` : 'none';
+        note = { type: 'note', tone: 'dim', text: `${moved.name} → ${model} · ${serverWord(serverOf(r))} (was ${was}): your conversation, and every other window on this Mac from its next step. /profiles changes it.` };
+      }
     }
     self.agent.routeName = moved?.name ?? router.mainName();
-    return { away: helpersAway(now), note };
+    return { away: helpersAway(final), note };
+  };
+  // A later catalog (Ollama /api/show, or extra fields on /v1/models) rematches the same helper
+  // profiles again; idempotent. A window-only connect never writes.
+  const rolesToRemote = (r, picks) => {
+    if (!profilesSaved() || !picks || router.own) return { away: helpersAway(data()), note: null };
+    const moved = withRoles(data(), r, picks);
+    if (!moved) return { away: helpersAway(data()), note: null };
+    writeProfiles(moved.data);
+    router.seenStamp = router.stamp();
+    applyProfiles();
+    const names = moved.changed.join(', ');
+    return { away: helpersAway(moved.data), note: { type: 'note', tone: 'dim', text: `${names} → this service’s matching models.` } };
   };
   // Whether connecting to r would move Main (withMain, on the file as it is): /remote then asks "just this
   // window, or every window?" first (app-remote.mjs). A set-up with no model named yet counts as a move.
@@ -261,5 +279,5 @@ export function profilesPart(self) {
   const lendConn = (r, conn) => router.lend(serverOf(r), conn);
   const closeProfiles = () => { router.stop(); flushMeters(); };
 
-  return { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles, mainToRemote, windowToRemote, mainMoves, mainNow };
+  return { openProfilesPanel, profilesKey, openProfileStep, profileStepKey, saveProfileStep, followProfiles, applyProfiles, onRoute, lendConn, closeProfiles, mainToRemote, rolesToRemote, windowToRemote, mainMoves, mainNow };
 }

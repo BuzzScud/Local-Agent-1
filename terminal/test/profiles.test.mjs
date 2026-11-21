@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.AGENTIC_MEMORY_SAVE = 'off';
-const { profileFor, inheritedOf, seedProfiles, readProfiles, writeProfiles, profilesSaved, PROFILES_FILE, rowsOf, groupsNow, GROUPS, stepUse, openProfiles, listRows, cannotDo, usersOf, withMain, helpersAway, remoteOfMain, windowView } = await import('../src/app/profiles.mjs');
+const { profileFor, inheritedOf, seedProfiles, readProfiles, writeProfiles, profilesSaved, PROFILES_FILE, rowsOf, groupsNow, GROUPS, stepUse, openProfiles, listRows, cannotDo, usersOf, withMain, withRoles, helpersAway, remoteOfMain, windowView } = await import('../src/app/profiles.mjs');
 const { ProfileRouter, serverKey } = await import('../src/app/profile-router.mjs');
 const { noteServed, noteSpill, readMeters, flushMeters, meterWords } = await import('../src/agent/profile-meters.mjs');
 const { streamChat, routeCalls } = await import('../src/agent/client.mjs');
@@ -401,6 +401,21 @@ test('/remote and Main are one pick: Connect moves the conversation\'s profile, 
   // the helpers on another server than Main, one line a profile; none when they share Main's
   expect(helpersAway(m.data)).toEqual([{ label: '/btw and Side jobs', model: 'llama3.2:3b', where: 'service' }, { label: 'Pictures', model: 'llava:latest', where: 'service' }]);
   expect(helpersAway(d)).toEqual([]);
+  // rematch: existing helper profiles move onto the new server's matching models; Claude is left; nothing new is made
+  const rematch = withRoles(m.data, CLAUDE, { pictures: 'claude-haiku-4-5', side: 'claude-haiku-4-5', search: null, review: null });
+  expect(rematch.changed.sort()).toEqual(['Fast', 'Vision']);
+  expect(rematch.data.profiles.Vision).toMatchObject({ server: { kind: 'claude' }, model: 'claude-haiku-4-5' });
+  expect(rematch.data.profiles.Fast).toMatchObject({ server: { kind: 'claude' }, model: 'claude-haiku-4-5' });
+  expect(rematch.data.profiles.Claude).toEqual(d.profiles.Claude);
+  expect(rematch.data.uses).toEqual(d.uses);
+  expect(withRoles(rematch.data, CLAUDE, { pictures: 'claude-haiku-4-5', side: 'claude-haiku-4-5' })).toBeNull();
+  expect(withRoles({ profiles: { Main: P(SVC, 'qwen3.6') }, uses: { 'ai:main': 'Main' } }, CLAUDE, { pictures: 'claude-haiku-4-5', side: 'claude-haiku-4-5' })).toBeNull();
+  expect(helpersAway(rematch.data)).toEqual([]);
+  // Side jobs on Main: the rematch never rewrites the conversation's own profile
+  const onMain = { ...m.data, uses: { ...m.data.uses, 'ai:side': 'Main', 'ai:btw': 'Main' } };
+  const kept = withRoles(onMain, CLAUDE, { pictures: 'claude-haiku-4-5', side: 'claude-haiku-4-5' });
+  expect(kept.changed).toEqual(['Vision']);
+  expect(kept.data.profiles.Main).toEqual(m.data.profiles.Main);
   // another window, its conversation on the service: Main written by the first one's Connect moves it at its next step
   const calls = [];
   const r = new ProfileRouter({ settings: () => ({ remote: { ...SVC, model: 'qwen3.6', use: true }, remotes: { claude: { ...CLAUDE, model: 'claude-opus-5-5' } } }), connect: fakeConnect(calls) });

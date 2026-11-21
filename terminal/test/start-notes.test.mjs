@@ -6,7 +6,7 @@
 import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { HomePage, homeItems, itemAt, actionsOf } from '../src/app/home-looks.jsx';
 import { startLine, remoteNote, helpersWords } from '../src/app/start-notes.jsx';
@@ -123,8 +123,7 @@ test('the real window on the Menu: the rows say it and nothing is under the page
     ownerHome(base, claude.url);
     const steps = look === 'menu'
       ? [{ wait: 'Model · Claude API · ', ms: 25_000 }, { sleep: 800 }, { snapshot: 'start' },
-        { key: 'tab' }, { sleep: 200 }, { key: 'down' }, { sleep: 120 }, { key: 'down' }, { sleep: 120 }, { key: 'down' }, { sleep: 200 }, { snapshot: 'picked' },
-        { key: 'enter' }, { wait: 'A profile is a server', ms: 10_000 }, { sleep: 300 }, { snapshot: 'profiles' }, { key: 'esc' }, { sleep: 300 }]
+        { type: '/profiles' }, { key: 'enter' }, { wait: 'A profile is a server', ms: 10_000 }, { sleep: 300 }, { snapshot: 'profiles' }, { key: 'esc' }, { sleep: 300 }]
       : [{ wait: ON_REMOTE, ms: 25_000 }, { sleep: 800 }, { snapshot: 'start' },
         { type: 'hello' }, { key: 'enter' }, { wait: 'Answered by the Claude API.', ms: 20_000 }, { sleep: 800 }, { snapshot: 'after' }];
     const r = await runInPty({ cwd, cols: 149, rows: 50, env: { ...env, ...ENV, AGENTIC_HOME_LOOK: look }, args: ['--no-flows'], timeoutMs: 90_000, steps: [...steps, ...quit] });
@@ -135,19 +134,20 @@ test('the real window on the Menu: the rows say it and nothing is under the page
     if (look === 'menu') {
       expect(s.start).toMatch(/Model · Claude API · \d+ ms\s+\/model/);
       expect(s.start).toMatch(/Mode · bypass permissions · kept from the last window\s+shift\+tab/);
-      expect(s.start).toMatch(/Helpers · 2 models on the service\s+\/profiles/);
-      // under the page: its last row, a blank row, the prompt box
+      // Fast and Vision rematch onto Haiku, so no helpers are left on the service
+      expect(s.start).not.toMatch(/Helpers · \d+ models on the service/);
       const lines = s.start.split('\n');
       const box = lines.findLastIndex((l) => l.startsWith('╭'));
       expect(lines[box - 2]).toContain('tab to pick from this page');
       expect(lines[box - 1].trim()).toBe('');
-      expect(s.picked).toMatch(/❯\s+Helpers · 2 models on the service/);
-      expect(s.picked).toContain('↵ opens /profiles: which model each helper uses');
       expect(s.profiles).toContain('A profile is a server, a model and its settings by name.');
+      const d = JSON.parse(readFileSync(join(base, 'home', 'profiles.json'), 'utf8'));
+      expect(d.profiles.Vision).toMatchObject({ model: 'claude-haiku-4-5' });
+      expect(d.profiles.Fast).toMatchObject({ model: 'claude-haiku-4-5' });
     } else {
-      expect(flat(s.start)).toMatch(/⏵⏵ bypass, kept from the last window · claude-opus-5-5 on the Claude API, \d+ ms · 2 helper models on the service/);
-      // printed with the page above your first message
-      expect(flat(s.after)).toMatch(/claude-opus-5-5 on the Claude API, \d+ ms · 2 helper models on the service.*› hello/);
+      expect(flat(s.start)).toMatch(/⏵⏵ bypass, kept from the last window · claude-opus-5-5 on the Claude API, \d+ ms/);
+      expect(flat(s.start)).not.toMatch(/helper models on the service/);
+      expect(flat(s.after)).toMatch(/claude-opus-5-5 on the Claude API, \d+ ms.*› hello/);
     }
   }
 }, T * 3);

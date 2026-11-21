@@ -10,7 +10,7 @@ import { windowSpend } from '../agent/spend.mjs';
 import { modelsInUseOn, updateWindow } from './copies.mjs';
 import { kindWord, openForm, startEdit, rowsOf as remoteRows, savePlan, formWarning, sourceWord, testForm, withTest, connectionChanged, openModelPick, readyRemote, remotesOf, remoteChoices } from './remote-form.mjs';
 import { ctxWord, suggestModel, openService } from './remote-models.mjs';
-import { MAIN } from './subagents.mjs';
+import { MAIN, roleModels, catalogFromList } from './subagents.mjs';
 import { tryOut } from '../agent/tryout.mjs';
 import { readTryouts, saveTryout } from './tryouts.mjs';
 import { saveSettings, loadSettings, recentFolders, saveService, saveUse } from './store.mjs';
@@ -98,7 +98,11 @@ export function remotePart(self) {
     try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: self.agent.messages[0].content, tools: self.agent.tools(), thinking: self.agent.thinking, effort: self.agent.effort, slot: self.agent.slots?.main, onPhase: self.setStartPhase }); } catch {}
     self.setStarting(false);
     // The conversation's profile follows (app-profiles.mjs): else the router moved it back at the next step.
-    const main = (scope === 'window' ? self.windowToRemote : self.mainToRemote)(r, m.remote?.model ?? r.model);
+    // Helper profiles rematch onto this server's models from the list (role, capabilities, or the name).
+    const modelName = m.remote?.model ?? r.model;
+    self.remoteRef.current.rematchRoles = scope !== 'window';
+    const picks = scope === 'window' ? null : roleModels(catalogOf(conn, r), modelName);
+    const main = (scope === 'window' ? self.windowToRemote : self.mainToRemote)(r, modelName, picks);
     // Where it runs now, and the helpers that stay where they are (start-notes.jsx): the start page's rows
     // while it is up, else one note (the owner's pick, 9 Oct 2026; before, two notes of a paragraph each).
     const label = m.remote?.label ?? '';
@@ -127,6 +131,7 @@ export function remotePart(self) {
     self.remoteRef.current.on = false;
     const was = self.remoteRef.current.conn;
     self.remoteRef.current.conn = null;
+    self.remoteRef.current.rematchRoles = false;
     self.setRemoteState(null); self.setCatalog(null);
     await leaveService(was);
     const back = self.localModelRef.current ?? modelById(self.settings.model) ?? MODELS[DEFAULT_MODEL];
@@ -367,10 +372,20 @@ export function remotePart(self) {
     self.settings.remote = saveUse(r, true).remote;
     useRemote(self.settings.remote);
   };
+  // The models a connect already knows, from /v1/models (ids, or rows with role and capabilities) or the Claude API.
+  const catalogOf = (conn, r) => catalogFromList(r?.kind === 'claude' ? (conn?.info?.models ?? []) : (conn?.info?.modelRows?.length ? conn.info.modelRows : (conn?.info?.models ?? [])));
   // An Ollama service's list (ollama.mjs), read in the background: after a connect, and as /model opens.
+  // When the richer list lands, helper profiles rematch again (idempotent) unless this window is on its own.
   const refreshCatalog = (conn = self.remoteRef.current.conn) => {
     if (!conn?.info?.ollama) return;
-    ollamaCatalog({ url: conn.url }).then((c) => { if (c && self.remoteRef.current.conn === conn) self.setCatalog(c); }).catch(() => {});
+    ollamaCatalog({ url: conn.url }).then((c) => {
+      if (!(c && self.remoteRef.current.conn === conn)) return;
+      self.setCatalog(c);
+      if (!self.remoteRef.current.rematchRoles || !self.settings.remote) return;
+      const r = self.settings.remote;
+      const res = self.rolesToRemote(r, roleModels(c.models, r.model));
+      if (res.note) self.push(res.note);
+    }).catch(() => {});
   };
   // An Ollama model's own context (/effort's Context row; 0: the service's own), kept by model in
   // the service's set-up ("contexts"), so `coding -p` and the next start ask for it too.

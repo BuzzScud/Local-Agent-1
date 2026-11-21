@@ -49,6 +49,96 @@ export function choicesFor(job, models = [], main = null) {
   return JOBS.find((j) => j.id === job)?.main ? [MAIN, ...ids] : ids;
 }
 
+// What a model is, from its name and any extras the API sent (role, capabilities). A list of ids
+// is enough to rematch helpers before /api/show lands: llava sees, embed searches, 3b is Fast.
+const CLAUDE_SIZE = { haiku: '3B', sonnet: '17B', opus: '200B', fable: '200B' };
+export function entryFromName(id, extra = {}) {
+  const name = String(id ?? extra.id ?? extra.name ?? '');
+  const lower = name.toLowerCase();
+  const caps = Array.isArray(extra.capabilities) ? extra.capabilities : Array.isArray(extra.caps) ? extra.caps : null;
+  const has = (c) => Boolean(caps?.includes(c));
+  const visionName = /llava|bakllava|moondream|minicpm-v|pixtral|vision|qwen.*vl|deepseek-ocr|llama4|^claude-/.test(lower);
+  const embedName = /embed|nomic-embed|bge-|e5-|minilm/.test(lower);
+  const thinkName = /think|reasoner|\br1\b/.test(lower);
+  const sizeHit = /(\d+(?:\.\d+)?)\s*b/i.exec(name.replace(/:latest$/i, ''));
+  const claudeKind = /^claude-/.test(lower) ? (lower.match(/haiku|sonnet|opus|fable/) || [])[0] : null;
+  const params = extra.params || extra.parameter_size || extra.details?.parameter_size || (sizeHit ? `${sizeHit[1]}B` : (claudeKind ? CLAUDE_SIZE[claudeKind] : '')) || '';
+  const vision = extra.vision === true || has('vision') || visionName;
+  const embedding = extra.embedding === true || has('embedding') || embedName;
+  const thinking = extra.thinking === true || has('thinking') || thinkName;
+  const chat = extra.chat === false ? false : embedding ? extra.chat === true || has('completion') : extra.chat ?? (caps ? has('completion') : true);
+  const tools = extra.tools === false ? false : embedding ? extra.tools === true || has('tools') : extra.tools ?? (caps ? has('tools') : true);
+  const known = extra.known === true || Boolean(caps) || vision || embedding || Boolean(params) || Boolean(claudeKind);
+  const role = extra.role || (embedName ? 'search' : visionName ? 'vision' : undefined);
+  return {
+    id: name,
+    family: extra.family ?? extra.details?.family ?? '',
+    params,
+    quant: extra.quant ?? extra.quantization_level ?? extra.details?.quantization_level ?? '',
+    bytes: extra.bytes ?? extra.size ?? 0,
+    digest: extra.digest ?? null,
+    modified: extra.modified ?? extra.modified_at ?? null,
+    ctx: extra.ctx ?? extra.max_input_tokens ?? extra.context_length ?? null,
+    known,
+    chat: Boolean(chat),
+    tools: Boolean(tools),
+    thinking: Boolean(thinking),
+    vision: Boolean(vision),
+    embedding: Boolean(embedding),
+    loaded: Boolean(extra.loaded),
+    loadedCtx: extra.loadedCtx ?? null,
+    sameAs: extra.sameAs ?? [],
+    ...(role ? { role } : {}),
+    ...(caps ? { capabilities: caps } : {}),
+  };
+}
+// Fill abilities the API omitted: a completion-only show of llava still sees; true flags stay.
+export function fillEntry(m) {
+  if (!m?.id) return m;
+  const inferred = entryFromName(m.id, m);
+  return {
+    ...inferred,
+    ...m,
+    id: m.id,
+    vision: Boolean(m.vision) || inferred.vision,
+    embedding: Boolean(m.embedding) || inferred.embedding,
+    thinking: Boolean(m.thinking) || inferred.thinking,
+    tools: m.tools === false ? false : Boolean(m.tools) || inferred.tools,
+    chat: m.chat === false ? false : Boolean(m.chat) || inferred.chat,
+    known: Boolean(m.known) || inferred.known,
+    params: m.params || inferred.params,
+    role: m.role || inferred.role,
+  };
+}
+export function catalogFromList(list = []) {
+  return (Array.isArray(list) ? list : []).map((item) => (typeof item === 'string' ? entryFromName(item) : entryFromName(item.id ?? item.name, item))).filter((m) => m.id).map(fillEntry);
+}
+
+// The helper model each job should use on this catalog. An explicit role from the API wins, even
+// when the model is bigger than choicesFor would pick (a 27B tagged fast). Pictures may be Main
+// when that model sees; side, search and review stay put when their pick would be Main.
+const ROLE_FOR = { pictures: ['vision', 'pictures'], side: ['fast', 'side'], search: ['search', 'embedding'], review: ['review'] };
+export function roleModels(models = [], main = null) {
+  const filled = catalogFromList(models);
+  const pick = (job) => {
+    const roles = ROLE_FOR[job];
+    const tagged = filled.filter((m) => roles.includes(m.role));
+    const from = (pool) => choicesFor(job, pool, main).filter((id) => id && id !== MAIN);
+    let id = (tagged.length ? from(tagged) : from(filled))[0] ?? null;
+    if (tagged.length && !id) {
+      const rest = tagged.filter((m) => m.id !== main).sort((a, b) => B(a) - B(b));
+      id = rest[0]?.id ?? null;
+    }
+    if (job === 'pictures') {
+      if (id) return id;
+      const mine = filled.find((m) => m.id === main);
+      return mine && (mine.vision || roles.includes(mine.role)) ? main : null;
+    }
+    return !id || id === main ? null : id;
+  };
+  return { pictures: pick('pictures'), side: pick('side'), search: pick('search'), review: pick('review') };
+}
+
 // The jobs as saved for this service, a job never set getting its default: on, with
 // its first choice (the UI design writer: the main model itself).
 export function jobsOf(saved = {}, models = [], main = null) {

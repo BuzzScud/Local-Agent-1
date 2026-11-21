@@ -46,6 +46,11 @@ test('their case: started on the Claude API it stays there; /remote service and 
   const claude = await startFakeAnthropic(Array.from({ length: 6 }, () => ({ text: 'Answered by the Claude API.' })), { key: KEY });
   theirHome(base, { svcUrl: svc.url, claudeUrl: claude.url, on: 'claude' });
   const mains = [];
+  const helpers = [];
+  const helpersOf = () => {
+    const p = fileOf(base, 'profiles.json').profiles;
+    return { Vision: p.Vision.model, Fast: p.Fast.model, Search: p.Search.model, Review: p.Review.model };
+  };
   const r = await runInPty({ cwd, env: { ...env, ...ENV }, args: ['--no-flows', '--mode', 'bypass'], timeoutMs: 120_000, steps: [
     // its saved set-up is not Main: it asks where to start (9 Oct 2026, "Just this window"); every window, as before
     { wait: 'Where should this window start?', ms: 25_000 }, { sleep: 300 }, { snapshot: 'ask' }, { type: '3' },
@@ -55,7 +60,7 @@ test('their case: started on the Claude API it stays there; /remote service and 
     // that moves Main asks first: every window
     { type: '/remote service' }, { key: 'enter' }, { wait: 'in which windows?', ms: 20_000 }, { sleep: 300 }, { type: '2' },
     // (after the start question the start page is printed, so the line is a note: start-notes.jsx remoteNote)
-    { wait: /coder:30b on \S+, \d+ ms|On the remote: coder:30b · \S+ · OpenAI-compatible · answered in \d+ ms/, ms: 20_000 }, { sleep: 3000 }, { snapshot: 'service' }, { fn: () => mains.push(mainOf(base).model) },
+    { wait: /coder:30b on \S+, \d+ ms|On the remote: coder:30b · \S+ · OpenAI-compatible · answered in \d+ ms/, ms: 20_000 }, { sleep: 3000 }, { snapshot: 'service' }, { fn: () => { mains.push(mainOf(base).model); helpers.push(helpersOf()); } },
     { type: '/remote claude' }, { key: 'enter' }, { wait: 'in which windows?', ms: 20_000 }, { sleep: 300 }, { type: '2' },
     { wait: 'Main → claude-opus-5-5 · Claude API (was coder:30b', ms: 20_000 }, { sleep: 3000 }, { fn: () => mains.push(mainOf(base).model) },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Answered by the Claude API.', ms: 30_000 }, { sleep: 800 }, { snapshot: 'hello' },
@@ -70,8 +75,12 @@ test('their case: started on the Claude API it stays there; /remote service and 
   expect(s.ask).not.toMatch(/Main: claude-opus-5-5 → coder:30b/);
   // started on the Claude API and still there after the window looked at the file: Main moved with it, said once
   expect(flat(s.start)).toContain('Main → claude-opus-5-5 · Claude API (was coder:30b · service): your conversation, and every other window on this Mac from its next step.');
-  // the helpers left on the service: counted in the start page's one line (start-notes.jsx), no paragraph
-  expect(flat(s.start)).toMatch(/4 helper models on the service|4 helpers stay on the service/);
+  // Vision and Fast rematch onto Haiku; Search and Review stay on the service (no embedder, review would be Main)
+  expect(flat(s.start)).toMatch(/2 helper models on the service|2 helpers stay on the service/);
+  expect(fileOf(base, 'profiles.json').profiles.Vision.model).toBe('claude-haiku-4-5');
+  expect(fileOf(base, 'profiles.json').profiles.Fast.model).toBe('claude-haiku-4-5');
+  expect(fileOf(base, 'profiles.json').profiles.Search.model).toBe('embed:latest');
+  expect(fileOf(base, 'profiles.json').profiles.Review.model).toBe('thinker:35b');
   expect(flat(s.start)).not.toContain('The helpers keep their own profiles');
   expect(s.start).not.toMatch(/Main: claude-opus-5-5 → coder:30b/);
   expect(footerOf(s.start)).toContain('● Main · claude-opus-5-5');
@@ -79,6 +88,8 @@ test('their case: started on the Claude API it stays there; /remote service and 
   expect(mains).toEqual(['claude-opus-5-5', 'coder:30b', 'claude-opus-5-5']);
   expect(flat(s.service)).toContain('Main → coder:30b · service (was claude-opus-5-5 · Claude API)');
   expect(footerOf(s.service)).toMatch(/● Main · coder:30b on /);
+  // captured at the service snapshot, before /remote claude rematches Vision/Fast onto Haiku
+  expect(helpers).toEqual([{ Vision: 'llava:latest', Fast: 'tiny:3b', Search: 'embed:latest', Review: 'thinker:35b' }]);
   // hello: on the Claude API, nothing moved it back
   expect(hello).toEqual(['claude:claude-opus-5-5']);
   expect(s.hello).not.toMatch(/Main: claude-opus-5-5 → coder:30b/);
