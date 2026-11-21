@@ -5,7 +5,7 @@
 // sandbox: { readOnly: [...] } for more folders it may read, or sandbox: { open: true }
 // in Bypass permissions (any folder and the internet; sandbox.mjs).
 import { spawn, execFileSync } from 'node:child_process';
-import { sandboxAvailable, sandboxed, fenceHint } from './sandbox.mjs';
+import { sandboxAvailable, sandboxed, fenceHint, SHELL } from './sandbox.mjs';
 
 // The lines of a test run with its passing tests folded into one line (squeeze: a model on another
 // machine, 3 Oct 2026): node --test writes TAP when its output is not a terminal, five lines a passing
@@ -60,7 +60,7 @@ export function startShell(command, { cwd, sandbox = {} } = {}) {
   const fenced = sandbox !== false && sandboxAvailable();
   const child = fenced
     ? spawn(...sandboxed(command, cwd, sandbox), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env })
-    : spawn(command, { cwd, shell: '/bin/zsh', detached: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+    : spawn(command, { cwd, shell: SHELL, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env });
   return { child, fenced, mark };
 }
 // A signal to the command's whole process group (the shell alone when there is none).

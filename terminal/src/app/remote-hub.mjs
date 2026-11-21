@@ -117,7 +117,10 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
       // Cards by what each model is for, biggest first (categoryGroups); a loaded one keeps its mark.
       if (cat) return { server: `Ollama ${cat.version}`, ollama: true, models: cat.models.map((m) => ({ ...m, kind: 'ollama' })), groups: categoryGroups(cat.models) };
       const res = await fetch(`${c.url.replace(/\/+$/, '')}/v1/models`, { headers: c.key ? { authorization: `Bearer ${c.key}` } : {}, signal: AbortSignal.timeout(10_000) });
-      if (res.status === 401 || res.status === 403) throw new Error(c.key ? 'the API key was not accepted' : 'it needs an API key: add one in /remote');
+      if (res.status === 401 || res.status === 403) {
+        const no = refusalOf(res.status, await res.text().catch(() => ''));
+        throw new Error(no.kind !== 'key' ? no.text : c.key ? 'the API key was not accepted' : 'it needs an API key: add one in /remote');
+      }
       const j = await res.json().catch(() => null);
       if (!res.ok || !Array.isArray(j?.data)) throw new Error(`it answered ${res.status} to its model list`);
       const models = j.data.filter((x) => x?.id).map((x) => {

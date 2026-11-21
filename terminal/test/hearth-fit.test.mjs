@@ -4,8 +4,8 @@
 // their own and go to hearth's review size, and a run held on one server (hearth@poseidon) keeps every job there.
 import { test, expect, afterAll } from 'bun:test';
 import { createServer } from 'node:http';
-import { connectRemote, endpointOf, dropEndpoint, setEndpoint, pickHearthModel, DEFAULT_REMOTE } from '../../models/index.mjs';
-import { watched } from '../src/agent/client.mjs';
+import { connectRemote, endpointOf, dropEndpoint, setEndpoint, pickHearthModel, DEFAULT_REMOTE, probe, refusalOf } from '../../models/index.mjs';
+import { watched, streamChat } from '../src/agent/client.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { checkCall, ChecksPart } from '../src/agent/agent-checks.mjs';
 
@@ -138,4 +138,60 @@ test('a hearth model named with its server keeps the server through Connect', as
   open.push(d);
   const c = await connectRemote({ ...DEFAULT_REMOTE, source: 'hearth', kind: 'openai', connect: 'http', address: `${d.base}/v1`, model: 'hearth@poseidon-seats', key: true, keyEnd: 'cdef', keyId: 'hearth' }, { key: KEY });
   try { expect(endpointOf(c.url).model).toBe('hearth@poseidon-seats'); } finally { c.stop(); }
+});
+
+// 21 Nov 2026: a run on Triton reached hearth by its public address for a few seconds (the server's name lookup asked a
+// public DNS server too, and that answer won). hearth's web server refuses any address outside hearth's network with its
+// own 403 page, before a key is read; the app said "the API key was not accepted" and "change it in /remote".
+const APACHE_403 = '<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">\n<html><head>\n<title>403 Forbidden</title>\n</head><body>\n<h1>Forbidden</h1>\n<p>You don\'t have permission to access this resource.</p>\n</body></html>\n';
+test('a 403 says what it is: the service\'s own words, or a web server in front that refused this machine; a 401 is the key', async () => {
+  expect(refusalOf(401, '{"error":"That key isn\'t one of hearth\'s."}')).toEqual({ kind: 'key', text: 'the API key was not accepted' });
+  expect(refusalOf(403, '')).toEqual({ kind: 'key', text: 'the API key was not accepted' });
+  expect(refusalOf(403, '{"error":"This key is paused."}')).toEqual({ kind: 'refused', text: 'it refused this request (403): This key is paused.' });
+  expect(refusalOf(403, '{"error":{"message":"This key doesn\'t reach hearth."}}').text).toBe('it refused this request (403): This key doesn\'t reach hearth.');
+  expect(refusalOf(403, APACHE_403)).toEqual({ kind: 'address', text: 'a web server in front of it refused this machine\'s address (403) before any key was read' });
+  expect(refusalOf(403, APACHE_403, { hearth: true }).text).toContain('hearth\'s API answers on hearth\'s network only (the VPN or the house)');
+
+  // A stand-in for hearth behind its web server: `shut` is what every request gets ('page': the web server's 403; 'words': the door's own).
+  let shut = null;
+  const d = await door();
+  open.push(d);
+  const front = createServer(async (req, res) => {
+    let b = ''; for await (const c of req) b += c;
+    if (shut === 'page') { res.writeHead(403, { 'content-type': 'text/html; charset=iso-8859-1' }); return res.end(APACHE_403); }
+    if (shut === 'words') { res.writeHead(403, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'This key is paused.' })); }
+    const up = await fetch(`${d.base.replace(/\/door$/, '')}${req.url}`, { method: req.method, headers: { authorization: req.headers.authorization ?? '', 'content-type': 'application/json' }, body: req.method === 'GET' ? undefined : b });
+    res.writeHead(up.status, { 'content-type': up.headers.get('content-type') ?? 'application/json' });
+    res.end(await up.text());
+  });
+  await new Promise((ok) => front.listen(0, '127.0.0.1', ok));
+  const base = `http://127.0.0.1:${front.address().port}/door`;
+  open.push({ base, close: () => new Promise((ok) => { front.closeAllConnections?.(); front.close(ok); }) });
+  try {
+    // Connect's check
+    shut = 'page';
+    const page = await probe({ url: `${base}/v1`, kind: 'openai', key: KEY, hearth: true });
+    expect(page.ok).toBe(false);
+    expect(page.error).toMatch(/^reached in \d+ ms, but a web server in front of it refused this machine's address \(403\) before any key was read: hearth's API answers on hearth's network only/);
+    expect(page.error).not.toContain('API key was not accepted');
+    shut = 'words';
+    expect((await probe({ url: `${base}/v1`, kind: 'openai', key: KEY, hearth: true })).error).toMatch(/^reached in \d+ ms, but it refused this request \(403\): This key is paused\.$/);
+    shut = null;
+    expect((await probe({ url: `${base}/v1`, kind: 'openai', key: 'hk_wrong-key-0123456789', hearth: true })).error).toMatch(/^reached in \d+ ms, but the API key was not accepted$/);
+
+    // A step of a run
+    const c = await connectRemote({ ...DEFAULT_REMOTE, source: 'hearth', kind: 'openai', connect: 'http', address: `${base}/v1`, model: 'hearth', key: true, keyEnd: 'cdef', keyId: 'hearth' }, { key: KEY });
+    const step = () => drain(streamChat({ url: c.url, conversation: 'c1', messages: [{ role: 'user', content: 'hi' }], thinking: false, model: c.model, sampling: {}, maxTokens: 50 })).catch((e) => e);
+    shut = 'page';
+    const e1 = await step();
+    expect(e1.status).toBe(403);
+    expect(e1.message).toContain('a web server in front of it refused this machine\'s address (403) before any key was read');
+    expect(e1.message).not.toContain('API key');
+    expect(e1.message).not.toContain('/remote');
+    shut = 'words';
+    const e2 = await step();
+    expect(e2.message).toContain('it refused this request (403): This key is paused.');
+    expect(e2.message).not.toContain('did not accept the API key');
+    c.stop?.();
+  } finally { shut = null; }
 });

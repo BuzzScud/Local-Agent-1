@@ -18,6 +18,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { HOME } from '../../../models/index.mjs';
 import { activePlugins, withRoot } from './plugins.mjs';
+import { SHELL } from '../tools/sandbox.mjs';
 
 export const EVENTS = [
   { id: 'PreToolUse', label: 'Before a step', tool: true, what: 'before a tool runs: exit 2 stops it, and the model is told why (what it prints to stderr)' },
@@ -161,7 +162,7 @@ export function runHook(hook, input, { cwd, signal } = {}) {
     const env = { ...process.env, AGENTIC_PROJECT_DIR: cwd ?? '', CLAUDE_PROJECT_DIR: cwd ?? '', AGENTIC_HOOK_EVENT: hook.event, ...(hook.root ? { CLAUDE_PLUGIN_ROOT: hook.root } : {}) };
     delete env.AGENTIC_RESTART_FILE;
     let child;
-    try { child = spawn('/bin/zsh', ['-c', hook.command], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true }); } catch (e) { resolve({ code: 1, stdout: '', stderr: e.message, timedOut: false, ms: 0 }); return; }
+    try { child = spawn(SHELL, ['-c', hook.command], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true }); } catch (e) { resolve({ code: 1, stdout: '', stderr: e.message, timedOut: false, ms: 0 }); return; }
     let stdout = '';
     let stderr = '';
     let timedOut = false;

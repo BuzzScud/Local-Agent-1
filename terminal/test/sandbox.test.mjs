@@ -5,7 +5,8 @@ import { mkdtempSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sandboxProfile, fenceHint } from '../src/tools/sandbox.mjs';
+import { sandboxProfile, fenceHint, shellPath, SHELL, sandboxed } from '../src/tools/sandbox.mjs';
+import { startShell } from '../src/tools/run.mjs';
 
 test('the profile closes outbound network and still allows this Mac', () => {
   const root = mkdtempSync(join(tmpdir(), 'agentic-sandbox-'));
@@ -111,4 +112,19 @@ test.if(process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))('t
   expect(run(open, 'echo hi && echo ok').stdout).toBe('hi\nok\n');
   const self = sandboxProfile(project, { home, open: true, self: true });
   expect(run(self, `cat ${JSON.stringify(join(home, '.agentic-coder', 'door.key'))}`).stdout).toBe('');
+});
+
+// 21 Nov 2026: on a Linux server with no zsh (Triton) every command failed before it started.
+test('commands run in zsh; where there is none, in bash, then sh', async () => {
+  expect(shellPath(() => true)).toBe('/bin/zsh');
+  expect(shellPath((f) => f !== '/bin/zsh')).toBe('/bin/bash');
+  expect(shellPath(() => false)).toBe('/bin/sh');
+  expect(existsSync(SHELL)).toBe(true);
+  expect(sandboxed('true', '/tmp')[1].at(-3)).toBe(SHELL);
+  // a command typed by you (no fence) starts in that shell and answers
+  const { child } = startShell('echo shell-ok', { cwd: tmpdir(), sandbox: false });
+  let out = '';
+  child.stdout.on('data', (b) => { out += b; });
+  const code = await new Promise((ok) => child.on('exit', ok));
+  expect([code, out.trim()]).toEqual([0, 'shell-ok']);
 });

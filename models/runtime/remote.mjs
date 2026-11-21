@@ -391,9 +391,27 @@ export async function openTunnel({ dest, remotePort = SERVE_PORT, ssh = 'ssh', t
 async function getJson(url, path, { key, signal, timeoutMs }) {
   const t = AbortSignal.timeout(timeoutMs);
   const res = await fetch(`${norm(url)}${path}`, { headers: key ? { authorization: `Bearer ${key}` } : {}, signal: signal ? AbortSignal.any([signal, t]) : t });
-  let body = null;
-  try { body = await res.json(); } catch {}
-  return { status: res.status, ok: res.ok, body };
+  let body = null, text = '';
+  try { text = await res.text(); body = JSON.parse(text); } catch {}
+  return { status: res.status, ok: res.ok, body, text };
+}
+
+// What a 401 or 403 says (21 Nov 2026, the hearth fit audit): each was reported as "the API key was not accepted",
+// whatever the service said. A run on a server whose name lookup gave hearth's public address got the web server's
+// own 403 page there (hearth's API answers on its network only; no key was read), and it read as a wrong key; so did a
+// paused key and a model the key doesn't reach. A 401 is the key, as before. A 403 with the service's words gives
+// them; a 403 that is a web page is a server in front of the service refusing this machine's address.
+// Answers { kind: 'key' | 'refused' | 'address', text } (text: what follows "it …" or stands alone after a colon).
+export function refusalOf(status, text = '', { hearth = false } = {}) {
+  const raw = String(text ?? '').trim();
+  let words = '';
+  try {
+    const j = JSON.parse(raw);
+    words = String((typeof j?.error === 'string' ? j.error : j?.error?.message) ?? j?.message ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  } catch {}
+  if (status === 403 && words) return { kind: 'refused', text: `it refused this request (403): ${words}` };
+  if (status === 403 && /<html|<!doctype/i.test(raw)) return { kind: 'address', text: `a web server in front of it refused this machine's address (403) before any key was read${hearth ? ": hearth's API answers on hearth's network only (the VPN or the house), and this request came from outside it" : ''}` };
+  return { kind: 'key', text: 'the API key was not accepted' };
 }
 
 // The sizes hearth's door lists (hearth-2b …: its /api/tags), [] on a door from before them or one that does not answer.
@@ -495,7 +513,10 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
       out.ms = Date.now() - t0;
       steps.push({ ok: true, text: `reached in ${out.ms} ms` });
       const p = await getJson(url, '/props', { key, signal, timeoutMs });
-      if (p.status === 401 || p.status === 403) return fail(key ? 'the API key was not accepted' : 'this server needs an API key');
+      if (p.status === 401 || p.status === 403) {
+        const no = refusalOf(p.status, p.text);
+        return fail(no.kind !== 'key' ? no.text : key ? 'the API key was not accepted' : 'this server needs an API key');
+      }
       if (!p.ok || !p.body) return fail(`it did not say what it runs (/props answered ${p.status})`);
       steps.push({ ok: true, text: key ? 'the key was accepted' : 'no key needed' });
       out.file = p.body.model_path ?? null;
@@ -507,7 +528,10 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
     } else {
       const r = await getJson(url, '/v1/models', { key, signal, timeoutMs });
       out.ms = Date.now() - t0;
-      if (r.status === 401 || r.status === 403) return fail(key ? `reached in ${out.ms} ms, but the API key was not accepted` : `reached in ${out.ms} ms, but it needs an API key`);
+      if (r.status === 401 || r.status === 403) {
+        const no = refusalOf(r.status, r.text, { hearth });
+        return fail(no.kind !== 'key' ? `reached in ${out.ms} ms, but ${no.text}` : key ? `reached in ${out.ms} ms, but the API key was not accepted` : `reached in ${out.ms} ms, but it needs an API key`);
+      }
       if (!r.ok || !Array.isArray(r.body?.data)) return fail(`the address answered ${r.status} to /v1/models: is it an OpenAI-compatible server? (with a path like /api/v1 when it has one)`);
       steps.push({ ok: true, text: `reached in ${out.ms} ms${key ? ' · the key was accepted' : ''}` });
       out.models = r.body.data.map((m) => m.id).filter(Boolean);

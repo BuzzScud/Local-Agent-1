@@ -140,9 +140,16 @@ export function sandboxAvailable() {
   return usable;
 }
 
-// [file, args] that run `command` in zsh inside the fence around `root`.
+// The shell every command runs in: zsh, as on every Mac; where there is none, bash, then sh (21 Nov 2026: on a Linux
+// server with no zsh every command failed before it started, "✗ Bash(true)", and a run stopped at five tool errors).
+export function shellPath(exists = existsSync) {
+  return ['/bin/zsh', '/bin/bash'].find((f) => exists(f)) ?? '/bin/sh';
+}
+export const SHELL = shellPath();
+
+// [file, args] that run `command` in the shell inside the fence around `root`.
 export function sandboxed(command, root, { readOnly, open, self } = {}) {
-  return [SANDBOX_EXEC, ['-p', sandboxProfile(root, { readOnly, open, self }), '/bin/zsh', '-c', command]];
+  return [SANDBOX_EXEC, ['-p', sandboxProfile(root, { readOnly, open, self }), SHELL, '-c', command]];
 }
 
 // What a blocked command prints, turned into a hint for the model. A blocked

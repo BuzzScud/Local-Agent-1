@@ -10,7 +10,7 @@
 // timed out.", before the first word or mid-reply); a busy service or a long conversation
 // read again takes longer, so the model's requests turn that off (timeout: false). Esc
 // still stops them (signal).
-import { thinkingKwargs, thinkingLevel, endpointOf, authHeaders, isOutOfMemory, hearthList } from '../../../models/index.mjs';
+import { thinkingKwargs, thinkingLevel, endpointOf, authHeaders, isOutOfMemory, hearthList, refusalOf } from '../../../models/index.mjs';
 import { streamClaude } from './claude.mjs';
 import { openAIMessages, ollamaMessages } from './images.mjs';
 import { splitThink } from './think-tags.mjs';
@@ -48,6 +48,12 @@ const refusedKey = (url, model) => `${url ?? ''}\u0000${model ?? ''}`;
 // An error the server answered with (its status kept, and how long it asked to wait: busy.mjs),
 // and the one for a model that does not fit (noRoom: summarizing the conversation would not make it fit).
 const serverError = (text, status, res) => Object.assign(new Error(text), { status, ...(res?.headers?.get?.('retry-after') ? { retryAfter: retryAfterHeader(res.headers.get('retry-after')) } : {}) });
+// A 401 or 403 in the service's own terms (remote.mjs refusalOf): the key, the service's words, or a web server in
+// front of it that refused this machine's address.
+const refusedError = (ep, url, status, text) => {
+  const no = refusalOf(status, text, { hearth: Boolean(ep.hearth) });
+  return serverError(no.kind === 'key' ? `the remote model (${ep.label ?? url}) did not accept the API key (${status}); change it in /remote` : `the remote model (${ep.label ?? url}): ${no.text}`, status);
+};
 const roomError = (ep, status) => Object.assign(serverError(`the service has no room to load ${ep.model} (out of GPU memory): /model picks another, or /effort a smaller Context`, status), { noRoom: true });
 
 // The body as an OpenAI-compatible server takes it (exported for the tests).
@@ -296,7 +302,7 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
       continue;
     }
     if (ep && isOutOfMemory(text)) throw roomError(ep, res.status);
-    if (ep && (res.status === 401 || res.status === 403)) throw serverError(`the remote model (${ep.label ?? url}) did not accept the API key (${res.status}); change it in /remote`, res.status);
+    if (ep && (res.status === 401 || res.status === 403)) throw refusedError(ep, url, res.status, text);
     throw serverError(`${ep ? `remote model server (${ep.label ?? url})` : 'model server'} ${res.status}: ${text.slice(0, 300)}`, res.status, res);
   }
   const decoder = new TextDecoder();
@@ -401,7 +407,7 @@ async function* streamOllama({ url, ep, side = false, messages, tools, toolChoic
     const field = tries < 2 ? refusedField(res.status, text, { reasoning_effort: body.think, tools: body.tools }) : null;
     if (field) { refused.set(k, new Set([...(refused.get(k) ?? []), field])); drop(); continue; }
     if (isOutOfMemory(text)) throw roomError(ep, res.status);
-    if (res.status === 401 || res.status === 403) throw serverError(`the remote model (${ep.label ?? url}) did not accept the API key (${res.status}); change it in /remote`, res.status);
+    if (res.status === 401 || res.status === 403) throw refusedError(ep, url, res.status, text);
     throw serverError(`remote model server (${ep.label ?? url}) ${res.status}: ${text.slice(0, 300)}`, res.status, res);
   }
   const decoder = new TextDecoder();
