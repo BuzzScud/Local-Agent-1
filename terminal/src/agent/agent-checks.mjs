@@ -41,7 +41,7 @@ export class ChecksPart {
   // permissions' note, the web page's, your standing rules and five more were lost there.
   requestNotes() {
     const t = this.turn;
-    return [t?.bug, t?.skill, t?.folder, t?.look, t?.asks, t?.fixNote, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.ssh, t?.rules].filter(Boolean);
+    return [t?.bug, t?.skill, t?.folder, t?.look, t?.asks, t?.fixNote, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.ssh, t?.rules, t?.shortSteps].filter(Boolean);
   }
 
   // The model's tool lines (way.mjs) name only the tools this request offers: the list is fixed

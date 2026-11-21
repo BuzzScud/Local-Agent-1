@@ -55,6 +55,11 @@
     // (21 Nov 2026: a dashboard file written for 5 minutes read "Writing… 16 words" the whole time)
     const quiet = L.whole && L.lastTokenAt && !L.waiting && !L.running && !L.task ? (now() - L.lastTokenAt) / 1000 : 0;
     if (quiet >= 15) return { key: 'live', k: 'whole', text: L.text, since: L.lastTokenAt, tps: L.wholeTps ?? null, verb: ['Writing its next step', 'sent in one piece when it is done'] };
+    // A reply with no words before its call (thinking off) sends nothing at all until the call is whole: once reading what is
+    // new should be done (readSecs, at the service's usual reading speed) and 15 s more have passed, it is writing (21 Nov 2026:
+    // a dashboard written for 11 minutes read "Waiting… for the model to read what is new" the whole time). Not while it waits in line.
+    const readEnd = L.whole && L.waiting && !L.queued && !L.running && !L.task && L.readSecs != null && L.stepStart ? L.stepStart + L.readSecs * 1000 : null;
+    if (readEnd && (now() - readEnd) / 1000 >= 15) return { key: 'live', k: 'whole', text: null, since: readEnd, tps: L.wholeTps ?? null, verb: ['Writing its next step', 'sent in one piece when it is done'] };
     // the answer once it comes (the thought before it is still in the live state until the reply ends)
     if (L.text) return { key: 'live', k: 'said', text: L.text, since: L.textStart ?? since, verb: ['Writing', ''] };
     if (L.thinking) return { key: 'live', k: 'think', text: L.thinking, tokens: L.thinkTokens ?? 0, since: L.thinkStart ?? since, verb: ['Thinking', ''] };

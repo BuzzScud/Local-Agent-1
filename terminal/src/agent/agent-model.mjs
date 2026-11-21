@@ -13,6 +13,11 @@ import { CALL_STOPS, CALL_UNREADABLE, STEP_DOWN_CAP, STUCK_WORD, auto, beforeCal
 
 // The most of a reply's thinking kept when it passed the cap (keepPlan): about 4.5k tokens.
 const PLAN_KEEP = 16_000;
+// Short thinking on hearth, a step at a time like Claude's (21 Nov 2026, the owner: "make it think short, write, do commands,
+// then think again … until complete"; picks "about 1 minute" a step and "a plan you can see" first). In tokens at hearth's
+// usual ~18 a second: about a minute a step, about 90 s on a request's first step, for its plan. Never past the model's budget.
+export const HEARTH_STEP_THINK = 1024;
+export const HEARTH_PLAN_THINK = 1600;
 // The model's usual writing speed: the middle of its last replies' (stats.speeds), leaving out what no model writes
 // (21 Nov 2026: a one-token reply on hearth timed at 1,000,000 tokens a second). For the screen's "about N tokens so far".
 export const usualSpeed = (speeds) => { const ok = (speeds ?? []).filter((x) => x > 0.5 && x < 1000).sort((a, b) => a - b); return ok.length ? ok[Math.floor(ok.length / 2)] : null; };
@@ -79,12 +84,14 @@ export class ModelPart {
   // The thinking a reply did before it passed the cap, handed back for the rest of the request: on the end of the last
   // message (a tool's result or the request), as the plan reminder goes, so nothing before it is read again, and kept
   // there. A very long one keeps its start and its newest part. False when there is nothing to keep or nowhere to put it.
-  keepPlan(reasoning) {
+  // first: the request's first step, whose thought is its plan: it goes into TodoWrite, where the user sees it.
+  keepPlan(reasoning, { first = false } = {}) {
     let plan = String(reasoning ?? '').trim();
     const last = this.messages.at(-1);
     if (!plan || !last || last.role === 'assistant' || last.role === 'system') return false;
     if (plan.length > PLAN_KEEP) plan = `${plan.slice(0, 4000)}\n…\n${plan.slice(-(PLAN_KEEP - 4000))}`;
-    const text = `(Your thinking went past its limit, so it was stopped there. This is what you had planned; it stays with you for the rest of this request. Act on it now with your tools, and do not plan it all again:\n${plan})`;
+    const act = first ? 'If the request takes several steps, write your plan now with TodoWrite (short items), then do its first item.' : 'Act on it now with your tools; do not think it all over again.';
+    const text = `(Your thinking for this step reached its limit, so it was stopped there. This is what you thought; it stays with you for the rest of this request. ${act} You think again after the result:\n${plan})`;
     if (typeof last.content === 'string') last.content = last.content ? `${last.content}\n\n${text}` : text;
     else if (Array.isArray(last.content)) last.content = [...last.content, { type: 'text', text }];
     else last.content = text;
@@ -276,8 +283,12 @@ export class ModelPart {
     // An Ollama service takes no thinking cap, so the app holds one itself: a reply that thinks past the
     // model's thinking budget is stopped and asked for once more with thinking off (5 Oct 2026: one reply
     // of Qwen3.6 thought for 14 minutes, 28.4k tokens, to the end of its reply room, in a 25-minute task).
-    const serviceCap = thinking && endpointOf(this.url)?.ollama ? this.model?.thinkingBudget ?? 4096 : 0;
-    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : serviceCap ? serviceCap : !this.capsThinking() ? maxTokens : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama), tps: usualSpeed(this.stats?.speeds) });
+    const onHearth = Boolean(endpointOf(this.url)?.hearth);
+    const hearthCap = onHearth ? ((this.turn?.steps ?? 0) === 0 ? HEARTH_PLAN_THINK : HEARTH_STEP_THINK) : Infinity;
+    const serviceCap = thinking && endpointOf(this.url)?.ollama ? Math.min(this.model?.thinkingBudget ?? 4096, hearthCap) : 0;
+    // readSecs: about how long the service takes to read what is new, at its usual reading speed; past it, a reply that
+    // has sent nothing on a service that sends a call whole is writing one (the window's "Writing its next step").
+    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : serviceCap ? serviceCap : !this.capsThinking() ? maxTokens : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama), tps: usualSpeed(this.stats?.speeds), readSecs: this.stats?.pps > 0 ? fresh / this.stats.pps : null });
     // What this step was asked with, for a call of it asked for again (agent-step.mjs rereadCall).
     const sentTools = focus ? this.mcpFocusTools(focus) : this.tools();
     this.lastAsk = { thinking, effort, sampling, maxTokens, tools: sentTools };
@@ -388,15 +399,15 @@ export class ModelPart {
     if (turn.overThought) {
       clock('thought past the cap');
       this.stats.outTokens += tokensOf(turn.reasoning);
+      // On hearth the thought is kept and this one step acts on it with thinking off; the next step thinks again (21 Nov
+      // 2026, the owner's picks: the plan kept, then "think short, write, do commands, then think again").
+      if (onHearth && this.keepPlan(turn.reasoning, { first: (this.turn?.steps ?? 0) === 0 })) {
+        this.emit('note', { text: `Thought to this step's limit (${kTok(serviceCap)}): the thought is kept, it acts on it now, and it thinks again after the result.`, tone: 'dim', fold: true });
+        return this.generate(signal, { retry, textOnly, maxTokens: cap, focus, noThink: true });
+      }
       // And the rest of this request with it off: thinking stopped at the cap is thrown away, and a model that
       // passes it once passes it again (5 Oct 2026: six capped replies in one run, about 100 s each, 10 of its 25 minutes).
       if (this.turn) this.turn.overThought = true;
-      // On hearth its plan is kept (21 Nov 2026, the owner's pick "Keep plan, then act", for the whole request): the
-      // 27b planned a dashboard for 5 minutes, passed the cap, and every word of it was thrown away.
-      if (endpointOf(this.url)?.hearth && this.keepPlan(turn.reasoning)) {
-        this.emit('note', { text: `It thought past ${kTok(serviceCap)} in one reply (the service takes no thinking cap): its plan so far is kept and handed back, and it acts on it with thinking off for the rest of this request.`, tone: 'dim' });
-        return this.generate(signal, { retry, textOnly, maxTokens: cap, focus, noThink: true });
-      }
       this.emit('note', { text: `It thought past ${kTok(serviceCap)} in one reply (the service takes no thinking cap): that reply is asked for again with thinking off, and so is the rest of this request.`, tone: 'dim' });
       return this.generate(signal, { retry, textOnly, maxTokens: cap, focus, noThink: true });
     }
