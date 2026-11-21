@@ -1,0 +1,141 @@
+// Agentic Coder on hearth's API, made to fit (21 Nov 2026, the hearth fit audit: a `coding -p` run did its work, then sent
+// one more call that waited 940 s in the door's line and never ended or printed anything). On a stand-in door: a wait in
+// the line is no word (the request is still stopped at its first-word limit), the app's own checks of a turn have a limit of
+// their own and go to hearth's review size, and a run held on one server (hearth@poseidon) keeps every job there.
+import { test, expect, afterAll } from 'bun:test';
+import { createServer } from 'node:http';
+import { connectRemote, endpointOf, dropEndpoint, setEndpoint, pickHearthModel, DEFAULT_REMOTE } from '../../models/index.mjs';
+import { watched } from '../src/agent/client.mjs';
+import { Agent } from '../src/agent/agent.mjs';
+import { checkCall, ChecksPart } from '../src/agent/agent-checks.mjs';
+
+const KEY = 'hk_test-hearth-fit-key-0123456789abcdef';
+const drain = async (it) => { const out = []; for await (const e of it) out.push(e); return out; };
+
+// A door that lists the sizes and answers no chat: each waits in its line for ever, saying why every 40 ms.
+function door() {
+  const seen = [];
+  const s = createServer(async (req, res) => {
+    let b = ''; for await (const c of req) b += c;
+    const json = (code, j) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
+    if (req.headers.authorization !== `Bearer ${KEY}`) return json(401, { error: 'no' });
+    const p = req.url.replace(/^\/door/, '');
+    const names = ['hearth', 'hearth-2b', 'hearth-4b', 'hearth-9b'];
+    if (p === '/api/version') return json(200, { version: '0.40.0' });
+    if (p === '/v1/models') return json(200, { object: 'list', data: names.map((id) => ({ id, object: 'model' })) });
+    if (p === '/api/tags') return json(200, { models: names.map((name) => ({ name, model: name, details: { family: '', parameter_size: name === 'hearth' ? '27B' : name.slice(7).toUpperCase() } })) });
+    if (p === '/api/ps') return json(200, { models: names.map((name) => ({ name, model: name, context_length: name === 'hearth' ? 131072 : 32768 })) });
+    if (p === '/api/show') return json(200, { details: {}, model_info: { 'general.context_length': 131072 }, capabilities: ['completion', 'tools', 'thinking'] });
+    if (p === '/api/chat') {
+      seen.push({ body: JSON.parse(b || '{}'), side: req.headers['x-hearth-job'] ?? null });
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+      const ping = setInterval(() => res.write(`${JSON.stringify({ message: { role: 'assistant', content: '' }, done: false, hearth: { waiting: 'Poseidon is busy with a staff chat', ahead: 2 } })}\n`), 40);
+      req.on('close', () => clearInterval(ping));
+      res.on('close', () => clearInterval(ping));
+      return;
+    }
+    json(404, { error: 'Not found.' });
+  });
+  return new Promise((ok) => s.listen(0, '127.0.0.1', () => ok({ base: `http://127.0.0.1:${s.address().port}/door`, seen, close: () => new Promise((d) => { s.closeAllConnections?.(); s.close(d); }) })));
+}
+const open = [];
+afterAll(async () => { for (const d of open) { await d.close(); dropEndpoint(d.base); } });
+
+test('a wait in the line is no word: the request is still stopped at its first-word limit', async () => {
+  const was = { f: process.env.AGENTIC_FIRST_WORD_SECS, q: process.env.AGENTIC_QUIET_SECS };
+  process.env.AGENTIC_FIRST_WORD_SECS = '0.4';
+  process.env.AGENTIC_QUIET_SECS = '0.15';
+  try {
+    // pings every 50 ms, never a word: before, each ping put the quiet limit back and it never ended
+    const pings = (sig) => (async function* () { while (!sig.aborted) { await Bun.sleep(50); yield { type: 'queued', why: 'busy', ahead: 1 }; } throw sig.reason; })();
+    const t0 = Date.now();
+    const err = await drain(watched(pings, null, 'hearth')).catch((e) => e);
+    expect(err?.stalled).toBe(true);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(380);
+    expect(Date.now() - t0).toBeLessThan(1500);
+    // once a word has come, a quiet stretch is a stall as before
+    const words = (sig) => (async function* () { yield { type: 'text', text: 'a' }; await Bun.sleep(400); if (sig.aborted) throw sig.reason; yield { type: 'done' }; })();
+    const e2 = await drain(watched(words, null, 'hearth')).catch((e) => e);
+    expect(e2?.stalled).toBe(true);
+  } finally {
+    for (const [k, v] of [['AGENTIC_FIRST_WORD_SECS', was.f], ['AGENTIC_QUIET_SECS', was.q]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
+
+test('a check of a turn on a remote has a limit of its own; on this Mac it is as it was', async () => {
+  const was = process.env.AGENTIC_CHECK_SECS;
+  process.env.AGENTIC_CHECK_SECS = '0.1';
+  try {
+    const url = 'http://127.0.0.1:9/fit-remote';
+    setEndpoint(url, { kind: 'openai', ollama: true, model: 'x' });
+    const c = checkCall({ url, onHearth: () => ({ model: 'hearth-9b' }) }, 'review', null);
+    expect(c.use).toEqual({ model: 'hearth-9b' });
+    await Bun.sleep(180);
+    expect([c.signal.aborted, c.timedOut()]).toEqual([true, true]);
+    c.done();
+    dropEndpoint(url);
+    const outer = new AbortController();
+    const here = checkCall({ url: 'http://127.0.0.1:17600', onHearth: () => ({ model: 'hearth-9b' }) }, 'review', outer.signal);
+    expect([here.use, here.signal === outer.signal, here.timedOut()]).toEqual([undefined, true, false]);
+  } finally { if (was === undefined) delete process.env.AGENTIC_CHECK_SECS; else process.env.AGENTIC_CHECK_SECS = was; }
+});
+
+test('on hearth the checks go to the review size as side jobs, and one that waits in the line is skipped with a line', async () => {
+  const d = await door();
+  open.push(d);
+  const c = await connectRemote({ ...DEFAULT_REMOTE, source: 'hearth', kind: 'openai', connect: 'http', address: `${d.base}/v1`, model: 'hearth', key: true, keyEnd: 'cdef', keyId: 'hearth' }, { key: KEY });
+  const was = process.env.AGENTIC_CHECK_SECS;
+  process.env.AGENTIC_CHECK_SECS = '0.5';
+  try {
+    expect(endpointOf(c.url)).toMatchObject({ hearth: true, hearthSizes: ['hearth-2b', 'hearth-4b', 'hearth-9b'] });
+    const notes = [];
+    const me = { url: c.url, model: { remote: { model: 'hearth' } }, slots: null, isHelper: false, router: null, conversation: 'c1', emit: (t, e) => { if (t === 'note') notes.push(e.text); },
+      messages: [{ role: 'user', content: 'Make applyDiscount never go below 0.' }], turn: { diffs: '+ return Math.max(0, x);', request: 'Make applyDiscount never go below 0.' } };
+    for (const k of ['hearthUse', 'onHearth']) me[k] = Agent.prototype[k].bind(me);
+    for (const k of ['verifyDone', 'listCases']) me[k] = ChecksPart.prototype[k].bind(me);
+    const t0 = Date.now();
+    const [done, listed] = await Promise.all([me.verifyDone('Done.', null), me.listCases(null)]);
+    expect(Date.now() - t0).toBeLessThan(2500);
+    expect([done, listed]).toEqual([null, []]);
+    expect(notes).toEqual(expect.arrayContaining([expect.stringContaining('Checking it did everything: no answer in 0.5 s'), expect.stringContaining('Listing the cases: no answer in 0.5 s')]));
+    expect(d.seen.map((r) => [r.body.model, r.side])).toEqual([['hearth-9b,hearth,hearth-4b', 'side'], ['hearth-9b,hearth,hearth-4b', 'side']]);
+  } finally { c.stop(); if (was === undefined) delete process.env.AGENTIC_CHECK_SECS; else process.env.AGENTIC_CHECK_SECS = was; }
+});
+
+test('a run held on one server (hearth@poseidon) keeps every helper job on that model there, each a side job', () => {
+  const url = 'http://127.0.0.1:9/fit-held';
+  const me = { url };
+  me.hearthUse = Agent.prototype.hearthUse.bind(me);
+  setEndpoint(url, { kind: 'openai', ollama: true, hearth: true, hearthSizes: ['hearth-2b', 'hearth-4b', 'hearth-9b'], model: 'hearth@poseidon' });
+  expect(['side', 'btw', 'review', 'helpers'].map((j) => [me.hearthUse(j)?.model, me.hearthUse(j)?.side])).toEqual([['hearth@poseidon', true], ['hearth@poseidon', true], ['hearth@poseidon', true], ['hearth@poseidon', true]]);
+  expect(me.hearthUse('pictures')).toBeUndefined();
+  // not held: the sizes, as before
+  setEndpoint(url, { kind: 'openai', ollama: true, hearth: true, hearthSizes: ['hearth-2b', 'hearth-4b', 'hearth-9b'], model: 'hearth' });
+  expect(['side', 'review', 'helpers'].map((j) => [me.hearthUse(j)?.model, me.hearthUse(j)?.side])).toEqual([['hearth-2b', undefined], ['hearth-9b', undefined], ['hearth-4b', undefined]]);
+  dropEndpoint(url);
+});
+
+test('on hearth the memory is cleaned up before the door would refuse it; your Clean up at and other services as before', async () => {
+  const { HEARTH_CLEAN_AT } = await import('../src/agent/agent.mjs');
+  const url = 'http://127.0.0.1:9/fit-room';
+  const cap = (over) => Object.getOwnPropertyDescriptor(Agent.prototype, 'cleanCap').get.call({ url, ctx: 131072, workRoom: 0, model: { remote: { model: 'hearth' } }, ...over });
+  setEndpoint(url, { kind: 'openai', ollama: true, hearth: true, model: 'hearth' });
+  expect(HEARTH_CLEAN_AT).toBe(102400);
+  // the door's line: a prompt and 4,096 of reply over 131,072 is refused, and a whole reply needs 16,384
+  expect(cap()).toBe(102400);
+  expect(HEARTH_CLEAN_AT + 16384).toBeLessThan(131072);
+  expect(cap({ workRoom: 65536 })).toBe(65536);
+  setEndpoint(url, { kind: 'openai', ollama: true, model: 'qwen' });
+  expect(cap()).toBe(131072);
+  dropEndpoint(url);
+});
+
+test('a hearth model named with its server keeps the server through Connect', async () => {
+  expect(pickHearthModel(['hearth', 'hearth-2b'], 'hearth@poseidon-seats')).toBe('hearth@poseidon-seats');
+  expect(pickHearthModel(['hearth/oto', 'hearth/lite'], 'hearth@neptune')).toBe('hearth/oto@neptune');
+  expect([pickHearthModel(['hearth'], 'hearth'), pickHearthModel(['hearth'], 'hearth@'), pickHearthModel(['hearth'], '')]).toEqual(['hearth', 'hearth', 'hearth']);
+  const d = await door();
+  open.push(d);
+  const c = await connectRemote({ ...DEFAULT_REMOTE, source: 'hearth', kind: 'openai', connect: 'http', address: `${d.base}/v1`, model: 'hearth@poseidon-seats', key: true, keyEnd: 'cdef', keyId: 'hearth' }, { key: KEY });
+  try { expect(endpointOf(c.url).model).toBe('hearth@poseidon-seats'); } finally { c.stop(); }
+});

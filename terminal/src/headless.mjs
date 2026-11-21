@@ -105,6 +105,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   if (limits) { applyLimits(agent, limits); applySearch(agent, limits); }
   // The helper models of its side jobs, as a window's /subagents gives them (helper-models.mjs); a web run's Helper.
   if (helperJobs) agent.helperJobs = helperJobs;
+  // No next message to read ahead for (agent-model.mjs warmNext), unless a loop's run may send one (more).
+  agent.noWarmNext = !more;
   // A loop's own steps a run (its rules) over /effort's Steps per request.
   if (maxSteps) agent.maxSteps = maxSteps;
   // A way given to the run (bench --way, coding -p --way, AGENTIC_WAY) wins over the limits' row.
@@ -125,6 +127,10 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   hooksNote = (text, tone) => agent.emit('note', { text, tone });
   // A step under way (a helper's progress): to onEvent only, not the log.
   agent.on('tool-running', (ev) => onEvent('tool-running', ev));
+  // A wait in hearth's line and the app's own checks (21 Nov 2026, the hearth fit audit: coding -p said nothing for 15
+  // minutes while a check waited in the door's line): to onEvent only, so a script can say why it waits.
+  agent.on('queued', (ev) => onEvent('queued', ev));
+  agent.on('busy', (ev) => onEvent('busy', ev));
   // The turn's own counts (steps, reads, thinking): the last turn-end wins.
   let counts = {};
   agent.on('turn-end', (ev) => { counts = ev; });

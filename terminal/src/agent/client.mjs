@@ -185,7 +185,10 @@ export async function* watched(make, signal, what) {
   };
   arm(secsEnv('AGENTIC_FIRST_WORD_SECS', 1200));
   try {
-    for await (const ev of make(ac.signal)) { arm(secsEnv('AGENTIC_QUIET_SECS', 300)); yield ev; }
+    // A wait in a service's line (hearth's door says why: 'queued'; a busy service asked again: 'busy') is no word: it
+    // keeps the first wait running (21 Nov 2026, the hearth fit audit: each ping re-armed the quiet limit, so a request
+    // in line was never stopped, and the first ping cut the first wait to the quiet one).
+    for await (const ev of make(ac.signal)) { if (ev?.type !== 'queued' && ev?.type !== 'busy') arm(secsEnv('AGENTIC_QUIET_SECS', 300)); yield ev; }
   } catch (e) {
     if (fired && !signal?.aborted) throw Object.assign(new Error(fired), { stalled: true });
     throw e;
@@ -248,7 +251,8 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
     // On hearth (models/runtime/remote.mjs HEARTH_CTX): a side job, or a step on another of its models (a helper's), says
     // so and runs beside the conversation's step; a door without side jobs (it lists no sizes) takes one at a time from
     // here, since each new job from a key took the running one's place there.
-    const side = Boolean(ep.hearth) && (!conversation || Boolean(use?.model && use.model !== endpointOf(url)?.model));
+    // use.side: a helper's step on the conversation's own model (a run held on one server, agent.mjs hearthUse) is one too.
+    const side = Boolean(ep.hearth) && (!conversation || Boolean(use?.side) || Boolean(use?.model && use.model !== endpointOf(url)?.model));
     const make = () => streamOllama({ url, ep, side, messages: ownStartOn(ep) ? ownStart(messages, conversation) : messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra });
     const stream = !ep.hearth ? make() : ep.hearthSizes?.length ? (side ? withTurn(`${url} side`, HEARTH_SIDE_JOBS, signal, make) : make()) : withTurn(url, 1, signal, make);
     yield* recorded(stream, { model: ep.model, url, who: conversation ? 'conversation' : what, messages, tools: tools?.length ?? 0, think: Boolean(thinking) });

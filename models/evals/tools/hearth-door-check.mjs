@@ -10,7 +10,7 @@
 //   3 after: side jobs ask for no thinking, and the steps say their level (thinking sent on every call)
 //   4 after: the change is made and the shop's tests pass
 //   5 after: the request's working time at most 10% over before's
-// Runs on hearth's 27b on Poseidon by default (--model hearth@poseidon): tests and measurements never go to the copy kept
+// Runs on hearth's 27b on Poseidon by default (--model hearth@poseidon-seats: the door names it so; "hearth@poseidon" matches no server): tests and measurements never go to the copy kept
 // for customers. Usage: bun models/evals/tools/hearth-door-check.mjs [--before <checkout>] [--model <name>] [--look]
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -26,7 +26,7 @@ const DIR = join(root, 'models', 'evals', 'results');
 rebuildIfAsked(o, (dir, rows, summary) => writeResultsPage(hearthPage, dir, rows, summary, previousRun(dir, summary, 'hearth-door-')));
 
 const { recordTest, codeLabel, HEARTH_ADDRESS } = await import('../../index.mjs');
-const MODEL = o.opt('model', 'hearth@poseidon');
+const MODEL = o.opt('model', 'hearth@poseidon-seats');
 const look = o.has('look');
 const TASK = 'In src/price.mjs, applyDiscount can return a negative price when the percent is over 100. Make it never go below 0, add a test for that in test/price.test.mjs, and run the tests.';
 const key = spawnSync('security', ['find-generic-password', '-s', 'agentic-coder-remote', '-a', 'hearth', '-w'], { encoding: 'utf8' }).stdout.trim();

@@ -18,6 +18,26 @@ import { reviewChange } from './helper-models.mjs';
 import { MODEL_TOOL_LINES, offeredToolLines } from './way.mjs';
 import { BIG_MEMORY, CASE_ITEM, CHANGES, CUT_MARK, LOOKS, PLAN_EVERY, REQUEST_EVERY, claimsFound, namesAFix, planList, planReminder, requestReminder, severalAsks } from './agent-said.mjs';
 
+// The app's own checks of a turn (listing the cases, reading the code against them, checking it did everything) on a
+// model on another machine (21 Nov 2026, the hearth fit audit): each was a call of the conversation's own model with no
+// limit of its own, awaited before the answer was given. On hearth's API one waited 940 s in the door's line behind other
+// keys' jobs after the work was done, and `coding -p` printed nothing and never ended. Now on a remote each has
+// CHECK_SECS (AGENTIC_CHECK_SECS), then is skipped with a line, and on hearth it goes to hearth's own size for its job
+// (onHearth: the review list, 9b first), so it waits for no 27b. On this Mac (a llama.cpp side slot) it is as it was.
+export const CHECK_SECS = 120;
+export function checkCall(agent, job, signal) {
+  if (!endpointOf(agent.url)) return { use: undefined, signal, timedOut: () => false, done: () => {} };
+  const n = Number(process.env.AGENTIC_CHECK_SECS);
+  const ms = (Number.isFinite(n) && n > 0 ? n : CHECK_SECS) * 1000;
+  const ac = new AbortController();
+  let late = false;
+  const onAbort = () => ac.abort(signal.reason);
+  if (signal?.aborted) ac.abort(signal.reason); else signal?.addEventListener('abort', onAbort, { once: true });
+  const timer = setTimeout(() => { late = true; ac.abort(new Error(`no answer in ${Math.round(ms / 1000)} s`)); }, ms);
+  timer.unref?.();
+  return { use: agent.onHearth?.(undefined, job), signal: ac.signal, secs: ms / 1000, timedOut: () => late, done: () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); } };
+}
+
 export class ChecksPart {
   // This turn's request with what goes along with it (see send()): the steps
   // for its kind of bug, the user's own math notes when the topic came up, and
@@ -170,8 +190,9 @@ export class ChecksPart {
   async listCases(signal) {
     const request = String(this.turn?.request ?? '').trim();
     if (!request) return [];
+    const c = checkCall(this, 'review', signal);
     try {
-      const r = await complete({ what: 'listing the cases', url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 4000,
+      const r = await complete({ what: 'listing the cases', url: this.url, model: this.model, slot: this.slots?.side, signal: c.signal, use: c.use, temperature: 0, maxTokens: 4000,
         system: 'You list the cases a coding request specifies, so each can be tested. Judge only from the request.',
         user: `Request:\n${request.slice(0, 6000)}\n\nList what this request specifies, so that each thing can be tested. Go through it phrase by phrase and stay with its own words: add no behaviour, argument or path it does not state.\n- cases: each behaviour it asks for. One case for every form it names: "A, B or C" is three cases.\n- unchanged: each thing it says must stay as it is, be refused, or be left alone. Again one for every form it names.\nFor each one: example is the input alone, just as the request writes it (a command line, a string, a value), with a small made-up value where it has a placeholder (FILE becomes notes.txt, DIR becomes src, N becomes 3) and relative names only, never a path from the root. Give a call only when the request's form is itself a call. expect is what the request says happens, in the request's own words, with no data shape of your own.\nAt most ${MAX_CASES} in each list.`,
         schema: { type: 'object', properties: { cases: { type: 'array', items: CASE_ITEM, maxItems: MAX_CASES }, unchanged: { type: 'array', items: CASE_ITEM, maxItems: MAX_CASES } }, required: ['cases', 'unchanged'] } });
@@ -180,8 +201,9 @@ export class ChecksPart {
       return listed.length ? [...listed, ...gapCases(request, listed)] : listed;
     } catch (e) {
       if (signal?.aborted) throw e;
+      if (c.timedOut()) this.emit('note', { text: `Listing the cases: no answer in ${c.secs} s; the work goes on without them.`, tone: 'dim', fold: true });
       return [];
-    }
+    } finally { c.done(); }
   }
 
   // Case review: the changed code (not its tests), read against each case of the request by a call of its
@@ -198,8 +220,9 @@ export class ChecksPart {
     if (code.length > REVIEW_CODE) code = t.diffs?.trim() ? `(The changed files are long, so these are this message's changes: + added, - removed.)\n${t.diffs.slice(0, REVIEW_CODE)}` : code.slice(0, REVIEW_CODE);
     const t0 = Date.now();
     this.emit('busy', { task: 'reading the code against the cases' });
+    const c = checkCall(this, 'review', signal);
     try {
-      const r = await complete({ what: 'reviewing the cases', url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 4000, system: REVIEW_SYSTEM, user: reviewAsk({ request, code, cases }), schema: REVIEW_SCHEMA(cases.length) });
+      const r = await complete({ what: 'reviewing the cases', url: this.url, model: this.model, slot: this.slots?.side, signal: c.signal, use: c.use, temperature: 0, maxTokens: 4000, system: REVIEW_SYSTEM, user: reviewAsk({ request, code, cases }), schema: REVIEW_SCHEMA(cases.length) });
       const secs = Math.max(1, Math.round((Date.now() - t0) / 1000));
       if (!Array.isArray(r.json?.reviews)) { this.emit('note', { text: `Case review: no answer came back (${secs} s); the answer stands as it is.`, tone: 'dim', fold: true }); return ''; }
       const wrong = reviewWrong(r.json.reviews, cases);
@@ -208,9 +231,9 @@ export class ChecksPart {
       return reviewBack(wrong, cases.length);
     } catch (e) {
       if (signal?.aborted) throw e;
-      this.emit('note', { text: 'Case review: no answer came back; the answer stands as it is.', tone: 'dim', fold: true });
+      this.emit('note', { text: c.timedOut() ? `Case review: no answer in ${c.secs} s; the answer stands as it is.` : 'Case review: no answer came back; the answer stands as it is.', tone: 'dim', fold: true });
       return '';
-    }
+    } finally { c.done(); }
   }
 
   // Who checks that a model on another machine stays on task (drift.mjs): on an Ollama service its Side
@@ -313,8 +336,9 @@ export class ChecksPart {
   async verifyDone(answer, signal) {
     const request = [...this.messages].reverse().find((m) => m.role === 'user' && !/^\[|^Not done yet|^Go ahead|^The tests fail|^You created|^Reply to the user|^You ran out/.test(m.content))?.content ?? '';
     if (!request.trim() || !this.turn.diffs.trim()) return null;
+    const c = checkCall(this, 'review', signal);
     try {
-      const r = await complete({ what: 'checking it did everything', url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 220,
+      const r = await complete({ what: 'checking it did everything', url: this.url, model: this.model, slot: this.slots?.side, signal: c.signal, use: c.use, temperature: 0, maxTokens: 220,
         system: 'You check whether a coding assistant did everything a request asked. Judge only from the request, the changes and its report.',
         user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Agentic Coder shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nBreak the request into its distinct asks (parts, at most 6) and judge each one against the changes. A request with one ask has one part. A part is done only when it is done fully, the way the person asking would expect: a story, notes, a description or documentation that is only a sentence or two, a placeholder, a stub or a TODO counts as not done. Is every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
         schema: { type: 'object', properties: { parts: { type: 'array', items: { type: 'object', properties: { part: { type: 'string' }, done: { type: 'boolean' } }, required: ['part', 'done'] }, maxItems: 6 }, done: { type: 'boolean' }, missing: { type: 'string' } }, required: ['parts', 'done', 'missing'] } });
@@ -325,7 +349,10 @@ export class ChecksPart {
       if (undone.length) return undone.join('; ').slice(0, 200);
       if (r.json.done || !r.json.missing?.trim()) return null;
       return r.json.missing.trim().slice(0, 200);
-    } catch { return null; }
+    } catch {
+      if (c.timedOut()) this.emit('note', { text: `Checking it did everything: no answer in ${c.secs} s; skipped.`, tone: 'dim', fold: true });
+      return null;
+    } finally { c.done(); }
   }
 
   // What it looked at in this message (Read, Search, List, Map, CodeSearch), as the screen names them.

@@ -79,13 +79,18 @@ export function hearthModelsOf(ids = []) {
   }
   return out;
 }
+// A name with its server (hearth@poseidon-seats, the door's modelRef) keeps the server (21 Nov 2026, the hearth fit audit:
+// Connect gave back plain "hearth", so a run named for one server went wherever the door sent it).
 export function pickHearthModel(ids = [], preferred = '') {
   const agents = hearthModelsOf(ids);
-  const want = String(preferred ?? '').trim();
+  const asked = String(preferred ?? '').trim();
+  const at = asked.lastIndexOf('@');
+  const want = at > 0 ? asked.slice(0, at) : asked;
+  const server = at > 0 && at < asked.length - 1 ? asked.slice(at) : '';
   if (want) {
     const mapped = agents.find((id) => foldHearth(id) === foldHearth(want) || hearthAgentOf(id) === hearthAgentOf(want));
-    if (mapped) return mapped;
-    if (ids.includes(want)) return want;
+    if (mapped) return `${mapped}${server}`;
+    if (ids.includes(want)) return `${want}${server}`;
   }
   return agents.find((id) => hearthAgentOf(id)?.ask === HEARTH_MODEL) || agents[0] || pickRemoteModel(ids);
 }
@@ -515,7 +520,7 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
         out.hearthSizes = HEARTH_SIZES.filter((s) => folded.includes(s));
         const pool = agents.length ? agents : out.models;
         const mapped = named ? pickHearthModel(out.models, named) : null;
-        const listed = Boolean(mapped && out.models.includes(mapped));
+        const listed = Boolean(mapped && out.models.includes(mapped.replace(/@[^@]*$/, '')));
         // Connect lists the agents when none is named (the form sends none while its row is the default it never picked), or
         // the named one is not on this door.
         if (!autoPick && pool.length > 1 && (!named || !listed)) {

@@ -22,9 +22,10 @@ export class ModelPart {
   // next message read the whole answer again, its steps and their output: 132 s for 18,659 tokens of Bonsai 2 9B
   // on this Mac. Right after an answer that thought, the conversation goes once as the next message will send it,
   // with a stand-in message and one token to write, so the service has read it by then. The next message stops
-  // it if it is still going (what it read stays read). AGENTIC_WARM_NEXT=off turns it off (the tests).
+  // it if it is still going (what it read stays read). AGENTIC_WARM_NEXT=off turns it off (the tests). noWarmNext: a run
+  // with no next message (coding -p, headless.mjs), where it was a whole read of the conversation as the process ended.
   warmNext() {
-    if (!endpointOf(this.url)?.ollama || this.isHelper || !this.lastAsk || String(process.env.AGENTIC_WARM_NEXT ?? 'on').toLowerCase() === 'off') return false;
+    if (!endpointOf(this.url)?.ollama || this.isHelper || this.noWarmNext || !this.lastAsk || String(process.env.AGENTIC_WARM_NEXT ?? 'on').toLowerCase() === 'off') return false;
     const at = this.messages.findLastIndex((m) => m.role === 'user');
     if (!this.messages.slice(at + 1).some((m) => m.role === 'assistant' && m.reasoning_content)) return false;
     this.warmCtl?.abort();

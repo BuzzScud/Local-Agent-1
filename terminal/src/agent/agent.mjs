@@ -57,6 +57,9 @@ import { AnswerPart } from './agent-answer.mjs';
 import { NotesPart } from './agent-notes.mjs';
 import { StartPart } from './agent-start.mjs';
 
+// Where the cleanup starts on hearth's API (cleanCap): its 131,072 less a whole reply (16,384) and room for the door's count.
+export const HEARTH_CLEAN_AT = 102_400;
+
 export class Agent extends EventEmitter {
   // whenFull: what happens when the conversation fills the model's memory.
   // 'notes' (the default): it writes down where it is and carries on from
@@ -312,10 +315,16 @@ export class Agent extends EventEmitter {
   // in HEARTH_JOBS goes to its size there (the door's list takes whichever is free, client.mjs), unless its profile sends
   // it to hearth already (a size picked in /profiles). A profile pointing elsewhere (another service, this Mac) is left
   // aside while the conversation is on hearth: those had not answered, so every such job ran on the 27b in its steps' place.
+  // A model named with its server (hearth@poseidon, 21 Nov 2026, the hearth fit audit): the run is held on that server, so
+  // every job stays on that model there, a side job each (use.side): the sizes' lists end in plain "hearth", and the
+  // small sizes live on other servers (hearth Lite's 9b answers customers on one of them), so a held run's side jobs
+  // and its second opinion had left the server it named.
   hearthUse(id) {
     const ep = endpointOf(this.url);
     const size = ep?.hearth && ep.hearthSizes?.length ? HEARTH_JOBS[id] : null;
-    return size ? { url: this.url, model: size, thinks: true, tools: true, family: '' } : undefined;
+    if (!size) return undefined;
+    const held = String(ep.model ?? '').includes('@');
+    return { url: this.url, model: held ? ep.model : size, thinks: true, tools: true, family: '', ...(held ? { side: true } : {}) };
   }
   // A job's call on hearth: the profile's when it is on hearth too, else hearth's own size; undefined off hearth.
   onHearth(call, id = 'helpers') {
@@ -373,7 +382,14 @@ export class Agent extends EventEmitter {
   // memory is cleaned up (notes, then a fresh start from them) as if it held only this many tokens. The
   // model keeps its whole memory, so one big file still fits. 0: its whole memory, as before.
   workRoom = 0;
-  get cleanCap() { return this.workRoom > 0 && this.model?.remote ? Math.min(this.ctx, this.workRoom) : this.ctx; }
+  // On hearth with no Clean up at of yours: HEARTH_CLEAN_AT (21 Nov 2026, the hearth fit audit). hearth's door refuses a
+  // job whose prompt and 4,096 tokens of reply pass 131,072 by its own count (characters a token, often more than the
+  // model's), and gives the room for a whole reply (16,384) only below that; the cleanup started at 95% of 131,072 by ours,
+  // so a long run met the door's 413 first (Cline on Neptune did, twice that morning).
+  get cleanCap() {
+    const room = this.workRoom > 0 ? this.workRoom : endpointOf(this.url)?.hearth ? HEARTH_CLEAN_AT : 0;
+    return room > 0 && this.model?.remote ? Math.min(this.ctx, room) : this.ctx;
+  }
   get lookSecsNow() { return this.lean ? 0 : lookSecs(this.look, { thinking: this.thinking, effort: this.effort }); }
   rulesRoom = 0;
   upFront = 0;

@@ -581,7 +581,7 @@ if (opts.print) {
       ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, steering: loop.io.steering, signal: loop.io.signal, keepProgress: true, testsFirst: loop.testsFirst, maxSteps: loop.steps, rewind: loop.rewind, resume: loop.resume } : {}),
       helperJobs,
       // What the app read for it before its first step (the project map, the files a question names) ends " [app]".
-      onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'answer') { if (!printed) process.stdout.write(`${String(ev.text ?? '').trim()}\n`); printed = true; return; } if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
+      onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'answer') { if (!printed) process.stdout.write(`${String(ev.text ?? '').trim()}\n`); printed = true; return; } if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); if (type === 'queued' && ev?.why) process.stderr.write(`· in hearth's line: ${ev.why}${ev.ahead ? ` (${ev.ahead} ahead)` : ''}\n`); if (type === 'busy' && ev?.task) process.stderr.write(`· ${ev.task}\n`); },
     });
     // AGENTIC_TRANSCRIPT=<file>: the whole conversation and every step, for a measurement that scores a run
     // (models/evals/tools/follow-through-replay.mjs). Nothing is written without it.
