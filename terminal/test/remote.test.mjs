@@ -12,6 +12,9 @@ import { startFakeServer } from './fake-server.mjs';
 // A throwaway home before the models part is loaded (it reads AGENTIC_HOME once): nothing here reaches the real ~/.agentic-coder.
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-remote-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
+// Nor the shell's own Claude key (22 Nov 2026: run from a shell that has ANTHROPIC_API_KEY, the form's key row read
+// "ANTHROPIC_API_KEY", not "none", and the form test failed there on every commit).
+delete process.env.ANTHROPIC_API_KEY;
 const { streamChat, openaiBody, refusedField } = await import('../src/agent/client.mjs');
 const { decide, complete } = await import('../src/flows/llm.mjs');
 const { setEndpoint, dropEndpoint, MODELS, GENERIC_REMOTE, HOME } = await import('../../models/index.mjs');
