@@ -284,5 +284,16 @@ export const toolNameOf = (name, way = 'app') => {
 };
 const SHELL_NAME = /^(?:run|exec|execute)?(?:shell|bash|terminal|command|commands|cmd|cli)(?:command|commands)?$/;
 
+// Write on hearth (agent.mjs ownTools): hearth's door sends a call only once it is whole and it may take 10 minutes
+// (client.mjs watched), and its 27b writes about 18 tokens a second, so a big file goes in parts, each added to the
+// end as it lands (21 Nov 2026, the owner's pick "Add to the end": a dashboard written for 5 minutes was lost whole).
+// tools.mjs prepare runs `append`; normalizeArgs keeps it.
+const HEARTH_PART_LINES = 150;
+export const HEARTH_WRITE_DEF = {
+  name: 'Write',
+  description: `Create a new file, or add to the end of one. On this service a file you write shows only once the whole call is written, and one call must be done within 10 minutes, so write a file over about ${HEARTH_PART_LINES} lines in parts: the first part (up to about ${HEARTH_PART_LINES} lines) with Write, then each next part with Write and append: true, in order, until the file is whole. End each part at a whole line, between two elements or functions. To change part of an existing file use Edit; Write without append replaces the whole file. Example: {"path": "report.html", "content": "<section id=\\"charts\\">\\n…\\n</section>\\n", "append": true}`,
+  parameters: { type: 'object', properties: { path: str('File path'), content: str('The file content, or with append the next part'), append: { type: 'boolean', description: 'true adds content to the end of the file (one you wrote or read in this conversation) instead of replacing it' } }, required: ['path', 'content'] },
+};
+
 // A tool's definition, on either way (Read's own takes paths only on Model).
 export const defOf = (name, way = 'app') => [...toolDefs(way), ...WEB_TOOL_DEFS, SCREEN_TOOL_DEF, AGENT_TOOL_DEF, APP_TOOL_DEF].find((d) => d.name === name);

@@ -4,7 +4,7 @@
 import { EventEmitter } from 'node:events';
 import { endpointOf, HEARTH_JOBS } from '../../../models/index.mjs';
 import { focusedInstructions, readInstructions, replaceInstructionBlock, withModelNotes } from './instructions.mjs';
-import { EXPLORE_TOOLS, resolvePath, toolSchemas } from './tools.mjs';
+import { EXPLORE_TOOLS, HEARTH_WRITE_DEF, resolvePath, toolSchemas } from './tools.mjs';
 import { DONT_ASK, isSelf, ownBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
 import { gitSummary, isHomeFolder, notesRoom, projectNotes, promptSetOf, systemPrompt, testCommand } from './prompt.mjs';
 import { lookSecs } from './look.mjs';
@@ -218,7 +218,9 @@ export class Agent extends EventEmitter {
       ...(this.model?.toolsOff ?? []),
     ]);
     const can = (t) => !off.has(t.function.name);
-    return (this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all).filter(can);
+    const list = (this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all).filter(can);
+    // On hearth, Write adds a big file in parts (tools-defs.mjs HEARTH_WRITE_DEF); every other service's list is as it was.
+    return endpointOf(this.url)?.hearth ? list.map((t) => (t.function.name === 'Write' ? { type: 'function', function: HEARTH_WRITE_DEF } : t)) : list;
   }
   // ---- Tools on demand (tool-groups.mjs) ----
   // "toolsOnDemand" (settings.json, set by the app): "auto", "on" or "off"; null (a test, a practice

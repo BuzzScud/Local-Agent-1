@@ -177,8 +177,13 @@ async function* spilling(args, sp) {
 // so coding -p, a helper or a side call waited for ever on a stalled server). Reading a long conversation again
 // can take minutes before the first word, so the first wait is long; after it, a quiet stretch is a stall.
 // AGENTIC_FIRST_WORD_SECS and AGENTIC_QUIET_SECS change them.
+// whole: hearth's door, which sends a tool call whole once it is written. Once its answer has begun, a long quiet
+// stretch is a big call being written, not a stall (21 Nov 2026: hearth wrote a dashboard file for 5 minutes and the
+// request was stopped for it), so it gets AGENTIC_WHOLE_QUIET_SECS, 10 minutes (the owner's pick); a big file goes in
+// parts there (tools-defs.mjs HEARTH_WRITE_DEF), each well under it.
 const secsEnv = (name, d) => { const n = Number(process.env[name]); return (Number.isFinite(n) && n > 0 ? n : d) * 1000; };
-export async function* watched(make, signal, what) {
+const ANSWERING = new Set(['reasoning', 'text', 'tool']);
+export async function* watched(make, signal, what, { whole = false } = {}) {
   const ac = new AbortController();
   const onAbort = () => ac.abort(signal.reason);
   if (signal?.aborted) ac.abort(signal.reason); else signal?.addEventListener('abort', onAbort, { once: true });
@@ -190,11 +195,18 @@ export async function* watched(make, signal, what) {
     timer.unref?.();
   };
   arm(secsEnv('AGENTIC_FIRST_WORD_SECS', 1200));
+  let answering = false;
   try {
     // A wait in a service's line (hearth's door says why: 'queued'; a busy service asked again: 'busy') is no word: it
     // keeps the first wait running (21 Nov 2026, the hearth fit audit: each ping re-armed the quiet limit, so a request
     // in line was never stopped, and the first ping cut the first wait to the quiet one).
-    for await (const ev of make(ac.signal)) { if (ev?.type !== 'queued' && ev?.type !== 'busy') arm(secsEnv('AGENTIC_QUIET_SECS', 300)); yield ev; }
+    for await (const ev of make(ac.signal)) {
+      if (ev?.type !== 'queued' && ev?.type !== 'busy') {
+        answering ||= whole && ANSWERING.has(ev?.type);
+        arm(answering ? secsEnv('AGENTIC_WHOLE_QUIET_SECS', 600) : secsEnv('AGENTIC_QUIET_SECS', 300));
+      }
+      yield ev;
+    }
   } catch (e) {
     if (fired && !signal?.aborted) throw Object.assign(new Error(fired), { stalled: true });
     throw e;
@@ -211,7 +223,7 @@ async function* streamOne(args) {
     const tags = args.model?.thinkTags;
     if (!tags?.length || ep?.kind === 'claude') return streamRaw(a);
     return splitThink(streamRaw(a), tags, { thinking: Boolean(args.thinking) });
-  }, args.signal, ep?.label ?? 'The model server');
+  }, args.signal, ep?.label ?? 'The model server', { whole: Boolean(ep?.hearth) });
   if (!ep?.remote) { yield* once(); return; }
   // Each answer's cost goes on the meter (spend.mjs), whoever asked: the conversation, a flow, a side job.
   for await (const ev of withBusyRetry(once, { key: ep.label ?? args.url, signal: args.signal })) {

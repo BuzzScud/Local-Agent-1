@@ -279,12 +279,13 @@ export class WorkPart {
             this.emit('note', { text: `File too long for one reply (${size}): saving its first ${kept.lines} lines, then carrying on from there`, tone: 'dim' });
             const out = await this.runTool({ id, name: 'Write', args }, signal);
             this.messages.push({ role: 'tool', tool_call_id: id, content: out.text });
-            this.messages.push({ role: 'user', content: auto(out.error ? cutCallNote('Write', path) : keptWriteNote(path, kept)) });
+            const append = Boolean(endpointOf(this.url)?.hearth);
+            this.messages.push({ role: 'user', content: auto(out.error ? cutCallNote('Write', path, { append }) : keptWriteNote(path, kept, { append })) });
             if (!out.error) cuts = 0; // a step landed: cut-off replies are no longer "in a row"
             continue;
           }
           this.messages.push({ role: 'assistant', content: beforeCall(text), ...(thought ? { reasoning_content: thought } : {}) });
-          this.messages.push({ role: 'user', content: auto(cutCallNote(cutCall.name, path)) });
+          this.messages.push({ role: 'user', content: auto(cutCallNote(cutCall.name, path, { append: Boolean(endpointOf(this.url)?.hearth) })) });
           this.emit('note', { text: `${cutCall.name === 'Write' || cutCall.name === 'Edit' ? 'File too long' : 'Call too long'} for one reply (${size}): asked it to ${cutCall.name === 'Write' || cutCall.name === 'Edit' ? `build ${path ?? 'the file'} in parts` : 'do it in smaller pieces'}`, tone: 'dim' });
           continue;
         }

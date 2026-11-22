@@ -703,6 +703,59 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: the thinking, then 
   } finally { await p.close(); }
 }, 60_000);
 
+// hearth sends a tool call in one piece once it is written (21 Nov 2026: a dashboard file written for 5 minutes read
+// "Writing… 16 words" the whole time). After 15 s of quiet the line says it is writing its next step, with about how
+// much is written at the last reply's speed; before that, and on a service that streams its calls, it is as it was.
+test.skipIf(needs('chrome', findChrome))('in a real browser: a call hearth is still writing says so, with about how much is written', async () => {
+  const p = await openPage();
+  try {
+    const turnStart = Date.now() - 300_000;
+    const said = { phase: 'working', turnStart, tokens: 30, text: 'Let me write the dashboard file.', textStart: Date.now() - 201_000 };
+    // 200 s quiet at 18 tokens a second: about 3.6k written.
+    await p.say({ ...base, live: { ...said, whole: true, lastTokenAt: Date.now() - 200_000, wholeTps: 18 } });
+    const live = await p.js(LIVE);
+    expect(live.slice(0, 2)).toEqual(['Writing its next step…', 'sent in one piece when it is done']);
+    expect(live[2]).toMatch(/^\(3m 2\ds · about 3\.6k tokens so far · /);
+    expect(await p.js(`document.querySelector('.ch7.live .tail7')?.textContent ?? null`)).toBe('Let me write the dashboard file.');
+    // No speed known yet: the time alone.
+    await p.say({ ...base, live: { ...said, whole: true, lastTokenAt: Date.now() - 40_000, wholeTps: null } });
+    expect((await p.js(LIVE))[2]).toMatch(/^\(4\d s · \d+ calls? · /);
+    // Under 15 s of quiet, or a service that streams its calls: the answer's own line.
+    await p.say({ ...base, live: { ...said, whole: true, lastTokenAt: Date.now() - 5_000, wholeTps: 18 } });
+    expect((await p.js(LIVE))[0]).toBe('Writing…');
+    await p.say({ ...base, live: { ...said, whole: false, lastTokenAt: Date.now() - 200_000, wholeTps: 18 } });
+    expect((await p.js(LIVE))[0]).toBe('Writing…');
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
+// A reply with no words before its call (thinking off) sends nothing at all until the call is whole (21 Nov 2026: a
+// dashboard written for 11 minutes read "Waiting… for the model to read what is new" the whole time). Once reading what is
+// new should be done, and 15 s more, the line says it is writing; not before, and not while it waits in hearth's line.
+test.skipIf(needs('chrome', findChrome))('in a real browser: a step that has sent nothing past its reading time says it is writing its next step', async () => {
+  const p = await openPage();
+  try {
+    const turnStart = Date.now() - 600_000;
+    const step = (more) => ({ ...base, live: { phase: 'working', turnStart, tokens: 30, waiting: true, whole: true, wholeTps: 9, ...more } });
+    // Read for about 5 s, then 120 s of nothing: writing, about 1.1k tokens at 9 a second.
+    await p.say(step({ stepStart: Date.now() - 125_000, readSecs: 5 }));
+    const live = await p.js(LIVE);
+    expect(live.slice(0, 2)).toEqual(['Writing its next step…', 'sent in one piece when it is done']);
+    expect(live[2]).toMatch(/^\(2m 0\ds · about 1\.1k tokens so far · /);
+    // Still inside its reading time (and 15 s more): reading.
+    await p.say(step({ stepStart: Date.now() - 12_000, readSecs: 5 }));
+    expect(await p.js(LIVE)).toEqual(['Waiting…', 'for the model to read what is new', expect.any(String)]);
+    // Waiting in hearth's line, no reading speed known, or a service that streams its calls: as before.
+    await p.say(step({ stepStart: Date.now() - 125_000, readSecs: 5, queued: 'Poseidon is busy' }));
+    expect((await p.js(LIVE))[0]).toBe('Waiting…');
+    await p.say(step({ stepStart: Date.now() - 125_000, readSecs: null }));
+    expect((await p.js(LIVE))[0]).toBe('Waiting…');
+    await p.say(step({ stepStart: Date.now() - 125_000, readSecs: 5, whole: false }));
+    expect((await p.js(LIVE))[0]).toBe('Waiting…');
+    expect(p.errors).toEqual([]);
+  } finally { await p.close(); }
+}, 60_000);
+
 // A picture you attach shows in the window (19 Nov 2026, the owner: "when i attach a screenshot or image, it shows in
 // the agentic coder"): the prompt's tray draws each picture as itself over the box (the window server serves only the
 // files the app named), a click shows it full size and esc closes it, a sent message shows its pictures, and ⌘V of a

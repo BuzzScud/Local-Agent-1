@@ -21,6 +21,12 @@ import { requestHits, requestNote } from './mcp.mjs';
 import { MCP_GROUP } from './tool-groups.mjs';
 import { BYPASS_OPEN, CORRECTS, SELF_OPEN, asksForWork, tokensOf, webAddresses } from './agent-said.mjs';
 import { sshNamed, sshNote } from '../tools/ssh.mjs';
+import { endpointOf } from '../../../models/index.mjs';
+
+// How to work on hearth (21 Nov 2026, the owner: "make it think short, write, do commands, then think again … like claude"):
+// its 27b planned a whole page in its head for 10 minutes before a single step. With each request there, so the prompt above
+// it never moves. agent-model.mjs holds the thinking to about a minute a step (HEARTH_STEP_THINK).
+export const HEARTH_STEPS_NOTE = 'How to work here: in short steps. Think only about your next step, in a few sentences, then act with a tool; you think again after each result. Never draft a file\'s contents or a whole design in your thinking: write them with Write (a big file in parts). When the request takes several steps, first write a short plan with TodoWrite (the user sees it), then work through it one item at a time.';
 
 export class NotesPart {
   async turnNotes(text, request, signal, { follow, kind, bug, skill, math }) {
@@ -57,6 +63,8 @@ export class NotesPart {
     }
     const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
     // said once a session, and again only after it was off (7 Oct 2026: it was printed every turn)
+    // On hearth: short steps (HEARTH_STEPS_NOTE), with every request of yours there, a follow-up too.
+    if (!this.isHelper && endpointOf(this.url)?.hearth && request?.role === 'user' && typeof request.content === 'string') this.turn.shortSteps = { request, notes: HEARTH_STEPS_NOTE };
     if (!this.isHelper && !follow) { if (this.lean && !this.leanSaid) this.emit('note', { text: LEAN_NOTE, tone: 'dim', fold: true }); this.leanSaid = this.lean; }
     if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.look = { request, notes: folder?.kind === 'data' ? LOOK_NOTE_DATA : LOOK_NOTE };

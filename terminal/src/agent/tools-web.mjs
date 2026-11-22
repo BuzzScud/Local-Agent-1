@@ -78,6 +78,10 @@ export function desktopDefault(path, { cwd, home, request = '', code = false } =
   if (!p || isAbsolute(p) || p.startsWith('~')) return null;
   const segs = p.split('/').filter(Boolean);
   const name = segs.at(-1);
+  // "desktop/x.html" written from the Desktop itself means the Desktop, not a folder named desktop in it (21 Nov 2026: hearth
+  // saved a finance dashboard asked for "on my desktop" as ~/Desktop/desktop/finance-dashboard.html, a folder it made). Any
+  // case; not when the request names such a folder ("Desktop/desktop/…").
+  if (cwd === desktop && segs.length > 1 && segs[0].toLowerCase() === 'desktop' && !/desktop\/desktop\//i.test(String(request))) return { to: join(desktop, ...segs.slice(1)) };
   if (cwd === desktop || `${cwd}/`.startsWith(`${desktop}/`) && segs[0] !== 'Desktop') return null; // already on the Desktop
   // "Desktop/x.html" from a folder with no Desktop of its own means the Desktop.
   if (segs[0] === 'Desktop' && segs.length > 1 && !existsSync(join(cwd, 'Desktop'))) return { to: join(desktop, ...segs.slice(1)) };

@@ -69,6 +69,7 @@ export function answerOf(body, { review = 'LGTM', look = 'LGTM', describe = 'A l
   return { content: `From ${m}.` };
 }
 
+const fakeCut = new WeakSet(); // the stand-ins whose first chat was cut (opts.cutFirst)
 export const fakeOllama = (opts = {}) => new Promise((ok) => {
   const loaded = new Map(FAKE_MODELS.filter((m) => m.loaded).map((m) => [m.name, m.loaded]));
   const seen = [];
@@ -122,6 +123,13 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
       const a = answerOf(body, opts);
       if (!body.stream) return json(200, { model: body.model, message: { role: 'assistant', content: a.content || 'ready' }, done: true });
       res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+      // opts.cutFirst: the first chat with tools ends at the reply limit with nothing of it arrived (Ollama holds a tool call
+      // back until it is whole, so a Write cut off never comes at all).
+      if (opts.cutFirst && body.tools?.length && !fakeCut.has(opts)) {
+        fakeCut.add(opts);
+        res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: '' }, done: true, done_reason: 'length', prompt_eval_count: 900, prompt_eval_duration: 1e9, eval_count: body.options?.num_predict ?? 3000, eval_duration: 1e9 })}\n`);
+        return res.end();
+      }
       // opts.overthink: characters of thinking a reply writes first when it is asked to think (a service takes no cap).
       if (opts.overthink && body.think) {
         for (let n = 0; n < opts.overthink && !res.destroyed; n += 200) {

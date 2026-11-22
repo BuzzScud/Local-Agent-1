@@ -381,12 +381,18 @@ export function keptPart(args) {
   return lines >= KEEP_FROM ? { content, lines } : null;
 }
 // What the model is told once the cut-off Write's whole lines are saved.
-export function keptWriteNote(path, kept) {
+// append: hearth's Write adds to the end (tools-defs.mjs HEARTH_WRITE_DEF), so the rest goes on that way, not through Edit.
+export function keptWriteNote(path, kept, { append = false } = {}) {
   const tail = kept.content.split('\n').slice(-3).join('\n');
-  return `Your Write of ${path} ran out of room before the end. Agentic Coder saved what had arrived: its first ${kept.lines} lines, which end with:\n${tail}\nThe file is unfinished on purpose. Carry on from line ${kept.lines + 1}: add the rest with Edit, old_text = those last lines exactly as above and new_text = the same lines followed by the next part. Keep each part well under 100 lines, and do not write the file again from the start.`;
+  const rest = append
+    ? `add the rest with Write and append: true, one part at a time (each up to about 150 lines), in order, until the file is whole`
+    : `add the rest with Edit, old_text = those last lines exactly as above and new_text = the same lines followed by the next part. Keep each part well under 100 lines`;
+  return `Your Write of ${path} ran out of room before the end. Agentic Coder saved what had arrived: its first ${kept.lines} lines, which end with:\n${tail}\nThe file is unfinished on purpose. Carry on from line ${kept.lines + 1}: ${rest}, and do not write the file again from the start.`;
 }
 
-const inParts = (file) => `Build ${file} in parts instead. First Write ${file} with only a short skeleton: its opening, empty sections marked with comments, and its closing. Then add one section at a time with Edit, each part well under 100 lines. Start with the skeleton now.`;
+const inParts = (file, append = false) => (append
+  ? `Build ${file} in parts instead. First Write ${file} with its first part only (up to about 150 lines, ending between two elements or functions). Then add each next part with Write and append: true, in order, each up to about 150 lines, until the file is whole. Start with the first part now.`
+  : `Build ${file} in parts instead. First Write ${file} with only a short skeleton: its opening, empty sections marked with comments, and its closing. Then add one section at a time with Edit, each part well under 100 lines. Start with the skeleton now.`);
 
 // A reply with no call that the server says was far longer than what arrived (its words and thinking):
 // a call written and dropped on the way. A reply cut at the limit is the cut handling's.
@@ -398,16 +404,16 @@ export function lostCall(turn, text) {
 }
 export const LOST_CALL = 'Your last reply wrote a tool call that never arrived: it was lost on the way (a long file in one call can be dropped by the model server), so nothing ran. Take that step again, smaller. For a file: Write a short first version now (under 80 lines: its outline and first part), then add the rest with Edit, one part at a time.';
 
-export function cutCallNote(name, path) {
+export function cutCallNote(name, path, { append = false } = {}) {
   const file = path || 'the file';
   if (name === 'Write' || name === 'Edit') {
-    return `Your ${name} call ran out of room before the end, so nothing was written: the whole content does not fit in one reply. ${inParts(file)}`;
+    return `Your ${name} call ran out of room before the end, so nothing was written: the whole content does not fit in one reply. ${inParts(file, append)}`;
   }
   return `Your ${name} call ran out of room before the end and was not run. Do it again in smaller pieces.`;
 }
 // A reply cut at the limit with nothing of it arrived: Ollama holds a tool call back until it is
 // whole, so a call cut off never comes at all (nor its path).
-export const emptyCutNote = () => `Your reply reached the reply limit before it ended, and none of it arrived: most likely a file too long for one reply. ${inParts('the file')}`;
+export const emptyCutNote = ({ append = false } = {}) => `Your reply reached the reply limit before it ended, and none of it arrived: most likely a file too long for one reply. ${inParts('the file', append)}`;
 
 // Where a tool call written as text starts: <tool_call> (Qwen's kind and the
 // 27B's), <ifm|tool_calls> / <ifm|tool_call> (K2 Horizon's). The text before
