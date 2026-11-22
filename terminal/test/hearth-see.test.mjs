@@ -258,3 +258,71 @@ test('"desktop/x.html" written from the Desktop is the Desktop itself, not a fol
   expect(desktopDefault('page.html', { cwd: desk, home, request: req })).toBeNull();
   expect(desktopDefault('notes/page.html', { cwd: desk, home, request: req })).toBeNull();
 });
+
+// A big file in parts, for real (21 Nov 2026: told to, the 27b still wrote a 406-line page in one 4-minute call). A reply on
+// hearth writes at most HEARTH_REPLY_ROOM past its thinking, so a longer Write reaches the limit, and the cut-off handling has
+// it build the file in parts with Write's append. And 80 steps there, since its steps are short now.
+test('on hearth a reply may write about 3,000 tokens past its thinking; elsewhere the service room, as before', async () => {
+  const { HEARTH_REPLY_ROOM } = await import('../src/agent/agent-model.mjs');
+  expect(HEARTH_REPLY_ROOM).toBe(3000);
+  const svc = await fakeOllama();
+  const other = await fakeOllama();
+  setEndpoint(svc.url, { remote: true, kind: 'openai', ollama: true, hearth: true, thinks: true, model: 'coder:30b', numCtx: 65536, free: true });
+  setEndpoint(other.url, { remote: true, kind: 'openai', ollama: true, thinks: true, model: 'coder:30b', numCtx: 65536, free: true });
+  try {
+    const mk = (url, more = {}) => new Agent({ url, model: { ...local, thinkingBudget: 4096, remote: { model: 'coder:30b', ollama: true }, ...more }, cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], thinking: true, ctx: 65536 });
+    const a = mk(svc.url);
+    await a.send('hello');
+    const sent = () => svc.seen.filter((x) => x.path === '/api/chat').map((x) => x.body.options.num_predict);
+    expect(sent()[0]).toBe(1600 + 3000); // the first step: its plan's thinking and the reply
+    a.messages.push({ role: 'user', content: 'more' });
+    await a.generate();
+    expect(sent().at(-1)).toBe(1024 + 3000); // a later step
+    a.thinking = false;
+    await a.generate();
+    expect(sent().at(-1)).toBe(3000); // no thinking: the reply alone
+    // Your own Reply length, when smaller, still wins.
+    const b = mk(svc.url, { replyTokens: 2048 });
+    await b.send('hello');
+    expect(sent().at(-1)).toBe(2048);
+    // Any other Ollama service: the service room, as before.
+    const c = mk(other.url);
+    await c.send('hello');
+    expect(other.seen.filter((x) => x.path === '/api/chat')[0].body.options.num_predict).toBeGreaterThan(20000);
+  } finally { dropEndpoint?.(svc.url); dropEndpoint?.(other.url); await svc.close?.(); await other.close?.(); }
+});
+
+test('a file cut off at the limit on hearth is built in parts with Write and append; elsewhere with Edit, as before', async () => {
+  const { emptyCutNote, cutCallNote, keptWriteNote } = await import('../src/agent/agent-said.mjs');
+  expect(emptyCutNote({ append: true })).toMatch(/Then add each next part with Write and append: true, in order, each up to about 150 lines, until the file is whole/);
+  expect(emptyCutNote()).toMatch(/Then add one section at a time with Edit/);
+  expect(cutCallNote('Write', 'page.html', { append: true })).toMatch(/First Write page\.html with its first part only/);
+  expect(keptWriteNote('page.html', { content: 'a\nb\nc', lines: 3 }, { append: true })).toMatch(/Carry on from line 4: add the rest with Write and append: true/);
+  expect(keptWriteNote('page.html', { content: 'a\nb\nc', lines: 3 })).toMatch(/add the rest with Edit, old_text = those last lines/);
+  // On a stand-in hearth whose first reply is cut with nothing arrived: the next ask says to add parts to the end.
+  const svc = await fakeOllama({ cutFirst: true });
+  setEndpoint(svc.url, { remote: true, kind: 'openai', ollama: true, hearth: true, model: 'coder:30b', numCtx: 65536, free: true });
+  try {
+    const a = new Agent({ url: svc.url, model: { ...local, remote: { model: 'coder:30b', ollama: true } }, cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], ctx: 65536 });
+    const notes = [];
+    a.on('note', (e) => notes.push(e.text));
+    await a.send('make the dashboard page');
+    const chats = svc.seen.filter((x) => x.path === '/api/chat').map((x) => x.body);
+    expect(chats.length).toBeGreaterThanOrEqual(2);
+    expect(chats[1].messages.some((m) => /add each next part with Write and append: true/.test(String(m.content)))).toBe(true);
+    expect(notes.some((t) => /nothing of it arrived, most likely a file too long for one reply: asked it to build the file in parts/.test(t))).toBe(true);
+  } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
+});
+
+test('a window on hearth starts with 80 steps; another service keeps its own', async () => {
+  const { remoteModel, HEARTH_STEPS } = await import('../../models/index.mjs');
+  const { LIMITS } = await import('../src/app/limits.mjs');
+  expect(HEARTH_STEPS).toBe(80);
+  const steps = LIMITS.find((l) => l.id === 'steps');
+  const onHearth = remoteModel({ source: 'hearth', kind: 'openai', address: 'https://employee.hearth.monster/door/v1', model: 'hearth' }, { model: 'hearth' });
+  expect(onHearth.startSteps).toBe(80);
+  expect(steps.def(onHearth)).toBe(80);
+  const elsewhere = remoteModel({ source: 'openai', kind: 'openai', address: 'http://127.0.0.1:9', model: 'qwen3:8b' }, { model: 'qwen3:8b' });
+  expect(elsewhere.startSteps).toBeUndefined();
+  expect(steps.def(elsewhere)).toBe(40);
+});

@@ -282,7 +282,7 @@ export class AnswerPart {
         this.messages.push({ role: 'user', content: auto('You ran out of room while thinking. Think less and take the next step.') });
         this.emit('note', { text: `The model ran out of room while thinking (${size}); asked it to act.`, tone: 'warn' });
       } else {
-        this.messages.push({ role: 'user', content: auto(emptyCutNote()) });
+        this.messages.push({ role: 'user', content: auto(emptyCutNote({ append: Boolean(endpointOf(this.url)?.hearth) })) });
         this.emit('note', { text: `The reply was cut off at the limit (${size}) and nothing of it arrived, most likely a file too long for one reply: asked it to build the file in parts.`, tone: 'warn' });
       }
       return 'continue';

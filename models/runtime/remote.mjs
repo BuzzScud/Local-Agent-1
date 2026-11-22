@@ -107,6 +107,7 @@ export function hearthList(model, sizes = HEARTH_SIZES) {
 // What hearth's 27b does: thinks and uses tools. An older door said "completion" only, for every model.
 // hearth's levels (its door takes off, low, medium and high; its High is the model's xhigh), by the connection, not the
 // model's name ("hearth@poseidon" is hearth too: matched by name, it fell to the generic Off/On and ran with no thinking).
+export const HEARTH_STEPS = 80;
 export const HEARTH_LEVELS = [
   { id: 'off', label: 'Off', effort: null, note: 'answers straight away' },
   { id: 'low', label: 'Low', effort: 'low', note: 'thinks briefly first' },
@@ -730,7 +731,9 @@ export function remoteModel(r, info = {}) {
   // A big one carries big-model mode (bigHarness).
   const harness = bigHarness(o);
   const own = OWN_REMOTES.find((x) => x.match.test(name));
-  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}) } : {};
+  // hearth: 80 steps (21 Nov 2026): it thinks about a minute a step and builds a big file in parts, so a page takes about
+  // twice the steps it did; at 40 the measured run stopped while it checked its finished page.
+  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}) } : hearth ? { startSteps: HEARTH_STEPS } : {};
   return { ...GENERIC_REMOTE, ...levels, ...common, ...(harness ? { harness } : {}), ...mine, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
 }
 

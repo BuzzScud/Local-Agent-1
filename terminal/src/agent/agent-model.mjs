@@ -18,6 +18,10 @@ const PLAN_KEEP = 16_000;
 // usual ~18 a second: about a minute a step, about 90 s on a request's first step, for its plan. Never past the model's budget.
 export const HEARTH_STEP_THINK = 1024;
 export const HEARTH_PLAN_THINK = 1600;
+// What one reply on hearth may write on top of its thinking (21 Nov 2026: told to write a big file in parts, the 27b wrote a
+// 406-line page in one 4-minute call anyway). About 200 lines and under 3 minutes at its usual speed: a longer Write reaches
+// the limit, and the cut-off handling has it build the file in parts with Write's append (agent-said.mjs inParts).
+export const HEARTH_REPLY_ROOM = 3000;
 // The model's usual writing speed: the middle of its last replies' (stats.speeds), leaving out what no model writes
 // (21 Nov 2026: a one-token reply on hearth timed at 1,000,000 tokens a second). For the screen's "about N tokens so far".
 export const usualSpeed = (speeds) => { const ok = (speeds ?? []).filter((x) => x > 0.5 && x < 1000).sort((a, b) => a - b); return ok.length ? ok[Math.floor(ok.length / 2)] : null; };
@@ -241,9 +245,13 @@ export class ModelPart {
     // context has left under the trim line (at least the answer's 2,048).
     // One that cannot think (a single level: a remote's None) gets no room for thinking.
     // Auto on a service: SERVICE_REPLY, the same way (its thinking and its file both fit).
+    const onHearth = Boolean(endpointOf(this.url)?.hearth);
+    const hearthCap = onHearth ? ((this.turn?.steps ?? 0) === 0 ? HEARTH_PLAN_THINK : HEARTH_STEP_THINK) : Infinity;
     const own = this.turn?.roomUp || this.model?.replyTokens || (this.model?.remote?.ollama ? SERVICE_REPLY : 0);
     const thinks = thinking && (this.model?.thinkingLevels?.length ?? 2) > 1;
-    const maxTokens = cap ?? (own ? Math.max(2048, Math.min(own, Math.floor(this.ctx * this.roomAt) - this.estNow())) : replyRoom(thinks, this.model?.thinkingBudget));
+    const room = own ? Math.max(2048, Math.min(own, Math.floor(this.ctx * this.roomAt) - this.estNow())) : replyRoom(thinks, this.model?.thinkingBudget);
+    // On hearth a reply writes at most HEARTH_REPLY_ROOM past its step's thinking (your own Reply length still wins when smaller).
+    const maxTokens = cap ?? (onHearth && !this.model?.replyTokens ? Math.min(room, HEARTH_REPLY_ROOM + (thinking ? Math.min(this.model?.thinkingBudget ?? 4096, hearthCap) : 0)) : room);
     this.lastRoom = maxTokens;
     // fitContext keeps the answer's 2,048 and this much thinking free: in a tight
     // memory the thinking shrinks (thinkRoom), not the answer.
@@ -283,8 +291,6 @@ export class ModelPart {
     // An Ollama service takes no thinking cap, so the app holds one itself: a reply that thinks past the
     // model's thinking budget is stopped and asked for once more with thinking off (5 Oct 2026: one reply
     // of Qwen3.6 thought for 14 minutes, 28.4k tokens, to the end of its reply room, in a 25-minute task).
-    const onHearth = Boolean(endpointOf(this.url)?.hearth);
-    const hearthCap = onHearth ? ((this.turn?.steps ?? 0) === 0 ? HEARTH_PLAN_THINK : HEARTH_STEP_THINK) : Infinity;
     const serviceCap = thinking && endpointOf(this.url)?.ollama ? Math.min(this.model?.thinkingBudget ?? 4096, hearthCap) : 0;
     // readSecs: about how long the service takes to read what is new, at its usual reading speed; past it, a reply that
     // has sent nothing on a service that sends a call whole is writing one (the window's "Writing its next step").
