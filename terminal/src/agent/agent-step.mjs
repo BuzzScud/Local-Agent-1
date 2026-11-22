@@ -29,6 +29,7 @@ import { CODE_SEARCH_CHARS, CUT_MARK, MODEL_TOOLS, countLine, failsOf, firstFenc
 import { rawQwenCall } from './client.mjs';
 import { givenParams, qwenRawFits, readCallText } from './qwen-raw.mjs';
 import { HOME, endpointOf } from '../../../models/index.mjs';
+import { PR_NOT_ASKED, asksForPr, opensPr } from './agent-notes.mjs';
 import { usesSsh } from '../tools/ssh.mjs';
 
 // A fenced block's language → the file extension a pasted file of that kind takes (pastePath).
@@ -338,6 +339,12 @@ export class StepPart {
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: `${named.name} is an MCP tool, not a command` }, error: true });
         return { text: `Nothing ran: ${named.name} is a tool of the user's MCP server "${named.server}", not a command. Call it as a tool${gated ? `: ${MCP_TOOL} with "tool": "${named.name}" and its "arguments"` : ', with its arguments as JSON'}.`, error: true };
       }
+    }
+    // On hearth, as hearth 3.0 does (22 Nov 2026, its prGate): a command that opens, changes or merges a pull request runs
+    // only when this request asked for one; else nothing runs and the model is told to say the work is ready on its branch.
+    if (call.name === 'Bash' && endpointOf(this.url)?.hearth && opensPr(args.command) && !asksForPr(this.turn?.request)) {
+      this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'a pull request only when you ask for one' }, error: true });
+      return { text: PR_NOT_ASKED, error: true };
     }
     // A folder that is not there before the command ("cd /testbed && npm test", "cd /Users/gkane && …": six
     // times in eight runs, 4 Oct 2026, each refused as outside the project): the command runs here, and says so.

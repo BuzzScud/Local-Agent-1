@@ -2214,3 +2214,40 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Tests**: `terminal/test/hearth-door.test.mjs` (a stand-in door as live has it and with sizes), and the Arena's
   **hearth door check** (`models/evals/tools/hearth-door-check.mjs`, `/test hearth`, its page by `-page.mjs`): one small
   change through `coding -p` on the owner's key, GitHub's main and then this code, on `hearth@poseidon`.
+
+## hearth 3.0's way of working, on hearth (22 Nov 2026)
+
+- **What and why.** The owner, after hearth's own agents hearth 2.0 and 3.0 were compared: "ensure the same process and
+  everything, is inside of the agentic coder … we need to make sure the agentic coder uses all models correctly". Their
+  windows' request log of 20–22 Nov (activity/requests.jsonl): 51 requests on hearth's 27b, 4 on its 2b, none on its 9b
+  or its 4b. The 4b only works when the model starts a helper, which it never did (on hearth the app decided, so the
+  Agent tool was a side door), and the 9b only gave the second opinion, which runs after a change finishes. Their picks:
+  everything hearth 3.0 does; 3.0's jobs for the small models with today's kept; the model decides, like 3.0; then "just
+  build it and push to main" and "dont test": no test was run for this change, only a check that every changed file loads.
+- **The model decides on hearth** (models/runtime/remote.mjs `startWay: 'model'` on a hearth model; limits.mjs's Who
+  decides row starts from it, after `harness.way`): as hearth 2.0's and 3.0's harness, nothing sorts the request first.
+  What /effort saved still wins. With it come Model's own six checks (tests after a change among them) and the Agent tool.
+- **Three helpers, one on each small model** (`HEARTH_JOBS` worker → 9b, helpers → 4b, lookup → 2b; `HEARTH_HELPERS`
+  by the Agent tool's kind; agent.mjs `runHelper`): general on the 9b (it may edit and run commands; its short
+  instructions on hearth end with running the one test file that covers its change), explore on the 4b, and a third kind
+  on hearth only, **lookup**, on the 2b: one thing looked up, `LOOKUP_STEPS` (6) steps at most, the explore helper's tools,
+  three lines back, its cited lines checked against the files as an explore helper's are. Each size goes as its list
+  (`HEARTH_ORDER`), so a size with no free copy goes to the next and at last to the 27b, as hearth 3.0 gives an answer
+  one helper on its own model when no small one is in memory. On hearth the Agent tool says which kind is which
+  (tools-defs.mjs `agentToolDef(helpers, { sizes })`, `HEARTH_AGENT_LINES`); off hearth it is as it was, letter for
+  letter, and a `lookup` asked for there is an explore helper. The second opinion stays on the 9b and side jobs on the 2b.
+- **3.0's working rules** (agent-notes.mjs `HEARTH_WORK_NOTE`, `HEARTH_HELPERS_NOTE`; with each request on hearth, after
+  the short steps, so the prompt above never moves): in a git project a branch of its own before the first change when
+  on main or master, the test that covers a change before "done", a pull request only when asked, helpers for a big
+  search, one fact, a change that stands on its own, and a review.
+- **A pull request only when you say** (agent-step.mjs, as hearth 3.0's `prGate`): on hearth a command that opens,
+  changes or merges one (`opensPr`: gh pr create/edit/merge/ready/reopen, glab mr create/update/merge, hub pull-request,
+  coding pr) does not run unless this request's own words ask for one (`asksForPr`); the model is told to say the work
+  is ready on its branch. A push still always asks, as everywhere.
+- **Which model did each job** (client.mjs: hearth's door says it in `x-hearth-model` and `x-hearth-door`, kept on the
+  reply's `done` as `served`; activity.mjs `ranMark`, `ranSince`, `modelsWords`, `sizeOf`): each finished request of the
+  process is noted with what it asked for and what answered, requests.jsonl keeps `served` and `door`, and a request's
+  end line in the window says "models 27b 12 · 9b 3 · 4b 1 · 2b 2" on hearth (app-run.mjs → `doneCounts`).
+- **Not done, not measured.** No run on hearth, no stand-in run, no suite. `terminal/test/hearth-door.test.mjs`'s list
+  of jobs was brought up to date by hand; other tests that pin a hearth conversation's tools or its notes may need the
+  same. The real proof is a before/after on hearth (the Arena's hearth checks), which the owner left for later.

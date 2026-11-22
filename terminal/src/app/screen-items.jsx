@@ -250,7 +250,7 @@ function MemoryPanel({ it, width }) {
 // (a count of 0 is left out; old saved sessions have none).
 export function doneCounts(it) {
   const n = (x, one, many) => (x ? ` · ${x.toLocaleString('en-US')} ${x === 1 ? one : many}` : '');
-  return `${n(it.steps, 'step', 'steps')}${n(it.reads, 'read', 'reads')}${it.thinkTokens ? ` · ~${it.thinkTokens.toLocaleString('en-US')} thinking tokens` : ''}${it.session ? ` · ↓ ${fmtTok(it.session)} tokens this session` : ''}`;
+  return `${n(it.steps, 'step', 'steps')}${n(it.reads, 'read', 'reads')}${it.thinkTokens ? ` · ~${it.thinkTokens.toLocaleString('en-US')} thinking tokens` : ''}${it.session ? ` · ↓ ${fmtTok(it.session)} tokens this session` : ''}${it.models ? ` · models ${it.models}` : ''}`;
 }
 
 export function Item({ it, width, model, cwd, loaded, start }) {

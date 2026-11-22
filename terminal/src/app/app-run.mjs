@@ -10,6 +10,7 @@ import { terminalApp } from '../tools/screen.mjs';
 import { battleHold, runningServer, ModelServer, freeWithHandBack, stopServer, chooseContext, availableBytes, scanServers, contextCheck, hasDraft, searchBytes, LINGER_SECS, warmUp, stopIdleServers, remoteLabel, thinkingLevel, serverBinOf, modelPath, onDiskBytes, engineOf, visionPath, needBytes, DEFAULT_REMOTE, keyStore, remoteRisk, HOME, endpointOf, ollamaLoaded, localAuth } from '../../../models/index.mjs';
 import { shownHelpers, withHelper } from './helpers-panel.mjs';
 import { windowSpend } from '../agent/spend.mjs';
+import { ranMark, ranSince, modelsWords } from '../agent/activity.mjs';
 import { updateWindow } from './copies.mjs';
 import { kindWord } from './remote-form.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -197,7 +198,7 @@ export function runPart(self) {
     };
     // Each step keeps when it started and how long it took (27 Oct 2026, the owner's pick "Real time for every step":
     // only commands kept a time, 1,506 of 3,931 steps); the reply's tool calls are counted for its end line.
-    let toolAt = null, calls = 0;
+    let toolAt = null, calls = 0, ranAt = ranMark();
     const addPre = (patch) => { self.pre.current = { ...(self.pre.current ?? {}), ...patch }; self.setLive((l) => ({ ...l, pre: self.pre.current })); };
     const offs = [
       on('helper', helperEvent),
@@ -208,7 +209,7 @@ export function runPart(self) {
       on('queued', ({ why, ahead }) => self.setLive((l) => (l.phase ? { ...l, queued: `${why}${ahead ? ` (${ahead} ahead)` : ''}` } : l))),
       // The conversation moved to another profile's model between steps (app-profiles.mjs onRoute).
       on('profile-route', (ev) => self.onRoute(ev)),
-      on('turn-start', () => { calls = 0; try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend(); self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
+      on('turn-start', () => { calls = 0; ranAt = ranMark(); try { const u = [...self.agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} self.turnSpend.current = windowSpend(); self.railOn.current = true; self.pre.current = null; self.lastCheck.current = null; const [verb, past] = pick(VERBS); self.setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
       // wholeTps: the last reply's writing speed, for the size of a call an Ollama service is still writing (screen-live.jsx).
       // readSecs: about how long reading what is new takes; past it, a reply with nothing sent yet is writing a call (steps-page.js).
@@ -295,11 +296,14 @@ export function runPart(self) {
         // How much of what this request sent came from the prompt cache (Claude API), for its end line too.
         const sent = spentNow.cache.sent - (self.turnSpend.current?.cache?.sent ?? 0);
         const cached = usd && sent > 0 ? Math.round((100 * (spentNow.cache.hit - (self.turnSpend.current?.cache?.hit ?? 0))) / sent) : undefined;
-        if (reason === 'interrupted') { self.push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd, cached, session }); self.setPlaceholder('Tell Agentic Coder what to do instead'); }
-        else if (reason === 'done') self.push({ type: 'done', reason, past, secs, at, steps, calls, reads, thinkTokens, left, usd, cached, session });
+        // On hearth: which of its models answered this request's steps, helpers and side jobs ("27b 12 · 9b 3 · 2b 1"), for
+        // its end line too (22 Nov 2026, the owner: "make sure the agentic coder uses all models correctly").
+        const models = self.agentRef.current?.model?.remote?.source === 'hearth' ? modelsWords(ranSince(ranAt)) || undefined : undefined;
+        if (reason === 'interrupted') { self.push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd, cached, session, models }); self.setPlaceholder('Tell Agentic Coder what to do instead'); }
+        else if (reason === 'done') self.push({ type: 'done', reason, past, secs, at, steps, calls, reads, thinkTokens, left, usd, cached, session, models });
         // Esc in the question box after some answers: they went to the model, which waits for you.
-        else if (reason === 'declined' && self.agentRef.current?.happened?.answersSent) self.push({ type: 'done', reason, text: 'Stopped after your answers · it waits for your next message', secs, at, left, usd, cached, session });
-        else self.push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd, cached, session });
+        else if (reason === 'declined' && self.agentRef.current?.happened?.answersSent) self.push({ type: 'done', reason, text: 'Stopped after your answers · it waits for your next message', secs, at, left, usd, cached, session, models });
+        else self.push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd, cached, session, models });
         self.railOn.current = false;
         self.pre.current = null;
         // In its own copy: changed files are offered back to the real folder (copies.mjs).

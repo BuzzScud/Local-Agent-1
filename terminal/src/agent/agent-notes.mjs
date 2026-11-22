@@ -28,6 +28,20 @@ import { endpointOf } from '../../../models/index.mjs';
 // it never moves. agent-model.mjs holds the thinking to about a minute a step (HEARTH_STEP_THINK).
 export const HEARTH_STEPS_NOTE = 'How to work here: in short steps. Think only about your next step, in a few sentences, then act with a tool; you think again after each result. Never draft a file\'s contents or a whole design in your thinking: write them with Write (a big file in parts). When the request takes several steps, first write a short plan with TodoWrite (the user sees it), then work through it one item at a time.';
 
+// hearth 3.0's working rules (22 Nov 2026, the owner: "ensure the same process and everything, is inside of the agentic
+// coder"; their pick: everything 3.0 does): hearth's own harness tells its 3.0 agent these (THREE_LINES: a branch of its own
+// before a change, the tests after, a pull request only when asked, a review handed to a helper, helpers for big searches).
+// With each request on hearth, after the short steps, so the prompt above never moves. helpers: whether the Agent tool is on
+// offer in this conversation (its line is left out without it).
+export const HEARTH_WORK_NOTE = 'How a change goes here: in a git project, change files on a branch of your own: on main or master, run git switch -c <a-short-name> before your first change; on any other branch, stay on it. After a change, run the test that covers it before you say it is done. Open or update a pull request only when the user\'s message asks for one; otherwise end by saying the work is ready on its branch.';
+export const HEARTH_HELPERS_NOTE = ' Use your helpers (Agent): a search over many files goes to an explore helper, a single fact to a lookup helper, a change that stands on its own to a general helper; when the user asks for a review of a change, hand the diff to a helper and report what it found.';
+// Whether a message asks for a pull request ("open a PR", "make a pull request for this", "send a merge request").
+export const asksForPr = (text) => /\b(pull[- ]requests?|merge[- ]requests?|prs?)\b/i.test(String(text ?? ''));
+// A command that opens, changes or merges a pull request: GitHub's and GitLab's own tools, and Agentic Coder's.
+export const opensPr = (command) => /(?:^|[\s;&|(])(?:gh\s+pr\s+(?:create|edit|merge|ready|reopen)|glab\s+mr\s+(?:create|update|merge)|hub\s+pull-request|coding\s+pr)\b/.test(String(command ?? ''));
+// What such a command is told on hearth when the request did not ask for one (agent-step.mjs).
+export const PR_NOT_ASKED = 'Nothing ran: a pull request is opened or changed only when the user asks for one, and this request did not. Say that the work is ready on its branch (name it), and what a pull request would hold; the user asks for it when they want it.';
+
 export class NotesPart {
   async turnNotes(text, request, signal, { follow, kind, bug, skill, math }) {
     if (asksForWork(this.turn.request) && wantsDesktop(this.turn.request)) this.desktopAsked = true;
@@ -64,7 +78,8 @@ export class NotesPart {
     const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
     // said once a session, and again only after it was off (7 Oct 2026: it was printed every turn)
     // On hearth: short steps (HEARTH_STEPS_NOTE), with every request of yours there, a follow-up too.
-    if (!this.isHelper && endpointOf(this.url)?.hearth && request?.role === 'user' && typeof request.content === 'string') this.turn.shortSteps = { request, notes: HEARTH_STEPS_NOTE };
+    // And hearth 3.0's working rules (HEARTH_WORK_NOTE), with the helpers' line while the Agent tool is on offer.
+    if (!this.isHelper && endpointOf(this.url)?.hearth && request?.role === 'user' && typeof request.content === 'string') this.turn.shortSteps = { request, notes: `${HEARTH_STEPS_NOTE} ${HEARTH_WORK_NOTE}${this.agentsOn() && this.hearthUse('lookup') ? HEARTH_HELPERS_NOTE : ''}` };
     if (!this.isHelper && !follow) { if (this.lean && !this.leanSaid) this.emit('note', { text: LEAN_NOTE, tone: 'dim', fold: true }); this.leanSaid = this.lean; }
     if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.look = { request, notes: folder?.kind === 'data' ? LOOK_NOTE_DATA : LOOK_NOTE };

@@ -2,7 +2,7 @@
 // back, run the tool it asks for (asking you first when needed), feed the
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
-import { endpointOf, HEARTH_JOBS } from '../../../models/index.mjs';
+import { endpointOf, HEARTH_JOBS, HEARTH_HELPERS } from '../../../models/index.mjs';
 import { focusedInstructions, readInstructions, replaceInstructionBlock, withModelNotes } from './instructions.mjs';
 import { EXPLORE_TOOLS, HEARTH_WRITE_DEF, resolvePath, toolSchemas } from './tools.mjs';
 import { DONT_ASK, isSelf, ownBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
@@ -39,7 +39,7 @@ import { complete } from '../flows/llm.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { helpersOn } from './helpers.mjs';
 import { useOf } from './helper-models.mjs';
-import { CHECK_INS, FULL, HELPER_STEPS, LIMIT_REPORT, MAX_STEPS, OWN_HELPER_CTX, RESULT_MAX, TRIM_AT, aboutTheCode, asksForWork, budgetFromEnv, helperPrompt, helperToolFilter, newConversation, smallHelperPrompt, tokensOf } from './agent-said.mjs';
+import { CHECK_INS, FULL, HELPER_STEPS, LOOKUP_STEPS, LIMIT_REPORT, MAX_STEPS, OWN_HELPER_CTX, RESULT_MAX, TRIM_AT, aboutTheCode, asksForWork, budgetFromEnv, helperPrompt, helperToolFilter, newConversation, smallHelperPrompt, tokensOf } from './agent-said.mjs';
 import { checkReport, proofBlock, recheckNote } from './helper-proof.mjs';
 export { MAX_CALLS, MCP_BACKS, THINK_BUDGET_SECS, STEP_DOWN_CAP, RESULT_MAX, filesNamed, isLooping, AUTO, asksTheUser, announcesNextStep, claimsAlreadyThere, asksForWork, aboutTheCode, fullPathsIn, filesInAnswer, CHECK_IT, looksGood, wantsCheck, missingParts, claimsAllGood, claimsFound, severalAsks, wantsDesktop, claimsDone, keyLines, namesAFix, KEEP_FROM, keptPart, keptWriteNote, CALL_MARK, beforeCall, leakedThinking, leakedCall, toolCallInText, bareCallInText, safeArgs, READ_TIP, CHECK_INS, helperPrompt, helperToolFilter, requestReminder, planReminder } from './agent-said.mjs';
 import { McpPart } from './agent-mcp.mjs';
@@ -196,7 +196,8 @@ export class Agent extends EventEmitter {
   // The app's own tools this agent would offer, all of them (on demand or not).
   ownTools() {
     const agents = this.agentsOn();
-    const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [], self: this.selfOn() && !this.isHelper });
+    // On hearth with its small sizes: the Agent tool names hearth 3.0's three helpers (tools-defs.mjs agentToolDef).
+    const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [], self: this.selfOn() && !this.isHelper, sizes: agents && Boolean(this.hearthUse('lookup')) });
     // CodeSearch only when it can run (4 Oct 2026: qwen3-coder-next called it twice, was told twice
     // "the code search is off here", and those two errors helped stop it at five in a row).
     // The same for the four never called in 40 runs on a service (5 Oct 2026): Map not in the home
@@ -703,8 +704,10 @@ export class Agent extends EventEmitter {
   async runHelper(id, args, shown, signal) {
     const asked = String(args.kind ?? '').toLowerCase();
     const own = this.helperAgents().find((h) => h.kind === asked) ?? null;
-    const kind = own ? own.kind : asked === 'general' ? 'general' : 'explore';
-    if (!own && shown.label !== 'Agent') shown = { ...shown, label: 'Explore' };
+    // On hearth a lookup is a kind of its own (hearth 3.0's helper on the 2b); anywhere else it is an explore helper.
+    const lookup = !own && asked === 'lookup' && Boolean(this.hearthUse('lookup'));
+    const kind = own ? own.kind : asked === 'general' ? 'general' : lookup ? 'lookup' : 'explore';
+    if (!own && shown.label !== 'Agent') shown = { ...shown, label: lookup ? 'Lookup' : 'Explore' };
     // Its Model line: another model on the same Ollama service; anywhere else it runs on this one.
     // The main model by its own name is the main model (another size would load it again).
     const bare = (m) => String(m ?? '').toLowerCase().replace(/:latest$/, '');
@@ -713,7 +716,9 @@ export class Agent extends EventEmitter {
     // call names that model. Moved there by its profile, the helper connected that model at the same address, which
     // names one model, so the conversation went on on the helper's, and the service, asked for its own context, let the
     // main model go (28 Oct 2026, the Bonsai helpers check: 9B's answer and its next message came from 2B).
-    const away = !own && this.helpersElsewhere() ? this.onHearth(this.router?.active?.() ? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null) ?? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null;
+    // On hearth each kind has its own size, as hearth 3.0's helpers do (HEARTH_HELPERS: general → the 9b, explore → the 4b,
+    // lookup → the 2b), unless a profile sends the helpers to hearth by name.
+    const away = !own && this.helpersElsewhere() ? this.onHearth(this.router?.active?.() ? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null, HEARTH_HELPERS[kind] ?? 'helpers') ?? this.router?.helper?.('helpers', { url: this.url, model: this.modelName() }) : null;
     const awayHere = away?.model && endpointOf(this.url)?.ollama && endpointOf(away.url) === endpointOf(this.url) ? away.model : null;
     // On the Claude API its Model line may name a Claude by Claude Code's words (haiku, sonnet, opus, fable) or its id (19 Nov 2026).
     const claudeOwn = own && endpointOf(this.url)?.kind === 'claude' ? claudeModelOf(own.model, this.modelName()) : null;
@@ -731,14 +736,14 @@ export class Agent extends EventEmitter {
     const slot = this.slots ? { main: this.slots.side ?? this.slots.main } : undefined;
     const helper = new Agent({
       // On a model of its own it has that model's room (OWN_HELPER_CTX), so it summarizes in time.
-      url: this.url, model: this.model, cwd: wt?.cwd ?? this.cwd, system: small ? smallHelperPrompt(kind) : helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse && !claudeOwn ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
-      mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash, home: this.home,
+      url: this.url, model: this.model, cwd: wt?.cwd ?? this.cwd, system: small ? smallHelperPrompt(kind, { hearth: Boolean(endpointOf(this.url)?.hearth) }) : helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse && !claudeOwn ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
+      mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: kind === 'lookup' ? LOOKUP_STEPS : HELPER_STEPS, slots: slot, bash: this.bash, home: this.home,
       way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, mcp: this.mcp, permissions: this.permissions, waitForServer: this.waitForServer, instructions: this.rulesSet(),
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
       ask: Object.assign((req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))), { together: Boolean(this.ask?.together) }),
     });
     // Its tools: the app's, and of the MCP tools those its file names (mcp__github__get_* names several).
-    const toolFilter = own ? helperToolFilter(own.tools, [...this.tools().map((t) => t.function.name), ...this.mcpEntries().map((e) => e.name)]) : kind === 'explore' ? EXPLORE_TOOLS : null;
+    const toolFilter = own ? helperToolFilter(own.tools, [...this.tools().map((t) => t.function.name), ...this.mcpEntries().map((e) => e.name)]) : kind === 'explore' || kind === 'lookup' ? EXPLORE_TOOLS : null;
     Object.assign(helper, { jobs: this.jobs, userHooks: this.userHooks, isHelper: true, router: ownUse ? null : this.router, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, attachedPaths: this.attachedPaths, setMode: () => {} });
     // The same MCP servers and this conversation's list of their tools (worked out for its own room), and what you allowed.
     if (this.mcpFrozen) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
@@ -749,7 +754,7 @@ export class Agent extends EventEmitter {
     const steps = [];
     let report = '';
     // The helpers panel (app/helpers-panel.mjs, 28 Oct 2026): which model it runs on, its steps and its last one, as it goes.
-    const panel = (more = {}) => this.emit('helper', { id, kind: own ? own.kind : kind === 'general' ? 'Agent' : 'Explore', model: ownUse?.model ?? helper.modelName() ?? this.helpersAway?.model ?? this.modelName(), steps: steps.length, last: steps.at(-1)?.slice(2) ?? '', started: t0, ...more });
+    const panel = (more = {}) => this.emit('helper', { id, kind: own ? own.kind : kind === 'general' ? 'Agent' : kind === 'lookup' ? 'Lookup' : 'Explore', model: ownUse?.model ?? helper.modelName() ?? this.helpersAway?.model ?? this.modelName(), steps: steps.length, last: steps.at(-1)?.slice(2) ?? '', started: t0, ...more });
     const say = (last) => { panel(); this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` }); };
     // Its changes count as this message's, so "done" after them is not "nothing changed".
     const edited = new Set();
@@ -770,7 +775,7 @@ export class Agent extends EventEmitter {
     // A report from a helper on a model of its own that only read: the lines it cites, read from the files, go under
     // it, so the conversation need not read them again; what the files do not have sends it back once to look again.
     let checked = null;
-    if (ownUse && (own ? own.tools === 'look' : kind === 'explore') && report.trim() && !signal?.aborted) {
+    if (ownUse && (own ? own.tools === 'look' : kind === 'explore' || kind === 'lookup') && report.trim() && !signal?.aborted) {
       checked = checkReport(report, this.cwd);
       if (checked.problems.length && (reason === 'done' || reason === 'answered')) {
         steps.push(`✗ checked: ${checked.problems.join('; ').slice(0, 120)}`);

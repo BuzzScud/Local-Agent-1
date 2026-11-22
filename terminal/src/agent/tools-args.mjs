@@ -283,7 +283,7 @@ export function display(name, args = {}) {
     case 'Browser': return { label: 'Browser', arg: `${args.action ?? ''} ${args.url ?? (args.ref != null ? `[${args.ref}]` : args.selector ?? args.text ?? args.key ?? '')}`.trim() };
     case 'Database': return { label: 'Database', arg: `${args.action ?? ''} ${args.action === 'query' ? String(args.sql ?? '').replace(/\s+/g, ' ').slice(0, 60) : args.table ?? ''}`.trim() };
     case 'App': return { label: 'App', arg: args.action === 'command' ? String(args.command ?? '').trim() : args.action === 'setting' ? `setting ${args.key ?? '(all)'}${args.value !== undefined ? ' = ' + JSON.stringify(args.value) : ''}` : 'restart on the new code' };
-    case 'Agent': { const d = String(args.description || args.prompt || '').replace(/\s+/g, ' ').trim(); const k = String(args.kind ?? '').toLowerCase(); return { label: k === 'general' ? 'Agent' : !k || k === 'explore' ? 'Explore' : k, arg: d.length > 70 ? `${d.slice(0, 69)}…` : d }; }
+    case 'Agent': { const d = String(args.description || args.prompt || '').replace(/\s+/g, ' ').trim(); const k = String(args.kind ?? '').toLowerCase(); return { label: k === 'general' ? 'Agent' : !k || k === 'explore' ? 'Explore' : k === 'lookup' ? 'Lookup' : k, arg: d.length > 70 ? `${d.slice(0, 69)}…` : d }; }
     default: return { label: name, arg: '' };
   }
 }

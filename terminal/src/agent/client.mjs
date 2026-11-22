@@ -422,6 +422,9 @@ async function* streamOllama({ url, ep, side = false, messages, tools, toolChoic
     if (res.status === 401 || res.status === 403) throw refusedError(ep, url, res.status, text);
     throw serverError(`remote model server (${ep.label ?? url}) ${res.status}: ${text.slice(0, 300)}`, res.status, res);
   }
+  // hearth's door says which model answered and on which server (a size goes as a list, and the door takes the first
+  // free): kept with the reply's end, so the window can say which model did each job (activity.mjs modelsWords).
+  const served = ep.hearth && res.headers?.get?.('x-hearth-model') ? { model: res.headers.get('x-hearth-model'), ...(res.headers.get('x-hearth-door') ? { door: res.headers.get('x-hearth-door') } : {}) } : null;
   const decoder = new TextDecoder();
   let buf = '';
   let finish = null, usage = null, timings = null, calls = 0;
@@ -466,7 +469,7 @@ async function* streamOllama({ url, ep, side = false, messages, tools, toolChoic
     }
   }
   yield* read(buf);
-  yield { type: 'done', finish, usage, timings };
+  yield { type: 'done', finish, usage, timings, ...(served ? { served } : {}) };
 }
 
 // One call of a step asked for again on an Ollama service's Qwen 3.5 family, in Ollama's raw mode, so its

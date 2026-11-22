@@ -101,7 +101,15 @@ export const HEARTH_ORDER = {
   'hearth-9b': ['hearth-9b', HEARTH_MODEL, 'hearth-4b'],
 };
 // Which size does each helper job on hearth (client.mjs `use`), when no profile sends the job to hearth by name.
-export const HEARTH_JOBS = { side: 'hearth-2b', btw: 'hearth-2b', review: 'hearth-9b', helpers: 'hearth-4b' };
+// worker and lookup (22 Nov 2026, the owner: "ensure the same process and everything, is inside of the agentic coder … make
+// sure the agentic coder uses all models correctly"; their picks: everything hearth 3.0 does, 3.0's jobs with today's kept):
+// hearth 3.0 gives an answer one helper for each small size, the 9b may change files and run the tests, the 4b searches and
+// reads, the 2b looks one thing up. Until then every helper here went to the 4b's list and in two days of the owner's
+// windows the 9b and the 4b were never asked once. The second opinion stays on the 9b and the summaries on the 2b.
+export const HEARTH_JOBS = { side: 'hearth-2b', btw: 'hearth-2b', review: 'hearth-9b', helpers: 'hearth-4b', worker: 'hearth-9b', lookup: 'hearth-2b' };
+// The job of each kind of helper the Agent tool starts on hearth (agent.mjs runHelper): general → the 9b, explore → the
+// 4b, lookup → the 2b. Each is a list at the door (HEARTH_ORDER), so a size with no free copy goes to the next.
+export const HEARTH_HELPERS = { general: 'worker', explore: 'helpers', lookup: 'lookup' };
 // A model as the door is asked for it: a size becomes its list (only the sizes this door has, and hearth's own name), any
 // other name stays as it is. sizes: the sizes the door listed (ep.hearthSizes).
 export function hearthList(model, sizes = HEARTH_SIZES) {
@@ -762,7 +770,9 @@ export function remoteModel(r, info = {}) {
   const own = OWN_REMOTES.find((x) => x.match.test(name));
   // hearth: 80 steps (21 Nov 2026): it thinks about a minute a step and builds a big file in parts, so a page takes about
   // twice the steps it did; at 40 the measured run stopped while it checked its finished page.
-  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}) } : hearth ? { startSteps: HEARTH_STEPS } : {};
+  // hearth: the model decides each step, as hearth 3.0's does (22 Nov 2026, the owner's pick "The model, like 3.0"): /effort's
+  // Who decides starts on Model there (startWay, limits.mjs), and what /effort saved still wins.
+  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}) } : hearth ? { startSteps: HEARTH_STEPS, startWay: 'model' } : {};
   return { ...GENERIC_REMOTE, ...levels, ...common, ...(harness ? { harness } : {}), ...mine, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
 }
 

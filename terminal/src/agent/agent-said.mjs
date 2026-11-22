@@ -604,6 +604,8 @@ export const LOOKS = new Set(['Read', 'Search', 'List', 'Glob', 'Grep', 'Bash'])
 
 // A helper's steps at most (its own limit, under the conversation's).
 export const HELPER_STEPS = 30;
+// A lookup helper's (hearth's 2b: one thing looked up, agent.mjs runHelper): a search and a read or two, then its line.
+export const LOOKUP_STEPS = 6;
 // What a helper stopped at that limit with no report is told (agent.mjs runHelper): write it now, from what it found.
 export const LIMIT_REPORT = 'You have reached your step limit. Do not call any more tools. Write your report now, from what you have found so far, in the form you were asked for: what you found (with file:line), and what you did not get to.';
 // How long a conversation's first message waits for MCP servers that are still starting.
@@ -612,7 +614,7 @@ export const MCP_WAIT_MS = 8000;
 // own: one of your helper agent files (prompt-files.mjs parseHelperAgent): its instructions follow,
 // and it reports as an explore helper does when it only reads.
 export function helperPrompt(system, kind, own = null) {
-  const looks = own ? own.tools === 'look' : kind === 'explore';
+  const looks = own ? own.tools === 'look' : kind === 'explore' || kind === 'lookup';
   const base = `${system}\n\n# You are a helper\nThe main agent handed you one task. You see only this task, not its conversation, and you cannot ask the user anything. Work it out with your tools, then end with a short report for the main agent: ${looks ? 'what you found, with file:line or the page it came from. You only read: do not change anything; say what should change instead.' : 'what you changed (files and lines) and what you checked, or what stopped you.'}`;
   return own ? `${base}\n\n# Your job: ${own.kind}\nThe user wrote these instructions for you (${own.name}.md):\n${own.body}` : base;
 }
@@ -626,9 +628,13 @@ Tool use
 - Search for a name before you Read: then Read only the files the search points to, and in a long file pass find with the name to get the lines around it.
 - Use List to see a folder; try a shorter search when one finds nothing.
 - Call one tool at a time and wait for its result.`;
-export function smallHelperPrompt(kind) {
+// hearth (22 Nov 2026, hearth 3.0's three helpers): the general helper on the 9b runs the test that covers its change, as
+// 3.0's Worker does; a lookup on the 2b finds one thing and says it in a line or two. Off hearth: as it was.
+export function smallHelperPrompt(kind, { hearth = false } = {}) {
   const base = helperPrompt(SMALL_HELPER, kind);
-  return kind === 'explore' ? `${base} Cover every part of the task. For each thing you found, give file:line and copy that line from the Read result. Name only files, lines and functions a tool showed you.` : base;
+  if (kind === 'lookup') return `${base} You look ONE thing up. Find it with one search and one or two reads, then answer in at most three lines: the answer, its file:line, and that line copied from the Read result. If the project does not have it, say so in one line. Do not go on to anything else.`;
+  if (kind === 'explore') return `${base} Cover every part of the task. For each thing you found, give file:line and copy that line from the Read result. Name only files, lines and functions a tool showed you.`;
+  return hearth ? `${base} After you change a file, run the one test file that covers it (never the whole suite) and say in your report what it showed.` : base;
 }
 
 // The tools one of your helper agents is given: look = an explore helper's; all = a general

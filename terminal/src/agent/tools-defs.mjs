@@ -198,7 +198,15 @@ export const AGENT_TOOL_DEF = {
 };
 // The Agent tool with your own helpers (prompt-files.mjs readHelperAgents, in your folder's agents/):
 // each is a kind of its own, named with what its file says it is for.
-export function agentToolDef(helpers = []) {
+// sizes (on hearth, 22 Nov 2026): hearth 3.0's three helpers, one on each of its small models, so a third kind, lookup,
+// joins the two, and the tool says which is which (HEARTH_AGENT_LINES). Off hearth the tool is as it was, letter for letter.
+export const HEARTH_AGENT_LINES = ' kind lookup: it looks ONE thing up (where one name is defined or used, what one setting or line says) and answers in a line or two. Here each kind has a model of its own, so a helper works while you go on: general on the 9b (it edits and runs the tests), explore on the 4b (it searches and reads), lookup on the 2b. Hand a search over many files to explore, a single fact to lookup, and a change that stands on its own, with its tests, to general.';
+export function agentToolDef(helpers = [], { sizes = false } = {}) {
+  if (sizes) {
+    const base = agentToolDef(helpers);
+    const kind = base.parameters.properties.kind;
+    return { ...base, description: `${base.description}${HEARTH_AGENT_LINES}`, parameters: { ...base.parameters, properties: { ...base.parameters.properties, kind: { ...kind, enum: [...kind.enum.slice(0, 2), 'lookup', ...kind.enum.slice(2)], description: kind.description.replace(') or general', '), general, or lookup (one thing looked up)').replace('general, or one of', 'general, lookup (one thing looked up), or one of') } } } };
+  }
   if (!helpers.length) return AGENT_TOOL_DEF;
   const kinds = ['explore', 'general', ...helpers.map((h) => h.kind)];
   const own = helpers.map((h) => `- ${h.kind}${h.about ? `: ${h.about}` : ''}${h.mode === 'plan' ? ' (it only reads and plans)' : ''}${h.isolation ? ' (it works in its own copy of the repository: its changes come back as a diff, not in the folder)' : ''}`).join('\n');
@@ -248,7 +256,8 @@ const READ_MANY = {
 // agents: the Agent tool joins them (a helper's own list never has it); helpers: your own helper agents in it.
 // screen: the Screen tool joins them (a model that can look at pictures, on a Mac).
 // self: the App tool joins them (the app works on itself, permissions.mjs isSelf).
-export const toolDefs = (way = 'app', web = null, { agents = false, screen = false, helpers = [], self = false } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), JOBS_TOOL_DEF, ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [agentToolDef(helpers)] : []), ...(self ? [APP_TOOL_DEF] : [])];
+// sizes: on hearth, the Agent tool with its three helpers (agentToolDef).
+export const toolDefs = (way = 'app', web = null, { agents = false, screen = false, helpers = [], self = false, sizes = false } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), JOBS_TOOL_DEF, ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [agentToolDef(helpers, { sizes })] : []), ...(self ? [APP_TOOL_DEF] : [])];
 export const toolSchemas = (way = 'app', web = null, opts = {}) => toolDefs(way, web, opts).map((d) => ({ type: 'function', function: d }));
 
 // Other agents' names for a tool here that takes the same arguments (Claude Code's Glob, Grep and

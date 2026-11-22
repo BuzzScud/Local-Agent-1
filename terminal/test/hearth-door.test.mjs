@@ -58,7 +58,8 @@ test('a size goes as its list, first choice first, with only the sizes this door
   expect(hearthList('hearth-2b', ['hearth-9b'])).toBe('hearth-9b,hearth');
   expect(hearthList('hearth')).toBe('hearth');
   expect(hearthList('bonsai-2:27b@poseidon')).toBe('bonsai-2:27b@poseidon');
-  expect(HEARTH_JOBS).toEqual({ side: 'hearth-2b', btw: 'hearth-2b', review: 'hearth-9b', helpers: 'hearth-4b' });
+  // worker and lookup (22 Nov 2026): hearth 3.0's helpers, the 9b for a change with its tests, the 2b for one thing looked up.
+  expect(HEARTH_JOBS).toEqual({ side: 'hearth-2b', btw: 'hearth-2b', review: 'hearth-9b', helpers: 'hearth-4b', worker: 'hearth-9b', lookup: 'hearth-2b' });
 });
 
 test('on the door as it is: hearth thinks and takes tools whatever it says, works in 128k, and takes one call at a time', async () => {

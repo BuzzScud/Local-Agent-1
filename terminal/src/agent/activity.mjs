@@ -51,6 +51,32 @@ const askOf = (messages) => {
   return '';
 };
 
+// What each finished request of this process ran on (22 Nov 2026, the owner: "we need to make sure the agentic coder uses all
+// models correctly"): the model asked for and, on hearth, the one its door says answered. In memory only, the newest RAN_KEEP;
+// ranMark() before a request and ranSince(mark) after it give that request's own (the helpers it started are in this process).
+const RAN_KEEP = 2000;
+const ran = [];
+let ranN = 0;
+export const ranMark = () => ranN;
+export const ranSince = (mark = 0) => ran.filter((r) => r.n > mark);
+const noteRan = (r) => { ran.push({ n: ++ranN, ...r }); if (ran.length > RAN_KEEP) ran.splice(0, ran.length - RAN_KEEP); };
+// A model's short name for that line: its size when its name says one ("bonsai-2:9b-q2_0" → "9b", "hearth-2b" → "2b"),
+// hearth's own name as "27b" (HEARTH_MAIN_SIZE: what "hearth" is), else the name.
+export const HEARTH_MAIN_SIZE = '27b';
+export const sizeOf = (name) => {
+  const s = String(name ?? '').toLowerCase().replace(/:latest$/, '');
+  if (/^hearth(@[\w.-]+)?$/.test(s)) return HEARTH_MAIN_SIZE;
+  return /(?:^|[-:_/])(\d+(?:\.\d+)?b)(?![a-z0-9])/.exec(s)?.[1] ?? s;
+};
+// "27b 12 · 9b 3 · 4b 1 · 2b 2": how many requests each model answered, the biggest model first. '' with none.
+// A request with no word of which model answered counts under the one it asked for first.
+export function modelsWords(list = []) {
+  const by = new Map();
+  for (const r of list) { const k = sizeOf(r.served ?? String(r.asked ?? '').split(',')[0]); if (k) by.set(k, (by.get(k) ?? 0) + 1); }
+  const num = (k) => { const m = /^(\d+(?:\.\d+)?)b$/.exec(k); return m ? Number(m[1]) : -1; };
+  return [...by].sort((a, b) => num(b[0]) - num(a[0]) || (a[0] < b[0] ? -1 : 1)).map(([k, n]) => `${k} ${n}`).join(' · ');
+}
+
 // The stream of one request, passed through unchanged, its progress written as it goes.
 // who: 'conversation' (your conversation's own steps) or a side job's name (flows/llm.mjs `what`).
 export async function* recorded(stream, { model, url, who, messages, tools = 0, think }) {
@@ -68,7 +94,8 @@ export async function* recorded(stream, { model, url, who, messages, tools = 0, 
         const t = ev.timings ?? {};
         end = ev.finish ?? 'stop';
         const k = keptOf({ usage: ev.usage, timings: t });
-        append({ at: new Date().toISOString(), pid: st.pid, model, who: st.who, ask: st.ask, tools, think: st.think, secs: (Date.now() - st.started) / 1000,
+        noteRan({ who: st.who, asked: model, served: ev.served?.model ?? null, end });
+        append({ at: new Date().toISOString(), pid: st.pid, model, ...(ev.served?.model ? { served: ev.served.model, ...(ev.served.door ? { door: ev.served.door } : {}) } : {}), who: st.who, ask: st.ask, tools, think: st.think, secs: (Date.now() - st.started) / 1000,
           readTok: t.prompt_n ?? null, readMs: t.prompt_ms ?? null, wroteTok: t.predicted_n ?? null, writeMs: t.predicted_ms ?? null, loadMs: t.load_ms ?? null,
           thinkTok: st.thinkTok, end, ...(k ? { keptTok: k.kept, promptTok: k.prompt, reused: reusedWords(k) } : {}) });
       }
