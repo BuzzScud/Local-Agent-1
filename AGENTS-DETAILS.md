@@ -2268,6 +2268,12 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   that makes something (add, create, make, write, new, save, generate, put, scaffold) stands before it in its sentence
   or clause; a path named with no such word ("summarize notes-from-friday.md") is still a wall.
   `terminal/test/follow-through.test.mjs`.
+- **A listed call with too few arguments is made up** (cases.mjs `arityIn`, `casesFromList`'s `arity`; agent-checks.mjs
+  `listCases` passes the project's): the same request's list gave `applyDiscount(0)` and `applyDiscount(101)` for a
+  function that takes (price, percent), in both runs; the request writes no call, so nothing left them out, and the
+  correct work went back twice until the model stopped to ask the user which it meant. A call the request never writes
+  that passes fewer arguments than the project's own definition needs (its parameters before a default or a rest;
+  `function`, `const x = (…) =>` and Python's `def`, 400 files at most) is left out. `terminal/test/cases.test.mjs`.
 - **Smaller**: the "writing its next step" line rounds its token count (it printed 563.3915100432022); the start line
   on hearth with its sizes names its three helpers (general on the 9b, explore on the 4b, lookup on the 2b) in place of
   "Helpers on hearth-4b".

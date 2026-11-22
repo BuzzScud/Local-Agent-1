@@ -4,6 +4,8 @@
 // parts of 6). The main model writes its plan as the cases, each with an example in backticks (CASES_ASK);
 // before its answer stands, every case's example must appear in a test file changed in the message, else it
 // goes back twice with the cases still untested, and after that a line names them (agent.mjs, hook 'cases').
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 // What the model is asked for, with the step that made its first change. The examples are of no task the
 // benches set (a first version used task 40's own head -4 and cat | head, which told the models the answer).
@@ -61,6 +63,59 @@ export function casesOf(todos = []) {
   return out;
 }
 
+// How many arguments a function of the project needs (its parameters before the first with a default or a rest), by
+// its definition in the project's own code; null when none is found. A listed call with fewer is made up (22 Nov 2026,
+// the owner's window on hearth: asked to make applyDiscount(price, percent) throw when percent is below 0 or above 100,
+// the list gave applyDiscount(0) and applyDiscount(101), and correct work went back twice for them until the model
+// stopped to ask the user). One walk of the project's code a list, 400 files and 300 KB each at most.
+const CODE_EXT = /\.(?:m?js|cjs|jsx|ts|tsx|py)$/;
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.venv', 'venv', '__pycache__']);
+export function arityIn(cwd) {
+  let files = null;
+  const seen = new Map();
+  const list = () => {
+    if (files) return files;
+    files = [];
+    const walk = (dir, depth) => {
+      if (depth > 6 || files.length >= 400) return;
+      let names = [];
+      try { names = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const d of names) {
+        if (files.length >= 400) return;
+        if (d.isDirectory()) { if (!SKIP_DIRS.has(d.name) && !d.name.startsWith('.')) walk(join(dir, d.name), depth + 1); }
+        else if (CODE_EXT.test(d.name) && !/\.(?:test|spec)\.|(?:^|_)test_/.test(d.name)) files.push(join(dir, d.name));
+      }
+    };
+    if (cwd) walk(cwd, 0);
+    return files;
+  };
+  const needed = (params) => {
+    const parts = [];
+    let depth = 0, cur = '';
+    for (const ch of params) { if ('([{'.includes(ch)) depth++; else if (')]}'.includes(ch)) depth--; if (ch === ',' && depth === 0) { parts.push(cur); cur = ''; } else cur += ch; }
+    if (cur.trim()) parts.push(cur);
+    let n = 0;
+    for (const raw of parts) { const x = raw.trim(); if (!x || x === 'self' || x === 'cls' || x.startsWith('...') || x.startsWith('*') || /=/.test(x)) break; n++; }
+    return n;
+  };
+  return (name) => {
+    const bare = String(name ?? '').split('.').pop();
+    if (!/^[A-Za-z_$][\w$]*$/.test(bare)) return null;
+    if (seen.has(bare)) return seen.get(bare);
+    const n = bare.replace(/\$/g, '\\$');
+    const defs = [new RegExp(`function\\s*\\*?\\s+${n}\\s*\\(([^)]*)\\)`), new RegExp(`(?:const|let|var)\\s+${n}\\s*=\\s*(?:async\\s*)?(?:function\\s*)?\\(([^)]*)\\)`), new RegExp(`def\\s+${n}\\s*\\(([^)]*)\\)`)];
+    let found = null;
+    for (const f of list()) {
+      let text = '';
+      try { if (statSync(f).size > 300_000) continue; text = readFileSync(f, 'utf8'); } catch { continue; }
+      for (const re of defs) { const m = re.exec(text); if (m) { found = needed(m[1]); break; } }
+      if (found != null) break;
+    }
+    seen.set(bare, found);
+    return found;
+  };
+}
+
 // The cases a call of their own listed (agent.mjs listCases): what the request asks for (cases) and what
 // it says must stay as it is (unchanged), each { example, expect }; those that look like code. MAX_CASES
 // in each half: at 20 in all, a request that named some thirty forms lost the last ten, the ones that
@@ -69,13 +124,18 @@ export const MAX_CASES = 25;
 // request: an example that calls a function the request names with more arguments than the request gives it
 // is left out (5 Oct 2026: asked for plainRead(command, cwd), a list came back as plainRead('cat', ['file.txt'],
 // '/home/user'), and the model built and tested that made-up form: 1 part of 6).
-export function casesFromList(list, unchanged = [], request = '') {
+// arity: a function's needed arguments in the project (arityIn), for a call the request itself never writes.
+export function casesFromList(list, unchanged = [], request = '', { arity = null } = {}) {
   const params = (name) => { const m = new RegExp(`(?:^|[^\\w.$])${name.replace(/[.$]/g, '\\$&')}\\(([^()]*)\\)`).exec(request); return m ? (m[1].trim() ? m[1].split(',').length : 0) : null; };
   const madeUp = (example) => {
     const m = /^([\w.$]+)\(([\s\S]*)\)\s*$/.exec(example);
     if (!m) return false;
     const want = params(m[1]);
-    if (want == null) return false;
+    if (want == null) {
+      // A call the request never writes: made up when it passes fewer arguments than the function needs.
+      const need = arity?.(m[1]);
+      return need != null && (m[2].trim() ? 1 + [...m[2]].filter((ch) => ch === ',').length : 0) < need;
+    }
     // its arguments, counted at the top level: commas inside quotes and brackets are not between arguments
     let depth = 0, quote = '', n = m[2].trim() ? 1 : 0;
     for (const ch of m[2]) {

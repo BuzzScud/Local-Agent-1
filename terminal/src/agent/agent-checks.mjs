@@ -3,7 +3,7 @@
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
 import { endpointOf } from '../../../models/index.mjs';
 import { askedQuestions, checkInQuestion, errorSaid, limitQuestion, lookSaid, planQuestion, sameResultSaid, stepSaid, stuckQuestion } from './questions.mjs';
-import { CASES_ASK, CASES_FIX, MAX_CASES, REVIEW_CODE, REVIEW_MAX, REVIEW_SCHEMA, REVIEW_SYSTEM, addCase, casesFromList, casesOf, casesTold, gapCases, isTestPath, onlyProse, reviewAsk, reviewBack, reviewWrong, signSample } from './cases.mjs';
+import { CASES_ASK, CASES_FIX, MAX_CASES, REVIEW_CODE, REVIEW_MAX, REVIEW_SCHEMA, REVIEW_SYSTEM, addCase, arityIn, casesFromList, casesOf, casesTold, gapCases, isTestPath, onlyProse, reviewAsk, reviewBack, reviewWrong, signSample } from './cases.mjs';
 import { display, parseArgs } from './tools.mjs';
 import { readFileSync } from 'node:fs';
 import { namesQuestion } from './folder.mjs';
@@ -197,7 +197,8 @@ export class ChecksPart {
         system: 'You list the cases a coding request specifies, so each can be tested. Judge only from the request.',
         user: `Request:\n${request.slice(0, 6000)}\n\nList what this request specifies, so that each thing can be tested. Go through it phrase by phrase and stay with its own words: add no behaviour, argument or path it does not state.\n- cases: each behaviour it asks for. One case for every form it names: "A, B or C" is three cases.\n- unchanged: each thing it says must stay as it is, be refused, or be left alone. Again one for every form it names.\nFor each one: example is the input alone, just as the request writes it (a command line, a string, a value), with a small made-up value where it has a placeholder (FILE becomes notes.txt, DIR becomes src, N becomes 3) and relative names only, never a path from the root. Give a call only when the request's form is itself a call. expect is what the request says happens, in the request's own words, with no data shape of your own.\nAt most ${MAX_CASES} in each list.`,
         schema: { type: 'object', properties: { cases: { type: 'array', items: CASE_ITEM, maxItems: MAX_CASES }, unchanged: { type: 'array', items: CASE_ITEM, maxItems: MAX_CASES } }, required: ['cases', 'unchanged'] } });
-      const listed = casesFromList(r.json?.cases, r.json?.unchanged, request);
+      // A call the request never writes, with fewer arguments than the project's function needs, is left out (arityIn).
+      const listed = casesFromList(r.json?.cases, r.json?.unchanged, request, { arity: arityIn(this.turn?.workFolder ?? this.cwd) });
       // What the request spells out and the list left unused (cases.mjs gapCases): a case each.
       return listed.length ? [...listed, ...gapCases(request, listed)] : listed;
     } catch (e) {

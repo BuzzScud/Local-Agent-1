@@ -11,7 +11,7 @@ process.env.AGENTIC_MEMORY_SAVE = 'off';
 const { Agent } = await import('../src/agent/agent.mjs');
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const { prepare } = await import('../src/agent/tools.mjs');
-const { CASES_ASK, casesOf, caseProbe, untested, isTestPath, isProsePath, onlyProse, casesFromList, gapCases, reviewWrong, reviewBack, signSample } = await import('../src/agent/cases.mjs');
+const { CASES_ASK, casesOf, caseProbe, untested, isTestPath, isProsePath, onlyProse, casesFromList, arityIn, gapCases, reviewWrong, reviewBack, signSample } = await import('../src/agent/cases.mjs');
 const { MODEL_HOOKS } = await import('../src/agent/way.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
 const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
@@ -377,4 +377,20 @@ test('plain words are no case, and a message that changed only a page of words h
     expect(autoNotes(a).some((t) => /have no test yet/.test(t))).toBe(false);
     expect(a.messages.at(-1).content).toBe('Done: docs/API.md lists f.');
   } finally { await fake.close(); }
+});
+
+// 22 Nov 2026, the owner's window on hearth: asked to make applyDiscount(price, percent) throw a RangeError when percent
+// is below 0 or above 100, the list (hearth's 9b) gave applyDiscount(0) and applyDiscount(101); the request never writes
+// a call, so nothing left them out, and correct work went back twice until the model stopped to ask the user.
+test('a listed call with fewer arguments than the project\'s function needs is made up', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'arity-'));
+  writeFileSync(join(dir, 'price.mjs'), 'export function applyDiscount(price, percent) {\n  return price - (price * percent) / 100;\n}\nexport const slug = (s, sep = \'-\') => s;\n');
+  writeFileSync(join(dir, 'tool.py'), 'def total(items, *rest):\n    return 0\n');
+  const arity = arityIn(dir);
+  expect([arity('applyDiscount'), arity('slug'), arity('total'), arity('nowhere'), arity('m.applyDiscount')]).toEqual([2, 1, 1, null, 2]);
+  const req = 'In src/price.mjs, make applyDiscount throw a RangeError when percent is below 0 or above 100.';
+  const list = [{ example: 'applyDiscount(0)', expect: 'throws' }, { example: 'applyDiscount(101)', expect: 'throws' }, { example: 'applyDiscount(100, -5)', expect: 'throws a RangeError' }, { example: "slug('A B')", expect: 'a-b' }];
+  expect(casesFromList(list, [], req, { arity }).map((c) => c.example)).toEqual(['applyDiscount(100, -5)', "slug('A B')"]);
+  // without the project's code (no arity), as before
+  expect(casesFromList(list, [], req).map((c) => c.example)).toEqual(['applyDiscount(0)', 'applyDiscount(101)', 'applyDiscount(100, -5)', "slug('A B')"]);
 });
