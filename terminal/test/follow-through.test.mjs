@@ -14,6 +14,7 @@ process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-follow-home-'))
 process.env.AGENTIC_MEMORY_SAVE = 'off';
 const { Agent, claimsAllGood, claimsFound, severalAsks, fullPathsIn } = await import('../src/agent/agent.mjs');
 const { execute, wallOf, settlePath } = await import('../src/agent/tools.mjs');
+const { asksToMake } = await import('../src/agent/tools-paths.mjs');
 const { outlineText, docParts, jsonShape } = await import('../src/tools/outline.mjs');
 const { nearPath, nearNames } = await import('../src/tools/fs.mjs');
 const { readResults } = await import('../src/flows/results.mjs');
@@ -100,6 +101,18 @@ test('a page that needs a login, or an address or path the user gave that is not
   expect(r.text).toContain('ask how to go on, with Ask');
   const off = await execute('Read', { path: 'notes-from-friday.md' }, {}, { cwd: dir, request: 'summarize notes-from-friday.md', blocked: false });
   expect(off.wall).toBeUndefined();
+  // A file the request asks to make is not there yet: no wall (22 Nov 2026, hearth's 27b was told to stop and ask).
+  const ask = 'In src/price.mjs, make applyDiscount throw a RangeError. Add a test for it in test/price.test.mjs, then run npm test and tell me what it printed.';
+  const toMake = await execute('Read', { path: 'test/price.test.mjs' }, {}, { cwd: dir, request: ask });
+  expect(toMake.error).toBe(true);
+  expect(toMake.wall).toBeUndefined();
+  // The file to change, named with no word that makes it, is still a wall when it is not there.
+  const toChange = await execute('Read', { path: 'src/price.mjs' }, {}, { cwd: dir, request: ask });
+  expect(toChange.wall).toMatchObject({ kind: 'missing' });
+  expect(asksToMake('notes.md', 'write the summary to notes.md')).toBe(true);
+  expect(asksToMake('notes.md', 'create a file named notes.md')).toBe(true);
+  expect(asksToMake('notes-from-friday.md', 'summarize notes-from-friday.md')).toBe(false);
+  expect(asksToMake('src/foo.mjs', 'fix the bug in src/foo.mjs. Then add a test.')).toBe(false);
 });
 
 test('the words of the run: what claims all good, what claims it found it, several asks, a script\'s own count', () => {

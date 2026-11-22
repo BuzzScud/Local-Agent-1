@@ -2251,3 +2251,23 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Not done, not measured.** No run on hearth, no stand-in run, no suite. `terminal/test/hearth-door.test.mjs`'s list
   of jobs was brought up to date by hand; other tests that pin a hearth conversation's tools or its notes may need the
   same. The real proof is a before/after on hearth (the Arena's hearth checks), which the owner left for later.
+
+## Every step in sight, and a file to make is no wall (22 Nov 2026)
+
+- **What and why.** The owner, after hearth 3.0's way of working went in untested: "all i see is, thinking... i need to
+  see bash, commands, writes, using mcp tools. i need to see this". Their window was driven on hearth with their own
+  settings (a pseudo-terminal on Triton, every change of the screen kept): /steps grouped, the default since 9 Oct,
+  folds each finished step into a task row of one line, the row under way shows only its last two steps, and on hearth,
+  where a step thinks for up to a minute, that row mostly read THINKING. The first reply took 47.5 s to its first word.
+- **Open is the default** (screen-switches.mjs `stepsOf`): every step printed as it runs, the command, the diff of an
+  edit, a Write's file, an MCP call and its result, as before 9 Oct. Grouped stays one `/steps grouped` away, kept in
+  settings.json as before. `terminal/test/folders.test.mjs` (the default; its real-window test now sets grouped itself).
+- **A file the request asks to make is no wall** (tools-paths.mjs `asksToMake`, used by `missing`): "Add a test for it
+  in test/price.test.mjs" read the test file first, was told the user's path was not there and it was blocked, and two
+  steps later to stop and ask the user (Stop when blocked) in place of writing it. A path is one to make when a word
+  that makes something (add, create, make, write, new, save, generate, put, scaffold) stands before it in its sentence
+  or clause; a path named with no such word ("summarize notes-from-friday.md") is still a wall.
+  `terminal/test/follow-through.test.mjs`.
+- **Smaller**: the "writing its next step" line rounds its token count (it printed 563.3915100432022); the start line
+  on hearth with its sizes names its three helpers (general on the 9b, explore on the 4b, lookup on the 2b) in place of
+  "Helpers on hearth-4b".

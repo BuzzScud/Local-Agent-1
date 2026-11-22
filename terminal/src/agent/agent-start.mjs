@@ -35,7 +35,9 @@ export class StartPart {
     // first message, the prompt built again once.
     if (!this.isHelper && Boolean(this.helperLineUsed) !== this.helpersElsewhere()) {
       this.refreshNotes();
-      if (this.helperLineUsed) this.emit('note', { text: `Helpers on ${this.helpersAway.model}: the Agent tool hands reading and searching to it, and its report comes back (/profiles, Helpers it starts).`, tone: 'dim' });
+      // On hearth with its sizes, one helper on each (22 Nov 2026, HEARTH_HELPERS): the line names all three, not the 4b alone.
+      const sizes = this.hearthUse('lookup') && !String(this.hearthUse('lookup').model).includes('@');
+      if (this.helperLineUsed) this.emit('note', { text: sizes ? "Helpers on hearth's small models: general on the 9b (it changes files and runs their test), explore on the 4b, lookup on the 2b; a size with no free copy goes to the next, at last the 27b." : `Helpers on ${this.helpersAway.model}: the Agent tool hands reading and searching to it, and its report comes back (/profiles, Helpers it starts).`, tone: 'dim' });
       if (this.helperLineUsed) this.warmHelper();
     }
   }

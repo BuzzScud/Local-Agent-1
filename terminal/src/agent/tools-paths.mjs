@@ -47,9 +47,24 @@ export function settlePath(cwd, typed, { home = homedir(), work = null } = {}) {
   if (alt.length === 1) return { path: alt[0], note: `(${typed} does not exist; this is ${alt[0]})\n` };
   return { picks: [...new Set([...near.picks.map(shown), ...alt])].slice(0, 5) };
 }
-// Not there: when the request names that path, a wall too (asking beats guessing another file).
+// A path the request asks to make ("Add a test for it in test/price.test.mjs", "write it to notes.md", "create
+// src/x.mjs"): a word that makes something before it, in the same sentence or clause. Not there yet is then no wall
+// (22 Nov 2026, the owner's window on hearth: its 27b read the test file it was asked to add, was told it was blocked,
+// and two steps later to stop and ask the user, in place of writing it).
+const MAKE_WORDS = /\b(?:add|adds|adding|create|creates|creating|make|makes|making|write|writes|writing|new|save|saves|saving|generate|generates|put|scaffold)\b/i;
+export const asksToMake = (typed, request) => {
+  const t = String(typed ?? '').replace(/\/$/, '');
+  const name = t.split('/').pop();
+  if (t.length < 4) return false;
+  for (const part of String(request ?? '').split(/(?<=[.!?])\s+|\n+|;\s*|,\s*(?:then|and then)\b/i)) {
+    const at = part.includes(t) ? part.indexOf(t) : name.length >= 6 ? part.indexOf(name) : -1;
+    if (at > 0 && MAKE_WORDS.test(part.slice(0, at))) return true;
+  }
+  return false;
+};
+// Not there: when the request names that path, a wall too (asking beats guessing another file), unless it asks to make it.
 export function missing(text, typed, env, message) {
-  const wall = env.blocked !== false && named(typed, env.request) ? { kind: 'missing', url: String(typed), why: `${typed}, which the user named, is not there` } : null;
+  const wall = env.blocked !== false && named(typed, env.request) && !asksToMake(typed, env.request) ? { kind: 'missing', url: String(typed), why: `${typed}, which the user named, is not there` } : null;
   return { text: `${text}${wall ? wallLine(wall) : ''}`, error: true, view: { kind: 'error', message }, ...(wall ? { wall } : {}) };
 }
 export const notThere = (typed, picks, what = 'File') => `${what} not found: ${typed}.${picks.length ? ` Did you mean one of: ${picks.join(', ')}?` : ' Use List or Search to find the right path.'}`;

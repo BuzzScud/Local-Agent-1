@@ -43,7 +43,9 @@ test('a stretch of steps between the model’s words; one step stays a step; its
   expect(live.printed.map((it) => it.type)).toEqual(['text']);
   expect(live.held).toHaveLength(2);
   expect(stepsOf('words')).toBe('words');
-  expect(stepsOf('nonsense')).toBe('grouped');
+  // Open by default since 22 Nov 2026 (the owner: "i need to see bash, commands, writes, using mcp tools").
+  expect(stepsOf('nonsense')).toBe('open');
+  expect(stepsOf(undefined)).toBe('open');
 });
 
 // 9 Oct 2026 afternoon: every command was RUNNING, so a grep or a git log between two edits made a box of its own.
@@ -258,7 +260,7 @@ test('the real window: a reply’s steps as a task row; the pointer resting on i
   let runRow = null, partRow = null;
   const seen = {};
   const mouseNow = (name) => ({ fn: ({ raw }) => { seen[name] = raw().lastIndexOf(MOUSE_ON) > raw().lastIndexOf(MOUSE_OFF) ? 'app' : 'Terminal'; } });
-  const r = await runInPty({ cwd, env: { ...env, AGENTIC_STEPS: '' }, args: ['--url', fake.url, '--no-flows'], cols: 120, rows: 40, timeoutMs: 90_000, steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_STEPS: 'grouped' }, args: ['--url', fake.url, '--no-flows'], cols: 120, rows: 40, timeoutMs: 90_000, steps: [
     { wait: '? for shortcuts' }, { sleep: 300 },
     { type: 'what does this project do?' }, { key: 'enter' }, { wait: 'It turns trades into CSV rows.', ms: 30_000 }, { sleep: 800 }, { snapshot: 'closed' },
     // the screen text is the whole buffer; the window is its last 40 rows (Terminal counts them from 1)
