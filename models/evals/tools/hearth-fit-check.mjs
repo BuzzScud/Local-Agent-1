@@ -14,7 +14,7 @@
 //   5 the quick question is answered within 90 s
 //   6 the four runs' time in all at most 10% over main's
 // On hearth's 27b on Poseidon by default (--model hearth@poseidon-seats: the door names it so; "hearth@poseidon" matches no server): tests never go to the copies kept for customers.
-// Usage: bun models/evals/tools/hearth-fit-check.mjs [--before <checkout>] [--model <name>] [--only quick,fix] [--arms after] [--look]
+// Usage: bun models/evals/tools/hearth-fit-check.mjs [--before <checkout>] [--model <name>] [--only quick,fix] [--arms after] [--look] [--hold-before no]
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -46,6 +46,10 @@ const TASKS = [
     judge: (shop) => { const d = read(join(shop, 'docs', 'API.md')); const want = ['total', 'withTax', 'shippingFor', 'checkout', 'applyDiscount', 'roundCents']; const has = want.filter((w) => d.includes(w)); const clean = !sh('git status --porcelain -- src test', shop).stdout.trim(); return { ok: has.length === want.length && clean, why: `${has.length} of ${want.length} functions named · ${clean ? 'code untouched' : 'code changed'}` }; } },
 ];
 const only = o.opt('only', null)?.split(',');
+// --hold-before no (22 Nov 2026): main's side as this side, not held by the guard. Held, its sizes are hidden, so it has no
+// second opinion and no helpers: with a main that holds a run on one server itself (8346761 and later), the two sides then
+// differed by the second opinion and its rework (docs 189 s against 403 s of GPU), not by the change measured.
+const HOLD_BEFORE = o.opt('hold-before', 'yes') !== 'no';
 const tasks = only ? TASKS.filter((t) => only.includes(t.id)) : TASKS;
 
 // HEARTH_FIT_KEY: the key for a run off a Mac (no Keychain: 21 Nov 2026, run on Triton while the M4 was off).
@@ -119,7 +123,7 @@ function beforeCheckout() {
 async function runOne(arm, checkout, task) {
   const base = mkdtempSync(join(tmpdir(), `hearth-fit-${arm}-${task.id}-`));
   const shop = makeShop(join(base, 'shop'));
-  const g = guard({ hold: arm === 'before' });
+  const g = guard({ hold: arm === 'before' && HOLD_BEFORE });
   const remote = { use: true, source: 'hearth', kind: 'openai', connect: 'http', address: g.address, port: null, model: MODEL, context: 0, key: true, keyEnd: key.slice(-4), keyId: 'hearth' };
   const home = throwawayHome(join(base, 'home'), { remote, remotes: { hearth: remote }, instructions: 'auto', thinking: own.thinking ?? true, effort: own.effort ?? null });
   const prof = ownProfiles(g.address);
