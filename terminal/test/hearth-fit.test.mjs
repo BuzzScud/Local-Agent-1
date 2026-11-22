@@ -8,6 +8,8 @@ import { connectRemote, endpointOf, dropEndpoint, setEndpoint, pickHearthModel, 
 import { watched, streamChat } from '../src/agent/client.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { checkCall, ChecksPart } from '../src/agent/agent-checks.mjs';
+import { reviewThink, reviewChange } from '../src/agent/helper-models.mjs';
+import { ownSteps } from '../src/agent/second-look.mjs';
 
 const KEY = 'hk_test-hearth-fit-key-0123456789abcdef';
 const drain = async (it) => { const out = []; for await (const e of it) out.push(e); return out; };
@@ -194,4 +196,36 @@ test('a 403 says what it is: the service\'s own words, or a web server in front 
     expect(e2.message).not.toContain('did not accept the API key');
     c.stop?.();
   } finally { shut = null; }
+});
+
+// 21 Nov 2026, run 5 of the hearth fit check: all the work right, and two checks still failed on these.
+test('on hearth the second opinion asks for no thinking; one that only thought is asked once more without', async () => {
+  expect(reviewThink({ thinks: true, model: 'hearth@poseidon-seats' }, { hearth: true })).toBe(false);
+  expect(reviewThink({ thinks: true, model: 'qwen3.6:35b' }, { ollama: true })).toBe(true);
+  expect(reviewThink({ thinks: true, model: 'gpt-oss:20b', family: 'gptoss' }, { ollama: true })).toBe('low');
+  expect(reviewThink({ thinks: false, model: 'llava' }, { ollama: true })).toBe(undefined);
+  // a service that takes no thinking cap: 3,000 tokens of thinking and no word, then LGTM with thinking off
+  const sent = [];
+  const send = async (a) => { sent.push({ think: a.use.think, maxTokens: a.maxTokens }); return sent.length === 1 ? { text: '', secs: 142 } : { text: 'LGTM', secs: 6 }; };
+  const r = await reviewChange({ url: 'http://127.0.0.1:9', use: { model: 'qwen3.6:35b', thinks: true }, request: 'fix it', diff: '+ x', send });
+  expect(sent).toEqual([{ think: true, maxTokens: 3000 }, { think: false, maxTokens: 500 }]);
+  expect(r).toMatchObject({ ok: true, findings: [], secs: 148 });
+  expect(r.empty).toBeUndefined();
+  // one that answered is not asked again
+  const once = [];
+  await reviewChange({ url: 'http://127.0.0.1:9', use: { model: 'qwen3.6:35b', thinks: true }, request: 'fix it', diff: '+ x', send: async (a) => { once.push(a.use.think); return { text: '- a.mjs: off by one', secs: 3 }; } });
+  expect(once).toEqual([true]);
+});
+
+test('what the app read for the model is among the steps the second look is shown', () => {
+  const me = { cwd: process.cwd(), messages: [], turn: { reads: new Map() }, readFiles: new Set(), ctxUsed: 0, emit() {} };
+  for (const k of ['sawForIt', 'giveRead', 'pretend']) me[k] = Agent.prototype[k].bind(me);
+  me.giveRead('src/checkout.mjs', { path: 'src/checkout.mjs' }, 'export function checkout() {}', {});
+  me.pretend({ name: 'Search', args: { pattern: 'checkout' }, body: 'src/checkout.mjs:1', view: {} });
+  me.turn.callLog.push({ function: { name: 'Read', arguments: JSON.stringify({ path: 'src/cart.mjs' }) } }); // the model's own
+  const steps = ownSteps([{ role: 'assistant', tool_calls: me.turn.callLog }]);
+  expect(steps).toHaveLength(3);
+  expect(steps[0]).toContain('src/checkout.mjs');
+  expect(steps[1]).toContain('checkout');
+  expect(steps[2]).toContain('src/cart.mjs');
 });

@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { streamChat } from './client.mjs';
-import { authHeaders } from '../../../models/index.mjs';
+import { authHeaders, endpointOf } from '../../../models/index.mjs';
 
 export const MAIN = 'main';
 // The context each helper is loaded at: small, so it fits beside the main model.
@@ -60,14 +60,27 @@ export const describedNote = (images, model, text) => `(The user attached ${imag
 
 // A second opinion on a finished change. Answers { ok, findings: [line, …], secs }:
 // ok when it found nothing; at most three findings, each one line.
-export async function reviewChange({ url, use, request, diff, signal }) {
+// How it thinks: one that can think does, a little (gpt-oss at its lowest level). On hearth it does not (21 Nov 2026, the
+// hearth fit check: a run held on hearth@poseidon-seats had its own 27b read the change with thinking on; it thought for
+// 142 s to the end of its 3,000 tokens and wrote no word, so the change was not read at all. hearth's other side jobs
+// ask for no thinking either, and its door takes no thinking cap).
+export function reviewThink(use, ep) {
+  if (ep?.hearth) return false;
+  return use?.thinks ? (/gpt-?oss/i.test(`${use.family ?? ''} ${use.model}`) ? 'low' : true) : undefined;
+}
+export async function reviewChange({ url, use, request, diff, signal, send = helperText }) {
   const ask = [
     { role: 'system', content: 'You review a code change another assistant just made. Report only real problems: bugs, a part of the request not done, something broken or removed by mistake. Not style, not naming, not ideas for more. If there is nothing real, answer exactly: LGTM' },
     { role: 'user', content: `The request:\n${String(request).slice(0, 2000)}\n\nThe change (diff):\n${String(diff).slice(-24_000)}\n\nList at most 3 real problems, one per line, each starting with "- " and naming the file. Or answer LGTM.` },
   ];
-  // One that can think does, a little (gpt-oss at its lowest level); the room is for the thinking and the answer.
-  const think = use?.thinks ? (/gpt-?oss/i.test(`${use.family ?? ''} ${use.model}`) ? 'low' : true) : undefined;
-  const r = await helperText({ url, use: { ...use, think }, messages: ask, maxTokens: think ? 3000 : 500, signal });
+  // The room is for the thinking and the answer.
+  const think = reviewThink(use, endpointOf(use?.url ?? url));
+  let r = await send({ url, use: { ...use, think }, messages: ask, maxTokens: think ? 3000 : 500, signal });
+  // It thought to the end of its room and wrote no word (a service takes no thinking cap): once more, thinking off.
+  if (think && !r.text) {
+    const again = await send({ url, use: { ...use, think: false }, messages: ask, maxTokens: 500, signal });
+    r = { ...again, secs: (r.secs ?? 0) + (again.secs ?? 0) };
+  }
   return { ...r, ...findingsOf(r.text) };
 }
 

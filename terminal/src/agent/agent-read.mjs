@@ -86,6 +86,12 @@ export class ReadPart {
   // about into the conversation as if the model had read it: the files it
   // names (whole when they fit, otherwise their parts and the lines that
   // match the question), then the definitions of the names it uses.
+  // What the app read or searched for the model counts among the message's steps (21 Nov 2026, the hearth fit check: the
+  // second look is shown the model's own calls, so with src/checkout.mjs read for it by the app it said "there is no
+  // recorded read of src/checkout.mjs", sent a right answer back, and a one-sentence question took 102 s instead of 60).
+  sawForIt(name, args) {
+    if (this.turn) (this.turn.callLog ??= []).push({ function: { name, arguments: JSON.stringify(args ?? {}) } });
+  }
   // One read put into the conversation as if the model had made it.
   giveRead(rel, args, body, view) {
     const id = `read_${Date.now()}_${this.messages.length}`;
@@ -98,6 +104,7 @@ export class ReadPart {
     try { mtime = statSync(abs).mtimeMs; } catch {}
     this.turn?.reads?.set(`${abs}|${args.offset ?? ''}|${args.limit ?? ''}|`, { msg: result, mtime });
     if (this.turn) this.turn.given = (this.turn.given ?? 0) + 1;
+    this.sawForIt('Read', args);
     this.emit('tool', { id, name: 'Read', label: 'Read', arg: rel, view, given: true });
   }
 
@@ -307,6 +314,7 @@ export class ReadPart {
     this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
     this.messages.push(result);
     this.ctxUsed += tokensOf(body) + 30;
+    this.sawForIt(name, args);
     this.emit('tool', { id, name, ...display(name, args), view, given: true });
   }
 
