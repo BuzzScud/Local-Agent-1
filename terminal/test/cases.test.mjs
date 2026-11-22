@@ -347,6 +347,13 @@ test('plain words are no case, and a message that changed only a page of words h
   // a command with plain words, a bare command and a form with a capital are cases as before
   expect(casesFromList([{ example: 'grep tax src' }, { example: 'ls' }, { example: 'cat FILE' }, { example: 'git status' }, { example: 'head -4 notes.txt' }]).map((c) => c.example)).toEqual(['grep tax src', 'ls', 'cat FILE', 'git status', 'head -4 notes.txt']);
   expect(casesOf([{ text: '`run the tests` → they pass' }, { text: '`head -4 notes.txt` → 4 lines' }]).map((c) => c.example)).toEqual(['head -4 notes.txt']);
+  // a call is found whatever the spaces inside its brackets (the plan's example against the test as written)
+  expect(caseProbe('withTax([{price: 100}])').test('assert.equal(withTax([{ price: 100 }]), 107);')).toBe(true);
+  expect(caseProbe('withTax([{price: 100}])').test('assert.equal(withTax([{price:250}]), 267.5);')).toBe(true);
+  expect(caseProbe('withTax([{price: 100}])').test('assert.equal(total([{ price: 100 }]), 100);')).toBe(false);
+  expect(caseProbe('add(2, 3)').test('assert.equal(add( 10 , 20 ), 30)')).toBe(true);
+  expect(caseProbe('shippingFor(75)').test('shippingFor(75, zone)')).toBe(true);
+  expect(caseProbe('shippingFor(75)').test('shippingCost(75)')).toBe(false);
   // the command that runs the tests is how cases are tried, never one of them (a plan had `npm test` → all pass)
   expect(casesOf([{ text: '`npm test` → all tests pass' }, { text: '`node --test` → 0 failures' }, { text: '`bun test ./a.test.mjs` → passes' }, { text: '`npm run test -- --watch` → runs' }, { text: '`python -m pytest tests` → green' }, { text: '`shippingFor(75)` → 0' }, { text: '`npm install` → installs' }]).map((c) => c.example)).toEqual(['shippingFor(75)', 'npm install']);
   expect(casesFromList([{ example: 'npm test', expect: 'the suite passes' }, { example: 'cargo test', expect: 'passes' }, { example: 'withTax(100)', expect: '107' }]).map((c) => c.example)).toEqual(['withTax(100)']);

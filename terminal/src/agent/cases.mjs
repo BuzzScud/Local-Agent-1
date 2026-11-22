@@ -141,8 +141,13 @@ export function caseProbe(example) {
   // A call may take more arguments in the test than in the example: plainRead('ls') is tried by
   // plainRead('ls', cwd) (4 Oct 2026: Qwen3.6 was sent back twice for a case its tests did try).
   const more = (re) => re.replace(/\\\)$/, '(?:\\s*,[^)]*)?\\)');
-  // A call with plain arguments (add(2, 3)): its own text, spaces as they come.
-  if (/^[\w.$]+\([^'"\x60]*$/.test(words[0] ?? '')) return new RegExp(more(words.slice(0, 8).map(literal).join('\\s*')));
+  // A call with plain arguments (add(2, 3)): its own text, spaces as they come, around its brackets, commas and colons
+  // too (22 Nov 2026, the hearth fit check: the plan's `withTax([{price: 100}])` was "not tried" by a test that had
+  // withTax([{ price: 100 }]), so a finished answer went back).
+  if (/^[\w.$]+\([^'"\x60]*$/.test(words[0] ?? '')) {
+    const loose = literal(words.slice(0, 8).join('')).replace(/\\[{}[\]()]|[,:]/g, (x) => `\\s*${x}\\s*`);
+    return new RegExp(loose.replace(/\\s\*\\\)\\s\*$/, '(?:\\s*,[^)]*)?\\s*\\)'));
+  }
   const OP = /^(\|\||&&|[|;<>])$/;
   const parts = [];
   for (const [i, w] of words.slice(0, 8).entries()) {

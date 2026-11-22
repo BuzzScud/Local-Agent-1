@@ -71,7 +71,7 @@ export function reviewThink(use, ep) {
 export async function reviewChange({ url, use, request, diff, signal, send = helperText }) {
   const ask = [
     { role: 'system', content: 'You review a code change another assistant just made. Report only real problems: bugs, a part of the request not done, something broken or removed by mistake. Not style, not naming, not ideas for more. If there is nothing real, answer exactly: LGTM' },
-    { role: 'user', content: `The request:\n${String(request).slice(0, 2000)}\n\nThe change (diff):\n${String(diff).slice(-24_000)}\n\nList at most 3 real problems, one per line, each starting with "- " and naming the file. Or answer LGTM.` },
+    { role: 'user', content: `The request:\n${String(request).slice(0, 2000)}\n\nThe change, as its edits in order (a file edited more than once is listed more than once, so the same lines can show twice here without being twice in the file):\n${String(diff).slice(-24_000)}\n\nList at most 3 real problems, one per line, each starting with "- " and naming the file. Or answer LGTM.` },
   ];
   // The room is for the thinking and the answer.
   const think = reviewThink(use, endpointOf(use?.url ?? url));
