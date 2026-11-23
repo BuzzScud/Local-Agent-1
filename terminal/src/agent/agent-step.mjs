@@ -36,6 +36,10 @@ import { usesSsh } from '../tools/ssh.mjs';
 const EXT_OF = { html: 'html', htm: 'html', md: 'md', markdown: 'md', json: 'json', js: 'js', javascript: 'js', jsx: 'jsx', mjs: 'mjs', ts: 'ts', typescript: 'ts', tsx: 'tsx', css: 'css', py: 'py', python: 'py', sh: 'sh', bash: 'sh', txt: 'txt', text: 'txt', xml: 'xml', svg: 'svg', yaml: 'yaml', yml: 'yaml' };
 // A name from a title or a request: lower-case, words joined by hyphens, the first six (tags stripped first).
 const slugName = (s) => String(s ?? '').toLowerCase().replace(/<[^>]*>/g, ' ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').split('-').filter(Boolean).slice(0, 6).join('-');
+// The one line a Write kept without its path shrinks to in the conversation (keepWrite), and that line sent back.
+const keptMark = (lines) => `[${lines} lines, kept by Agentic Coder]`;
+const KEPT_MARK = /^\s*\[\d+ lines?, kept by Agentic Coder\]\s*$/;
+const isOn = (v) => v === true || v === 'true' || v === 1 || v === '1';
 
 export class StepPart {
   // A Write with its content but no path: the content is kept, the call in the
@@ -43,21 +47,38 @@ export class StepPart {
   // writes the kept content. On 28 Sep Gemma wrote a whole notes page this way
   // twice (2,157 and 3,085 tokens); each time it was told only 'Write needs
   // "path".', and the first draft filled its memory and was lost at the restart.
+  // The kept call's line copied back as the content is no content (23 Nov 2026, hearth's 27b: told to send
+  // only "path", it sent the path with content "[51 lines, kept by Agentic Coder]", and that one line replaced
+  // the whole 121-line sales-dashboard.html). hearth's append (tools-defs.mjs HEARTH_WRITE_DEF) is kept with
+  // the content: the lost call was a page's second part, so writing the kept lines without it would have
+  // replaced the page as well.
   keepWrite(call, parsed) {
     const sent = sentArgs('Write', call.args) ?? {};
-    const content = typeof sent.content === 'string' && sent.content.length ? sent.content : null;
+    const text = typeof sent.content === 'string' && sent.content.length ? sent.content : null;
+    const mark = text !== null && KEPT_MARK.test(text);
+    const content = mark ? null : text;
     const path = sent.path !== undefined && sent.path !== null && String(sent.path).trim() ? String(sent.path) : null;
+    const append = sent.append === undefined || sent.append === null ? null : isOn(sent.append);
     if (content && !path) {
-      this.keptWrite = { content };
+      this.keptWrite = { content, append: append === true };
       const lines = content.split('\n').length;
-      this.shrinkCall(call.id, JSON.stringify({ content: `[${lines} lines, kept by Agentic Coder]` }));
+      this.shrinkCall(call.id, JSON.stringify({ content: keptMark(lines), ...(append ? { append: true } : {}) }));
       const named = this.fileNamed();
       return {
-        error: `${needsText('Write', 'path')} Your content (${lines} lines) is kept, so do not write it again: send Write with only "path"${named ? ` (the request names "${named}")` : ''}, and the kept content is written there.`,
+        error: `${needsText('Write', 'path')} Your content (${lines} lines${append ? ', to add to the end of the file' : ''}) is kept, so do not write it again: send Write with only "path"${named ? ` (the request names "${named}")` : ''} and no "content", and the kept content is written there.`,
         shown: `Write needs "path"; its ${lines} lines are kept until it names the file`,
       };
     }
-    if (path && !content && this.keptWrite) return { args: { path, content: this.keptWrite.content }, fromKept: true };
+    if (path && !content && this.keptWrite) {
+      const add = append ?? this.keptWrite.append;
+      return { args: { path, content: this.keptWrite.content, ...(add ? { append: true } : {}) }, fromKept: true };
+    }
+    if (mark) {
+      return {
+        error: `"${text.trim()}" is the line Agentic Coder put in place of a Write it kept; it is not the file's text${this.keptWrite ? '. Send Write with only "path" and no "content", and the kept content is written there.' : ', and nothing is kept now, so nothing was written. Send Write with the file\'s real content.'}`,
+        shown: 'Write sent the kept-content line as its content; nothing was written',
+      };
+    }
     // A Write with its path and no content at all, nothing kept: the content was most likely written
     // and lost on the way. Qwen3.6 on the service (8 Oct 2026) wrote for 38 s and nothing arrived, then
     // sent Write of README.md twice with only "path"; told to send "content", it sent the same call.

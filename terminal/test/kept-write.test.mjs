@@ -62,6 +62,54 @@ test('Write without a path keeps the content; a Write with only the path writes 
   expect(agent.keptWrite).toBeNull();
 });
 
+// 23 Nov 2026, hearth's 27b: told to send only "path", it sent the path with its own call's kept line as the
+// content, and that line replaced the whole page. The line is no content: the kept page is written.
+test('the kept line sent back as the content writes the kept content, not the line', async () => {
+  const mark = `[${PAGE.split('\n').length} lines, kept by Agentic Coder]`;
+  const replies = [
+    { tool: { name: 'Write', args: { content: PAGE } } },
+    { tool: { name: 'Write', args: { path: 'notes.html', content: mark } } },
+    { text: 'Created notes.html.' },
+  ];
+  const { reason, events, agent, cwd } = await run(replies);
+  expect(reason).toBe('done');
+  expect(readFileSync(join(cwd, 'notes.html'), 'utf8')).toBe(PAGE);
+  expect(events.some((e) => e.type === 'note' && e.text === 'Wrote the kept content to notes.html; it was not written again.')).toBe(true);
+  expect(agent.keptWrite).toBeNull();
+});
+
+// The same day's lost call was the page's second part (append: true): the kept part goes on the end, and the
+// shrunk call keeps saying so, so the page is not replaced by its second half either.
+test('a kept part sent with append is added to the end of the file', async () => {
+  const first = ['<!doctype html>', '<html lang="en">', '<head><meta charset="utf-8"><title>Notes</title></head>', '<body>', ''].join('\n');
+  const second = [...Array.from({ length: 60 }, (_, i) => `<p>line ${i + 1}</p>`), '</body>', '</html>', ''].join('\n');
+  const lines = second.split('\n').length;
+  const replies = [
+    { tool: { name: 'Write', args: { path: 'notes.html', content: first } } },
+    { tool: { name: 'Write', args: { content: second, append: true } } },
+    { tool: { name: 'Write', args: { path: 'notes.html', content: `[${lines} lines, kept by Agentic Coder]` } } },
+    { text: 'Created notes.html.' },
+  ];
+  const { reason, agent, cwd } = await run(replies);
+  expect(reason).toBe('done');
+  expect(readFileSync(join(cwd, 'notes.html'), 'utf8')).toBe(`${first}${second}`);
+  const kept = agent.messages.filter((m) => m.tool_calls?.[0]?.function.name === 'Write')[1].tool_calls[0];
+  expect(JSON.parse(kept.function.arguments)).toEqual({ content: `[${lines} lines, kept by Agentic Coder]`, append: true });
+  expect(agent.messages.filter((m) => m.role === 'tool')[1].content).toContain(`Your content (${lines} lines, to add to the end of the file) is kept`);
+});
+
+test('the kept line with nothing kept is refused, and the file is left as it was', async () => {
+  const replies = [
+    { tool: { name: 'Write', args: { path: 'notes.html', content: PAGE } } },
+    { tool: { name: 'Write', args: { path: 'notes.html', content: '[51 lines, kept by Agentic Coder]' } } },
+    { text: 'Stopping here.' },
+  ];
+  const { agent, cwd, events } = await run(replies);
+  expect(readFileSync(join(cwd, 'notes.html'), 'utf8')).toBe(PAGE);
+  expect(agent.messages.filter((m) => m.role === 'tool')[1].content).toContain('is the line Agentic Coder put in place of a Write it kept');
+  expect(events.some((e) => e.type === 'tool' && e.view?.message === 'Write sent the kept-content line as its content; nothing was written')).toBe(true);
+});
+
 test('without anything kept, a Write with only the path still needs content', async () => {
   const replies = [{ tool: { name: 'Write', args: { path: 'notes.html' } } }, { text: 'Sorry.' }];
   const { agent, cwd } = await run(replies);
