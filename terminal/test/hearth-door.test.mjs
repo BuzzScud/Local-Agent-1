@@ -123,6 +123,11 @@ test('on the door with sizes: side jobs and helpers go to their size with the si
     me.router = { active: () => true, helper: () => undefined };
     expect(me.firstHelperUse()?.model).toBe('hearth-4b');
     me.router = null;
+    // Held on one server (hearth@poseidon-seats), every job is on that model: no search is handed to a helper first.
+    const held = { ...me, url: c.url, modelName: () => 'hearth', isHelper: false, helpersElsewhere: () => true, router: null };
+    for (const k of ['hearthUse', 'onHearth', 'firstHelperUse', 'handFirst']) held[k] = Agent.prototype[k].bind(held);
+    held.firstHelperUse = () => ({ url: c.url, model: 'hearth' });
+    expect(await held.handFirst('where is the tax rate set?', 'question', undefined)).toBe(false);
     // A profile that sends side jobs elsewhere is left aside on hearth; one on hearth itself is kept.
     me.router = { active: () => true, helper: () => undefined };
     me.profileUse = () => ({ url: 'http://127.0.0.1:9/elsewhere', model: 'bonsai-2:9b' });

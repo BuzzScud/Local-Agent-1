@@ -2278,6 +2278,13 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   correct work went back twice until the model stopped to ask the user which it meant. A call the request never writes
   that passes fewer arguments than the project's own definition needs (its parameters before a default or a rest;
   `function`, `const x = (…) =>` and Python's `def`, 400 files at most) is left out. `terminal/test/cases.test.mjs`.
+- **A question goes to the 4b first on hearth** (agent.mjs `firstHelperUse`, `handFirst`): on App a question about the code
+  is searched by an explore helper first, but its helper came from the profiles alone, which give nothing for a job on
+  the conversation's own model, so on hearth no question ever reached a smaller model. Now it takes hearth's explore size
+  (the 4b), and a run held on one server (every job on that model) hands nothing first. Measured on hearth with the
+  owner's profiles, "Where is the tax rate set, and what is it?": 27b ×6, 140 s of GPU before; 4b ×3 (8 s) + 27b ×4
+  (116 s) = 124 s after. A request with "Do not change any file" counts as asking for work (asksForWork) and is not
+  handed. `terminal/test/hearth-door.test.mjs`.
 - **Smaller**: the "writing its next step" line rounds its token count (it printed 563.3915100432022); the start line
   on hearth with its sizes names its three helpers (general on the 9b, explore on the 4b, lookup on the 2b) in place of
   "Helpers on hearth-4b".

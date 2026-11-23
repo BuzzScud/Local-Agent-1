@@ -692,6 +692,8 @@ export class Agent extends EventEmitter {
   async handFirst(text, kind, signal) {
     if (this.isHelper || !this.helpersElsewhere() || asksForWork(text) || !(kind === 'question' || aboutTheCode(text))) return false;
     const call = this.firstHelperUse();
+    // The conversation's own model (a run held on one server: every job there) gains nothing from a search first.
+    if (call?.model && call.model === this.modelName()) return false;
     if (!call?.model || !endpointOf(this.url)?.ollama || endpointOf(call.url) !== endpointOf(this.url)) return false;
     await this.loadMainFirst(); // before the helper's model, so both fit (agent-start.mjs)
     if (signal?.aborted) return 'interrupted';
