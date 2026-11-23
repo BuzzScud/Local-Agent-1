@@ -31,6 +31,7 @@ import { givenParams, qwenRawFits, readCallText } from './qwen-raw.mjs';
 import { HOME, endpointOf } from '../../../models/index.mjs';
 import { PR_NOT_ASKED, asksForPr, opensPr } from './agent-notes.mjs';
 import { usesSsh } from '../tools/ssh.mjs';
+import { cutWrite } from './write-guard.mjs';
 
 // A fenced block's language → the file extension a pasted file of that kind takes (pastePath).
 const EXT_OF = { html: 'html', htm: 'html', md: 'md', markdown: 'md', json: 'json', js: 'js', javascript: 'js', jsx: 'jsx', mjs: 'mjs', ts: 'ts', typescript: 'ts', tsx: 'tsx', css: 'css', py: 'py', python: 'py', sh: 'sh', bash: 'sh', txt: 'txt', text: 'txt', xml: 'xml', svg: 'svg', yaml: 'yaml', yml: 'yaml' };
@@ -525,6 +526,14 @@ export class StepPart {
         const msg = `Nothing was written: line ${leak.line} of your ${call.name === 'Write' ? 'content' : 'new_text'} is "${leak.text}", which is tool-call text, not part of the file (the end of your call got into it). Send the ${call.name} again with only the file's own text, and make any next call separately.`;
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: `Turned back: line ${leak.line} is tool-call text (${leak.text})` }, error: true });
         return { text: msg, error: true };
+      }
+    }
+    // On hearth, a Write without append that would cut a file to under half its lines: once, asked whether it is a part.
+    if (call.name === 'Write' && endpointOf(this.url)?.hearth) {
+      const cut = cutWrite(prepared, args.content, this.cutAsked ??= new Map());
+      if (cut) {
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: cut.shown }, error: true });
+        return { text: cut.error, error: true };
       }
     }
     // Like Claude Code: an existing file must be read before it is edited, so

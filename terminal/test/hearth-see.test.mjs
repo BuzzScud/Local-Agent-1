@@ -167,6 +167,44 @@ test('a Write that adds a part runs and says how long the file is now', async ()
   } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
 });
 
+// 23 Nov 2026: a part sent without append replaces the whole page with that part (write-guard.mjs). On hearth the first
+// such Write is turned back and asks whether it meant append; the same Write again runs. Small files and other services
+// are as before.
+test('on hearth a Write that would cut a page to under half its lines is turned back once; the same Write again runs', async () => {
+  const svc = await fakeOllama();
+  const other = await fakeOllama();
+  setEndpoint(svc.url, { remote: true, kind: 'openai', ollama: true, hearth: true, model: 'coder:30b', numCtx: 65536, free: true });
+  setEndpoint(other.url, { remote: true, kind: 'openai', ollama: true, model: 'coder:30b', numCtx: 65536, free: true });
+  const page = `${Array.from({ length: 121 }, (_, i) => `<p>line ${i + 1}</p>`).join('\n')}\n`;
+  const part = `${Array.from({ length: 51 }, (_, i) => `<p>part ${i + 1}</p>`).join('\n')}\n`;
+  const agentOn = (url) => new Agent({ url, model: { ...local, remote: { model: 'coder:30b' } }, cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], ctx: 65536 });
+  try {
+    const a = agentOn(svc.url);
+    expect((await a.runTool({ id: 'w1', name: 'Write', args: JSON.stringify({ path: 'page.html', content: page }) })).text).toMatch(/^Created page\.html/);
+    // The part without append: turned back, nothing written, and it says how to add it to the end.
+    const cut = await a.runTool({ id: 'w2', name: 'Write', args: JSON.stringify({ path: 'page.html', content: part }) });
+    expect(cut.error).toBe(true);
+    expect(cut.text).toBe('Nothing was written: page.html has 121 lines, and this Write without append would replace all of them with these 51. If this is the next part of the file, send it again with append: true, and it is added to the end. If you do mean to replace the whole file with these 51 lines, send the same Write again.');
+    expect(readFileSync(join(dir, 'page.html'), 'utf8')).toBe(page);
+    // With append it is added to the end.
+    expect((await a.runTool({ id: 'w3', name: 'Write', args: JSON.stringify({ path: 'page.html', content: part, append: true }) })).text).toMatch(/^Added to the end of page\.html/);
+    expect(readFileSync(join(dir, 'page.html'), 'utf8')).toBe(`${page}${part}`);
+    // Meant: the same Write sent again replaces the page.
+    expect((await a.runTool({ id: 'w4', name: 'Write', args: JSON.stringify({ path: 'page.html', content: part }) })).error).toBe(true);
+    const again = await a.runTool({ id: 'w5', name: 'Write', args: JSON.stringify({ path: 'page.html', content: part }) });
+    expect(again.error).toBeFalsy();
+    expect(readFileSync(join(dir, 'page.html'), 'utf8')).toBe(part);
+    // A small file is rewritten freely.
+    await a.runTool({ id: 'w6', name: 'Write', args: JSON.stringify({ path: 'small.html', content: `${Array.from({ length: 30 }, (_, i) => `<p>${i}</p>`).join('\n')}\n` }) });
+    expect((await a.runTool({ id: 'w7', name: 'Write', args: JSON.stringify({ path: 'small.html', content: '<p>one</p>\n' }) })).error).toBeFalsy();
+    // Another service: as before.
+    const b = agentOn(other.url);
+    await b.runTool({ id: 'w8', name: 'Write', args: JSON.stringify({ path: 'other.html', content: page }) });
+    expect((await b.runTool({ id: 'w9', name: 'Write', args: JSON.stringify({ path: 'other.html', content: part }) })).error).toBeFalsy();
+    expect(readFileSync(join(dir, 'other.html'), 'utf8')).toBe(part);
+  } finally { dropEndpoint?.(svc.url); dropEndpoint?.(other.url); await svc.close?.(); await other.close?.(); }
+});
+
 // Short steps on hearth (21 Nov 2026, the owner: "make it think short, write, do commands, then think again … like claude";
 // picks: about a minute a step, a plan you can see first). The cap a step thinks to, the note with each request, and the
 // reading time the window uses to tell reading from writing.
