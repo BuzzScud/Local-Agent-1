@@ -770,10 +770,10 @@ export function remoteModel(r, info = {}) {
   const own = OWN_REMOTES.find((x) => x.match.test(name));
   // hearth: 80 steps (21 Nov 2026): it thinks about a minute a step and builds a big file in parts, so a page takes about
   // twice the steps it did; at 40 the measured run stopped while it checked its finished page.
-  // hearth: Who decides starts on App, as before (22 Nov 2026: Model, hearth 3.0's way, went in at noon untested; the
-  // Arena's hearth fit check that afternoon had every task right on both, and Model at 24% more GPU time, 996 s to 802 s:
-  // it read the files one by one where the app reads them ahead. The owner's pick: "Back to app decides").
-  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}) } : hearth ? { startSteps: HEARTH_STEPS } : {};
+  // hearth: the model decides each step, as hearth 3.0's does (22 Nov 2026, the owner's pick "The model, like 3.0"): /effort's
+  // Who decides starts on Model there (startWay, limits.mjs), and what /effort saved still wins. Back on App for a night (22
+  // Nov), then the owner, 23 Nov 2026: "hearth 3.0 is the new default for hearth and agentic coder".
+  const mine = own ? { ...(own.rules ? { rules: own.rules } : {}), ...(own.steps ? { startSteps: own.steps } : {}) } : hearth ? { startSteps: HEARTH_STEPS, startWay: 'model' } : {};
   return { ...GENERIC_REMOTE, ...levels, ...common, ...(harness ? { harness } : {}), ...mine, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
 }
 

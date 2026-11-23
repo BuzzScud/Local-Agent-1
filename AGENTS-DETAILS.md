@@ -2224,10 +2224,10 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   Agent tool was a side door), and the 9b only gave the second opinion, which runs after a change finishes. Their picks:
   everything hearth 3.0 does; 3.0's jobs for the small models with today's kept; the model decides, like 3.0; then "just
   build it and push to main" and "dont test": no test was run for this change, only a check that every changed file loads.
-- **Back to App on hearth, the same day** (the owner's pick after the Arena's hearth fit check, 8346761 against 9b854b7 on
-  hearth@poseidon-seats: all four tasks right on both, Model at 24% more GPU time, 996 s to 802 s, and 11% more time:
-  it read the files one by one where the app reads them ahead, docs 137 → 256 s, multi 365 → 452 s). `startWay` is
-  gone; what follows was the noon state. The helpers, the working rules, the pull request gate and the models line stay.
+- **hearth 3.0 is the default** (23 Nov 2026, the owner: "we see hearth 3.0 is better, so we will use it … hearth 3.0 is
+  the new default for hearth and agentic coder"). The night of 22 Nov hearth went back to App on an Arena result that
+  turned out unfair (its main side was held, so only this side ran the second opinion); the fair run that followed was
+  about the 3.0 working rules, not the way. Model, as below, is hearth's way again; nothing else changed with it.
 - **The model decides on hearth** (models/runtime/remote.mjs `startWay: 'model'` on a hearth model; limits.mjs's Who
   decides row starts from it, after `harness.way`): as hearth 2.0's and 3.0's harness, nothing sorts the request first.
   What /effort saved still wins. With it come Model's own six checks (tests after a change among them) and the Agent tool.

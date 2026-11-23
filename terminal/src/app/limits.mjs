@@ -48,8 +48,9 @@ export const LIMITS = [
   {
     id: 'way', label: 'Who decides', group: 'Effort', choice: true,
     steps: () => ['app', 'model'],
-    // A big model on a service (big-model mode) decides for itself, as Claude Code does; the rest (hearth too) as before.
-    def: (m) => m?.harness?.way ?? 'app',
+    // A big model on a service (big-model mode) decides for itself, as Claude Code does, and so does hearth's (startWay:
+    // hearth 3.0's way, models/runtime/remote.mjs); the rest as before.
+    def: (m) => m?.harness?.way ?? m?.startWay ?? 'app',
     show: (v) => (v === 'model' ? 'Model' : 'App'),
     note: (v) => (v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · six checks start on (/hooks)' : 'the app sorts, reads ahead and checks, as before'),
   },
