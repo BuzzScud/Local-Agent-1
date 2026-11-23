@@ -682,9 +682,16 @@ export class Agent extends EventEmitter {
   // the search to an explore helper before the first step, as if the model had called the Agent tool, and the model
   // answers from its report (28 Oct 2026, the owner's pick: Bonsai 9B, offered the Agent tool, searched by itself in
   // both runs). A request for work is left to the model. 'interrupted', true when it handed it, else false.
+  // The helper a question is handed to first (handFirst): its profile's, and on hearth the explore helper's own size
+  // (HEARTH_HELPERS: the 4b), as runHelper takes it (22 Nov 2026: this asked the profiles alone, which give nothing for a
+  // job on the conversation's own model, so on hearth no question was ever handed to a smaller model first).
+  firstHelperUse() {
+    const fromProfile = this.router?.active?.() ? this.router.helper('helpers', { url: this.url, model: this.modelName() }) : undefined;
+    return this.onHearth(fromProfile, HEARTH_HELPERS.explore) ?? fromProfile;
+  }
   async handFirst(text, kind, signal) {
     if (this.isHelper || !this.helpersElsewhere() || asksForWork(text) || !(kind === 'question' || aboutTheCode(text))) return false;
-    const call = this.router?.helper?.('helpers', { url: this.url, model: this.modelName() });
+    const call = this.firstHelperUse();
     if (!call?.model || !endpointOf(this.url)?.ollama || endpointOf(call.url) !== endpointOf(this.url)) return false;
     await this.loadMainFirst(); // before the helper's model, so both fit (agent-start.mjs)
     if (signal?.aborted) return 'interrupted';

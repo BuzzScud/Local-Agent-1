@@ -115,6 +115,14 @@ test('on the door with sizes: side jobs and helpers go to their size with the si
     const me = { url: c.url, isHelper: false, router: null, helperJobs: {}, subagents: true, conversation: 'c1' };
     for (const k of ['hearthUse', 'onHearth', 'helperUse', 'btwUse', 'sideUse', 'profileUse']) me[k] = Agent.prototype[k].bind(me);
     expect([me.sideUse()?.model, me.btwUse()?.model, me.helperUse('review')?.model, me.hearthUse('helpers')?.model, me.helperUse('pictures')]).toEqual(['hearth-2b', 'hearth-2b', 'hearth-9b', 'hearth-4b', undefined]);
+    // A question handed to a helper first goes to the explore helper's size, with no profiles and with profiles that give
+    // the job nothing of its own (22 Nov 2026: it asked the profiles alone, so on hearth it never ran).
+    me.firstHelperUse = Agent.prototype.firstHelperUse.bind(me);
+    me.modelName = () => 'hearth';
+    expect(me.firstHelperUse()?.model).toBe('hearth-4b');
+    me.router = { active: () => true, helper: () => undefined };
+    expect(me.firstHelperUse()?.model).toBe('hearth-4b');
+    me.router = null;
     // A profile that sends side jobs elsewhere is left aside on hearth; one on hearth itself is kept.
     me.router = { active: () => true, helper: () => undefined };
     me.profileUse = () => ({ url: 'http://127.0.0.1:9/elsewhere', model: 'bonsai-2:9b' });
