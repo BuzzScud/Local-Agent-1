@@ -102,6 +102,31 @@ export function lookSaid(name, args = {}) {
   }
 }
 
+// A search command by what it looks for (26 Nov 2026, the Agentic Coder vs hearth page): in one measured run on hearth it ran
+// grep -rn "FORGE_STEPS" about ten times with other flags, other folders or an echo of the exit code after it, each found nothing,
+// and none counted as the same step again because the words differed. A Bash command that searches (grep, rg, ag, strings | grep,
+// git grep) is keyed by the words it looks for, lower-cased and sorted, so the same search the same way round is the same step; the
+// output still decides (a search that now finds something is new). Anything else keeps its own words.
+const SEARCHES = /(^|[|;&(]\s*|\s)(grep|egrep|rg|ag|git\s+grep)\b/;
+export function stepMeaning(name, args) {
+  if (name !== 'Bash') return null;
+  let cmd = '';
+  try { cmd = String((typeof args === 'string' ? JSON.parse(args) : args)?.command ?? ''); } catch { return null; }
+  if (!SEARCHES.test(cmd)) return null;
+  const bare = cmd.replace(/\b(echo|printf)\s+("[^"]*"|'[^']*')/g, ' ');
+  const quoted = [...bare.matchAll(/"([^"]+)"|'([^']+)'/g)].map((m) => m[1] ?? m[2]);
+  const terms = quoted.flatMap((q) => q.split(/\\\||\|/)).map((t) => t.trim().toLowerCase()).filter((t) => t && !/^-/.test(t) && !/^\*\./.test(t));
+  if (!terms.length) return null;
+  return `search:${[...new Set(terms)].sort().join(',')}`;
+}
+
+// The files a command printed lines of, as grep -n and rg print them ("deploy/x.yaml:108: …", "./src/a.mjs:12-"), at most 50.
+export function filesWithLinesShown(text) {
+  const out = new Set();
+  for (const m of String(text ?? '').matchAll(/(?:^|\n)\.?\/?([\w.@-][\w./@-]*\.[A-Za-z0-9]+):\d+[:-]/g)) { out.add(m[1]); if (out.size >= 50) break; }
+  return [...out];
+}
+
 // One step as the stuck question names it: the command it ran, the file it changed, else what it
 // looked at ("running npm test", "changing export.mjs in src", "looking at the files in src").
 // A script typed into the command (a heredoc) is named by its first line, not its body run together.

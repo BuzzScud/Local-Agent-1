@@ -14,6 +14,7 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { outsidePaths } from './command-words.mjs';
 import { isCodeProject, runKind } from '../flows/index.mjs';
 import { changedNote, changesText, printedFiles } from './seen.mjs';
+import { filesWithLinesShown } from './questions.mjs';
 import { toolInput } from './user-hooks.mjs';
 import { copyNote, keepOwnCopy } from './self.mjs';
 import { readResults, testsFailed } from '../flows/results.mjs';
@@ -699,6 +700,14 @@ export class StepPart {
         else if (!out.view?.outline) { this.turn.outlined.delete(abs); (this.turn.readSome ??= new Set()).add(abs); }
       }
       if (call.name === 'Bash' && this.turn.outlined.size) for (const f of [...this.turn.outlined]) if (String(args.command ?? '').includes(basename(f))) this.turn.outlined.delete(f);
+      // A command that printed a file's own lines ("path:108: …", as grep -n does) has read them, so a later outline of that file does not
+      // put it back as seen only as an outline (26 Nov 2026: grep showed hearth-portals.yaml:108 FORGE_MINUTES "20", a later outline Read
+      // listed the file as outline-only again, and the second look sent the right answer back as unproven until the time ran out).
+      if (call.name === 'Bash' && !out.error && out.text) for (const f of filesWithLinesShown(out.text)) {
+        const abs = resolvePath(this.cwd, f).abs;
+        (this.turn.readSome ??= new Set()).add(abs);
+        this.turn.outlined.delete(abs);
+      }
       if (call.name === 'WebFetch') this.turn.fetched = true;
       if (call.name === 'Bash' && usesSsh(args.command)) this.turn.sshRan = true;
       (this.turn.callLog ??= []).push({ function: { name: call.name, arguments: JSON.stringify(args ?? {}) } });

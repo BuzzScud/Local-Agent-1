@@ -1,7 +1,7 @@
 // The Agent's loop (agent.mjs): one message worked through, step after step, until it answers.
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
 import { endpointOf } from '../../../models/index.mjs';
-import { sameStepNote, stepSaid } from './questions.mjs';
+import { sameStepNote, stepMeaning, stepSaid } from './questions.mjs';
 import { oldSteps, parseArgs } from './tools.mjs';
 import { isReadOnly } from './permissions.mjs';
 import { isHomeFolder } from './prompt.mjs';
@@ -431,7 +431,8 @@ export class WorkPart {
             this.emit('note', { text: 'It named the cause; asked it to make the change now.', tone: 'dim' });
           }
         }
-        const key = calls.map((c) => `${c.name}:${c.args}`).join('\n');
+        // A search is keyed by the words it looks for (questions.mjs stepMeaning), so other flags or folders aren't a new step.
+        const key = calls.map((c) => stepMeaning(c.name, c.args) ?? `${c.name}:${c.args}`).join('\n');
         // A Read moved on to a long file's next part (runTool) got new lines: not a repeat.
         const paged = this.turn.paged;
         this.turn.paged = false;

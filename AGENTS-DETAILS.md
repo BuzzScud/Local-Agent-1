@@ -2338,3 +2338,20 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the note and the App tool on a stand-in, the notes), `permissions-self.test.mjs` (own beside self, what stays
   locked), `sandbox.test.mjs` (the same in a real sandbox), `app-tool.test.mjs` (the three commands),
   `permissions.test.mjs` (a certificate), `hearth-see.test.mjs` (the clock, 300 steps), `skills.test.mjs` (the library).
+
+## hearth's engine: three fixes from the measured runs (26 Nov 2026)
+
+- **What and why.** The owner had Agentic Coder and hearth's own chat run the same 8 tasks on bonsai 2.5 27b
+  (`~/Desktop/hearth/agentic-coder-vs-hearth-2026-11-26.html`, private). Agentic Coder never blocked itself and only
+  6% of its steps failed, but 6 of 8 runs hit the 30-minute stop: it re-ran near-identical searches, stopped every 2 to 5
+  minutes to ask itself "am I on the right track?" (22 times in 6 runs), and once its second look sent back a right
+  answer as unproven. Then "build option 2 and then build option 1": hearth can pick Agentic Coder to do its work.
+- **No check-ins while it works alone** (agent-checks.mjs `checkIn`): with `aloneOn()` (Bypass on hearth) nobody is
+  there to answer and the app answers its own question, so the check-in is skipped; the stuck question still catches a loop.
+- **A search by what it looks for** (questions.mjs `stepMeaning`, agent-work.mjs's repeat key): a Bash command that
+  searches (grep, egrep, rg, ag, git grep) is keyed by its quoted words, lower-cased and sorted (an `echo "…"` and glob
+  flags left out), so other flags or folders are the same step again; a search that now prints something new still is not.
+- **Lines a command printed are read** (questions.mjs `filesWithLinesShown`, agent-step.mjs): a file whose lines a command
+  printed as `path:108:` counts as read (`turn.readSome`), so a later outline Read no longer puts it back on the
+  outline-only list the second look and Read before claiming go by.
+- **Tests**: `terminal/test/engine-fixes.test.mjs`.

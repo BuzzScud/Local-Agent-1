@@ -396,6 +396,10 @@ export class ChecksPart {
   async checkIn(call, signal) {
     const t = this.turn;
     if (!t || !this.checkIns || t.changed || !LOOKS.has(call.name)) return null;
+    // Working alone (aloneOn: Bypass on hearth) nobody is there to answer, and the app answers its own question, so each check-in
+    // was a step spent on itself: 22 in 6 measured runs on hearth (26 Nov 2026, the Agentic Coder vs hearth page), one every 2 to 5
+    // minutes. The stuck question still catches a loop.
+    if (this.aloneOn?.()) return null;
     const args = parseArgs(call.name, call.args).args ?? {};
     const shown = display(call.name, args);
     // Counted by the step itself; listed in plain words (the file's name, the words searched for).
