@@ -1,5 +1,5 @@
 import { resolve, basename, join, relative } from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isLocalAddress } from '../flows/layoutcheck.mjs';
 import { bareSite } from '../tools/browser.mjs';
@@ -40,6 +40,19 @@ export const modeOf = (word) => { const w = String(word ?? '').trim().toLowerCas
 // A local model never gets this: the guards below were written for one.
 export const SELF_LOCKED = ['door.key', 'trust.json'];
 export const isSelf = (mode, kind) => mode === 'bypass' && kind === 'claude';
+// Its own files and the App tool, open (25 Nov 2026, the owner: "we need it to just access everything … to do everything
+// alone"; their pick of four: "Own settings + App tool", not the push and not stopping processes): Bypass permissions
+// on hearth. As Self, a copy of each own file is kept first and SELF_LOCKED stays shut; unlike Self, a git push still
+// asks, a force push and kill stay blocked. ep: the model's endpoint (models endpointOf).
+export const isOwnOpen = (mode, ep) => mode === 'bypass' && Boolean(ep?.hearth);
+// What stays shut there on top of SELF_LOCKED: the own files that could lift the limits the owner kept. A hook runs a
+// command outside the fence, the rules hold their never-list, and an MCP server is a program of its own, so with
+// those writable a push or a kill was one edit away. Its settings, rules, skills and memory are what opens.
+export const OWN_LOCKED = [...SELF_LOCKED, 'hooks.json', 'hooks-state.json', 'permissions.json', 'mcp.json', 'mcp-state.json'];
+export const ownLockedBy = (rel) => protectedBy(rel, [], OWN_LOCKED);
+const LOCKED_WHY = (locked, self) => (self || SELF_LOCKED.includes(locked)
+  ? `the door's own file (who may reach this Mac), which stays locked even when Agentic Coder works on itself`
+  : `one of the files that could lift the limits you work under here (its hooks, the user's permission rules, the MCP servers), which stay the user's to change: tell them what you wanted changed`);
 export const selfLockedBy = (rel) => protectedBy(rel, [], SELF_LOCKED);
 
 // A commit always asks first, every time (the user's pick, 29 Sep 2026):
@@ -205,8 +218,25 @@ export const SECRET_FILES = ['.ssh', '.ssh/**', '.env', '.env.*', '*.pem', '*.ke
 // names, its settings, the servers it knows and the public halves. Not secrets (25 Nov 2026: hearth's model, asked why a
 // server was slow, was refused "~/.ssh is a secret" for `ls ~/.ssh`; the owner: "all permissions"). A key never is.
 const SSH_OPEN = /(?:^|\/)\.ssh\/?$|(?:^|\/)\.ssh\/(?:config|known_hosts2?|config\.d\/[^/*?]+|[^/*?]+\.pub)$/i;
-const secretBy = (paths) => {
-  const left = [].concat(paths ?? []).filter((p) => !SSH_OPEN.test(String(p).replace(/\\/g, '/')));
+// A certificate is public too (25 Nov 2026, the owner's pick "SSH config + certificates": hearth's model was refused its
+// own forge's CA file, ~/.config/hearth/…-root-ca.pem, twice in a week, so no https call to it could be checked). A
+// .pem, .crt or .cer that is there, small, and holds certificates and no key may be read and named in a command; any
+// other *.pem, one under ~/.ssh, and a pattern (*.pem) stay secrets. Writing one stays refused (secretBy's certs).
+const CERT_FILE = /\.(?:pem|crt|cer)$/i;
+export function isCertificate(p, cwd) {
+  const raw = String(p ?? '').replace(/\\/g, '/');
+  if (!CERT_FILE.test(raw) || /[*?[\]{}]/.test(raw) || /(?:^|\/)\.ssh\//.test(raw)) return false;
+  const abs = raw.startsWith('~/') ? join(homedir(), raw.slice(2)) : resolve(cwd ?? '.', raw);
+  try {
+    const st = statSync(abs);
+    if (!st.isFile() || st.size > 262144) return false;
+    const text = readFileSync(abs, 'utf8');
+    return /-----BEGIN (?:TRUSTED )?CERTIFICATE-----/.test(text) && !/PRIVATE KEY-----/.test(text);
+  } catch { return false; }
+}
+// certs: a certificate counts as no secret (a read, a command); false for a write.
+const secretBy = (paths, { cwd, certs = true } = {}) => {
+  const left = [].concat(paths ?? []).filter((p) => !SSH_OPEN.test(String(p).replace(/\\/g, '/')) && !(certs && isCertificate(p, cwd)));
   return left.length ? protectedBy(left, [], SECRET_FILES) : null;
 };
 const namesOwn = (command, list = OWN) => { for (const w of shellWords(String(command ?? ''))) { const g = protectedBy(String(w), [], list); if (g) return g; } return null; };
@@ -352,11 +382,14 @@ const hasRule = (list, rule) => [...(list ?? [])].some((r) => String(r).toLowerC
 //   rules: { allow, never, protect } from /permissions; rel: the path from the project folder.
 //   mcp: for a tool of an MCP server, what the app knows of it: { server, tool, reads, changed }.
 //   self: Bypass with the Claude API (isSelf): the app's own files, git push and its own processes are open.
-export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel, mcp, self = false } = {}) {
+//   own: the app's own files and the App tool are open (isOwnOpen: Bypass on hearth); self has it too.
+export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel, mcp, self = false, own = false } = {}) {
   // Don't ask: judged as Accept edits, then whatever would ask is refused (dontAsk below).
   if (mode === DONT_ASK) return dontAsk(judge(name, args, { mode: 'edits', allowedPrefixes, inside, cwd, rules, rel, mcp }), name, mcp);
   const bypass = mode === 'bypass';
   self = bypass && Boolean(self);
+  own = bypass && (self || Boolean(own));
+  const ownWhy = self ? 'Bypass on Claude' : 'Bypass on hearth';
   // A tool of an MCP server (agent/mcp.mjs): a program or a service of the user's, which can do
   // whatever its server lets it. Each tool asks before its first use, in every mode but Bypass,
   // until a rule allows it. reads: the user marked it in /mcp as one that only reads (the server's
@@ -377,7 +410,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
   }
   if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow', why: 'it changes nothing' };
   // The app itself (tools.mjs APP_TOOL_DEF): only when it works on itself.
-  if (name === 'App') return self ? { decision: 'allow', why: 'Bypass on Claude: the app may drive itself', self: true } : { decision: 'deny', reason: 'the App tool runs only in Bypass permissions on the Claude API' };
+  if (name === 'App') return own ? { decision: 'allow', why: `${ownWhy}: the app may drive itself`, self: true } : { decision: 'deny', reason: 'the App tool runs only in Bypass permissions on the Claude API or on hearth' };
   // A background command's output, or a stop of it: the command itself was asked about when it started.
   if (name === 'Jobs') return { decision: 'allow', why: 'it reads or stops a command you already let run' };
   // The model's own tools when it decides (agent/way.mjs): two read, one writes to the memory,
@@ -390,7 +423,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     const abs = p.startsWith('~/') ? join(homedir(), p.slice(2)) : resolve(cwd ?? '.', p);
     const there = !cwd || !relative(cwd, abs).startsWith('..');
     if (there) return { decision: 'allow', why: name === 'LSP' ? 'it only reads the code' : 'it opens the database read only' };
-    if (bypass && !secretBy([abs])) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
+    if (bypass && !secretBy([abs], { cwd })) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
     return { decision: 'deny', reason: bypass ? 'that is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach' : 'that is outside the project folder; only files inside it may be read' };
   }
   if (name === 'Database') {
@@ -413,7 +446,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     if (need.local) return { decision: 'allow', why: 'a page on this Mac or your own network' };
     if (need.file) {
       if (need.inside) return { decision: 'allow', why: 'a file in the project' };
-      if (bypass && !secretBy([need.file])) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
+      if (bypass && !secretBy([need.file], { cwd })) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
       return { decision: 'deny', reason: 'that file is outside the project folder' };
     }
     if (hasRule(rules?.never, need.rule)) return { decision: 'deny', reason: `blocked by your rule "${need.rule}" (/permissions)` };
@@ -455,22 +488,22 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
   const away = [].concat(rel ?? [], args?.path ?? []);
   if (name === 'Read' || name === 'List' || name === 'Search') {
     if (inside) return { decision: 'allow', why: 'reading inside the project never asks' };
-    if (bypass && !secretBy(away)) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
+    if (bypass && !secretBy(away, { cwd })) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
     return { decision: 'deny', reason: bypass ? 'that is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach' : 'that is outside the project folder; only files inside it may be read' };
   }
   if (name === 'Edit' || name === 'Write') {
-    if (!inside && (!bypass || secretBy(away))) return { decision: 'deny', reason: bypass ? 'that is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach' : 'that file is outside the project folder' };
+    if (!inside && (!bypass || secretBy(away, { cwd, certs: false }))) return { decision: 'deny', reason: bypass ? 'that is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach' : 'that file is outside the project folder' };
     if (mode === 'plan') return { decision: 'deny', reason: 'plan mode is on, so nothing may be changed yet' };
     // A protected file always asks, even in Accept edits and Auto, and has no "allow all edits"
     // choice (once). In Bypass nothing asks: it goes through, but the app's own settings never do.
     const guard = protectedBy(rel ?? args?.path, rules?.protect);
     if (bypass) {
-      const own = ownBy(rel ?? args?.path);
-      if (own && self) {
-        const locked = selfLockedBy(rel ?? args?.path);
-        return locked ? { decision: 'deny', reason: `${locked} is the door's own file (who may reach this Mac), which stays locked even when Agentic Coder works on itself` } : { decision: 'allow', why: `Bypass on Claude: Agentic Coder's own file (${own}) may change; a copy is kept first`, self: true };
+      const ownFile = ownBy(rel ?? args?.path);
+      if (ownFile && own) {
+        const locked = (self ? selfLockedBy : ownLockedBy)(rel ?? args?.path);
+        return locked ? { decision: 'deny', reason: `${locked} is ${LOCKED_WHY(locked, self)}` } : { decision: 'allow', why: `${ownWhy}: Agentic Coder's own file (${ownFile}) may change; a copy is kept first`, self: true };
       }
-      return own ? { decision: 'deny', reason: `${own} holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on' };
+      return ownFile ? { decision: 'deny', reason: `${ownFile} holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on' };
     }
     if (guard) return { decision: 'ask', once: true, protectedBy: guard, why: `it is a protected file (${guard}); protected files always ask` };
     if (mode === 'edits') return { decision: 'allow', why: 'Accept edits is on' };
@@ -484,7 +517,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     // Bypass lifts the fence: a command may name any folder, but not a secret outside the
     // project (SECRET_FILES), and not the app's own settings (below).
     const outs = outsidePaths(command, cwd);
-    const secret = bypass ? outs.find((w) => secretBy(w)) : null;
+    const secret = bypass ? outs.find((w) => secretBy(w, { cwd })) : null;
     if (secret) return { decision: 'deny', reason: `${secret} is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach` };
     // A path that is not there (a made-up value in code, a file to make in /tmp): say what to use instead.
     const gone = outs[0] && outs[0] !== '~' && !outs[0].startsWith('~') && !existsSync(resolve(cwd ?? '.', outs[0]));
@@ -496,12 +529,12 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     if (mode === 'plan') return isReadOnly(command) ? { decision: 'allow', why: 'it only reads' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
     if (bypass && !self && runsGitPush(command)) return { decision: 'ask', once: true, why: 'a push sends your code to GitHub, so it always asks (even in Bypass, unless the model is Claude)' };
     if (bypass) {
-      const own = ownChanged(command);
-      if (own && self) {
-        const locked = ownChanged(command, SELF_LOCKED);
-        return locked ? { decision: 'deny', reason: `it names ${locked}, the door's own file (who may reach this Mac), which stays locked even when Agentic Coder works on itself` } : { decision: 'allow', why: `Bypass on Claude: it may change Agentic Coder's own file (${own})`, self: true };
+      const ownFile = ownChanged(command);
+      if (ownFile && own) {
+        const locked = ownChanged(command, self ? SELF_LOCKED : OWN_LOCKED);
+        return locked ? { decision: 'deny', reason: `it names ${locked}, ${LOCKED_WHY(locked, self)}` } : { decision: 'allow', why: `${ownWhy}: it may change Agentic Coder's own file (${ownFile})`, self: true };
       }
-      return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: `Bypass permissions is on (any folder, the internet and the servers already running on this Mac; stopping what already runs stays out of reach${self ? '; git push and stopping its own processes may run' : ''})` };
+      return ownFile ? { decision: 'deny', reason: `it names ${ownFile}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: `Bypass permissions is on (any folder, the internet and the servers already running on this Mac; stopping what already runs stays out of reach${self ? '; git push and stopping its own processes may run' : ''})` };
     }
     // once: no "don't ask again" for it.
     if (runsGitCommit(command)) return { decision: 'ask', once: true, why: 'a commit always asks' };
@@ -560,10 +593,11 @@ const STEPS = {
 };
 // "Right now": a table of what runs, asks or is refused in this mode, with the user's own rules,
 // added to PERMISSIONS.md when the model reads it, so the guide never disagrees with the app.
-export function permissionsTable({ mode = 'ask', rules = null, session = [], self = false } = {}) {
+export function permissionsTable({ mode = 'ask', rules = null, session = [], self = false, own = false } = {}) {
   const m = MODES.includes(mode) || mode === DONT_ASK ? mode : 'ask';
   const ruled = m === 'ask' || m === 'edits' || m === 'auto' || m === DONT_ASK;
   self = m === 'bypass' && Boolean(self);
+  own = m === 'bypass' && (self || Boolean(own));
   const blocked = [...new Set(BLOCKED.filter((b) => !(self && b.self)).map((b) => b.why))];
   const list = (xs) => (xs?.length ? xs.map((x) => `"${x}"`).join(', ') : 'none');
   const rows = [
@@ -584,12 +618,12 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [], sel
     ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${ruled ? ', or a rule allows it' : ''}`],
     ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
     ['Other files or commands outside the project, the internet from a command', m === 'bypass' ? 'runs (Bypass lifts the fence), except secrets outside the project (keys, .ssh, .env); ssh, scp and rsync still log in with this Mac\'s saved keys; this Mac\'s servers are reached, but what already runs is never stopped' : 'refused (the sandbox)'],
-    ['Agentic Coder\'s own settings and rules (~/.agentic-coder, .agentic/)', self ? 'runs: you work on Agentic Coder itself (a copy of each own file is kept first); only door.key and trust.json stay locked' : 'refused'],
-    ...(self ? [['The App tool: a slash command, a setting, a restart on new code', 'runs']] : []),
+    ['Agentic Coder\'s own settings and rules (~/.agentic-coder, .agentic/)', own ? `runs: ${self ? 'you work on Agentic Coder itself' : 'its own files are open to you here'} (a copy of each own file is kept first); only ${self ? 'door.key and trust.json' : 'its hooks, the permission rules, the MCP servers, door.key and trust.json'} stay locked` : 'refused'],
+    ...(own ? [[`The App tool: a slash command${self ? '' : ' (not /permissions, /hooks or /mcp)'}, a setting, a restart on new code`, 'runs']] : []),
   ];
   return `## Right now (from the app, as you read this)
 
-Mode: ${MODE_NAMES[m]}${self ? ' on the Claude API: Agentic Coder may work on itself (its code, its own settings, git push, stopping its own processes, the App tool)' : ''}.
+Mode: ${MODE_NAMES[m]}${self ? ' on the Claude API: Agentic Coder may work on itself (its code, its own settings, git push, stopping its own processes, the App tool)' : own ? ' on hearth: Agentic Coder\'s own settings and the App tool are open (a git push still asks, and what already runs is never stopped)' : ''}.
 
 | Step | Here |
 |---|---|

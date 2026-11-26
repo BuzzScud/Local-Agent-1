@@ -513,6 +513,28 @@ export class ChecksPart {
     return { ok: false, feedback: text || answer.feedback };
   }
 
+  // Working alone (25 Nov 2026, the owner: "i need it to be able to do everything alone", their pick "Answers its own
+  // questions"; it had asked them 19 questions in 10 days, each one a stop until they came back). In Bypass
+  // permissions on hearth (agent.mjs aloneOn) the Ask tool is not put to the user: the model is told to choose
+  // itself, the choice it marked as recommended or else the safest one, to go on, and to say in its answer what it
+  // chose. A wall (a login, something only the user has) is still no licence for a different task. Any other mode
+  // asks as before, so shift+tab brings the questions back.
+  answerAlone(id, args, shown) {
+    const questions = askedQuestions(args);
+    if (!questions.length) questions.push({ question: String(args.question ?? ''), options: [], about: [], recommended: -1, several: false });
+    const picks = questions.map((q, i) => {
+      const qid = i ? `${id}_${i}` : id;
+      const qShown = i ? { label: 'Ask', arg: q.question } : shown;
+      const rec = q.recommended >= 0 ? q.options?.[q.recommended] : null;
+      this.emit('tool-ask', { id: qid, name: 'Ask', ...qShown });
+      this.emit('tool', { id: qid, name: 'Ask', ...qShown, view: { kind: 'answer', question: q.question, text: rec ? `left to it (working alone): ${rec}` : 'left to it (working alone)' } });
+      return `${questions.length > 1 ? `${i + 1}. ` : ''}${q.question} → ${rec ? `take the choice you marked as recommended: ${rec}` : q.options?.length ? 'take the safest of your choices' : 'decide it yourself, the safest way'}`;
+    });
+    if (this.turn) { this.turn.askedUser = true; (this.turn.alone ??= []).push(...questions.map((q) => q.question)); }
+    this.emit('note', { text: `Working alone: it answers ${questions.length === 1 ? 'its own question' : `its own ${questions.length} questions`} and goes on (shift+tab to another mode and it asks you again).`, tone: 'dim', fold: true });
+    return { text: `Nobody is here to answer: you are working alone, and the user wants the work finished without them.\n${picks.join('\n')}\nThe safest choice is the one that changes or deletes the least and can be undone. Go on with the work now; do not ask again. If you are truly blocked (a login, a refused step, something only the user has), do not do a different task instead: finish what you can. In your final answer, say each question you had and what you chose.` };
+  }
+
   // The model's Ask tool: the question goes through the same prompt as a
   // permission (or the answers hook when there is no screen).
   // Several questions (more) are asked one after another, each with its place ("1 of 2"); the

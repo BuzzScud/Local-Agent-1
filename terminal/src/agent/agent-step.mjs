@@ -380,7 +380,7 @@ export class StepPart {
       }
     }
     if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
-    if (call.name === 'Ask') { if (this.turn) this.turn.askedUser = true; return this.askUser(id, args, shown, signal); }
+    if (call.name === 'Ask') { if (this.aloneOn()) return this.answerAlone(id, args, shown); if (this.turn) this.turn.askedUser = true; return this.askUser(id, args, shown, signal); }
     // List of a file: it is read (4 Oct 2026: "Listed docs/map/docs.md · 0 paths").
     if (call.name === 'List' && typeof args.path === 'string' && !args.pattern) {
       let file = false;
@@ -439,7 +439,7 @@ export class StepPart {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if ((call.name === 'Screen' || (call.name === 'Browser' && args.action === 'shot')) && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, home: this.home, jobs: this.jobs, app: this.isHelper ? null : this.app ?? null, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes, self: this.selfOn() }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, todos: () => this.todos, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, home: this.home, jobs: this.jobs, app: this.isHelper ? null : this.app ?? null, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes, self: this.selfOn(), own: this.ownOn() }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, todos: () => this.todos, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
     // A new file goes to the Desktop unless the request says where (tools.mjs desktopDefault); a new code
     // file at the top of a code project is asked about once a message. AGENTIC_DESKTOP_DEFAULT=off: as before (the tests).
     // The page the request names, not read yet (Look before answering; 5 Oct 2026: asked to scrape a link, Qwen3.6
@@ -569,7 +569,7 @@ export class StepPart {
     const away = Boolean(at && !at.inside && (this.desktopOpen(call.name, at.abs) || this.attachedOpen?.(call.name, at.abs)));
     const inside = at ? at.inside || away : true;
     const rules = this.savedRules();
-    let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel, self: this.selfOn() });
+    let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel, self: this.selfOn(), own: this.ownOn() });
     // A saved skill (skill-write.mjs) comes with requests in every project: it asks each time, but in Bypass.
     if (prepared.skill && d.decision !== 'deny' && this.mode !== 'bypass') d = { decision: 'ask', once: true };
     // Your PreToolUse hook's answer (runTool): allow skips the question, ask asks; a hard stop still holds.

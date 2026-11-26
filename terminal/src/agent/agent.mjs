@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { endpointOf, HEARTH_JOBS, HEARTH_HELPERS } from '../../../models/index.mjs';
 import { focusedInstructions, readInstructions, replaceInstructionBlock, withModelNotes } from './instructions.mjs';
 import { EXPLORE_TOOLS, HEARTH_WRITE_DEF, resolvePath, toolSchemas } from './tools.mjs';
-import { DONT_ASK, isSelf, ownBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
+import { DONT_ASK, isOwnOpen, isSelf, ownBy, ownLockedBy, protectedBy, selfLockedBy, testRunOf } from './permissions.mjs';
 import { gitSummary, isHomeFolder, notesRoom, projectNotes, promptSetOf, systemPrompt, testCommand } from './prompt.mjs';
 import { lookSecs } from './look.mjs';
 import { guidePath, guidesList, harnessOf, helperMode, readGuides, readHelperAgents, readSkills, rulesSetOf, skillPath, skillsList, toolUseFor } from './prompt-files.mjs';
@@ -197,7 +197,7 @@ export class Agent extends EventEmitter {
   ownTools() {
     const agents = this.agentsOn();
     // On hearth with its small sizes: the Agent tool names hearth 3.0's three helpers (tools-defs.mjs agentToolDef).
-    const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [], self: this.selfOn() && !this.isHelper, sizes: agents && Boolean(this.hearthUse('lookup')) });
+    const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [], self: this.ownOn() && !this.isHelper, sizes: agents && Boolean(this.hearthUse('lookup')) });
     // CodeSearch only when it can run (4 Oct 2026: qwen3-coder-next called it twice, was told twice
     // "the code search is off here", and those two errors helped stop it at five in a row).
     // The same for the four never called in 40 runs on a service (5 Oct 2026): Map not in the home
@@ -287,6 +287,13 @@ export class Agent extends EventEmitter {
   // self.mjs), git push and stopping its own processes run, and the App tool is offered (runs a slash
   // command, a setting, a restart on new code; not inside a helper). A local model never gets it.
   selfOn() { return isSelf(this.mode, endpointOf(this.url)?.kind); }
+  // Its own files and the App tool, open (permissions.mjs isOwnOpen; the owner's pick, 25 Nov 2026): as Self, and in
+  // Bypass permissions on hearth too. There a push still asks, what already runs is still never stopped, and the own
+  // files that could lift those limits stay shut (OWN_LOCKED: hooks, permission rules, MCP servers).
+  ownOn() { return this.selfOn() || isOwnOpen(this.mode, endpointOf(this.url)); }
+  // Working alone (agent-checks.mjs answerAlone): in Bypass permissions on hearth the model answers its own Ask.
+  // "alone": false in settings.json, or AGENTIC_ALONE=off, puts every question to you again; a helper never asks.
+  aloneOn() { return this.mode === 'bypass' && Boolean(endpointOf(this.url)?.hearth) && this.alone !== false && process.env.AGENTIC_ALONE !== 'off'; }
   // The Screen tool (tools/screen.mjs): on a Mac, for a model that can look at pictures now or
   // once its vision is turned on (visionOn); "screen": false in settings.json leaves it out.
   // mayLook: the app says whether this model can turn its vision on (App.jsx).
@@ -525,7 +532,7 @@ export class Agent extends EventEmitter {
       setMode: (m) => this.setMode(m),
       // A protected file always asks (permissions.mjs), even on auto-accept; in Bypass only the
       // app's own settings still do (the tool loop refuses those; here the path asks).
-      protectedBy: (rel) => { const at = resolvePath(this.cwd, rel); return this.selfOn() ? selfLockedBy([rel, at.realRel]) : this.mode === 'bypass' ? ownBy([rel, at.realRel]) : protectedBy([rel, at.realRel], this.savedRules()?.protect); },
+      protectedBy: (rel) => { const at = resolvePath(this.cwd, rel); return this.selfOn() ? selfLockedBy([rel, at.realRel]) : this.ownOn() ? ownLockedBy([rel, at.realRel]) : this.mode === 'bypass' ? ownBy([rel, at.realRel]) : protectedBy([rel, at.realRel], this.savedRules()?.protect); },
       tool,
       note: (text, tone = 'dim') => this.emit('note', { text, tone }),
       // What a path found before handing over to the step-by-step way: a check

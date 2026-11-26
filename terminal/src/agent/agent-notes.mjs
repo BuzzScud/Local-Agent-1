@@ -6,7 +6,7 @@ import { ASK_NOTE, wantsQuestions } from './questions.mjs';
 import { isHomeFolder } from './prompt.mjs';
 import { kindText } from './rules.mjs';
 import { LOOK_NOTE, LOOK_NOTE_DATA } from './look.mjs';
-import { skillNote, skillWhere } from './prompt-files.mjs';
+import { skillNote, skillPath, skillWhere } from './prompt-files.mjs';
 import { noteSkillUse } from './skill-store.mjs';
 import { mathNotes } from './expertise.mjs';
 import { briefNote, designNotes, designSettings, isDesignRequest, mixTurn, pickCards } from './design.mjs';
@@ -19,7 +19,7 @@ import { checkInText } from '../flows/fix.mjs';
 import { alwaysRules } from './facts.mjs';
 import { requestHits, requestNote } from './mcp.mjs';
 import { MCP_GROUP } from './tool-groups.mjs';
-import { BYPASS_OPEN, CORRECTS, SELF_OPEN, asksForWork, tokensOf, webAddresses } from './agent-said.mjs';
+import { ALONE_NOTE, BYPASS_OPEN, CORRECTS, OWN_OPEN, SELF_OPEN, asksForWork, tokensOf, webAddresses } from './agent-said.mjs';
 import { sshNamed, sshNote } from '../tools/ssh.mjs';
 import { endpointOf } from '../../../models/index.mjs';
 
@@ -93,7 +93,7 @@ export class NotesPart {
       this.turn.check = checkInText(text);
     }
     if (skill && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.skill = { request, notes: skillNote(skill), name: skill.name };
+      this.turn.skill = { request, notes: skillNote(skill, { path: skillPath(this.cwd) }), name: skill.name };
       this.turn.fence = new Set(skill.fence ?? []);
       this.ctxUsed += tokensOf(this.turn.skill.notes);
       const fence = skill.fence?.length ? `; fence: ${skill.fence.join(', ')}` : '';
@@ -124,7 +124,7 @@ export class NotesPart {
     // kept word for word (the service's cache), so the request says what is true while it is on.
     if (this.mode === 'bypass' && request?.role === 'user' && typeof request.content === 'string') {
       // With where the user's own folders are: it does not know their name, and guessed /Users/Shared/Desktop (5 Oct 2026).
-      this.turn.open = { request, notes: `${this.selfOn() ? SELF_OPEN : BYPASS_OPEN} The user's home folder is ${this.home}; their Desktop is ${this.desktopDir}.` };
+      this.turn.open = { request, notes: `${this.selfOn() ? SELF_OPEN : this.ownOn() ? OWN_OPEN : BYPASS_OPEN}${this.aloneOn() ? ` ${ALONE_NOTE}` : ''} The user's home folder is ${this.home}; their Desktop is ${this.desktopDir}.` };
     }
     if (math && request?.role === 'user' && typeof request.content === 'string') {
       try {

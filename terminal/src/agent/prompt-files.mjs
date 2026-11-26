@@ -3,13 +3,13 @@
 // SKILLS.md holds steps for kinds of task, each brought by its words.
 // Read from disk at each use, so a save in the hub applies on the next
 // message; the copy built into the app is used when the repo is not here.
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { HOME } from '../../../models/index.mjs';
 import { ownWords } from '../flows/words.mjs';
-import { savedSkillFiles, skillsDir } from './skill-store.mjs';
+import { libraryDir, savedSkillFiles, skillsDir } from './skill-store.mjs';
 import { modeOf } from './permissions.mjs';
 import { activePlugins } from './plugins.mjs';
 
@@ -240,6 +240,44 @@ export function savedSkills(dir = skillsDir()) {
   });
 }
 
+// A library file is one skill whatever its text holds (a SKILL.md brought in whole has "## " headings of its own, and
+// parseSkills would end the skill at the first): its first "## Name" line, the "- Words:", "- About:" and "- Fence:"
+// lines right under it, and everything after them as its steps, as written.
+export function parseWholeSkill(text) {
+  const lines = String(text ?? '').replace(/\r\n/g, '\n').split('\n');
+  const at = lines.findIndex((l) => /^## +\S/.test(l));
+  if (at < 0) return null;
+  let i = at + 1;
+  const head = [];
+  while (i < lines.length && /^- (words|about|fence):/i.test(lines[i])) head.push(lines[i++]);
+  const field = (key) => head.find((l) => l.toLowerCase().startsWith(`- ${key}:`))?.slice(key.length + 3).trim() ?? '';
+  const name = lines[at].replace(/^## +/, '').trim();
+  const named = field('fence').toLowerCase().split(/[\s,]+/).filter(Boolean);
+  return { name, slug: slugOf(name), words: field('words').toLowerCase().split(',').map((w) => w.trim()).filter(Boolean), about: field('about'), fence: named.filter((w) => FENCES.includes(w)), fenceBad: named.filter((w) => !FENCES.includes(w)), body: lines.slice(i).join('\n').trim() };
+}
+// The library's skills (skill-store.mjs libraryDir): each kept by its file's time and size, since a Read asks for the
+// skills at every call and the library is megabytes of text.
+const shelfKept = new Map();
+export function librarySkills(dir = libraryDir()) {
+  let names;
+  try { names = readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+  const out = [];
+  for (const e of names) {
+    if (!e.isFile() || !/\.md$/i.test(e.name)) continue;
+    const slug = e.name.slice(0, -3).toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug) || out.some((x) => x.slug === slug)) continue;
+    const file = join(dir, e.name);
+    try {
+      const st = statSync(file);
+      const key = `${st.mtimeMs}:${st.size}`;
+      let kept = shelfKept.get(file);
+      if (kept?.key !== key) { const parsed = parseWholeSkill(readFileSync(file, 'utf8')); kept = { key, skill: parsed?.body ? { ...parsed, slug, from: 'library', shelf: true, file } : null }; shelfKept.set(file, kept); }
+      if (kept.skill) out.push(kept.skill);
+    } catch {}
+  }
+  return out.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
 // The app's own skill, for saving one: brought by its words, never listed (so a prompt with no skills
 // stays as it was), and never a fence: it writes.
 export const SAVE_SKILL = Object.freeze({
@@ -265,13 +303,16 @@ then the steps, numbered, one line each, as they worked in this conversation (th
 // Every skill: SKILLS.md's, then your saved ones (one with a name SKILLS.md has is left out), then the
 // app's own. saved: the folder of yours (skill-store.mjs), null for none.
 // plugins: the ones switched on (plugins.mjs); each skill/<name>/SKILL.md of theirs comes after yours, read-only.
-export function readSkills(dir = rulesDir(), set = 'local', { saved = skillsDir(), plugins = activePlugins() } = {}) {
+// library: the folder of skills brought in by the folder (librarySkills), after all of those and only on the remote
+// set: its skills are thousands of tokens each, more than a small model on this Mac has room for. null for none.
+export function readSkills(dir = rulesDir(), set = 'local', { saved = skillsDir(), plugins = activePlugins(), library = saved && set === 'remote' ? libraryDir(saved) : null } = {}) {
   const shipped = parseSkills(readPromptFile('skills', dir, set).text);
   const taken = new Set(shipped.map((s) => s.slug));
   const mine = saved ? savedSkills(saved).filter((s) => !taken.has(s.slug)) : [];
   for (const s of mine) taken.add(s.slug);
   const theirs = pluginSkills(plugins).filter((s) => !taken.has(s.slug) && taken.add(s.slug));
-  return [...shipped, ...mine, ...theirs, ...(taken.has(SAVE_SKILL.slug) ? [] : [SAVE_SKILL])];
+  const shelf = library ? librarySkills(library).filter((s) => !taken.has(s.slug) && taken.add(s.slug)) : [];
+  return [...shipped, ...mine, ...theirs, ...shelf, ...(taken.has(SAVE_SKILL.slug) ? [] : [SAVE_SKILL])];
 }
 // A plugin's skills, as a saved skill's file is read (a SKILL.md's front matter gives its name and About).
 function pluginSkills(plugins = activePlugins()) {
@@ -282,7 +323,27 @@ function pluginSkills(plugins = activePlugins()) {
 }
 const listed = (skills) => skills.filter((s) => !s.hidden);
 // Where a skill comes from, in the words the screen and the model see.
-export const skillWhere = (s) => (s?.from === 'saved' ? 'your saved skills' : s?.from === 'built-in' ? 'Agentic Coder' : s?.from === 'plugin' ? `the ${s.plugin} plugin` : 'SKILLS.md');
+export const skillWhere = (s) => (s?.from === 'saved' ? 'your saved skills' : s?.from === 'library' ? 'your skill library' : s?.from === 'built-in' ? 'Agentic Coder' : s?.from === 'plugin' ? `the ${s.plugin} plugin` : 'SKILLS.md');
+
+// A long skill comes in parts (25 Nov 2026: a library skill's steps run to 200,000 characters, more than a request or a
+// Read may carry): the lines from `offset` (1 is its first) that fit SKILL_PART, and where the next part starts. A
+// skill under that size comes whole, as before.
+export const SKILL_PART = 12000;
+export function skillPart(body, { offset = 1, limit = Infinity, room = SKILL_PART } = {}) {
+  const lines = String(body ?? '').split('\n');
+  const from = Math.min(Math.max(1, Math.floor(Number(offset)) || 1), Math.max(1, lines.length));
+  const most = Number(limit) > 0 ? Math.floor(Number(limit)) : Infinity;
+  let n = 0;
+  let chars = 0;
+  while (from - 1 + n < lines.length && n < most) {
+    const len = lines[from - 1 + n].length + 1;
+    if (n && chars + len > room) break;
+    chars += len;
+    n++;
+  }
+  const text = lines.slice(from - 1, from - 1 + n).join('\n');
+  return { text: text.length > room ? `${text.slice(0, room)}…` : text, from, to: from - 1 + n, total: lines.length, next: from + n <= lines.length ? from + n : null, whole: from === 1 && from + n > lines.length && text.length <= room };
+}
 
 // What stops a save (errors) and what is only worth saying (warnings).
 export function skillProblems(skills) {
@@ -316,8 +377,11 @@ export function pickSkill(text, skills = readSkills()) {
   return best;
 }
 
-// A skill's steps as they go with a request.
-export const skillNote = (s) => `Skill "${s.name}" from ${skillWhere(s)}: this request uses its words, so follow its steps:\n${s.body}`;
+// A skill's steps as they go with a request; of a long one its first part, with where the rest is.
+export const skillNote = (s, { path = 'SKILLS' } = {}) => {
+  const p = skillPart(s.body);
+  return `Skill "${s.name}" from ${skillWhere(s)}: this request uses its words, so follow its steps:\n${p.whole ? s.body : `${p.text}\n(That was lines 1 to ${p.to} of ${p.total}. Read ${path}/${s.slug} with offset ${p.next ?? p.to + 1} for the rest, before you reach a step you have not seen.)`}`;
+};
 
 // The path that opens a skill. SKILLS/<name> when the project has no folder of
 // that name; Rules/SKILLS/<name> when it does, so the read cannot land in the
@@ -327,19 +391,36 @@ export function skillPath(cwd) {
   return 'SKILLS';
 }
 
-// The list in the instructions: every skill by the path that opens it.
-export function skillsList(all, { path = 'SKILLS' } = {}) {
-  const skills = listed(all);
-  if (!skills.length) return '';
+// The list in the instructions: every skill by the path that opens it. The library's are counted, not listed (95 of
+// them were about 12k tokens at the top of every conversation): full, as Read gives the list, names them all, each
+// with a short About, and find keeps the ones that say a word.
+const short = (t, n = 110) => { const one = String(t ?? '').replace(/\s+/g, ' ').trim(); return one.length > n ? `${one.slice(0, n - 1)}…` : one; };
+export function skillsList(all, { path = 'SKILLS', full = false, find = '' } = {}) {
+  const every = listed(all);
+  const skills = every.filter((s) => !s.shelf);
+  const shelf = every.filter((s) => s.shelf);
+  if (!every.length) return '';
+  const row = (s, cut) => `- ${path}/${s.slug}${s.about ? `: ${cut ? short(s.about) : s.about}` : s.shelf && s.name ? `: ${short(s.name)}` : ''}`;
+  if (full) {
+    const want = String(find ?? '').trim().toLowerCase();
+    const says = (s) => !want || `${s.slug} ${s.name} ${s.about} ${s.words.join(' ')}`.toLowerCase().includes(want);
+    const a = skills.filter(says);
+    const b = shelf.filter(says);
+    if (want && !a.length && !b.length) return `No skill says "${want}". Read ${path} with no find lists all ${every.length}.`;
+    return `Skills${want ? ` that say "${want}"` : ''}
+Steps for some kinds of task. Read the one that fits before you start:
+${[...a.map((s) => row(s)), ...(b.length ? [`In your library (${b.length}):`, ...b.map((s) => row(s, true))] : [])].join('\n')}`;
+  }
   return `Skills
 Steps for some kinds of task (SKILLS.md). When one fits and its steps did not come with the request, Read it first:
-${skills.map((s) => `- ${path}/${s.slug}${s.about ? `: ${s.about}` : ''}`).join('\n')}`;
+${[...skills.map((s) => row(s)), ...(shelf.length ? [`- ${path}: ${shelf.length} more in your library, not listed here. Before a kind of task you have no steps for, Read ${path} with find set to a word of the task (a tool's, a system's, a file type's name) and open the one that fits.`] : [])].join('\n')}`;
 }
 
 // Read "SKILLS" (the list) or "SKILLS/<name>" (one skill). When the project has
 // a SKILLS folder, only "Rules/SKILLS" and "Rules/SKILLS/<name>" open the rules.
 // null: not such a path (a project's own SKILLS.md, or its own SKILLS folder).
-export function readSkillPath(cwd, p, skills) {
+// more: Read's own find, offset and limit: find narrows the list, offset and limit read a long skill in parts.
+export function readSkillPath(cwd, p, skills, more = {}) {
   // Not "SKILLS.md": that is a file a project may have or be asked to make.
   const raw = String(p ?? '').trim();
   const m = /^(?:\.\/)?(?:Rules\/)?SKILLS(?:\/(.+?)(?:\.md)?)?\/?$/.exec(raw);
@@ -350,16 +431,21 @@ export function readSkillPath(cwd, p, skills) {
   const all = skills ?? readSkills();
   if (!listed(all).length && !(m[1] && all.length)) return { error: 'There are no skills (SKILLS.md has none).' };
   const shown = path;
-  if (!m[1]) return { text: skillsList(all, { path: shown }) };
+  if (!m[1]) return { text: skillsList(all, { path: shown, full: true, find: more.find }) };
   const want = slugOf(m[1]);
   const s = all.find((x) => x.slug === want);
-  if (!s) return { error: `No skill ${shown}/${m[1]}. The skills: ${listed(all).map((x) => `${shown}/${x.slug}`).join(', ') || 'none yet'}.` };
-  return { text: skillText(s, shown), skill: s };
+  // The names in the error: yours and SKILLS.md's; the library is too long to say, so the way to its list instead.
+  if (!s) return { error: `No skill ${shown}/${m[1]}. The skills: ${listed(all).filter((x) => !x.shelf).map((x) => `${shown}/${x.slug}`).join(', ') || 'none yet'}${all.some((x) => x.shelf) ? `; Read ${shown} lists the library's too` : ''}.` };
+  return { text: skillText(s, shown, more), skill: s };
 }
 
 // One skill as Read gives it; a saved one says where it is kept and that Edit changes it.
 const tilde = (f) => (process.env.HOME && f?.startsWith(`${process.env.HOME}/`) ? `~${f.slice(process.env.HOME.length)}` : f);
-const skillText = (s, shown) => `${shown}/${s.slug} (${s.name}):\n${s.body}${s.from === 'saved' ? `\n(One of your saved skills, kept in ${tilde(s.file)} for every project: Edit ${shown}/${s.slug} changes it.)` : ''}`;
+const skillText = (s, shown, { offset, limit } = {}) => {
+  const p = skillPart(s.body, { offset, limit });
+  const part = p.whole ? s.body : `${p.text}\n(Lines ${p.from} to ${p.to} of ${p.total}${p.next ? `. Read ${shown}/${s.slug} with offset ${p.next} for the next part` : ': the end'}.)`;
+  return `${shown}/${s.slug} (${s.name}):\n${part}${s.from === 'saved' ? `\n(One of your saved skills, kept in ${tilde(s.file)} for every project: Edit ${shown}/${s.slug} changes it.)` : s.from === 'library' ? `\n(From your skill library, ${tilde(s.file)}: read-only here. Write ${shown}/${s.slug} to keep a version of your own, which is then used in its place.)` : ''}`;
+};
 
 // A Write or Edit of "SKILLS/<name>" (tools.mjs, skill-write.mjs): { slug, name } of the skill it means,
 // { list: true } for "SKILLS" itself, null when the path is not a skill's (as readSkillPath reads it).
@@ -384,9 +470,9 @@ export function readNearPath(cwd, p, { skills, guides = [] } = {}) {
     const all = skills ?? readSkills();
     if (!listed(all).length) return null;
     const path = skillPath(cwd);
-    if (!m[4]) return { text: `${p} is not a file here; the skills open by their own paths.\n${skillsList(all, { path })}` };
+    if (!m[4]) return { text: `${p} is not a file here; the skills open by their own paths.\n${skillsList(all, { path, full: true })}` };
     const s = all.find((x) => x.slug === slugOf(m[4]));
-    if (!s) return { error: `No skill ${m[4]}. The skills: ${listed(all).map((x) => `${path}/${x.slug}`).join(', ')}.` };
+    if (!s) return { error: `No skill ${m[4]}. The skills: ${listed(all).filter((x) => !x.shelf).map((x) => `${path}/${x.slug}`).join(', ')}.` };
     return { text: skillText(s, path), skill: s };
   }
   if (/^(?:RULES|Rules)\.md$/.test(raw) && guides.length) return { text: `${p} is not a file here; the guides open by their own paths.\n${guidesList(guides, { path: guidePath(cwd) })}` };

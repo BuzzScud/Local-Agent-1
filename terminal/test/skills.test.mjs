@@ -195,3 +195,108 @@ test('/skills: the panel (yours, then SKILLS.md\'s, with uses), show, save sends
   skillsCommand(self, 'open', false);
   expect(pushed.at(-1).text).toContain('one .md file each');
 });
+
+// The library (25 Nov 2026, the owner: "add all skills from the staff side … just add them"): 95 of hearth's staff
+// skills, 2.5 MB of steps, a SKILL.md each with headings of its own.
+test('the library: counted in the instructions and never listed there, read on the remote set only, brought by its words, listed by Read SKILLS, long ones in parts', async () => {
+  const { libraryDir } = await import('../src/agent/skill-store.mjs');
+  const { librarySkills, parseWholeSkill, skillPart, SKILL_PART } = await import('../src/agent/prompt-files.mjs');
+  writeSkillFile('deploy-the-site', DEPLOY);
+  const lib = libraryDir();
+  mkdirSync(lib, { recursive: true });
+  // A SKILL.md as it comes: "## " headings inside, which would end a skill of SKILLS.md at the first.
+  writeFileSync(join(lib, 'door-log.md'), '## Read the door log\n- Words: door log, door jobs\n- About: see which server took each request and how long it ran\n\n## Before you start\nIt is a file on the server.\n\n## Steps\n1. Open it.\n2. Read the last lines.\n');
+  const long = Array.from({ length: 900 }, (_, i) => `${i + 1}. Step ${i + 1} of the long one, with enough words to fill a line of it.`).join('\n');
+  writeFileSync(join(lib, 'long-one.md'), `## The long one\n- Words: the long one\n- About: ${'a very long line about it '.repeat(12)}\n\n${long}\n`);
+  writeFileSync(join(lib, 'deploy-the-site.md'), '## Deploy the site\n- Words: deploy the site\n- About: the library\'s own\n\n1. Not this one.\n');
+  writeFileSync(join(lib, 'no-steps.md'), '## Nothing here\n- Words: nothing here\n');
+  writeFileSync(join(lib, 'notes.txt'), 'not a skill');
+
+  expect(parseWholeSkill('no title\n')).toBeNull();
+  const got = librarySkills(lib);
+  expect(got.map((s) => s.slug)).toEqual(['deploy-the-site', 'door-log', 'long-one']);
+  expect(got[1]).toMatchObject({ name: 'Read the door log', from: 'library', shelf: true, words: ['door log', 'door jobs'] });
+  expect(got[1].body).toBe('## Before you start\nIt is a file on the server.\n\n## Steps\n1. Open it.\n2. Read the last lines.');
+
+  // The local set (a small model on this Mac) never has it.
+  expect(readSkills().some((s) => s.shelf)).toBe(false);
+  expect(skillsList(readSkills())).not.toContain('library');
+  // The remote set: after yours, and yours wins a name.
+  const all = readSkills(undefined, 'remote');
+  expect(all.filter((s) => s.shelf).map((s) => s.slug)).toEqual(['door-log', 'long-one']);
+  expect(all.find((s) => s.slug === 'deploy-the-site').from).toBe('saved');
+  const list = skillsList(all);
+  expect(list).toContain('- SKILLS/deploy-the-site: build, upload and check the site');
+  expect(list).toContain('- SKILLS: 2 more in your library, not listed here.');
+  expect(list).not.toContain('door-log');
+  expect(systemPrompt({ cwd: proj, git: 'none', set: 'remote' })).toContain('2 more in your library, not listed here');
+  expect(systemPrompt({ cwd: proj, git: 'none', set: 'remote' })).not.toContain('SKILLS/door-log');
+
+  // A request that uses its words brings it, whole when it is short.
+  const picked = pickSkill('can you check the door log for me', all);
+  expect(picked.slug).toBe('door-log');
+  expect(skillNote(picked)).toBe(`Skill "Read the door log" from your skill library: this request uses its words, so follow its steps:\n${picked.body}`);
+  // A long one: its first part, and where the rest is.
+  const big = all.find((s) => s.slug === 'long-one');
+  expect(big.body.length).toBeGreaterThan(SKILL_PART * 4);
+  const note = skillNote(big);
+  expect(note.length).toBeLessThan(SKILL_PART + 400);
+  expect(note).toContain('1. Step 1 of the long one');
+  const cut = /\(That was lines 1 to (\d+) of 900\. Read SKILLS\/long-one with offset (\d+) for the rest/.exec(note);
+  expect(Number(cut[2])).toBe(Number(cut[1]) + 1);
+  expect(note).not.toContain(`\n${Number(cut[2])}. Step`);
+  // A skill under the size is as it always was, letter for letter.
+  const mine = all.find((s) => s.slug === 'deploy-the-site');
+  expect(skillNote(mine)).toBe(`Skill "Deploy the site" from your saved skills: this request uses its words, so follow its steps:\n${mine.body}`);
+  expect(skillPart('a\nb\nc')).toMatchObject({ text: 'a\nb\nc', from: 1, to: 3, total: 3, next: null, whole: true });
+  expect(skillPart('a\nb\nc', { offset: 2, limit: 1 })).toMatchObject({ text: 'b', from: 2, to: 2, next: 3, whole: false });
+
+  // Read SKILLS: the whole list, the library's with a short About; find narrows it.
+  const full = readSkillPath(proj, 'SKILLS', all).text;
+  expect(full).toContain('In your library (2):');
+  expect(full).toContain('- SKILLS/door-log: see which server took each request and how long it ran');
+  expect(full.split('\n').find((l) => l.startsWith('- SKILLS/long-one')).length).toBeLessThan(140);
+  const found = readSkillPath(proj, 'SKILLS', all, { find: 'door' }).text;
+  expect(found).toContain('Skills that say "door"');
+  expect(found).toContain('SKILLS/door-log');
+  expect(found).not.toContain('long-one');
+  expect(readSkillPath(proj, 'SKILLS', all, { find: 'zebra' }).text).toBe('No skill says "zebra". Read SKILLS with no find lists all 4.');
+  // Read SKILLS/<name>: a part at a time, each saying where the next starts, the last saying it is the end.
+  const one = readSkillPath(proj, 'SKILLS/long-one', all);
+  expect(one.skill.slug).toBe('long-one');
+  const next = Number(/Read SKILLS\/long-one with offset (\d+) for the next part/.exec(one.text)[1]);
+  const two = readSkillPath(proj, 'SKILLS/long-one', all, { offset: next }).text;
+  expect(two).toContain(`\n${next}. Step ${next} of the long one`);
+  expect(readSkillPath(proj, 'SKILLS/long-one', all, { offset: 890 }).text).toContain('(Lines 890 to 900 of 900: the end.)');
+  expect(one.text).toContain('From your skill library');
+  expect(one.text).toContain('read-only here');
+  expect(readSkillPath(proj, 'SKILLS/nope', all).error).toContain("Read SKILLS lists the library's too");
+  // Through the tool, with Read's own find and offset.
+  const env = { cwd: proj, rulesSet: 'remote' };
+  expect((await execute('Read', { path: 'SKILLS', find: 'door' }, {}, env)).text).toContain('SKILLS/door-log');
+  expect((await execute('Read', { path: 'SKILLS/long-one', offset: 890 }, {}, env)).text).toContain('(Lines 890 to 900 of 900: the end.)');
+
+  // An Edit of a library skill is turned back with how to keep your own; a Write of that name is yours and wins.
+  const edit = prepare('Edit', { path: 'SKILLS/door-log', old_text: 'Open it.', new_text: 'Open it with ssh.' }, env);
+  expect(edit.error).toContain("is in the user's skill library, which is read-only here");
+  const own = prepare('Write', { path: 'SKILLS/door-log', content: '## Read the door log\n- Words: door log\n- About: my own\n\n1. Mine.\n' }, env);
+  expect(own.error).toBeUndefined();
+  expect(own.created).toBe(true);
+
+  // /skills: one line for the library; /skills library lists it; remove takes one out, dated, nothing deleted.
+  const panel = skillsPanel();
+  expect(panel.title).toContain('2 in the library');
+  expect(panel.rows.some((r) => r[0] === 'Library · 2 more, not listed in the instructions · /skills library')).toBe(true);
+  expect(panel.rows.some((r) => String(r[0]).includes('door-log'))).toBe(false);
+  const shelf = skillsPanel({ library: true });
+  expect(shelf.title).toContain('Skill library · 2 skills');
+  expect(shelf.rows.map((r) => r[0].trim())).toContain('door-log');
+  const said = [];
+  const self = { push: (x) => said.push(x), flash: () => {}, agent: { messages: [] } };
+  skillsCommand(self, 'library', false);
+  expect(said.at(-1).title).toContain('Skill library');
+  skillsCommand(self, 'remove door-log', false);
+  expect(said.at(-1).text).toContain('Removed door-log from your skills');
+  expect(existsSync(join(lib, 'door-log.md'))).toBe(false);
+  expect(readdirSync(join(lib, '.removed')).length).toBe(1);
+});

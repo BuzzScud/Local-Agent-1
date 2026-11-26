@@ -90,7 +90,11 @@ function gitDirs(cwd) {
 // Their data folders (SERVICE_DATA) stay closed, and removing a model asks first (permissions.mjs removesModel).
 // self: Bypass with the Claude API (permissions.mjs isSelf): the app works on itself, so its own
 // folder is open too; only the door's key and trust list stay closed (SELF_LOCKED).
-export function sandboxProfile(root, { home = homedir(), readOnly = [], net = false, local = [], open = false, self = false } = {}) {
+// own: Bypass on hearth (permissions.mjs isOwnOpen): its own folder is open too, but for the files that could lift the
+// limits it keeps there (OWN_SHUT, the same names as permissions.mjs OWN_LOCKED; sandbox.test.mjs holds the two together).
+export const SELF_SHUT = ['door.key', 'trust.json'];
+export const OWN_SHUT = [...SELF_SHUT, 'hooks.json', 'hooks-state.json', 'permissions.json', 'mcp.json', 'mcp-state.json'];
+export function sandboxProfile(root, { home = homedir(), readOnly = [], net = false, local = [], open = false, self = false, own = false } = {}) {
   const h = real(home);
   const project = real(root);
   const inHome = (rel) => join(h, rel);
@@ -99,7 +103,8 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [], net = fa
   const writable = [project, ...gitDirs(project).filter((d) => !d.startsWith(`${project}/`))];
   const paths = (list) => list.map((p) => `(subpath ${q(p)})`).join(' ');
   const ownDirs = [...new Set([inHome('.agentic-coder'), process.env.AGENTIC_HOME].filter(Boolean).map(real))];
-  const ownClosed = self ? ownDirs.flatMap((d) => ['door.key', 'trust.json'].map((f) => `(literal ${q(join(d, f))})`)).join(' ') : paths(ownDirs);
+  const shut = (names) => ownDirs.flatMap((d) => names.map((f) => `(literal ${q(join(d, f))})`)).join(' ');
+  const ownClosed = self ? shut(SELF_SHUT) : own ? shut(OWN_SHUT) : paths(ownDirs);
   // Never read, in any mode: the door's key and the secret files above.
   const keyFiles = ownDirs.map((d) => `(literal ${q(join(d, 'door.key'))})`).join(' ');
   const secretFiles = SECRET_FILES.map((f) => `(subpath ${q(inHome(f))})`).join(' ');
@@ -151,8 +156,8 @@ export function shellPath(exists = existsSync) {
 export const SHELL = shellPath();
 
 // [file, args] that run `command` in the shell inside the fence around `root`.
-export function sandboxed(command, root, { readOnly, open, self } = {}) {
-  return [SANDBOX_EXEC, ['-p', sandboxProfile(root, { readOnly, open, self }), SHELL, '-c', command]];
+export function sandboxed(command, root, { readOnly, open, self, own } = {}) {
+  return [SANDBOX_EXEC, ['-p', sandboxProfile(root, { readOnly, open, self, own }), SHELL, '-c', command]];
 }
 
 // What a blocked command prints, turned into a hint for the model. A blocked
@@ -178,7 +183,7 @@ const LOCAL_SERVER = /\b(?:connect(?:ion)?|socket)\b[^\n]*(?:Operation not permi
 // model, asked why a server was slow, got "operation not permitted: ps" and nothing else). The app runs a plain ps or top
 // itself (proclook.mjs); one it could not (a variable in its words, `$(ps …)`, /bin/ps by path) lands here.
 const SETUID_LOOK = /operation not permitted: (?:\/bin\/|\/usr\/bin\/)?(?:ps|top)\b|execvp\(\) of '\/(?:bin\/ps|usr\/bin\/top)'/i;
-export function fenceHint(output, { open = false, self = false, command = '' } = {}) {
+export function fenceHint(output, { open = false, self = false, own = false, command = '' } = {}) {
   // ssh says why it failed in its own words; the files hint below sent the model after the wrong cause.
   const ssh = sshHint(output, { open, command });
   if (ssh) return ssh;
@@ -204,6 +209,8 @@ export function fenceHint(output, { open = false, self = false, command = '' } =
   // already runs here, the services' data folders and the app's own folder.
   return open && self
     ? '\n(Blocked even when Agentic Coder works on itself: apps cannot be opened, programs already running on this Mac cannot be stopped, and door.key and trust.json cannot be changed.)'
+    : open && own
+    ? '\n(Blocked even with Agentic Coder\'s own files open to you: apps cannot be opened, programs already running on this Mac cannot be stopped, a key file cannot be read, and its hooks, the permission rules, the MCP servers, door.key and trust.json cannot be changed.)'
     : open
     ? '\n(Blocked even in Bypass: apps cannot be opened, programs already running on this Mac cannot be stopped, a key file cannot be read, and Agentic Coder\'s own folder cannot be changed.)'
     : '\n(Files outside the project folder cannot be read or changed, and apps cannot be opened; stay inside the project.)';

@@ -1,6 +1,9 @@
 import { test, expect } from 'bun:test';
 import { blockedReason, decide, outsidePath, isReadOnly, runsTests, testRunOf, splitCommand, ruleCovers, ruleFor, coverage, offerFor, neverRule, protectedBy, PROTECTED, checkRule, judge, MODES, CYCLE, nextMode, modeOf } from '../src/agent/permissions.mjs';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { isCertificate } from '../src/agent/permissions.mjs';
 
 const cases = {
   'rm -rf build': true, 'rm -fr x': true, 'rm -r -f x': true, 'rm --recursive --force x': true, 'rm -r x': false, 'rm file.txt': false,
@@ -513,6 +516,26 @@ test('Bypass lifts the folder fence: any folder for commands and files, but not 
   expect(d5('Write', { path: '/Users/x/.agentic-coder/settings.json' }, 'bypass', { inside: false, rel: '../Users/x/.agentic-coder/settings.json' })).toBe('deny');
   expect(d5('Bash', { command: 'cp x /Users/x/.agentic-coder/settings.json' }, 'bypass')).toBe('deny');
   expect(d5('Edit', { path: '../x.js' }, 'edits', { inside: false, rel: '../x.js' })).toBe('deny');
+});
+
+// 25 Nov 2026 (the owner's pick "SSH config + certificates"): hearth's model was refused its forge's own CA file twice.
+test('a certificate outside the project may be read and named in Bypass; a key in a .pem, a pattern and a write stay refused', () => {
+  const away = mkdtempSync(join(tmpdir(), 'agentic-certs-'));
+  const cert = join(away, 'root-ca.pem');
+  const key = join(away, 'site.pem');
+  const both = join(away, 'bundle.pem');
+  writeFileSync(cert, '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n');
+  writeFileSync(key, '-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n');
+  writeFileSync(both, '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n-----BEGIN EC PRIVATE KEY-----\nMHc\n-----END EC PRIVATE KEY-----\n');
+  expect([isCertificate(cert), isCertificate(key), isCertificate(both), isCertificate(join(away, 'gone.pem')), isCertificate(join(away, '*.pem')), isCertificate(join(away, 'notes.txt'))]).toEqual([true, false, false, false, false, false]);
+  expect(isCertificate('/Users/x/.ssh/root-ca.pem')).toBe(false);
+  expect(d5('Bash', { command: `curl --cacert ${cert} https://example.org/` }, 'bypass')).toBe('allow');
+  expect(d5('Read', { path: cert }, 'bypass', { inside: false, rel: cert })).toBe('allow');
+  for (const c of [`cat ${key}`, `cat ${both}`, `cat ${away}/*.pem`]) expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'deny']);
+  expect(d5('Read', { path: key }, 'bypass', { inside: false, rel: key })).toBe('deny');
+  // public is not the same as changeable: a write of it is still turned away, and so is a read outside Bypass
+  expect(d5('Write', { path: cert }, 'bypass', { inside: false, rel: cert })).toBe('deny');
+  expect(d5('Read', { path: cert }, 'ask', { inside: false, rel: cert })).toBe('deny');
 });
 
 // 3 Oct 2026: a Python check script sent as a heredoc was turned away as "/ is outside the

@@ -5,7 +5,8 @@ import { mkdtempSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sandboxProfile, fenceHint, shellPath, SHELL, sandboxed, forgetPorts } from '../src/tools/sandbox.mjs';
+import { sandboxProfile, fenceHint, shellPath, SHELL, sandboxed, forgetPorts, OWN_SHUT } from '../src/tools/sandbox.mjs';
+import { OWN_LOCKED } from '../src/agent/permissions.mjs';
 import { startShell } from '../src/tools/run.mjs';
 
 test('the profile closes outbound network and still allows this Mac', () => {
@@ -115,6 +116,19 @@ test.if(process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))('t
   expect(run(open, 'echo hi && echo ok').stdout).toBe('hi\nok\n');
   const self = sandboxProfile(project, { home, open: true, self: true });
   expect(run(self, `cat ${JSON.stringify(join(home, '.agentic-coder', 'door.key'))}`).stdout).toBe('');
+  // own (Bypass on hearth, 25 Nov 2026): the app's folder may be written, but not the files that could lift its limits.
+  expect(OWN_SHUT).toEqual(OWN_LOCKED);
+  const own = sandboxProfile(project, { home, open: true, own: true });
+  const inOwn = (f) => JSON.stringify(join(home, '.agentic-coder', f));
+  expect(run(own, `echo '{}' > ${inOwn('settings.json')} && cat ${inOwn('settings.json')}`).stdout).toBe('{}\n');
+  for (const f of ['hooks.json', 'permissions.json', 'mcp.json', 'trust.json']) {
+    expect([f, run(own, `echo '{}' > ${inOwn(f)}`).status === 0]).toEqual([f, false]);
+    expect([f, existsSync(join(home, '.agentic-coder', f))]).toEqual([f, false]);
+  }
+  expect(run(own, `echo '{}' > ${inOwn('made.tmp')} && mv ${inOwn('made.tmp')} ${inOwn('hooks.json')}`).status).not.toBe(0); // nor by a rename onto it
+  expect(run(own, `cat ${inOwn('door.key')}`).stdout).toBe('');
+  // Bypass with neither: the whole folder stays closed, as before.
+  expect(run(open, `echo '{}' > ${inOwn('settings2.json')}`).status).not.toBe(0);
 });
 
 // 21 Nov 2026: on a Linux server with no zsh (Triton) every command failed before it started.

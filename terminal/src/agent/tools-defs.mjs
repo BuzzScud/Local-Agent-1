@@ -242,6 +242,9 @@ export const APP_TOOL_DEF = {
 // Slash commands the App tool never runs: they end, replace or rewind the conversation it runs in,
 // or wait for a key of the user's. restart is the App tool's own action.
 export const APP_NOT = new Set(['clear', 'exit', 'quit', 'compact', 'resume', 'rewind', 'update', 'agents', 'loop', 'loops', 'jumptomac', 'btw', 'math', 'design', 'init', 'morning', 'test', 'start', 'stop']);
+// And the three it does not run where only its own settings are open (permissions.mjs isOwnOpen: Bypass on hearth):
+// they change what it may do (the rules, the hooks, the MCP servers), which stays the user's there.
+export const APP_OWN_NOT = new Set(['permissions', 'hooks', 'mcp']);
 // The tools an explore helper is given (the others are left out of its list and refused).
 export const EXPLORE_TOOLS = new Set(['Read', 'List', 'Search', 'Map', 'CodeSearch', 'LSP', 'Database', 'WebFetch', 'WebSearch', 'TodoWrite']);
 

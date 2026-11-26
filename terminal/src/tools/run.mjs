@@ -164,7 +164,7 @@ export async function runCommand(command, { cwd, timeoutMs = 120_000, maxLines =
       child.stdout.destroy();
       child.stderr.destroy();
       out = kept.text();
-      if (fenced) out += fenceHint(out, { open: Boolean(sandbox?.open), self: Boolean(sandbox?.self), command }); // also when a pipe hid the error code
+      if (fenced) out += fenceHint(out, { open: Boolean(sandbox?.open), self: Boolean(sandbox?.self), own: Boolean(sandbox?.own), command }); // also when a pipe hid the error code
       const all = out.replace(/\n$/, '').split('\n');
       const lines = squeeze ? squeezeTests(all) : all;
       const cut = lines.length > maxLines;

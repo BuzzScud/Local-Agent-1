@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { diffLines } from '../tools/edit.mjs';
 import { findEdit } from './tools-edit.mjs';
 import { parseSkills, readSkills, savedSkillText, skillProblems, skillTarget } from './prompt-files.mjs';
-import { skillFile, skillsDir } from './skill-store.mjs';
+import { libraryDir, skillFile, skillsDir } from './skill-store.mjs';
 
 const SHAPE = '## <Name>, then "- Words: <phrases a request for it uses>", "- About: <one line>", then its steps';
 
@@ -23,6 +23,8 @@ export function prepareSkill(name, args, env, { dir = skillsDir() } = {}) {
   let after;
   let how;
   if (name === 'Edit') {
+    // One of the library's (skill-store.mjs libraryDir): brought in by the folder and left as it came.
+    if (!exists && existsSync(skillFile(t.slug, libraryDir(dir)))) return { error: `${rel} is in the user's skill library, which is read-only here. To change it, Write ${rel} whole as your own version: it is then used in the library's place.` };
     if (!exists) return { error: `There is no saved skill ${rel}. Write it to save a new one: ${SHAPE}.` };
     const m = findEdit(before, args.old_text, args.new_text, { replaceAll: args.replace_all === true, line: Number(args.line) || null });
     if (!m.ok) return { error: m.error, ...(m.done ? { done: true } : {}) };

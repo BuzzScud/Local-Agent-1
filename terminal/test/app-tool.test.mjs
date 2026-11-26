@@ -49,6 +49,25 @@ test('restart hands the reason to the bridge, says the conversation is picked ba
   expect((await run({ action: 'dance' })).text).toContain('action must be command, setting or restart');
 });
 
+// 25 Nov 2026: Bypass on hearth opens the App tool too (permissions.mjs isOwnOpen), but for the three commands that
+// change what it may do, which stay the user's there.
+test('with only its own settings open (hearth), the App tool runs a command and a setting, but not /permissions, /hooks or /mcp', async () => {
+  const { APP_OWN_NOT } = await import('../src/agent/tools-defs.mjs');
+  expect([...APP_OWN_NOT]).toEqual(['permissions', 'hooks', 'mcp']);
+  const own = env({ permissionsNow: () => ({ mode: 'bypass', self: false, own: true }) });
+  calls.length = 0;
+  expect((await run({ action: 'command', command: '/mode auto' }, own)).error).toBeFalsy();
+  expect((await run({ action: 'setting', key: 'effort' }, own)).error).toBeFalsy();
+  for (const c of ['/permissions allow git push', '/hooks off 3', '/mcp', '/PERMISSIONS']) {
+    const no = await run({ action: 'command', command: c }, own);
+    expect([c, no.error]).toEqual([c, true]);
+    expect(no.text).toContain("that stays the user's");
+  }
+  expect(calls.map((c) => c[0])).toEqual(['command', 'setting']);
+  // With self (Claude) they run, as before.
+  expect((await run({ action: 'command', command: '/permissions allow npm test' })).error).toBeFalsy();
+});
+
 test('outside self, or with no window to drive, the tool refuses and says so', async () => {
   const off = await run({ action: 'command', command: '/mode auto' }, env({ permissionsNow: () => ({ mode: 'bypass', self: false }) }));
   expect(off.error).toBe(true);

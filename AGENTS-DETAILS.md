@@ -2288,3 +2288,53 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Smaller**: the "writing its next step" line rounds its token count (it printed 563.3915100432022); the start line
   on hearth with its sizes names its three helpers (general on the 9b, explore on the 4b, lookup on the 2b) in place of
   "Helpers on hearth-4b".
+
+## Working alone on hearth (25 Nov 2026)
+
+- **What and why.** The owner, on a screenshot of a window on hearth that had thought for 4 minutes at 1 token a second
+  about what "the M4 Cline" might be: "can we give it more tools? more permissions? more skills? … i need it to be able
+  to do everything alone". Measured first: 2,017 tool calls in its last 10 days of saved conversations, about 8 refused
+  (4 of them a certificate or ssh's settings), 19 questions put to the owner, 1 saved skill, no pack of Claude's notes;
+  and in that screenshot the app had added no wait: the server took 302 s to its first word. Their picks, of what was
+  offered: its own settings and the App tool, ssh's settings and certificates (not the push, not stopping processes);
+  Claude's notes readable, skills for their systems, and "add all skills from the staff side … just add them"; 300
+  steps, thinking held by the clock, its own questions answered by itself (not clicking and typing in apps).
+- **Own, not self** (permissions.mjs `isOwnOpen`, agent.mjs `ownOn`; judge's `own`): Bypass permissions on hearth opens
+  what Self opens of the app's own (`OWN`, a copy kept first; `SELF_LOCKED` stays shut; the App tool; the sandbox's own
+  folder) and nothing else of Self's: a git push still asks, a force push and kill stay blocked, and the end-of-turn
+  restart on new app code stays Claude's. `OWN_OPEN` is the note with the request; the PERMISSIONS guide's table says it.
+  The own files that could lift those limits stay shut there (`OWN_LOCKED`: hooks.json and its state, permissions.json,
+  mcp.json and its state, on top of the door's two; a hook runs a command outside the fence, the rules hold the
+  never-list, an MCP server is a program of its own), in judge, in the sandbox (`OWN_SHUT`, the same names; no
+  spelling of the path or rename reaches them) and in the App tool, which does not run /permissions, /hooks or /mcp
+  there (`APP_OWN_NOT`). Its settings, rules, skills and memory are what opens.
+- **A certificate is no secret** (permissions.mjs `isCertificate`, `secretBy`): a .pem, .crt or .cer outside the project
+  that is there, under 256 KB, and holds certificates and no key may be read and named in a command in Bypass (the
+  forge's CA file had been refused twice); under ~/.ssh, as a pattern, or for a write it is refused as before.
+  ssh's settings and public halves were opened earlier the same day (`SSH_OPEN`).
+- **Its own questions** (agent-checks.mjs `answerAlone`, agent.mjs `aloneOn`): in Bypass on hearth the Ask tool is not
+  put to the user: the model is told to take the choice it marked as recommended, else the safest (changes or deletes
+  least, can be undone), to go on, and to say in its answer what it chose; a wall is still no licence for another
+  task. Any other mode asks as before (shift+tab is the switch); settings.json `"alone": false` or `AGENTIC_ALONE=off`
+  puts the questions back in Bypass too. `ALONE_NOTE` goes with the request while it holds.
+- **300 steps** (remote.mjs `HEARTH_STEPS`; limits.mjs gives a model whose start is past 120 the steps up to 300).
+- **Thinking by the clock** (agent-model.mjs `hearthThinkSecs`, `HEARTH_STEP_SECS` 60, `HEARTH_PLAN_SECS` 90,
+  `AGENTIC_HEARTH_THINK_SECS`; 0 is off): the token caps of 21 Nov are a minute only at hearth's usual 18 tokens a
+  second. From a reply's first thought (reading the conversation is not thinking), past its time the thought is kept and
+  the step acts on it with thinking off, as at the token cap. Not measured on hearth yet.
+- **Claude's notes on hearth** (agent-memory.mjs `notesSent`): all of the pack may be seen there, as on the owner's own
+  machine; the facts about them still follow Memory sent, and `none` is still none. The pack's own filter (sign-ins,
+  servers, secrets left out) is unchanged, so a note about a server still stays out.
+- **The skill library** (skill-store.mjs `libraryDir`, prompt-files.mjs `librarySkills`, `parseWholeSkill`,
+  `skillPart`, `SKILL_PART`): `~/.agentic-coder/skills/library/*.md`, one skill a file whatever headings its text has,
+  read on the remote set only, kept by each file's time and size. The instructions count them in one line (98 of them
+  were about 12k tokens listed); a request that uses a skill's words brings it; `Read SKILLS` lists them all with a
+  short About and `find` narrows the list; a skill past 12,000 characters comes in parts, each saying where the next
+  starts (`offset`). A saved skill of the same name is used in its place; an Edit of a library skill is turned back
+  with that. `/skills` has one line for it, `/skills library` lists it, `/skills remove` takes one out (dated, kept).
+  /profiles' skill rows and the Bonsai tab leave it out. The importer for hearth's staff skills is the owner's own
+  (private, not in the repo).
+- **Tests**: `terminal/test/hearth-alone.test.mjs` (alone and own by mode and service, a question answered by the app,
+  the note and the App tool on a stand-in, the notes), `permissions-self.test.mjs` (own beside self, what stays
+  locked), `sandbox.test.mjs` (the same in a real sandbox), `app-tool.test.mjs` (the three commands),
+  `permissions.test.mjs` (a certificate), `hearth-see.test.mjs` (the clock, 300 steps), `skills.test.mjs` (the library).

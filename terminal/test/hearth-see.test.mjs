@@ -88,6 +88,43 @@ test('on hearth, a reply that thinks past its step\'s cap keeps the thought, act
   } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
 });
 
+// 25 Nov 2026: a busy server wrote 1 token a second; the step thought for 4 minutes with 192 tokens, 17 minutes short of its cap.
+test('on hearth, a step that thinks past its time is stopped by the clock though far under its token cap; elsewhere the clock is not used', async () => {
+  const { hearthThinkSecs, HEARTH_STEP_SECS, HEARTH_PLAN_SECS } = await import('../src/agent/agent-model.mjs');
+  expect([HEARTH_STEP_SECS, HEARTH_PLAN_SECS]).toEqual([60, 90]);
+  expect([hearthThinkSecs(false, {}), hearthThinkSecs(true, {})]).toEqual([60, 90]);
+  expect([hearthThinkSecs(false, { AGENTIC_HEARTH_THINK_SECS: '20' }), hearthThinkSecs(true, { AGENTIC_HEARTH_THINK_SECS: '20' })]).toEqual([20, 30]);
+  expect(hearthThinkSecs(true, { AGENTIC_HEARTH_THINK_SECS: '0' })).toBe(0);
+  expect(hearthThinkSecs(false, { AGENTIC_HEARTH_THINK_SECS: 'soon' })).toBe(60);
+  const was = process.env.AGENTIC_HEARTH_THINK_SECS;
+  // 4,000 characters of thinking (about 1.1k tokens, under the plan's 1.6k) written over 30 ms or more.
+  const run = async (hearth) => {
+    const svc = await fakeOllama({ overthink: 4000 });
+    setEndpoint(svc.url, { remote: true, kind: 'openai', ollama: true, hearth, thinks: true, model: 'coder:30b', numCtx: 65536, keepAlive: -1, free: true });
+    try {
+      const a = new Agent({ url: svc.url, model: { ...local, thinkingBudget: 4096, remote: { model: 'coder:30b' } }, cwd: dir, system: 'x', memory: false, flows: false, mode: 'bypass', way: 'model', hooks: [], thinking: true, ctx: 65536 });
+      const notes = [];
+      a.on('note', (e) => notes.push(e.text));
+      expect(await a.send('hello')).toBe('done');
+      return { notes, chats: svc.seen.filter((x) => x.path === '/api/chat').map((x) => x.body) };
+    } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
+  };
+  try {
+    process.env.AGENTIC_HEARTH_THINK_SECS = '0.004';
+    const onHearth = await run(true);
+    expect(onHearth.chats.map((b) => Boolean(b.think))).toEqual([true, false]);
+    expect(String(onHearth.chats[1].messages.at(-1).content)).toContain('Your thinking for this step reached its limit');
+    expect(String(onHearth.chats[1].messages.at(-1).content)).toContain('Part 0:');
+    expect(onHearth.notes.some((t) => /Thought for this step's \d+ seconds \(the server is writing slowly: \d+ tokens in \d+ s\): the thought is kept/.test(t))).toBe(true);
+    // The clock off: the same reply is under its token cap, so it is left to finish.
+    process.env.AGENTIC_HEARTH_THINK_SECS = '0';
+    expect((await run(true)).chats.map((b) => Boolean(b.think))).toEqual([true]);
+    // Another service has no clock.
+    process.env.AGENTIC_HEARTH_THINK_SECS = '0.004';
+    expect((await run(false)).chats.map((b) => Boolean(b.think))).toEqual([true]);
+  } finally { if (was === undefined) delete process.env.AGENTIC_HEARTH_THINK_SECS; else process.env.AGENTIC_HEARTH_THINK_SECS = was; }
+});
+
 test("the screen's speed for a call still being written is the usual one, never a one-token reply's", async () => {
   const { usualSpeed } = await import('../src/agent/agent-model.mjs');
   expect(usualSpeed([18.2, 17.9, 1_000_000, 18.6])).toBe(18.2);
@@ -352,15 +389,17 @@ test('a file cut off at the limit on hearth is built in parts with Write and app
   } finally { dropEndpoint?.(svc.url); await svc.close?.(); }
 });
 
-test('a window on hearth starts with 80 steps; another service keeps its own', async () => {
+test('a window on hearth starts with 300 steps; another service keeps its own', async () => {
   const { remoteModel, HEARTH_STEPS } = await import('../../models/index.mjs');
   const { LIMITS } = await import('../src/app/limits.mjs');
-  expect(HEARTH_STEPS).toBe(80);
+  expect(HEARTH_STEPS).toBe(300);
   const steps = LIMITS.find((l) => l.id === 'steps');
   const onHearth = remoteModel({ source: 'hearth', kind: 'openai', address: 'https://employee.hearth.monster/door/v1', model: 'hearth' }, { model: 'hearth' });
-  expect(onHearth.startSteps).toBe(80);
-  expect(steps.def(onHearth)).toBe(80);
+  expect(onHearth.startSteps).toBe(300);
+  expect(steps.def(onHearth)).toBe(300);
+  expect(steps.steps(onHearth)).toEqual([20, 40, 60, 80, 120, 200, 300]);
   const elsewhere = remoteModel({ source: 'openai', kind: 'openai', address: 'http://127.0.0.1:9', model: 'qwen3:8b' }, { model: 'qwen3:8b' });
   expect(elsewhere.startSteps).toBeUndefined();
   expect(steps.def(elsewhere)).toBe(40);
+  expect(steps.steps(elsewhere)).toEqual([20, 40, 60, 80, 120]);
 });

@@ -120,7 +120,7 @@ export function hearthList(model, sizes = HEARTH_SIZES) {
 // What hearth's 27b does: thinks and uses tools. An older door said "completion" only, for every model.
 // hearth's levels (its door takes off, low, medium and high; its High is the model's xhigh), by the connection, not the
 // model's name ("hearth@poseidon" is hearth too: matched by name, it fell to the generic Off/On and ran with no thinking).
-export const HEARTH_STEPS = 80;
+export const HEARTH_STEPS = 300; // steps a request: 40, then 80 (21 Nov 2026), then 300 (25 Nov, the owner: "i need it to be able to do everything alone"; at 80 a long job stopped and waited)
 export const HEARTH_LEVELS = [
   { id: 'off', label: 'Off', effort: null, note: 'answers straight away' },
   { id: 'low', label: 'Low', effort: 'low', note: 'thinks briefly first' },

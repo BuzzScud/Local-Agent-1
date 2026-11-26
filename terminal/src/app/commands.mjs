@@ -16,7 +16,7 @@ export const COMMANDS = [
   { name: 'memory', desc: 'What Agentic Coder remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
   { name: 'instructions', desc: 'Edit the instructions and prompt files (AGENTS, TOOLS, SKILLS.md) in the hub' },
   // /skills (28 Oct 2026): your saved skills (~/.agentic-coder/skills, every project) and SKILLS.md's (agent/skill-store.mjs).
-  { name: 'skills', desc: 'Your saved skills and SKILLS.md’s: steps a request’s words bring, kept for every project; save turns this conversation into one', arg: '[save [name]|show <name>|remove <name>|open]' },
+  { name: 'skills', desc: 'Your saved skills and SKILLS.md’s: steps a request’s words bring, kept for every project; save turns this conversation into one', arg: '[save [name]|show <name>|remove <name>|open|library]' },
   // /plugins (19 Nov 2026, as Claude Code's /plugin): skills, helper agents, hooks and MCP servers in one folder (agent/plugins.mjs).
   { name: 'plugins', desc: 'Plugins: skills, helper agents, hooks and MCP servers that come in one folder (Claude Code\'s layout); add one from a folder or a git address, switch it on or off', arg: '[add <folder|git address>|on|off|show|remove <name>|open]' },
   { name: 'rules', desc: 'What the model reads at every start, numbered; add, switch off or remove a rule', arg: '[add|off|on|remove|always|open]' },

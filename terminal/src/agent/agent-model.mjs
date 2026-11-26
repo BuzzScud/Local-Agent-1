@@ -18,6 +18,18 @@ const PLAN_KEEP = 16_000;
 // usual ~18 a second: about a minute a step, about 90 s on a request's first step, for its plan. Never past the model's budget.
 export const HEARTH_STEP_THINK = 1024;
 export const HEARTH_PLAN_THINK = 1600;
+// The same limit by the clock (25 Nov 2026, the owner's pick: "thinking capped by the clock"). The token caps are a
+// minute only at hearth's usual speed: on a busy server writing 1 token a second, a step thought for 4 minutes with
+// 192 tokens, and its cap of 1,024 was 17 minutes away. Counted from the reply's first thought, so the time the
+// server spends reading the conversation is not thinking. AGENTIC_HEARTH_THINK_SECS: another limit for a step
+// (the plan's is half as long again); 0 turns the clock off.
+export const HEARTH_STEP_SECS = 60;
+export const HEARTH_PLAN_SECS = 90;
+export const hearthThinkSecs = (first, env = process.env) => {
+  const own = env.AGENTIC_HEARTH_THINK_SECS;
+  const step = own !== undefined && own !== '' && Number.isFinite(Number(own)) && Number(own) >= 0 ? Number(own) : HEARTH_STEP_SECS;
+  return first ? step * (HEARTH_PLAN_SECS / HEARTH_STEP_SECS) : step;
+};
 // What one reply on hearth may write on top of its thinking (21 Nov 2026: told to write a big file in parts, the 27b wrote a
 // 406-line page in one 4-minute call anyway). About 200 lines and under 3 minutes at its usual speed: a longer Write reaches
 // the limit, and the cut-off handling has it build the file in parts with Write's append (agent-said.mjs inParts).
@@ -293,6 +305,9 @@ export class ModelPart {
     // model's thinking budget is stopped and asked for once more with thinking off (5 Oct 2026: one reply
     // of Qwen3.6 thought for 14 minutes, 28.4k tokens, to the end of its reply room, in a 25-minute task).
     const serviceCap = thinking && endpointOf(this.url)?.ollama ? Math.min(this.model?.thinkingBudget ?? 4096, hearthCap) : 0;
+    // On hearth the same cap by the clock (hearthThinkSecs), from the reply's first thought.
+    const clockCap = serviceCap && onHearth ? hearthThinkSecs((this.turn?.steps ?? 0) === 0) * 1000 : 0;
+    let thoughtFrom = null;
     // readSecs: about how long the service takes to read what is new, at its usual reading speed; past it, a reply that
     // has sent nothing on a service that sends a call whole is writing one (the window's "Writing its next step").
     this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : serviceCap ? serviceCap : !this.capsThinking() ? maxTokens : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama), tps: usualSpeed(this.stats?.speeds), readSecs: this.stats?.pps > 0 ? fresh / this.stats.pps : null });
@@ -313,6 +328,8 @@ export class ModelPart {
           this.emit('reasoning', { text: ev.text, all: turn.reasoning });
           if (isLooping(turn.reasoning)) { turn.looping = true; local.abort(); break; }
           if (serviceCap && turn.reasoning.length > serviceCap * 3 && tokensOf(turn.reasoning) > serviceCap) { turn.overThought = true; local.abort(); break; }
+          thoughtFrom ??= Date.now();
+          if (clockCap && Date.now() - thoughtFrom > clockCap) { turn.overThought = true; turn.overClock = Math.round((Date.now() - thoughtFrom) / 1000); local.abort(); break; }
         } else if (ev.type === 'text') {
           if (thinkEnd === null && turn.reasoning) thinkEnd = Date.now();
           turn.text += ev.text;
@@ -409,7 +426,9 @@ export class ModelPart {
       // On hearth the thought is kept and this one step acts on it with thinking off; the next step thinks again (21 Nov
       // 2026, the owner's picks: the plan kept, then "think short, write, do commands, then think again").
       if (onHearth && this.keepPlan(turn.reasoning, { first: (this.turn?.steps ?? 0) === 0 })) {
-        this.emit('note', { text: `Thought to this step's limit (${kTok(serviceCap)}): the thought is kept, it acts on it now, and it thinks again after the result.`, tone: 'dim', fold: true });
+        this.emit('note', { text: turn.overClock != null
+          ? `Thought for this step's ${Math.round(clockCap / 1000)} seconds (the server is writing slowly: ${tokensOf(turn.reasoning)} tokens in ${turn.overClock} s): the thought is kept, it acts on it now, and it thinks again after the result.`
+          : `Thought to this step's limit (${kTok(serviceCap)}): the thought is kept, it acts on it now, and it thinks again after the result.`, tone: 'dim', fold: true });
         return this.generate(signal, { retry, textOnly, maxTokens: cap, focus, noThink: true });
       }
       // And the rest of this request with it off: thinking stopped at the cap is thrown away, and a model that

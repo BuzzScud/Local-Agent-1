@@ -59,7 +59,7 @@ export const GROUPS = [
 export function groupsNow(skills = null) {
   let list = skills;
   if (!list) { try { list = readSkills(undefined, 'remote'); } catch { list = []; } }
-  return GROUPS.map((g) => (g.id === 'skill' ? { ...g, rows: list.filter((s) => !s.hidden).map((s) => ({ id: s.slug, label: s.name, note: s.about || 'a skill' })) } : g));
+  return GROUPS.map((g) => (g.id === 'skill' ? { ...g, rows: list.filter((s) => !s.hidden && !s.shelf).map((s) => ({ id: s.slug, label: s.name, note: s.about || 'a skill' })) } : g));
 }
 export const rowsOf = (groups) => groups.flatMap((g) => g.rows.map((r) => ({ ...r, group: g.id, key: `${g.id}:${r.id}` })));
 

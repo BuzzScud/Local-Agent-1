@@ -175,7 +175,9 @@ export const LIMITS = [
     // step limit for claude api"); a request runs until it is done, or esc stops it. Saved 0 fits only
     // there (readLimits: in range of the row's steps), so a local model keeps its count.
     id: 'steps', label: 'Steps per request',
-    steps: (m) => (m?.remote?.kind === 'claude' ? [0, 20, 40, 60, 80, 120] : [20, 40, 60, 80, 120]),
+    // A model whose own start is past the list (hearth, 300 since 25 Nov 2026) gets the steps up to it, so the row can
+    // come back to where it started.
+    steps: (m) => (m?.remote?.kind === 'claude' ? [0, 20, 40, 60, 80, 120] : (m?.startSteps ?? 0) > 120 ? [20, 40, 60, 80, 120, 200, 300] : [20, 40, 60, 80, 120]),
     // startSteps: a model on a service with a default of its own (models/runtime/remote.mjs OWN_REMOTES: Bonsai 2 9B, 120).
     def: (m) => (m?.remote?.kind === 'claude' ? 0 : m?.harness?.steps ?? m?.startSteps ?? 40),
     show: (v) => (v ? String(v) : 'no limit'),

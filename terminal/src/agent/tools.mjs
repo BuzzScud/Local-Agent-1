@@ -22,7 +22,7 @@ import { noteSkillUse, writeSkillFile } from './skill-store.mjs';
 import { designGuide } from './design-system.mjs';
 import { saveScript, usesScripts, commandWithScripts, outputWithScripts, scriptsDir, heredocScript, failingLine, savedNote, saveOutput, tildeHint, nodeHint } from './scripts.mjs';
 import { permissionsTable, runsGitPush, runsTests, splitCommand } from './permissions.mjs';
-import { APP_NOT, PART_DEFAULT, PART_MAX, WHOLE_MAX, oldSteps } from './tools-defs.mjs';
+import { APP_NOT, APP_OWN_NOT, PART_DEFAULT, PART_MAX, WHOLE_MAX, oldSteps } from './tools-defs.mjs';
 import { findEdit, stripLineNumbers, syntaxError } from './tools-edit.mjs';
 import { missing, notThere, resolvePath, settlePath } from './tools-paths.mjs';
 import { cut, webFetch, webSearch } from './tools-web.mjs';
@@ -259,7 +259,7 @@ export async function execute(name, args, prepared, env) {
         const text = guide.name === 'PERMISSIONS' && env.permissionsNow ? `${guide.text}\n\n${permissionsTable(env.permissionsNow())}` : guide.text;
         return { text, view: { kind: 'read', lines: text.split('\n').length, total: text.split('\n').length, content: text } };
       }
-      const skill = readSkillPath(env.cwd, args.path, skills);
+      const skill = readSkillPath(env.cwd, args.path, skills, { find: args.find, offset: args.offset, limit: args.limit });
       if (skill?.error) return { text: skill.error, error: true, view: { kind: 'error', message: 'No such skill' } };
       if (skill?.skill) noteSkillUse(skill.skill.slug);
       // A saved skill's file is what an Edit of it then changes (agent-step.mjs keeps it as read).
@@ -453,8 +453,9 @@ export async function execute(name, args, prepared, env) {
       // real folder, which the sandbox may read (scripts.mjs). The command itself runs as typed.
       const saved = saveScript(args.command, env.cwd);
       const scripts = Boolean(saved) || usesScripts(args.command, env.cwd);
-      // self: the app works on itself (permissions.mjs isSelf): its own folder is open too.
-      const sandbox = open ? { open: true, self: Boolean(now.self) } : scripts ? { readOnly: [scriptsDir()] } : null;
+      // self: the app works on itself (permissions.mjs isSelf): its own folder is open too. own: its own folder but
+      // for the files that could lift its limits (isOwnOpen, sandbox.mjs OWN_SHUT).
+      const sandbox = open ? { open: true, self: Boolean(now.self), own: Boolean(now.own) } : scripts ? { readOnly: [scriptsDir()] } : null;
       // A wait the model chose ("sleep 115; grep … run.log") ends early when a message of yours comes in.
       const wait = env.heard && waitsFirst(args.command);
       const signal = wait ? AbortSignal.any([env.signal, env.heard].filter(Boolean)) : env.signal;
@@ -587,7 +588,7 @@ async function startJob(args, env, max) {
   if (open && usesSsh(args.command)) await keysReady(); // a tunnel needs the key too (tools/ssh.mjs)
   // SCRIPTS/… is the real folder of saved scripts, which the sandbox may read (scripts.mjs).
   const scripts = usesScripts(args.command, env.cwd);
-  const sandbox = open ? { open: true, self: Boolean(now.self) } : scripts ? { readOnly: [scriptsDir()] } : null;
+  const sandbox = open ? { open: true, self: Boolean(now.self), own: Boolean(now.own) } : scripts ? { readOnly: [scriptsDir()] } : null;
   const r = await env.jobs.start(commandWithScripts(args.command, env.cwd), { cwd: env.cwd, description: args.description ?? '', ...(sandbox ? { sandbox } : {}) });
   if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: 'too many background jobs' } };
   const { job } = r;
@@ -641,7 +642,8 @@ async function jobsTool(args, env, max) {
 async function appTool(args, env, max) {
   const app = env.app;
   const err = (message, text = message) => ({ text, error: true, view: { kind: 'error', message } });
-  if (!env.permissionsNow?.().self) return err('the App tool runs only in Bypass permissions on the Claude API', 'The App tool is not available: it runs only while the user runs Agentic Coder in Bypass permissions on the Claude API. Tell the user what you wanted to do, and they can do it.');
+  const now = env.permissionsNow?.();
+  if (!now?.self && !now?.own) return err('the App tool runs only in Bypass permissions on the Claude API or on hearth', 'The App tool is not available: it runs only while the user runs Agentic Coder in Bypass permissions on the Claude API or on hearth. Tell the user what you wanted to do, and they can do it.');
   if (!app) return err('no window to drive here', 'The App tool has no window to drive here (a helper, or a run without the terminal). Do it another way, or tell the user.');
   const action = String(args.action ?? '').trim();
   if (action === 'command') {
@@ -649,6 +651,7 @@ async function appTool(args, env, max) {
     const m = /^\/(\S+)/.exec(line);
     if (!m) return err('command must start with /', 'Send command as the user would type it, starting with /: "/mode auto".');
     if (APP_NOT.has(m[1].toLowerCase())) return err(`/${m[1]} is not run by the App tool`, `/${m[1]} is not run by the App tool: it would end, replace or rewind the conversation you run in, or wait for the user's keys. ${m[1] === 'update' ? 'To start the app again on new code, use action restart.' : 'Tell the user to type it.'}`);
+    if (!now?.self && APP_OWN_NOT.has(m[1].toLowerCase())) return err(`/${m[1]} is the user's to run here`, `/${m[1]} is not run by the App tool here: it changes what you may do (the permission rules, the hooks, the MCP servers), and that stays the user's. Tell them what you wanted changed and why.`);
     const r = await app.command(line);
     const notes = (r.notes ?? []).map((t) => String(t).trim()).filter(Boolean);
     const body = notes.length ? notes.join('\n') : `${line} ran; the screen showed no note (a command that opens a panel shows it to the user).`;

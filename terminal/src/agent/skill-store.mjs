@@ -13,6 +13,12 @@ import { join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 
 export const skillsDir = (home = HOME) => join(home, 'skills');
+// The library (25 Nov 2026, the owner: "add all skills … just add them"; 95 of hearth's staff skills, 2.5 MB of steps):
+// skills brought in by the folder, one file each in skills/library/. They are not listed line by line in the
+// instructions (95 lines there were about 12k tokens read at every start): a request that uses a skill's words brings
+// it, and Read SKILLS lists them all (prompt-files.mjs). One of yours with the same name is used in its place.
+export const LIBRARY = 'library';
+export const libraryDir = (dir = skillsDir()) => join(dir, LIBRARY);
 const USES = '.uses.json';
 const REMOVED = '.removed';
 // A saved skill's name on disk: what SKILLS/<name> opens.

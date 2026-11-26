@@ -1,6 +1,7 @@
 // The Agent's memory (agent.mjs): facts brought back and saved, the opening read, the maps, Claude's
 // notes, a folder's notes and the Remember hint.
 // Its methods are put on Agent.prototype by agent.mjs, so this is the Agent: every this.x() is the agent's own.
+import { endpointOf } from '../../../models/index.mjs';
 import { resolvePath } from './tools.mjs';
 import { existsSync } from 'node:fs';
 import { isHomeFolder } from './prompt.mjs';
@@ -234,8 +235,13 @@ export class MemoryPart {
 
   // What of Claude's notes this model may be given: all of them on this Mac and on the owner's own
   // machine, else only those about this project, or none (opening.mjs memorySent, /remote's Memory sent).
+  // hearth is the owner's own service (25 Nov 2026, their pick "My notes, readable": its model spent four minutes
+  // guessing what "the M4 Cline" was, which the notes say): there all of Claude's notes may be seen, as on their own
+  // machine. The facts about them still follow Memory sent (giveOpening), and "none" still means none.
   notesSent() {
-    return this.model?.remote ? memorySent(this.model) : 'all';
+    if (!this.model?.remote) return 'all';
+    const sent = memorySent(this.model);
+    return sent === 'project' && endpointOf(this.url)?.hearth ? 'all' : sent;
   }
 
   // The pack of Claude's notes (claude-pack.mjs) as this model may see it: its map, its topics and

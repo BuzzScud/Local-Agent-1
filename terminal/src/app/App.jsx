@@ -613,6 +613,7 @@ export function App({ opts, win, onRestart }) {
   // Whether this model on this Mac can turn its vision on (the Screen tool is offered then too).
   agent.mayLook = () => !model.remote && !opts.url && Boolean(model.vision) && existsSync(visionPath(model));
   agent.screen = settings.screen !== false;
+  agent.alone = settings.alone !== false; // "alone": false: its questions come to you even in Bypass on hearth (agent.mjs aloneOn)
   // Tools on demand (agent/tool-groups.mjs): "auto" unless settings.json's "toolsOnDemand" says "on" or "off".
   agent.toolsOnDemand = settings.toolsOnDemand ?? 'auto';
   agent.visionOn = async () => {
