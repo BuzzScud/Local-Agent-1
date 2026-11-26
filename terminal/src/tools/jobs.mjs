@@ -4,7 +4,7 @@
 // or stops it. One that ends by itself is said to the model: with its next step while a reply
 // runs, or as a message of its own once the reply is over (agent.mjs jobEnded). Jobs stop when
 // the window closes (stopAll, and the exit hook below for a quit that skips it).
-import { startShell, signalCommand } from './run.mjs';
+import { startShell, signalCommand, looksFor } from './run.mjs';
 import { fenceHint } from './sandbox.mjs';
 
 // Running at once, at most: a fifth is refused with the list.
@@ -63,7 +63,7 @@ export class Jobs {
   async start(command, { cwd, sandbox = {}, description = '', firstMs = this.firstMs } = {}) {
     const busy = this.running();
     if (busy.length >= MAX_RUNNING) return { error: `${busy.length} background jobs are running already, the most there may be: ${busy.map((j) => j.id).join(', ')}. Stop one with Jobs (its id and "stop": true) first, or run this one without background.` };
-    const { child, fenced, mark } = startShell(command, { cwd, sandbox });
+    const { child, fenced, mark } = startShell(command, { cwd, sandbox, look: await looksFor(command, sandbox) });
     const n = ++this.n;
     const job = { n, id: `job${n}`, command, description, cwd, pid: child.pid, started: Date.now(), ended: null, code: null, out: '', seen: 0, dropped: 0, stopped: null, fenced, child, mark, marked: [] };
     this.all.push(job);

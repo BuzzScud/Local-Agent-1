@@ -687,7 +687,8 @@ function meterPill(m) {
   if (sizing(m)) parts.push('<span>ctx <span class="of">once loaded</span></span>');
   else if (m.ctx) parts.push((m.pct != null ? ctxBar(m.pct, '44px') : '') + '<span>ctx <b' + (ctxTone(m.pct) ? ' class="' + ctxTone(m.pct) + '"' : '') + '>' + (m.pct != null ? m.pct + '%' : '–') + '</b><span class="of"> of ' + esc(m.ctxWord) + '</span></span>');
   if (m.mac) parts.push('<span>Mac <b' + (macTone(m.mac) ? ' class="' + macTone(m.mac) + '"' : '') + '>' + m.mac.used.toFixed(1) + '</b>/' + Math.round(m.mac.total) + ' GB</span>');
-  else if (m.gpu) parts.push('<span>GPU <b' + (spills(m.gpu) ? ' class="warn"' : '') + '>' + (spills(m.gpu) ? m.gpu.pct + '%' : m.gpu.size ? gb(m.gpu.size) : m.gpu.pct + '%') + '</b>' + (spills(m.gpu) ? '<span class="of"> · rest on CPU</span>' : '') + '</span>');
+  // A service that says neither the model's size nor its share on the GPU (hearth's door, 25 Nov 2026: "GPU null%") says nothing here.
+  else if (m.gpu && (m.gpu.size || m.gpu.pct != null)) parts.push('<span>GPU <b' + (spills(m.gpu) ? ' class="warn"' : '') + '>' + (spills(m.gpu) ? m.gpu.pct + '%' : m.gpu.size ? gb(m.gpu.size) : m.gpu.pct + '%') + '</b>' + (spills(m.gpu) ? '<span class="of"> · rest on CPU</span>' : '') + '</span>');
   if (!parts.length) return '';
   const tone = worst(ctxTone(m.pct), macTone(m.mac), spills(m.gpu) ? 'warn' : null);
   return '<span class="upill free' + (tone ? ' ' + tone : '') + (S.usageCard ? ' open' : '') + '" data-act="usage">' + parts.join('<span class="sepv"></span>') + '</span>';
@@ -737,7 +738,7 @@ function meterCardHtml(m) {
     const mt = macTone(m.mac);
     mem += '<div class="ln"><span class="lbl">Memory</span><span>Mac</span><span class="meter"><i style="width:' + Math.min(100, (m.mac.used / m.mac.total) * 100).toFixed(1) + '%' + (mt ? ';background:var(--' + mt + ')' : '') + '"></i></span><span class="r"><span class="v' + (mt ? ' ' + mt : '') + '">' + m.mac.used.toFixed(1) + ' of ' + Math.round(m.mac.total) + ' GB</span> · pressure ' + esc(m.mac.pressure) + '</span></div>';
     mem += '<div class="ln"><span class="lbl"></span>' + (m.state === 'off' ? '<span>the model is off and holds nothing · ctrl+t or /start loads it</span>' : m.modelGb ? '<span>the model holds <span class="v">' + m.modelGb.toFixed(1) + ' GB</span> of it (its file and its cache)</span>' : '<span style="color:var(--faint)">the model’s share shows once it has loaded</span>') + '</div>';
-  } else if (m.gpu) {
+  } else if (m.gpu && (m.gpu.size || m.gpu.pct != null)) {
     const left = m.gpu.until ? Date.parse(m.gpu.until) - now : NaN;
     const stay = !Number.isFinite(left) ? '' : left > 86400000 ? 'kept loaded' : left > 0 ? 'unloads in ' + Math.max(1, Math.round(left / 60000)) + ' min' : '';
     mem += '<div class="ln"><span class="lbl">Memory</span><span>GPU</span><span class="meter"><i style="width:' + (m.gpu.pct ?? 100) + '%"></i></span><span class="r"><span class="v' + (spills(m.gpu) ? ' warn' : '') + '">' + (m.gpu.vram != null ? gb(m.gpu.vram) + ' of ' : '') + (m.gpu.size ? gb(m.gpu.size) : '') + '</span>' + (spills(m.gpu) ? ' <span class="warn">· ' + m.gpu.pct + '% on the GPU</span>' : ' · all on the GPU') + '</span></div>';

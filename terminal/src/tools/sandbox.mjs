@@ -10,7 +10,7 @@
 // It may not start apps (open, osascript), which would run outside the fence,
 // and it may not touch what already runs on this Mac: no signals to processes
 // it did not start, no connections to the services that were listening when
-// it started (Postgres, your desks' servers), no reading their data folders.
+// it started (Postgres, your desks' servers; Bypass reaches them), no reading their data folders.
 // Outbound network is closed. `allow default` used to leave it open, so a
 // command could still phone home. A server the command starts on this Mac
 // can still be reached; the internet cannot.
@@ -82,9 +82,12 @@ function gitDirs(cwd) {
 // opens for that one server: net (the internet), and local: the ports of services already
 // running on this Mac it may reach ([5432] for your Postgres), or 'any'.
 // open: Bypass permissions (the owner's pick, 3 Oct 2026): any folder and the internet, but
-// still no apps started, nothing that already runs here touched, Agentic Coder's own
+// still no apps started, no signals to what already runs here, Agentic Coder's own
 // folder not written, and ~/.ssh not read (permissions.mjs SECRET_FILES) but for ssh's public
-// files (SSH_PUBLIC), so ssh logs in through this Mac's ssh agent with no key file open to it (ssh.mjs).
+// files (SSH_PUBLIC) and the folder's list of names, so ssh logs in through this Mac's ssh agent with no key file open to it (ssh.mjs).
+// Since 25 Nov 2026 (the owner, on hearth's model failing to find why a server was slow: "all permissions") Bypass also
+// reaches the servers already running on this Mac, at any port or socket: Ollama's 11434 had read as an empty answer.
+// Their data folders (SERVICE_DATA) stay closed, and removing a model asks first (permissions.mjs removesModel).
 // self: Bypass with the Claude API (permissions.mjs isSelf): the app works on itself, so its own
 // folder is open too; only the door's key and trust list stay closed (SELF_LOCKED).
 export function sandboxProfile(root, { home = homedir(), readOnly = [], net = false, local = [], open = false, self = false } = {}) {
@@ -110,7 +113,7 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [], net = fa
     // stops every command with exit 65); localhost covers 127.0.0.1 and ::1.
     ...(net || open ? [] : ['(deny network-outbound)', '(allow network-outbound (remote ip "localhost:*"))', '(allow network-outbound (remote unix-socket))']),
     ...(open ? [`(deny file-write* ${ownClosed})`, `(deny file-read-data ${keyFiles} ${secretFiles})`, `(deny file-read-data file-write* (subpath ${q(inHome('.ssh'))}))`,
-      `(allow file-read-data ${SSH_PUBLIC.map((f) => `(literal ${q(inHome(`.ssh/${f}`))})`).join(' ')} (subpath ${q(inHome('.ssh/config.d'))}) (regex #"^${reText(inHome('.ssh'))}/[^/]+\\.pub$"))`] : [
+      `(allow file-read-data (literal ${q(inHome('.ssh'))}) ${SSH_PUBLIC.map((f) => `(literal ${q(inHome(`.ssh/${f}`))})`).join(' ')} (subpath ${q(inHome('.ssh/config.d'))}) (regex #"^${reText(inHome('.ssh'))}/[^/]+\\.pub$"))`] : [
       `(deny file-read-data (subpath ${q(h)}))`,
       // No writes anywhere but the project, the caches and the temp folders (18 Nov 2026, the audit: only the
       // home folder and /Volumes were closed, so a command could put a program in /opt/homebrew/bin or /usr/local).
@@ -126,7 +129,7 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [], net = fa
     // What already runs here: no signals to it, no connections to it, not its data.
     '(deny signal)', '(allow signal (target same-sandbox))', // its own processes only
     `(deny file-read-data file-write* ${SERVICE_DATA.map((p) => `(subpath ${q(p)})`).join(' ')})`,
-    ...(local === 'any' ? [] : [`(deny network-outbound (remote unix-socket (path-regex #"${SOCKETS}")))`,
+    ...(local === 'any' || open ? [] : [`(deny network-outbound (remote unix-socket (path-regex #"${SOCKETS}")))`,
       ...listeningPorts().filter((port) => !local.includes(port)).map((port) => `(deny network-outbound (remote ip "localhost:${port}"))`)]),
   ].filter(Boolean).join('\n');
 }
@@ -171,6 +174,10 @@ export function netHint(output, command) {
 }
 
 const LOCAL_SERVER = /\b(?:connect(?:ion)?|socket)\b[^\n]*(?:Operation not permitted|EPERM)|(?:Operation not permitted|EPERM)[^\n]*\bconnect/i;
+// ps and top are setuid programs, and macOS never starts one inside a sandbox, whatever its profile (25 Nov 2026: hearth's
+// model, asked why a server was slow, got "operation not permitted: ps" and nothing else). The app runs a plain ps or top
+// itself (proclook.mjs); one it could not (a variable in its words, `$(ps …)`, /bin/ps by path) lands here.
+const SETUID_LOOK = /operation not permitted: (?:\/bin\/|\/usr\/bin\/)?(?:ps|top)\b|execvp\(\) of '\/(?:bin\/ps|usr\/bin\/top)'/i;
 export function fenceHint(output, { open = false, self = false, command = '' } = {}) {
   // ssh says why it failed in its own words; the files hint below sent the model after the wrong cause.
   const ssh = sshHint(output, { open, command });
@@ -178,18 +185,26 @@ export function fenceHint(output, { open = false, self = false, command = '' } =
   if (new RegExp(`operation not permitted: (?:${LAUNCHERS})\\b`, 'i').test(output)) {
     return '\n(Apps cannot be started from here, so do not try again: say where the file is, with its full path.)';
   }
+  if (SETUID_LOOK.test(output)) {
+    return '\n(ps and top never start inside the command sandbox, in any mode. Write them by name with plain words (ps aux, ps -axo pid,%cpu,%mem,etime,command, top -l 1 -n 15 -o cpu): the app runs those itself and hands the answer in. Or use pgrep -lf <name>, lsof -nP -iTCP -sTCP:LISTEN, vm_stat, memory_pressure or iostat, which run here.)';
+  }
+  if (/Cannot run while sandboxed/i.test(output)) {
+    return '\n(The system log (log show) cannot be read inside the command sandbox. Read the program\'s own log file instead: Ollama writes ~/.ollama/logs/server.log.)';
+  }
   const net = open ? '' : netHint(output, command);
   if (net) return net;
   if (!/Operation not permitted|operation not permitted|EPERM|sandbox/i.test(output)) return '';
   // A server already running here, reached at any address, port or socket: said plainly, so no other way is tried
   // (18 Oct 2026: psql was turned away ten times in one conversation, each time at another host, port or socket).
-  if (open && LOCAL_SERVER.test(output)) {
-    return `\n(Blocked even in Bypass${self ? ' and when Agentic Coder works on itself' : ''}: commands cannot connect to a server already running on this Mac, such as a database or a dev server, at any host, port or socket, so another way fails the same. Do not try again: tell the user, and give them the exact command to run in their own terminal.)`;
+  // Bypass reaches them since 25 Nov 2026, so this is the other modes' fence.
+  if (!open && LOCAL_SERVER.test(output)) {
+    return '\n(Commands cannot connect to a server already running on this Mac, such as a database, a dev server or Ollama, at any host, port or socket, so another way fails the same: only Bypass permissions opens them, and the user turns that on. Do not try again: tell the user, and give them the exact command to run in their own terminal.)';
   }
-  // In Bypass the folders are open: what is still closed is what already runs here and the app's own folder.
+  // In Bypass the folders and this Mac's servers are open: what is still closed is starting apps, signals to what
+  // already runs here, the services' data folders and the app's own folder.
   return open && self
-    ? '\n(Blocked even when Agentic Coder works on itself: apps cannot be opened, servers and services already running on this Mac cannot be reached or stopped, and door.key and trust.json cannot be changed.)'
+    ? '\n(Blocked even when Agentic Coder works on itself: apps cannot be opened, programs already running on this Mac cannot be stopped, and door.key and trust.json cannot be changed.)'
     : open
-    ? '\n(Blocked even in Bypass: apps cannot be opened, servers and services already running on this Mac cannot be reached or stopped, and Agentic Coder\'s own folder cannot be changed.)'
+    ? '\n(Blocked even in Bypass: apps cannot be opened, programs already running on this Mac cannot be stopped, a key file cannot be read, and Agentic Coder\'s own folder cannot be changed.)'
     : '\n(Files outside the project folder cannot be read or changed, and apps cannot be opened; stay inside the project.)';
 }

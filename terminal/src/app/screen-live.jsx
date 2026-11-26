@@ -88,7 +88,10 @@ export function Spinner({ app }) {
   const quiet = live.whole && live.lastTokenAt && !live.waiting ? (now - live.lastTokenAt) / 1000 : readEnd && now > readEnd ? (now - readEnd) / 1000 : 0;
   // hearth's door: the request waits in its line, and why (app-run.mjs 'queued').
   // About how much of it is written: the quiet time at the last reply's speed (21 Nov 2026, the owner's pick).
-  const sofar = quiet >= 15 && live.wholeTps > 0 ? `, about ${fmtTok(Math.round(quiet * live.wholeTps))} tokens so far` : '';
+  // Never past the most this reply may write (live.room): then the time is a slow or busy server's (25 Nov 2026: "about 12.4k
+  // tokens so far" on hearth, whose steps write 3k at most).
+  const guess = quiet >= 15 && live.wholeTps > 0 ? Math.round(quiet * live.wholeTps) : 0;
+  const sofar = !guess ? '' : live.room > 0 && guess > live.room ? `, slower than its last reply: the server is slow or busy (${fmtTok(live.room)} tokens at most)` : `, about ${fmtTok(guess)} tokens so far`;
   const pace = busy ? busy : live.waiting && live.queued ? ` · in hearth's line: ${live.queued}` : !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting && quiet < 15 ? ' · reading' : quiet >= 15 ? ` · writing its next step, sent whole when done (${fmtSecs(quiet)}${sofar})` : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
   const doing = live.rail ? '' : doingWords(live);
   // The tokens: every one written since the window opened, this request's as they stream. In a

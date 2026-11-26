@@ -1210,11 +1210,14 @@ test('a blocked app gets its own hint, without the words that send it back to th
   expect(fenceHint('cat: /Users/x/a.txt: Operation not permitted')).toContain('Files outside the project folder cannot be read or changed');
   expect(fenceHint('all fine')).toBe('');
   // 18 Oct 2026: psql was turned away ten times in one conversation in Bypass, at another host, port or socket each time.
+  // Since 25 Nov 2026 Bypass reaches them, so the line is the other modes' fence, and says what opens them.
   for (const out of ['psql: error: connection to server on socket "/tmp/.s.PGSQL.5432" failed: Operation not permitted', 'psql: error: connection to server at "127.0.0.1", port 5435 failed: Operation not permitted', 'Error: connect EPERM 127.0.0.1:6379']) {
-    expect(fenceHint(out, { open: true })).toContain('commands cannot connect to a server already running on this Mac');
-    expect(fenceHint(out, { open: true })).toContain('Do not try again');
+    expect(fenceHint(out)).toContain('Commands cannot connect to a server already running on this Mac');
+    expect(fenceHint(out)).toContain('only Bypass permissions opens them');
+    expect(fenceHint(out)).toContain('Do not try again');
+    expect(fenceHint(out, { open: true })).not.toContain('cannot connect to a server');
   }
-  expect(fenceHint('ps: Operation not permitted', { open: true })).toContain('servers and services already running on this Mac cannot be reached');
+  expect(fenceHint('ps: Operation not permitted', { open: true })).toContain('programs already running on this Mac cannot be stopped');
 });
 
 // 3 Oct 2026: Qwen3.6 read a 674-line file with no offset seven times; each repeat was told

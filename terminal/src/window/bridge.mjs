@@ -188,7 +188,7 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
         // few, as the saved thought counts them) and start, the answer's start, what the app does between replies
         thinkTokens: live.thinking ? Math.max(live.thinking.tokens ?? 0, Math.ceil(String(live.thinking.text ?? '').length / 3.6)) : null, thinkStart: live.thinking?.startedAt ?? null, textStart: live.text ? live.textAt ?? null : null, task: live.task ? String(live.task).slice(0, 200) : null,
         // a service that sends a tool call in one piece (steps-page.js 'whole'): since when it has been quiet, and the last reply's speed
-        whole: Boolean(live.whole), lastTokenAt: live.lastTokenAt ?? null, wholeTps: live.wholeTps ?? null, readSecs: live.readSecs ?? null, queued: live.queued ?? null },
+        whole: Boolean(live.whole), lastTokenAt: live.lastTokenAt ?? null, wholeTps: live.wholeTps ?? null, readSecs: live.readSecs ?? null, queued: live.queued ?? null, room: live.room ?? null },
       input: { value: app.input?.value ?? '', cursor: app.input?.cursor ?? 0 }, tray: trayOf(app.tray), placeholder: app.placeholder ?? '', inputMode: app.inputMode ?? 'prompt', argHint: app.argHint ?? null,
       menu: app.menu ? { kind: app.menu.kind, index: app.menu.index ?? 0, items: (app.menu.items ?? []).slice(0, 60).map((x) => ({ label: x.label, desc: x.desc ?? '' })) } : null,
       perm, panel, full,

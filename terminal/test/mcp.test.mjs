@@ -140,6 +140,22 @@ test('a call finds its tool by any name a model reaches for, and says what is cl
   expect(mcp.findEntry(cat, '').error).toContain('needs "tool"');
 });
 
+// 25 Nov 2026, the owner's screenshot: hearth's 27b called mcp__hearth__list_workspace_list for workspace_list and was
+// told "There is no MCP tool", a step lost. The same words in another order, one twice, or a filler word: that one tool.
+test('a tool named with its own words in another way runs; a name that could be two tools never does', () => {
+  const hearth = ['tool_status', 'models_now', 'read_logs', 'workspace_list', 'list_activity', 'list_reports', 'list_people', 'server_log', 'usage'].map((name) => ({ name, description: name }));
+  const cat = mcp.catalogOf([{ name: 'hearth', tools: hearth }, { name: 'shop', tools: DEFAULT_TOOLS }]);
+  for (const [asked, meant] of [['mcp__hearth__list_workspace_list', 'workspace_list'], ['mcp__hearth__list_workspaces', 'workspace_list'], ['hearth_workspace_list', 'workspace_list'], ['mcp__hearth__logs_read', 'read_logs'], ['mcp__hearth__call_read_logs', 'read_logs'], ['mcp__hearth__people_list', 'list_people']])
+    expect([asked, mcp.findEntry(cat, asked).entry?.tool]).toEqual([asked, meant]);
+  // get_ticket and create_ticket both fit "ticket": a list of both, and nothing runs.
+  expect(mcp.findEntry(cat, 'mcp__shop__ticket').entry).toBeUndefined();
+  expect(mcp.findEntry(cat, 'mcp__shop__ticket').error).toMatch(/Close to it: mcp__shop__(?:get|create)_ticket, mcp__shop__(?:get|create)_ticket\./);
+  // A name close to none: the tools sharing its words, of the server it names.
+  const near = mcp.findEntry(cat, 'mcp__hearth__list_logs').error;
+  expect(near).toMatch(/Close to it: mcp__hearth__(?:read_logs|server_log), mcp__hearth__(?:read_logs|server_log), mcp__hearth__list_/);
+  expect(near).not.toContain('mcp__shop__');
+});
+
 test('arguments are made to fit the tool, and a missing one is said with the tool\'s arguments', () => {
   const [add, create] = ['add', 'create_ticket'].map((n) => mcp.catalogOf([{ name: 'shop', tools: DEFAULT_TOOLS }]).find((e) => e.tool === n));
   expect(mcp.checkArgs(add, { a: '2', b: 3 })).toEqual({ args: { a: 2, b: 3 } });

@@ -16,8 +16,8 @@ export { BLOCKED, blockedReason, isReadOnly, outsidePath, runsTests, splitComman
 //   plan    read-only: it may look but not change anything
 //   bypass  never asks; the blocked commands, your never-list and the app's own
 //           settings still hold. The folder fence and the sandbox's internet block
-//           are lifted (the owner's pick, 3 Oct 2026); what already runs on this
-//           Mac stays out of reach (sandbox.mjs)
+//           are lifted (the owner's pick, 3 Oct 2026), and since 25 Nov 2026 the servers
+//           already running on this Mac are reached; what already runs is never stopped (sandbox.mjs)
 export const MODES = ['auto', 'ask', 'edits', 'plan', 'bypass'];
 // shift+tab walks these. Bypass is picked on purpose (/mode 5, /mode bypass, --mode
 // bypass), never by cycling into it; from Bypass, shift+tab goes back to Manual.
@@ -54,6 +54,14 @@ export const runsGitCommit = (command) => GIT_COMMIT.test(String(command ?? ''))
 // only names it (grep 'git push' log) does not ask: shellText drops it.
 const GIT_PUSH = new RegExp(`(?:${CMD}|["'])\\s*git(?:\\s+(?:-[cC]\\s+\\S+|--?[\\w-]+(?:=\\S+)?))*\\s+push\\b`);
 export const runsGitPush = (command) => GIT_PUSH.test(shellText(command));
+// Removing a model from an Ollama (`ollama rm`, its /api/delete) asks in every mode, Bypass too (25 Nov 2026: Bypass
+// reaches the servers already running on this Mac since then, Ollama's among them, and a removed model is gigabytes to
+// fetch again, or gone for good when it was a build of your own).
+// Text that only names it (grep 'ollama rm' notes.md) does not ask: shellText drops it, and /api/delete counts only in a
+// command that sends a request.
+const OLLAMA_RM = new RegExp(`(?:${CMD}|["'])\\s*ollama\\s+(?:rm|remove|delete)\\b`);
+const SENDS = /\b(?:curl|wget|http|xh|python3?|node|bun|deno|fetch|requests|urllib)\b/;
+export const removesModel = (command) => OLLAMA_RM.test(shellText(command)) || (/\/api\/delete\b/.test(String(command ?? '')) && SENDS.test(String(command ?? '')));
 
 // ---- What you save with /permissions: commands that run without asking,
 // commands that never run, and files that always ask. Rules are plain words.
@@ -193,7 +201,14 @@ export const ownBy = (rel) => protectedBy(rel, [], OWN);
 // Secrets outside the project stay out of reach even in Bypass, which lifts the folder fence:
 // an SSH key or another project's .env would go to a model on another machine.
 export const SECRET_FILES = ['.ssh', '.ssh/**', '.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*'];
-const secretBy = (paths) => protectedBy(paths, [], SECRET_FILES);
+// What ssh reads besides the keys, as the sandbox lets Bypass read it (sandbox.mjs SSH_PUBLIC): the folder's list of
+// names, its settings, the servers it knows and the public halves. Not secrets (25 Nov 2026: hearth's model, asked why a
+// server was slow, was refused "~/.ssh is a secret" for `ls ~/.ssh`; the owner: "all permissions"). A key never is.
+const SSH_OPEN = /(?:^|\/)\.ssh\/?$|(?:^|\/)\.ssh\/(?:config|known_hosts2?|config\.d\/[^/*?]+|[^/*?]+\.pub)$/i;
+const secretBy = (paths) => {
+  const left = [].concat(paths ?? []).filter((p) => !SSH_OPEN.test(String(p).replace(/\\/g, '/')));
+  return left.length ? protectedBy(left, [], SECRET_FILES) : null;
+};
 const namesOwn = (command, list = OWN) => { for (const w of shellWords(String(command ?? ''))) { const g = protectedBy(String(w), [], list); if (g) return g; } return null; };
 
 // The files a part writes with > or >> (not /dev/null, not >&2), as typed.
@@ -477,6 +492,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     // Your own never-list holds in every mode.
     const mine = neverRule(command, rules?.never);
     if (mine) return { decision: 'deny', reason: `blocked by your rule "${mine}" (/permissions)` };
+    if (removesModel(command)) return mode === 'plan' ? { decision: 'deny', reason: 'plan mode is on, and it removes a model' } : { decision: 'ask', once: true, why: 'it removes a model from Ollama, so it always asks (even in Bypass)' };
     if (mode === 'plan') return isReadOnly(command) ? { decision: 'allow', why: 'it only reads' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
     if (bypass && !self && runsGitPush(command)) return { decision: 'ask', once: true, why: 'a push sends your code to GitHub, so it always asks (even in Bypass, unless the model is Claude)' };
     if (bypass) {
@@ -485,7 +501,7 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
         const locked = ownChanged(command, SELF_LOCKED);
         return locked ? { decision: 'deny', reason: `it names ${locked}, the door's own file (who may reach this Mac), which stays locked even when Agentic Coder works on itself` } : { decision: 'allow', why: `Bypass on Claude: it may change Agentic Coder's own file (${own})`, self: true };
       }
-      return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: `Bypass permissions is on (any folder and the internet; what already runs on this Mac stays out of reach${self ? '; git push and stopping its own processes may run' : ''})` };
+      return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: `Bypass permissions is on (any folder, the internet and the servers already running on this Mac; stopping what already runs stays out of reach${self ? '; git push and stopping its own processes may run' : ''})` };
     }
     // once: no "don't ask again" for it.
     if (runsGitCommit(command)) return { decision: 'ask', once: true, why: 'a commit always asks' };
@@ -567,7 +583,7 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [], sel
     ['Database a PostgreSQL server (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the host' : ''}`],
     ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${ruled ? ', or a rule allows it' : ''}`],
     ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
-    ['Other files or commands outside the project, the internet from a command', m === 'bypass' ? 'runs (Bypass lifts the fence), except secrets outside the project (keys, .ssh, .env); ssh, scp and rsync still log in with this Mac\'s saved keys; what already runs on this Mac stays out of reach' : 'refused (the sandbox)'],
+    ['Other files or commands outside the project, the internet from a command', m === 'bypass' ? 'runs (Bypass lifts the fence), except secrets outside the project (keys, .ssh, .env); ssh, scp and rsync still log in with this Mac\'s saved keys; this Mac\'s servers are reached, but what already runs is never stopped' : 'refused (the sandbox)'],
     ['Agentic Coder\'s own settings and rules (~/.agentic-coder, .agentic/)', self ? 'runs: you work on Agentic Coder itself (a copy of each own file is kept first); only door.key and trust.json stay locked' : 'refused'],
     ...(self ? [['The App tool: a slash command, a setting, a restart on new code', 'runs']] : []),
   ];

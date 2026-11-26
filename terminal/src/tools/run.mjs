@@ -6,6 +6,7 @@
 // in Bypass permissions (any folder and the internet; sandbox.mjs).
 import { spawn, execFileSync } from 'node:child_process';
 import { sandboxAvailable, sandboxed, fenceHint, SHELL } from './sandbox.mjs';
+import { prepareLooks } from './proclook.mjs';
 
 // The lines of a test run with its passing tests folded into one line (squeeze: a model on another
 // machine, 3 Oct 2026): node --test writes TAP when its output is not a terminal, five lines a passing
@@ -50,7 +51,9 @@ export function withoutSecrets(env) {
 // it starts, even one that left its process group: see signalCommand.
 let commands = 0;
 const COMMAND_MARK = 'AGENTIC_COMMAND';
-export function startShell(command, { cwd, sandbox = {} } = {}) {
+// look: the stand-ins for the ps and top a fenced command names (looksFor, proclook.mjs), first on its PATH; removed when
+// the command's shell has gone.
+export function startShell(command, { cwd, sandbox = {}, look = null } = {}) {
   const mark = `${process.pid}-${++commands}`;
   // A command the model runs gets no keys (18 Nov 2026, the audit: every command had the whole environment, the
   // Claude and service keys included, and "echo $ANTHROPIC_API_KEY" put one in the conversation). One you type
@@ -58,11 +61,16 @@ export function startShell(command, { cwd, sandbox = {} } = {}) {
   const env = { ...(sandbox === false ? process.env : withoutSecrets(process.env)), FORCE_COLOR: '0', NO_COLOR: '1', CI: '1', [COMMAND_MARK]: mark };
   delete env.AGENTIC_RESTART_FILE; // where /update leaves its restart: the app's alone
   const fenced = sandbox !== false && sandboxAvailable();
+  if (fenced && look) env.PATH = `${look.path}:${env.PATH ?? '/usr/bin:/bin:/usr/sbin:/sbin'}`;
   const child = fenced
     ? spawn(...sandboxed(command, cwd, sandbox), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env })
     : spawn(command, { cwd, shell: SHELL, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+  if (look) { child.once('close', look.done); child.once('error', look.done); }
   return { child, fenced, mark };
 }
+// The ps and top a command names, run by the app for it when it runs inside the sandbox, where macOS never starts them
+// (proclook.mjs). null for a command run as you are (sandbox: false) or with no ps or top in it.
+export const looksFor = (command, sandbox = {}) => (sandbox !== false && sandboxAvailable() ? prepareLooks(command).catch(() => null) : Promise.resolve(null));
 // A signal to the command's whole process group (the shell alone when there is none).
 function signalGroup(child, sig) { try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} } }
 
@@ -117,10 +125,11 @@ export function keepEnds(keep = OUT_KEEP) {
   };
 }
 
-export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, signal, sandbox = {}, squeeze = false } = {}) {
+export async function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, signal, sandbox = {}, squeeze = false } = {}) {
+  const look = await looksFor(command, sandbox);
   return new Promise((resolve) => {
     const started = Date.now();
-    const { child, fenced, mark } = startShell(command, { cwd, sandbox });
+    const { child, fenced, mark } = startShell(command, { cwd, sandbox, look });
     let timedOut = false;
     let done = false;
     let force = null;

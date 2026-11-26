@@ -497,8 +497,13 @@ test('Bypass lifts the folder fence: any folder for commands and files, but not 
   for (const c of ['cat /Users/x/notes.md', 'ls ~/Documents', 'cd .. && ls', 'python3 ../other/run.py', 'curl -s https://example.org/a.json'])
     expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'allow']);
   for (const c of ['cat /Users/x/notes.md', 'ls ~/Documents']) expect([c, d5('Bash', { command: c }, 'ask')]).toEqual([c, 'deny']); // the other modes keep it
-  for (const c of ['cat ~/.ssh/config', 'cp /Users/x/.ssh/id_ed25519 .', 'cat ../app/.env', 'cat /Users/x/certs/site.pem'])
+  for (const c of ['cp /Users/x/.ssh/id_ed25519 .', 'cat ~/.ssh/id_rsa', 'cat ~/.ssh/*', 'tar czf k.tgz ~/.ssh/deploy_key', 'cat ../app/.env', 'cat /Users/x/certs/site.pem'])
     expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'deny']);
+  // ssh's own settings, known servers, public halves and the folder's names are no secret (25 Nov 2026, the owner: "all
+  // permissions"; hearth's model was refused `ls ~/.ssh` looking for a server's address), as the sandbox lets ssh read them.
+  for (const c of ['cat ~/.ssh/config', 'ls ~/.ssh', 'ls -la ~/.ssh/', 'cat /Users/x/.ssh/known_hosts', 'cat ~/.ssh/id_ed25519.pub', 'cat ~/.ssh/config.d/work'])
+    expect([c, d5('Bash', { command: c }, 'bypass')]).toEqual([c, 'allow']);
+  expect(d5('Read', { path: '/Users/x/.ssh/config' }, 'bypass', { inside: false, rel: '../Users/x/.ssh/config' })).toBe('allow');
   expect(decide('Bash', { command: 'cat ~/.ssh/id_rsa' }, ctx5('bypass')).reason).toBe("~/.ssh/id_rsa is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach");
   expect(d5('Read', { path: '/Users/x/a.py' }, 'bypass', { inside: false, rel: '../Users/x/a.py' })).toBe('allow');
   expect(d5('Read', { path: '/Users/x/a.py' }, 'ask', { inside: false, rel: '../Users/x/a.py' })).toBe('deny');

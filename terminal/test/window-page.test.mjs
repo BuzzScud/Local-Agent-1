@@ -469,6 +469,12 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a model still loadi
     s = await seen();
     expect(s).toMatchObject({ dot: 'dot', pill: 'ctx 2% of 256kGPU 26.1 GB', sub: `in ~/project · ${name} · ${where} · thinking on` });
     expect(s.status.startsWith('Ready')).toBe(true);
+    // A service that says neither the size nor the GPU's share (hearth's door, 25 Nov 2026: "GPU null%"): nothing for it
+    await p.say(at('on', { server: { loaded: true, size: null, vram: null, gpuPct: null, until: null, ms: 40 } }));
+    expect((await seen()).pill).toBe('ctx 2% of 256k');
+    await p.click('[data-act="usage"]');
+    expect(await p.js(`document.getElementById('ucard').textContent`)).not.toContain('null');
+    await p.click('[data-act="usage"]');
     // The service gone: said, not Ready
     await p.say(at('down'));
     expect(await seen()).toMatchObject({ status: expect.stringContaining(`${where} is not answering · /remote`), dot: 'dot off' });
@@ -717,6 +723,12 @@ test.skipIf(needs('chrome', findChrome))('in a real browser: a call hearth is st
     expect(live.slice(0, 2)).toEqual(['Writing its next step…', 'sent in one piece when it is done']);
     expect(live[2]).toMatch(/^\(3m 2\ds · about 3\.6k tokens so far · /);
     expect(await p.js(`document.querySelector('.ch7.live .tail7')?.textContent ?? null`)).toBe('Let me write the dashboard file.');
+    // Past the most this step may write (its room: 3k on hearth), the time is a slow or busy server's (25 Nov 2026, the
+    // owner's screenshot: "6m 38s · about 12.4k tokens so far"); under it, the guess as before.
+    await p.say({ ...base, live: { ...said, whole: true, lastTokenAt: Date.now() - 398_000, wholeTps: 31, room: 3000 } });
+    expect((await p.js(LIVE))[2]).toMatch(/^\(6m 3\ds · slower than its last reply: the server is slow or busy \(this step writes 3\.0k tokens at most\) · /);
+    await p.say({ ...base, live: { ...said, whole: true, lastTokenAt: Date.now() - 200_000, wholeTps: 18, room: 6000 } });
+    expect((await p.js(LIVE))[2]).toMatch(/^\(3m 2\ds · about 3\.6k tokens so far · /);
     // No speed known yet: the time alone.
     await p.say({ ...base, live: { ...said, whole: true, lastTokenAt: Date.now() - 40_000, wholeTps: null } });
     expect((await p.js(LIVE))[2]).toMatch(/^\(4\d s · \d+ calls? · /);

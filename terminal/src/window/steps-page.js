@@ -54,12 +54,12 @@
     // written, so after 15 s of quiet the line says so, with about how much is written at the last reply's speed
     // (21 Nov 2026: a dashboard file written for 5 minutes read "Writing… 16 words" the whole time)
     const quiet = L.whole && L.lastTokenAt && !L.waiting && !L.running && !L.task ? (now() - L.lastTokenAt) / 1000 : 0;
-    if (quiet >= 15) return { key: 'live', k: 'whole', text: L.text, since: L.lastTokenAt, tps: L.wholeTps ?? null, verb: ['Writing its next step', 'sent in one piece when it is done'] };
+    if (quiet >= 15) return { key: 'live', k: 'whole', text: L.text, since: L.lastTokenAt, tps: L.wholeTps ?? null, room: L.room ?? null, verb: ['Writing its next step', 'sent in one piece when it is done'] };
     // A reply with no words before its call (thinking off) sends nothing at all until the call is whole: once reading what is
     // new should be done (readSecs, at the service's usual reading speed) and 15 s more have passed, it is writing (21 Nov 2026:
     // a dashboard written for 11 minutes read "Waiting… for the model to read what is new" the whole time). Not while it waits in line.
     const readEnd = L.whole && L.waiting && !L.queued && !L.running && !L.task && L.readSecs != null && L.stepStart ? L.stepStart + L.readSecs * 1000 : null;
-    if (readEnd && (now() - readEnd) / 1000 >= 15) return { key: 'live', k: 'whole', text: null, since: readEnd, tps: L.wholeTps ?? null, verb: ['Writing its next step', 'sent in one piece when it is done'] };
+    if (readEnd && (now() - readEnd) / 1000 >= 15) return { key: 'live', k: 'whole', text: null, since: readEnd, tps: L.wholeTps ?? null, room: L.room ?? null, verb: ['Writing its next step', 'sent in one piece when it is done'] };
     // the answer once it comes (the thought before it is still in the live state until the reply ends)
     if (L.text) return { key: 'live', k: 'said', text: L.text, since: L.textStart ?? since, verb: ['Writing', ''] };
     if (L.thinking) return { key: 'live', k: 'think', text: L.thinking, tokens: L.thinkTokens ?? 0, since: L.thinkStart ?? since, verb: ['Thinking', ''] };
@@ -157,8 +157,11 @@
     const so = ls.k === 'think' ? ls.tokens ?? 0 : ls.k === 'said' ? String(ls.text ?? '').split(/\s+/).filter(Boolean).length : null;
     const rate = ls.k === 'think' && secs > 0.5 && so ? Math.round(so / secs) : null;
     const think = turn.think + (ls.k === 'think' ? ls.tokens ?? 0 : 0);
+    // About how much is written, at the last reply's speed; never past the most this reply may write (its room: 25 Nov 2026,
+    // "about 12.4k tokens so far" on hearth, whose steps write 3k at most): then the time is a slow or busy server's.
     const est = ls.k === 'whole' && ls.tps > 0 ? Math.round(secs * ls.tps) : null;
-    const meta = [dur(now() - ls.since), est ? 'about ' + ktok(est) + ' tokens so far' : so != null ? (ls.k === 'think' ? '↓ ' + ktok(so) + ' tokens' + (rate ? ' · ' + rate + '/s' : '') : plural(so, 'word')) : '', plural(turn.steps.filter(isCall).length, 'call'), think ? ktok(think) + ' thinking' : '', fails ? '<span class="bad">' + fails + ' failed</span>' : '', dur(now() - (turn.start ?? now())) + ' in all', 'esc to interrupt'].filter(Boolean).join(' · ');
+    const slow = est != null && ls.room > 0 && est > ls.room;
+    const meta = [dur(now() - ls.since), slow ? 'slower than its last reply: the server is slow or busy (this step writes ' + ktok(ls.room) + ' tokens at most)' : est ? 'about ' + ktok(est) + ' tokens so far' : so != null ? (ls.k === 'think' ? '↓ ' + ktok(so) + ' tokens' + (rate ? ' · ' + rate + '/s' : '') : plural(so, 'word')) : '', plural(turn.steps.filter(isCall).length, 'call'), think ? ktok(think) + ' thinking' : '', fails ? '<span class="bad">' + fails + ' failed</span>' : '', dur(now() - (turn.start ?? now())) + ' in all', 'esc to interrupt'].filter(Boolean).join(' · ');
     return '<div class="l7 live" data-tail7="1" style="--c:' + fam(ls) + '"><span class="b7 ac">' + (STILL.matches ? '✻' : GLYPHS[Math.floor(now() / 120) % GLYPHS.length]) + '</span><span class="nm vb">' + esc(vb) + '…</span>' + (tg ? '<span class="ar">' + esc(cut(tg, 160)) + '</span>' : '') + '<span class="mt">(' + meta + ')</span></div>';
   }
   // what streams: its newest words, at most five whole lines, starting at a whole word

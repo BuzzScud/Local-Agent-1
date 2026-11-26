@@ -5,7 +5,7 @@ import { mkdtempSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sandboxProfile, fenceHint, shellPath, SHELL, sandboxed } from '../src/tools/sandbox.mjs';
+import { sandboxProfile, fenceHint, shellPath, SHELL, sandboxed, forgetPorts } from '../src/tools/sandbox.mjs';
 import { startShell } from '../src/tools/run.mjs';
 
 test('the profile closes outbound network and still allows this Mac', () => {
@@ -34,7 +34,7 @@ test.if(process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))('s
 
 // Bypass permissions (the owner's pick, 3 Oct 2026): the folders and the internet open, what
 // already runs on this Mac, the app's own folder and ~/.ssh stay closed.
-test('the open profile (Bypass): any folder and the internet; apps, running services, the app\'s folder and ~/.ssh stay closed', () => {
+test('the open profile (Bypass): any folder, the internet and this Mac\'s servers; apps, signals, the app\'s folder and ~/.ssh\'s keys stay closed', () => {
   const root = mkdtempSync(join(tmpdir(), 'agentic-sandbox-'));
   const home = join(root, 'home');
   const p = sandboxProfile(root, { home, open: true });
@@ -42,8 +42,9 @@ test('the open profile (Bypass): any folder and the internet; apps, running serv
   expect(p).not.toContain(`(deny file-read-data (subpath ${JSON.stringify(home)}))`);
   expect(p).toContain(`(deny file-write* (subpath ${JSON.stringify(join(home, '.agentic-coder'))})`);
   expect(p).toContain(`(deny file-read-data file-write* (subpath ${JSON.stringify(join(home, '.ssh'))}))`);
-  // ssh's own public files are read again after that deny (the last matching rule wins): never a key.
-  const pub = p.indexOf(`(allow file-read-data (literal ${JSON.stringify(join(home, '.ssh', 'config'))})`);
+  // ssh's own public files, and the folder's names, are read again after that deny (the last matching rule wins): never a key.
+  const pub = p.indexOf(`(allow file-read-data (literal ${JSON.stringify(join(home, '.ssh'))}) (literal ${JSON.stringify(join(home, '.ssh', 'config'))})`);
+  expect(pub).toBeGreaterThan(0);
   expect(pub).toBeGreaterThan(p.indexOf(`(deny file-read-data file-write* (subpath ${JSON.stringify(join(home, '.ssh'))}))`));
   expect(p.slice(pub)).toContain('known_hosts');
   expect(p).not.toMatch(/allow file-read-data[^\n]*id_ed25519"/);
@@ -79,7 +80,9 @@ test.if(process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))('t
   const run = (cmd, bypass = true) => spawnSync('/usr/bin/sandbox-exec', ['-p', sandboxProfile(project, { home, open: bypass }), '/bin/zsh', '-c', cmd], { encoding: 'utf8', cwd: project });
   for (const f of open) expect([f, run(`cat ${JSON.stringify(join(ssh, f))}`).stdout]).toEqual([f, `${f}\n`]);
   for (const f of ['id_ed25519', 'deploy_key']) expect([f, run(`cat ${JSON.stringify(join(ssh, f))}`).stdout]).toEqual([f, '']);
-  expect(run(`ls ${JSON.stringify(ssh)}`).stdout).toBe('');
+  // The folder's names may be listed in Bypass (25 Nov 2026), never what a key holds.
+  expect(run(`ls ${JSON.stringify(ssh)}`).stdout.split('\n')).toEqual(expect.arrayContaining(['config', 'deploy_key', 'id_ed25519', 'id_ed25519.pub', 'known_hosts']));
+  expect(run(`ls ${JSON.stringify(ssh)}`, false).stdout).toBe('');
   expect(run(`echo x >> ${JSON.stringify(join(ssh, 'known_hosts'))}`).status).not.toBe(0);
   expect(readFileSync(join(ssh, 'known_hosts'), 'utf8')).toBe('known_hosts\n');
   expect(run(`cat ${JSON.stringify(join(ssh, 'config'))}`, false).stdout).toBe(''); // outside Bypass the home is closed
@@ -127,4 +130,26 @@ test('commands run in zsh; where there is none, in bash, then sh', async () => {
   child.stdout.on('data', (b) => { out += b; });
   const code = await new Promise((ok) => child.on('exit', ok));
   expect([code, out.trim()]).toEqual([0, 'shell-ok']);
+});
+
+// 25 Nov 2026 (the owner, after hearth's model asked Ollama on this Mac for its models and read an empty answer: "all
+// permissions"): Bypass reaches a server that was already listening when the command started; the other modes do not.
+test.if(process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))('Bypass reaches a server already running on this Mac; the fence does not', async () => {
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('{"version":"0.0.0"}') });
+  try {
+    forgetPorts();
+    const root = mkdtempSync(join(tmpdir(), 'agentic-sandbox-'));
+    const cmd = `curl -s -m 5 http://127.0.0.1:${server.port}/api/version; echo " exit=$?"`;
+    const run = (open) => new Promise((resolve) => {
+      const p = Bun.spawn(['/usr/bin/sandbox-exec', '-p', sandboxProfile(root, { home: join(root, 'home'), open }), '/bin/zsh', '-c', cmd], { cwd: root, stdout: 'pipe' });
+      new Response(p.stdout).text().then(resolve);
+    });
+    expect(sandboxProfile(root, { open: true })).not.toContain(`localhost:${server.port}`);
+    expect(sandboxProfile(root, { open: false })).toContain(`(deny network-outbound (remote ip "localhost:${server.port}"))`);
+    expect((await run(true)).trim()).toBe('{"version":"0.0.0"} exit=0');
+    expect((await run(false)).trim()).not.toContain('version');
+  } finally {
+    server.stop(true);
+    forgetPorts();
+  }
 });

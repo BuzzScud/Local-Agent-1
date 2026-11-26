@@ -252,6 +252,43 @@ export function callHint(entry, { gated = false } = {}) {
 
 // ---- a call ---------------------------------------------------------------------------------------
 
+// A name's words, lower case, one s off the end ("workspaces" is "workspace"); mcp__ and the joins left out.
+const partsOf = (s) => String(s ?? '').toLowerCase().replace(/^mcp_+/, '').split(/[^a-z0-9]+/).filter(Boolean).map((w) => w.replace(/(?<!s)s$/, ''));
+// Words a model puts around a tool's own name that say nothing about which tool it is (not get: get_ticket and
+// create_ticket are two tools, and "ticket" alone is neither).
+const FILLER = new Set(['call', 'run', 'use', 'do', 'tool', 'mcp', 'fn', 'func', 'function']);
+// The server a name starts with or holds (its words all there), else every server's tools.
+function poolOf(on, asked) {
+  const servers = [...new Set(on.map((e) => e.server))].filter((s) => partsOf(s).length && partsOf(s).every((w) => asked.includes(w)));
+  return servers.length ? on.filter((e) => servers.includes(e.server)) : on;
+}
+// A tool named with its own words in another order, one said twice, or a filler word added (25 Nov 2026: hearth's 27b
+// called mcp__hearth__list_workspace_list for workspace_list, was told "There is no MCP tool", and lost a step): the one
+// tool of the server the name holds whose words are the same set. Never a guess between two.
+function sameWords(on, want) {
+  const asked = partsOf(want);
+  const pool = poolOf(on, asked);
+  const serverWords = new Set(pool.flatMap((e) => partsOf(e.server)));
+  const key = (words) => [...new Set(words.filter((w) => !FILLER.has(w)))].sort().join(' ');
+  const mine = key(asked.filter((w) => !serverWords.has(w)));
+  if (!mine) return null;
+  const hits = pool.filter((e) => key(partsOf(e.tool)) === mine);
+  return hits.length === 1 ? hits[0] : null;
+}
+// The tools closest to a name that is none of them: the ones sharing its words (of the server it names, when it names
+// one), a word fewer tools have counting more (list_logs: the logs tools before every list_ one), else the ones whose
+// name holds its last part, else none.
+function nearByWords(on, want) {
+  const asked = partsOf(want);
+  const pool = poolOf(on, asked);
+  const serverWords = new Set(pool.flatMap((e) => partsOf(e.server)));
+  const mine = new Set(asked.filter((w) => !serverWords.has(w) && !FILLER.has(w)));
+  const has = (w) => pool.filter((e) => partsOf(e.tool).includes(w)).length;
+  const scored = pool.map((e) => ({ e, n: [...new Set(partsOf(e.tool))].filter((w) => mine.has(w)).reduce((t, w) => t + 1 / has(w), 0) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  if (scored.length) return scored.slice(0, 8).map((x) => x.e);
+  return on.filter((e) => e.name.toLowerCase().includes(clean(want).toLowerCase().replace(/^mcp__/, '').split('__').pop())).slice(0, 8);
+}
+
 // The tool a call names: its name here, "server:tool", "server.tool", or the tool's own name when
 // only one server has it. { entry } · { server, tools } (a server was named: its tools) · { error }.
 export function findEntry(entries, asked) {
@@ -273,7 +310,9 @@ export function findEntry(entries, asked) {
   if (loose.length === 1) return { entry: loose[0] };
   const off = entries.find((e) => !e.on && (e.name === want || e.id === want));
   if (off) return { error: `${off.name} is switched off (the user turned it off in /mcp). Use another tool, or say what you need it for.` };
-  const near = on.filter((e) => e.name.toLowerCase().includes(clean(want).toLowerCase().replace(/^mcp__/, '').split('__').pop())).slice(0, 8);
+  const same = sameWords(on, want);
+  if (same) return { entry: same };
+  const near = nearByWords(on, want);
   const names = (near.length ? near : on.slice(0, 12)).map((e) => e.name);
   return { error: on.length ? `There is no MCP tool "${want}". ${near.length ? 'Close to it' : 'The tools'}: ${names.join(', ')}${!near.length && on.length > names.length ? `, … (${on.length} in all)` : ''}.` : 'No MCP tool is on in this conversation.' };
 }
