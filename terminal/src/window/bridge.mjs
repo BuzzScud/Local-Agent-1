@@ -18,6 +18,7 @@ import { knownOf } from '../app/start.jsx';
 import { viewItem, heldView, ansiRows, stepView } from './view.mjs';
 import { askState } from '../app/app-ask.mjs';
 import { shortName, sizeLine } from '../app/attach.mjs';
+import { wbTurn, wbAct } from './bridge-wb.mjs';
 
 // The question box as it stands (app-ask.mjs): every tab, the row you are on, the ticks, what you typed and the answers
 // so far (19 Nov 2026, the owner: "i also cant select the answer correctly"). Before, the window drew the request's
@@ -96,6 +97,8 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
       if (self.holdRef) self.holdRef.current = false;
       self.resumeSession?.(m.id);
     }
+    // the workbench's review, undo and commit message (bridge-wb.mjs), answered as { t: 'wbx-ai', id }
+    else if (typeof m.do === 'string' && m.do.startsWith('wb-')) wbAct(self, m, send);
   }
 
   const ansiOf = (key, el, width) => {
@@ -197,6 +200,8 @@ export function makeBridge(path = process.env.AGENTIC_WINDOW_SOCK, key = process
       hold: Boolean(app.hold), start: app.hold ? { model: app.start?.model, effort: effortWords(knownOf(app.start).effort), cwd: app.start?.cwd, git: app.start?.git ?? null, recent: (app.start?.recent ?? []).slice(0, 12).map((r) => ({ id: r.id, title: String(r.title ?? '').replace(/\s+/g, ' ').slice(0, 140), updated: r.updated ?? null, turns: r.turns ?? 0 })) } : null,
       queued: app.queued?.length ? app.queued.join(' · ') : null, notice: app.notice ?? null, tip: app.tip ?? null, usageText, usage, meter, acct: app.acct ?? null, files, todos, spend: app.spend ?? '', loopsBadge: app.loopsBadge ?? null,
       stats: { ctxUsed: app.stats?.ctxUsed ?? null, ctx: app.ctx ?? null },
+      // the last reply's changed files, for the workbench's review (bridge-wb.mjs)
+      wbTurn: working ? null : wbTurn(self),
     };
   }
 

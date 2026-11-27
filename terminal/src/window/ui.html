@@ -96,6 +96,21 @@ button { font: inherit; color: inherit; }
 .ucard .acts { display: flex; align-items: center; gap: 10px; margin-top: 10px; } .ucard .acts .k { color: var(--faint); font-size: 11.5px; }
 /* the body */
 .body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 22px; position: relative; }
+/* The workbench beside the conversation (26 Nov 2026, workbench.js): its activity bar always, a side pane when one is
+   picked, and once a file or the panel is open the editor takes the room and the conversation a column on the right.
+   The workbench's colours are these of the window's own. */
+:root { --wbx-bg: var(--win); --wbx-pane: #1b1b1e; --wbx-raise: var(--raise); --wbx-raise2: var(--raise2); --wbx-field: #121214; --wbx-line: var(--hair); --wbx-line2: var(--hair2);
+  --wbx-text: var(--text); --wbx-dim: var(--dim); --wbx-faint: var(--faint); --wbx-accent: var(--accent); --wbx-accent-bg: var(--accent-bg); --wbx-accent-line: var(--accent-line); --wbx-on-accent: #0c1620;
+  --wbx-ok: var(--ok); --wbx-bad: var(--bad); --wbx-warn: var(--sand); --wbx-mark: rgba(95,175,255,.28); --wbx-shadow: rgba(0,0,0,.5); --wbx-mono: var(--mono); --wbx-sans: var(--sans); }
+.wbrow { flex: 1; min-height: 0; display: flex; }
+.wbrow > .body { min-width: 0; }
+#wb { flex: 0 0 auto; min-width: 0; }
+.wbrow.ed > #wb { flex: 1 1 0; }
+.wbrow.ed > .body { flex: 0 0 var(--chatw, clamp(420px, 38vw, 700px)); border-left: 1px solid var(--hair); padding: 0 16px; }
+#chatgrip { display: none; flex: 0 0 0; position: relative; z-index: 4; }
+.wbrow.ed > #chatgrip { display: block; }
+#chatgrip::after { content: ""; position: absolute; top: 0; bottom: 0; left: -3px; width: 7px; cursor: col-resize; }
+#chatgrip:hover::after { background: var(--accent-bg); }
 .convo-wrap { flex: 1; min-height: 0; position: relative; }
 .convo { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 2px 14px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); }
 /* Its scroll bar (18 Nov 2026, the UI audit: it had none at all, so nothing said how long a conversation was): the
@@ -327,7 +342,7 @@ button:focus-visible, .row:focus-visible, .card:focus-visible { outline: 2px sol
     <button class="bb sq" data-act="find" title="Search ⌘K">ICON_SEARCH</button>
   </div>
 </div>
-<div class="body" id="body"></div>
+<div class="wbrow" id="wbrow"><div id="wb"></div><div id="chatgrip"></div><div class="body" id="body"></div></div>
 <aside class="side" id="side"></aside>
 <div id="drops"></div>
 <script>
@@ -351,11 +366,12 @@ function connect() {
   ws = new WebSocket('ws://' + location.host + '/ws?t=' + T);
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
-    if (m.t === 'hello') { S.items = m.state?.items ?? {}; S.order = m.state?.order ?? []; S.steps = m.state?.steps ?? {}; S.last = m.state; S.bot = m.bot; S.folder = m.folder; wantScreen(); render(); fit(); }
-    else if (m.t === 'state') { Object.assign(S.items, m.items); if (m.steps) Object.assign(S.steps, m.steps); if (m.order) { S.order = m.order; const keep = new Set(m.order); for (const k of Object.keys(S.items)) if (!keep.has(k)) delete S.items[k]; } S.last = m; S.skew = Date.now() - m.now; if (m.live?.tps) S.tps = [...S.tps.slice(-40), m.live.tps]; wantScreen(); render(); }
+    if (m.t === 'hello') { S.items = m.state?.items ?? {}; S.order = m.state?.order ?? []; S.steps = m.state?.steps ?? {}; S.last = m.state; S.bot = m.bot; S.folder = m.folder; wantScreen(); render(); fit(); window.WBHOST?.state?.(m, true); }
+    else if (m.t === 'state') { window.WBHOST?.state?.(m, false); Object.assign(S.items, m.items); if (m.steps) Object.assign(S.steps, m.steps); if (m.order) { S.order = m.order; const keep = new Set(m.order); for (const k of Object.keys(S.items)) if (!keep.has(k)) delete S.items[k]; } S.last = m; S.skew = Date.now() - m.now; if (m.live?.tps) S.tps = [...S.tps.slice(-40), m.live.tps]; wantScreen(); render(); }
     else if (m.t === 'reset') { S.items = {}; S.order = []; S.steps = {}; S.last = null; wantScreen(); render(); }
     else if (m.t === 'screen') { S.screen = m; if (!S.last) render(); }
     else if (m.t === 'exit') { S.gone = true; render(); }
+    else if (typeof m.t === 'string' && m.t.startsWith('wbx-')) window.WBHOST?.on(m);
     else if (m.t === 'error') console.error('bridge:', m.text);
   };
   ws.onclose = () => { if (!S.gone) setTimeout(connect, 500); };
@@ -1071,6 +1087,9 @@ function keyBytes(e) {
 }
 addEventListener('keydown', (e) => {
   if (e.isComposing) return;
+  // The workbench's own (workbench.js): a key typed in its editor, its terminal, a box of its panes or its palette is
+  // that part's, never the app's.
+  if (window.WB?.owns(e)) return;
   // The keys' list (keyMenuHtml): Enter saves a name being typed, esc drops it, then closes the list; Enter or space on a
   // row switches to it, and on the box opens the list.
   const fo = document.activeElement;
@@ -1114,7 +1133,7 @@ addEventListener('keydown', (e) => {
   if (b != null) { e.preventDefault(); keys(b); }
 });
 addEventListener('paste', (e) => {
-  if (document.activeElement?.tagName === 'INPUT') return;
+  if (document.activeElement?.tagName === 'INPUT' || window.WB?.owns(e)) return;
   // A picture on the clipboard (a screenshot copied with ctrl+shift+⌘4, a picture copied in Finder or a browser) goes as
   // ctrl+v, the app's own key for it (app-keys.mjs attachClipboard): the app reads the Mac's clipboard and attaches it
   // as [Image #n], its card over the box. Before (19 Nov 2026), ⌘V of a screenshot did nothing in the window.
@@ -1201,9 +1220,10 @@ let scrollShow = null;
 document.addEventListener('scroll', (e) => { const c = e.target; if (c?.id !== 'convo') return; c.classList.add('scrolling'); clearTimeout(scrollShow); scrollShow = setTimeout(() => c.classList.remove('scrolling'), 900); }, true);
 // The pretend terminal is as wide as the conversation, so what the app draws itself fits the window.
 let fitTimer = null;
-function fit() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { const probe = document.createElement('span'); probe.style.cssText = 'position:absolute;visibility:hidden;font:13px var(--mono)'; probe.textContent = 'M'.repeat(100); document.body.append(probe); const cw = probe.getBoundingClientRect().width / 100; probe.remove(); send({ t: 'resize', cols: Math.floor((innerWidth - 60) / cw), rows: Math.floor((innerHeight - 52) / 18) }); }, 150); }
+function fit() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { const probe = document.createElement('span'); probe.style.cssText = 'position:absolute;visibility:hidden;font:13px var(--mono)'; probe.textContent = 'M'.repeat(100); document.body.append(probe); const cw = probe.getBoundingClientRect().width / 100; probe.remove(); send({ t: 'resize', cols: Math.floor(((document.getElementById('body')?.clientWidth || innerWidth) - 60) / cw), rows: Math.floor((innerHeight - 52) / 18) }); }, 150); }
 addEventListener('resize', () => { fit(); fitBar(); fitModes(); placeCard(); placeModeMenu(); });
 connect();
 </script>
 <!--steps-page-->
+<!--workbench-->
 </body></html>

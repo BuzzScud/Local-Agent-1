@@ -95,6 +95,12 @@ your other Macs, and what happens next for any that is not main.
 itself, in the background (a few minutes the first time), and opens in it from the next start; it
 builds it again whenever GitHub's main changes it. Without Rust, `coding` runs in the terminal and
 says how to get the window; `AGENTIC_WINDOW=off` keeps the terminal.
+**The workbench in the window** (26 Nov 2026): the bar at the window's left edge opens Files, Search and Source control;
+a file opens in VS Code's editor part, in tabs and side by side, with the conversation in a column beside it. ⌘P goes to a
+file, ⇧⌘P runs a command, ⌘J shows Problems and a terminal in the folder, ⌘S saves. What you type there is the file's,
+never the app's. Since 27 Nov 2026 it also follows Agentic Coder as it works and puts each reply's changes up for review
+(Keep or Undo, file by file), goes to definitions and renames across files (F12, F2), runs and marks your tests, debugs
+a file with breakpoints (F5, F9), previews a page, and writes your commit message.
 **Uninstall:** delete `~/.local/bin/coding`, `~/.agentic-coder` (the model files and
 settings) and `~/agentic-coder`.
 

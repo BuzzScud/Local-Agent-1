@@ -2355,3 +2355,100 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   printed as `path:108:` counts as read (`turn.readSome`), so a later outline Read no longer puts it back on the
   outline-only list the second look and Read before claiming go by.
 - **Tests**: `terminal/test/engine-fixes.test.mjs`.
+
+## The workbench: the window like VS Code (26 Nov 2026)
+
+- **What and why.** The owner: "i want to make them both like vs code, it does everything" (Agentic Coder and hearth).
+  Their picks: our own workbench with VS Code's editor part inside (the `monaco-editor` package), editor tabs with
+  colours and split, search and source control, the command palette and its keys, a debugger and extensions; one page
+  used by both, hearth's customers too; built and shown first. This is stage 1, the workbench's core, in the window.
+  Not built yet: the extensions pane, the debugger, replace in files.
+- **One page, a host under it** (`terminal/src/window/workbench.js`, `workbench.css`): `Workbench.mount(root, host)`
+  knows nothing of the window. The host is an object of calls (tree, files, read, save, make, rename, trash, search,
+  git, diff, gitDo, monaco, terminal, onChange, toChat, commands, store) and `can` (write, git, push); hearth's page
+  will hand it its own. Every colour is a `--wbx-…` name the page sets; nothing is cut with an ellipsis (a long name
+  wraps, the tab strip wraps); a question is a bar over the editor or a line in the pane, never confirm(). Parts: the
+  activity bar, a side pane (Files with git's letters, new · rename · Trash; Search with case, whole word, pattern and
+  files to include; Source control with the commit box, stage · unstage · put back, the branch and a push that asks
+  first), editor tabs in up to three groups, a change's two sides in the diff view, a bottom panel (Problems from the
+  editor's own markers and the check after a save; Terminal), a status line, and the palette (⌘P a file, `>` a
+  command, `:` a line). With no editor part (`host.monaco()` gives null) a file opens in a plain text box.
+- **What a page that holds it can add** (27 Nov 2026, for hearth's Code tab; the window uses none of it): `host.panels`
+  (`[{ id, title, mount(box) → { dispose } }]`, its own tabs beside Problems and Terminal, each drawn once and kept, and
+  by name in the palette), `asks` in what `host.git()` gives (`[[label, fn]]`, buttons where a commit box would be),
+  `opts.welcome` (true, or a line of words: a start screen where the editor would be while nothing is open, with the
+  ways in and their keys, what changed and the files opened last; the window leaves it out, its conversation has that
+  place) and `opts.narrow` (the side pane takes the whole place while open, opening a file puts it away, no minimap).
+  Calls on what `mount` gives back: `touch(paths, who)` marks files someone else is working on now (a closed folder
+  that holds one too) and has the tree, the tabs and Source control follow them, `settle()` takes the marks away, and
+  `notice({ text, actions })` puts one line over the editor (on the start screen too), `notice(null)` takes it away.
+  Inside the workbench a `.sub` is reset: the page around it may have a `.sub` of its own (hearth's has).
+- **The window's side** (`workbench-host.js`, `ui.html`'s `#wbrow`, `server.mjs`): the conversation keeps the window
+  until a file or the panel is open, then takes a column on the right you can drag (`--chatw`); the pretend terminal is
+  as wide as that column (`fit`). The page's own key and paste handlers ask `WB.owns(e)` first, so what is typed in the
+  editor, a pane or the terminal is never typed at the app. What a folder had open is kept in
+  `<home>/workbench/<hash of the folder>.json` (`readState`, `saveState`): the page's address changes at every start,
+  so its own storage would forget.
+- **Its calls** (`workbench.mjs`, under `/wb/` with the window's key): everything stays inside the window's folder
+  (`inside`: no `..`, no absolute path, no link out). A save hands back the stamp its read gave, so a file something
+  else changed since is not written over unseen (a bar offers Compare · Save mine · Take the disk's). Find in files is
+  `git grep` in a repository (its ignore rules hold, new files count) and a walk elsewhere. Source control reads
+  `git status --porcelain=v2` with `GIT_OPTIONAL_LOCKS=0` (a status that wrote the index would wake the watcher that
+  asked for it). Put back sends a new file to the Trash, never a delete. The check after a save is Bun's own reader for
+  JavaScript and JSON and `python3` for Python; nothing is installed for it.
+- **The packages** (`packageDir`, `staticFile`): `monaco-editor`'s `min/vs` and `@xterm/xterm` are served from
+  node_modules at `/vs/` and `/xterm/` by their address alone (their loaders ask without the key; nothing of the
+  folder is under those addresses), found as the design studio finds tailwindcss (beside the source, `AGENTIC_BUILD`,
+  `AGENTIC_REPO`). xterm comes in by `import()` of its module file (workbench-host.js): once the editor's loader is
+  on the page, a plain script tag of it would hand itself to that loader instead.
+- **The terminal pane** (`makeShells`): the person's own login shell in the folder, one a tab, in a pretend terminal;
+  its output rides the page's own line (`wbx-term`); a shell ends with the page that opened it and with the window.
+  These are the person's hands, like Terminal: none of it is offered to the model, and no mode applies.
+- **Files that change** (`watchFolder` → `wbx-fs`): the model's edits, a command, another app. The tree, Source control
+  and a tab with no changes of your own follow; a tab with changes gets the bar instead.
+- **Tests**: `terminal/test/workbench.test.mjs` (the calls, on folders made for the test) and
+  `terminal/test/window-workbench.test.mjs` (the real page from the real server in headless Chrome: the window as it
+  was, Files, tabs side by side, Search, Source control, the palette, save and Problems, a tab following the disk, the
+  commit box keeping its cursor, the terminal by what it wrote, and the plain box with no editor part, and what a page
+  that holds it can add: the start screen, its own panel, the marks, the line, the buttons and a narrow place).
+
+## The workbench's parts: the chat ties, language smarts, Tests, Run and debug, the browser (27 Nov 2026)
+
+- **What and why.** The owner, on two screenshots of the workbench: "can you make it better? add more tools? more
+  integration? how?". Their picks: all four chat ties (follow it live, a review with keep or undo, fix and explain
+  buttons, source control helpers), all four tools (language smarts, a tests panel, a browser preview, a debugger), in
+  both the window and hearth's Code tab, built and shown first, nothing committed.
+- **Parts** (`workbench.js`'s `api` and `window.WorkbenchParts`): each tool is a file of its own that pushes a function
+  of the api, returning `{ id, views, panels, kinds, commands, editor, model, monaco, fileMenu, problemActs, gitRows,
+  panelActs, foot, keys, changed, keeps, edited, dispose }`; `WB.part(id)` is its own api. A part returns null when the
+  host lacks its calls (hearth has no `debug`). `workbench-kit.js` (elements, the fuzzy match, colours, the editor's theme)
+  loads first: workbench.js is held under the 20k-token line that way.
+- **The chat ties** (`workbench-ai.js`, the window's side in `workbench-host.js` `onState`, the app's in
+  `bridge-wb.mjs`): each new step of the window's state that reads or edits a file goes to `follow()` (the tree's mark;
+  with Follow on, the file opens beside you, unfocused, its new lines marked from the diff's hunk); a reply's files come
+  from its /rewind point (`wbTurn` in the state, the model's files only) to `done()`: a line over the editor and the
+  Review tab (the file before the reply from `Rewind.beforeOf` beside the disk's, Keep, Undo by `Rewind.restoreFile`: that
+  file alone, never one someone changed since). Explain, Fix and Write a test (⌥E, the editor's menu), Fix it on a
+  problem and Send to chat on the terminal type into the prompt; nothing is sent. Write the message asks the model
+  (`complete`, the side slot) with `git diff` (`gitDo` 'patch') and the last subjects.
+- **Language smarts** (`workbench-lang.js`, `/wb/sources` → `sourcesOf`): every code file of the folder (2,500 at most,
+  none over 400 KB) goes into VS Code's own TypeScript service as a model, imports read as a bundler reads them, so a
+  definition, the references, a rename and the hover reach across files; a jump opens a tab (`registerEditorOpener`). A
+  file a rename changed that was not open opens not saved, with Save all. Nothing is installed. The editor part's
+  definition and reference commands are commands, not actions: `trigger`, never `getAction`.
+- **Tests** (`workbench-tests.js`; `workbench-run.mjs` `testsOf`, `makeTestRuns`; the reading in `workbench-testkit.js`,
+  shared with hearth's page): the runner from the folder's files (vitest, jest, bun, go, pytest, node), the tests read
+  from the files (no runner asked), a run of everything, a file or one test (`bun test ./f -t ^name$`), its output in
+  Test output, each test's result beside its line (click a mark to run it) and in the list, with Ask … to fix on a failed
+  one. Bun out of a terminal names only failures: the rest pass when its totals add up (`countsOf`).
+- **Run and debug** (`workbench-debug.js`, `workbench-debug.mjs`): node's `--inspect-brk` (the Chrome protocol) or bun's
+  `--inspect-wait` (WebKit's), spoken to over their WebSocket; breakpoints in the margin (F9), the stack, every scope's
+  variables (a let not reached yet: "(not set yet)"), a value under the pointer, the Debug console, F5 F10 F11 ⇧F11 ⇧F5.
+  node by default (node 22.6+ runs TypeScript); bun for a file that uses bun's own calls. Bun stays open after the
+  program ends while debugged (tried, 1.4.2: its inspector says nothing): a bun run ends with Stop.
+- **The browser** (`workbench-web.js`): a page as a tab; a file of the folder under `/wb/site/<its own key>/` (never
+  the window's key: the page could read its own address and drive the conversation), sandboxed without same-origin,
+  reloaded when files change; an address or a port typed, with the ports this Mac listens on (`/wb/ports`).
+- **Tests**: `terminal/test/workbench-run.test.mjs` (the server sides and the one-file undo, a real bun run and a real
+  node program at a breakpoint) and `terminal/test/window-workbench-parts.test.mjs` (every part in the real page in
+  headless Chrome).

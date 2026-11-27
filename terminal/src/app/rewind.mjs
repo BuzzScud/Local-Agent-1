@@ -436,32 +436,61 @@ export class Rewind {
     const failed = [];
     const done = [];
     for (const it of plan.put) {
-      try {
-        const st = this.store(it.cwd);
-        if (it.to === null) {
-          rmSync(it.abs, { force: true });
-          await this.dropEmptyFolders(st, it);
-        } else {
-          const r = await git(st.dir, ['cat-file', 'blob', it.to]);
-          if (r.code !== 0) throw new Error('its copy is missing from the store');
-          mkdirSync(dirname(it.abs), { recursive: true });
-          if (it.mode === '120000') {
-            try { unlinkSync(it.abs); } catch {}
-            symlinkSync(r.out.toString(), it.abs);
-          } else {
-            try { if (lstatSync(it.abs).isSymbolicLink()) unlinkSync(it.abs); } catch {}
-            writeFileSync(it.abs, r.out);
-            const m = statSync(it.abs).mode & 0o777;
-            if (it.mode === '100755' && !(m & 0o111)) chmodSync(it.abs, m | ((m & 0o444) >> 2));
-            if (it.mode === '100644' && m & 0o111) chmodSync(it.abs, m & ~0o111);
-          }
-        }
-        for (const t of it.list) t.f.undone = true;
-        done.push(it);
-      } catch (e) { failed.push({ ...it, why: e.message }); }
+      try { await this.putBack(it); done.push(it); } catch (e) { failed.push({ ...it, why: e.message }); }
     }
     this.save();
     return { ...plan, put: done, failed };
+  }
+
+  // One file of a plan put back as it was (restore, restoreFile).
+  async putBack(it) {
+    const st = this.store(it.cwd);
+    if (it.to === null) {
+      rmSync(it.abs, { force: true });
+      await this.dropEmptyFolders(st, it);
+    } else {
+      const r = await git(st.dir, ['cat-file', 'blob', it.to]);
+      if (r.code !== 0) throw new Error('its copy is missing from the store');
+      mkdirSync(dirname(it.abs), { recursive: true });
+      if (it.mode === '120000') {
+        try { unlinkSync(it.abs); } catch {}
+        symlinkSync(r.out.toString(), it.abs);
+      } else {
+        try { if (lstatSync(it.abs).isSymbolicLink()) unlinkSync(it.abs); } catch {}
+        writeFileSync(it.abs, r.out);
+        const m = statSync(it.abs).mode & 0o777;
+        if (it.mode === '100755' && !(m & 0o111)) chmodSync(it.abs, m | ((m & 0o444) >> 2));
+        if (it.mode === '100644' && m & 0o111) chmodSync(it.abs, m & ~0o111);
+      }
+    }
+    for (const t of it.list) t.f.undone = true;
+  }
+
+  // The workbench's Undo on one file of one message (27 Nov 2026, window/bridge-wb.mjs): that file alone, as /rewind
+  // would put it back, and only while nobody has changed it since. → { ok } | { ok: false, why }
+  async restoreFile(n, rel) {
+    const plan = this.plan(n, { only: true });
+    if (!plan) return { ok: false, why: 'That reply is no longer kept.' };
+    const skip = plan.skip.find((x) => x.rel === rel);
+    if (skip) return { ok: false, why: `it ${skip.why}` };
+    const it = plan.put.find((x) => x.rel === rel);
+    if (!it) return { ok: false, why: plan.others.some((o) => o.rel === rel) ? 'it was changed by something other than the reply' : 'there is nothing of the reply in it to put back' };
+    try { await this.putBack(it); } catch (e) { return { ok: false, why: e.message }; }
+    this.save();
+    return { ok: true };
+  }
+
+  // A file of message n as it was before it, for the workbench's review. → { text } | { gone: true } (it was made by the
+  // message) | { why }
+  async beforeOf(n, rel) {
+    const p = this.points.find((x) => x.n === n);
+    const f = p?.files.find((x) => x.path === rel);
+    if (!f) return { why: 'No copy of it from before the reply.' };
+    if (f.before === null) return { gone: true };
+    const r = await git(this.store(p.cwd).dir, ['cat-file', 'blob', f.before]);
+    if (r.code !== 0) return { why: 'Its copy is missing from the store.' };
+    if (r.out.includes(0)) return { why: 'It is not text.' };
+    return { text: r.out.toString('utf8') };
   }
 
   // Folders a file the model made was the only thing in go with it, unless

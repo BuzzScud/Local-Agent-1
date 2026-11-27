@@ -12,9 +12,24 @@ import { execFile, spawn } from 'node:child_process';
 import UI_PAGE from './ui.html' with { type: 'text' };
 import STEPS_JS from './steps-page.js' with { type: 'text' };
 import STEPS_CSS from './steps-page.css' with { type: 'text' };
+import WB_KIT_JS from './workbench-kit.js' with { type: 'text' };
+import WB_JS from './workbench.js' with { type: 'text' };
+import WB_CSS from './workbench.css' with { type: 'text' };
+import WB_HOST_JS from './workbench-host.js' with { type: 'text' };
+import WB_ICONS_JS from './workbench-icons.js' with { type: 'text' };
+import WB_AI_JS from './workbench-ai.js' with { type: 'text' };
+import WB_LANG_JS from './workbench-lang.js' with { type: 'text' };
+import WB_TESTS_JS from './workbench-tests.js' with { type: 'text' };
+import WB_DEBUG_JS from './workbench-debug.js' with { type: 'text' };
+import WB_WEB_JS from './workbench-web.js' with { type: 'text' };
+import { staticFile, workbenchRoute, makeShells, watchFolder } from './workbench.mjs';
+import { sourcesOf, siteFile, listPorts, testsOf, makeTestRuns } from './workbench-run.mjs';
+import { makeDebugger } from './workbench-debug.mjs';
 
 // The page with its timeline (steps-page.js and .css, 27 Oct 2026) put in where it says, so each file stays small.
-const UI = UI_PAGE.replace('<!--steps-page-->', () => `<style>\n${STEPS_CSS}</style>\n<script>\n${STEPS_JS}</script>`);
+// The workbench the same way (workbench.js and .css, 26 Nov 2026), then the window's own side of it (workbench-host.js).
+const UI = UI_PAGE.replace('<!--steps-page-->', () => `<style>\n${STEPS_CSS}</style>\n<script>\n${STEPS_JS}</script>`)
+  .replace('<!--workbench-->', () => `<style>\n${WB_CSS}</style>\n<script>\n${WB_ICONS_JS}</script>\n<script>\n${WB_KIT_JS}</script>\n<script>\n${WB_JS}</script>\n${[WB_AI_JS, WB_LANG_JS, WB_TESTS_JS, WB_DEBUG_JS, WB_WEB_JS].map((js) => `<script>\n${js}</script>`).join('\n')}\n<script>\n${WB_HOST_JS}</script>`);
 import { VtScreen } from './vt.mjs';
 import { cellRows, xterm } from './view.mjs';
 import { selfCommand } from '../app/sessions.mjs';
@@ -155,12 +170,35 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
     terminal: { cols, rows, data(_t, bytes) { vt.write(bytes); pushScreen(); } },
   });
 
+  // The workbench (workbench.mjs): the terminal pane's shells, each closed with the page that opened it, and a note to
+  // the page when files change under the folder (the model's edits show in the tree and the open tabs).
+  const shells = makeShells({ folder, env, data: (id, text) => sendAll({ t: 'wbx-term', id, data: text }), ended: (id, code) => sendAll({ t: 'wbx-term', id, ended: true, code }) });
+  const watcher = watchFolder(folder, (paths) => sendAll({ t: 'wbx-fs', paths }));
+  // The workbench's tests and debugger (workbench-run.mjs, workbench-debug.mjs): what they print and do goes to every page.
+  const testRuns = makeTestRuns({ folder, env, send: sendAll });
+  const debug = makeDebugger({ folder, env, send: sendAll });
+  // The browser preview's own key: a page of the folder shown in the workbench gets this one in its address, never the
+  // window's (with which the page could drive the conversation).
+  const siteKey = randomBytes(18).toString('hex');
+
   // The window's page and its line to the app: this Mac only, and only with the key.
   const server = Bun.serve({
     hostname: '127.0.0.1', port,
     fetch(req, srv) {
       const u = new URL(req.url);
+      // The editor's and the terminal's own files (two packages anyone can download): by their address alone, since
+      // their loaders ask for them without the key. Nothing of the folder or the conversation is under these.
+      if (req.method === 'GET' || req.method === 'HEAD') { const f = staticFile(u.pathname); if (f) return new Response(req.method === 'HEAD' ? null : Bun.file(f.file), { headers: { 'content-type': f.type, 'cache-control': 'max-age=3600' } }); }
+      if (u.pathname.startsWith('/wb/site/') && req.method === 'GET') {
+        const [, , , k, ...rest] = u.pathname.split('/');
+        return sameKey(k, siteKey) ? siteFile(folder, rest.join('/')) : new Response('Not here.', { status: 403 });
+      }
       if (!sameKey(u.searchParams.get('t'), key)) return new Response('Not here.', { status: 403 });
+      if (u.pathname === '/wb/sources') return Response.json(sourcesOf(folder), { headers: { 'cache-control': 'no-store' } });
+      if (u.pathname === '/wb/tests') return Response.json(testsOf(folder), { headers: { 'cache-control': 'no-store' } });
+      if (u.pathname === '/wb/ports') return Response.json({ ports: listPorts({ not: [server.port] }) });
+      if (u.pathname === '/wb/site-key') return Response.json({ base: `/wb/site/${siteKey}/` });
+      if (u.pathname.startsWith('/wb/')) return workbenchRoute(req, u, folder, { home: HOME });
       if (u.pathname === '/ws') return srv.upgrade(req, { data: { screen: false } }) ? undefined : new Response('Not here.', { status: 400 });
       if (u.pathname === '/') return new Response(UI, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (u.pathname === '/sessions') { let list = []; try { list = listSessions(folder).slice(0, 200); } catch {} return Response.json(list); }
@@ -204,8 +242,24 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
         else if (m.t === 'resize') { const c = clamp(m.cols, 80, 320), r = clamp(m.rows, 24, 140); if (c !== vt.cols || r !== vt.rows) { proc.terminal.resize(c, r); vt.resize(c, r); } }
         else if (m.t === 'act') appSock?.write(`${JSON.stringify(m)}\n`);
         else if (m.t === 'screen') { ws.data.screen = Boolean(m.on); if (m.on) pushScreen(); }
+        else if (m.t === 'wbx-term' && typeof m.id === 'string' && /^t[a-z0-9]{1,12}$/.test(m.id)) {
+          if (m.op === 'open') { const r = shells.open(m.id, { cols: m.cols, rows: m.rows }); if (r.ok) (ws.data.terms ??= new Set()).add(m.id); else ws.send(JSON.stringify({ t: 'wbx-term', id: m.id, why: r.why })); }
+          else if (!ws.data.terms?.has(m.id)) return;
+          else if (m.op === 'data' && typeof m.data === 'string') shells.write(m.id, m.data);
+          else if (m.op === 'resize') shells.resize(m.id, m.cols, m.rows);
+          else if (m.op === 'close') { shells.close(m.id); ws.data.terms.delete(m.id); }
+        }
+        else if (m.t === 'wbx-test' && typeof m.id === 'string' && /^r[a-z0-9]{1,12}$/.test(m.id)) {
+          if (m.op === 'run') { const r = testRuns.run({ id: m.id, path: typeof m.path === 'string' ? m.path : null, name: typeof m.name === 'string' ? m.name : null }); if (!r.ok) ws.send(JSON.stringify({ t: 'wbx-test', id: m.id, why: r.why })); }
+          else if (m.op === 'stop') testRuns.stop(m.id);
+        }
+        else if (m.t === 'wbx-dbg' && typeof m.id === 'string' && /^d[a-z0-9]{1,12}$/.test(m.id)) {
+          if (m.op === 'start') { const r = debug.start({ id: m.id, path: m.path, runtime: m.runtime, bps: m.bps && typeof m.bps === 'object' ? m.bps : {} }); ws.send(JSON.stringify({ t: 'wbx-dbg', id: m.id, op: 'begun', ...r })); }
+          else if (m.op === 'stop') debug.stop(m.id);
+          else if (m.op === 'cmd') debug.cmd({ ...(m.args ?? {}), id: m.id, op: m.cmd, req: m.req ?? null });
+        }
       },
-      close(ws) { clients.delete(ws); },
+      close(ws) { clients.delete(ws); for (const id of ws.data.terms ?? []) shells.close(id); },
     },
   });
   const url = `http://127.0.0.1:${server.port}/?t=${key}`;
@@ -235,6 +289,7 @@ export async function runWindow({ folder = process.cwd(), args = [], env = proce
   sendAll({ t: 'exit', code });
   await Bun.sleep(150);
   try { win?.kill(); } catch {}
+  shells.closeAll(); watcher.close(); testRuns.stopAll(); debug.stopAll();
   server.stop(true);
   try { bridge.stop(true); } catch {}
   try { rmSync(sockPath, { force: true }); } catch {}

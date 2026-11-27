@@ -35,7 +35,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.130.0",
     "@modelcontextprotocol/client": "^2.3.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "ink": "7.1.1",
+    "monaco-editor": "^0.58.0",
     "react": "^19.3.0",
     "react-devtools-core": "file:terminal/scripts/shims/react-devtools-core",
     "tailwindcss": "^4.3.3"
