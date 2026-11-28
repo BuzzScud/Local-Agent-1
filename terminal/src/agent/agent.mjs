@@ -656,6 +656,8 @@ export class Agent extends EventEmitter {
     if (!this.jobNews.length) return null;
     return this.jobNews.splice(0).map((j) => {
       const last = this.jobs.tail(j, lines);
+      // A background agent's news is its report (tools/jobs.mjs startAgent).
+      if (j.agent) return `background agent ${j.agent} (${j.id}) ended after ${took(j.ended - j.started)}. ${j.report}`;
       return `background job ${j.id} (${j.command}) ended by itself: exit code ${j.code ?? '?'} after ${took(j.ended - j.started)}.${last.length ? ` Its last lines:\n${last.join('\n')}` : ''}`;
     }).join('\n\n');
   }
@@ -663,10 +665,13 @@ export class Agent extends EventEmitter {
   // The message that wakes the model for jobs that ended after its reply: { text, shown } or null.
   jobWake() {
     const ids = this.jobNews.map((j) => j.id);
+    const agents = this.jobNews.some((j) => j.agent);
     const news = this.takeJobNews(20);
     if (!news) return null;
     return {
-      text: `(From Agentic Coder, not the user: ${news})\nA background job you started ended after your last reply. Carry on with what it was for; if nothing is left to do, say so in one line.`,
+      text: agents
+        ? `(From Agentic Coder, not the user: ${news})\nA background agent you started finished after your last reply. Check what it says it found before you act on it, then carry on with what it was for; send it back with the Agent tool's agent: <its name> if it needs to do more; if nothing is left to do, say so in one line.`
+        : `(From Agentic Coder, not the user: ${news})\nA background job you started ended after your last reply. Carry on with what it was for; if nothing is left to do, say so in one line.`,
       shown: `${ids.join(', ')} ended`,
     };
   }
@@ -717,9 +722,45 @@ export class Agent extends EventEmitter {
   // on the main slot stays), and no Agent of its own. Its steps show on one line as it goes;
   // only its report comes back. esc stops it with the rest.
   // One of your helper agents (kind = its name) gets its file's instructions, tools and model.
+  // Agents as Claude Code's work (28 Nov 2026, the owner: "fable deployed sub agents to help it, i want hearth to do the same"): each
+  // has a name (agent1, agent2 …) and is kept when it ends, so agent: <name> sends it back to work with everything it already read and
+  // did (its own conversation, the same helper); background: true runs it as a background job (tools/jobs.mjs startAgent): you go on,
+  // Jobs lists it, shows its steps and stops it, and its report comes as news when it ends (jobEnded, takeJobNews).
   async runHelper(id, args, shown, signal) {
-    const asked = String(args.kind ?? '').toLowerCase();
-    const own = this.helperAgents().find((h) => h.kind === asked) ?? null;
+    const named = this.agentName(args);
+    if (named.error) { this.emit('tool', { id, name: 'Agent', ...shown, view: { kind: 'error', message: named.error } , error: true }); return { text: named.error, error: true }; }
+    if (args.background === true || args.background === 'true') {
+      if (!this.jobs) return { text: 'Background agents are not available here: send it without background.', error: true };
+      if (named.kept) named.kept.running = true;
+      const r = this.jobs.startAgent((sig, say) => this.runHelperNow(id, args, shown, sig, { bg: say, name: named.name, kept: named.kept }), { description: String(args.description ?? '').slice(0, 80), name: named.name });
+      if (r.error) {
+        if (named.kept) named.kept.running = false;
+        return { text: r.error, error: true, view: { kind: 'error', message: 'too many background jobs' } };
+      }
+      this.emit('tool', { id, name: 'Agent', ...shown, view: { kind: 'job', what: `${named.name} works in the background as ${r.job.id}`, lines: [] } });
+      return { text: `${named.name} works in the background as ${r.job.id}: you will be told when it ends, with its report. Go on with your own part. Jobs with "id": "${r.job.id}" shows its steps so far; add "stop": true to stop it.` };
+    }
+    return this.runHelperNow(id, args, shown, signal, { name: named.name, kept: named.kept });
+  }
+
+  // An agent's name: the one sent back (agent), or the next one (agent1, agent2 …). → { name, kept? } or { error }.
+  agentName(args) {
+    this.agentsKept ??= new Map();
+    const back = String(args.agent ?? '').trim().toLowerCase();
+    if (!back) {
+      this.agentN = (this.agentN ?? 0) + 1;
+      return { name: `agent${this.agentN}` };
+    }
+    const kept = this.agentsKept.get(back);
+    if (!kept) return { error: `There is no agent "${back}" to send back. ${this.agentsKept.size ? `Yours: ${[...this.agentsKept.keys()].join(', ')}.` : "Each agent's report names it."}` };
+    if (kept.running) return { error: `${back} is still working: wait for its report (Jobs shows a background one), or stop it first.` };
+    if (kept.closed) return { error: `${back} worked in its own copy of the repository, which went when it ended: send a new agent with the task instead.` };
+    return { name: back, kept };
+  }
+
+  async runHelperNow(id, args, shown, signal, { bg = null, name = 'agent', kept = null } = {}) {
+    const asked = kept ? kept.kind : String(args.kind ?? '').toLowerCase();
+    const own = kept ? kept.own : this.helperAgents().find((h) => h.kind === asked) ?? null;
     // On hearth a lookup is a kind of its own (hearth 3.0's helper on the 2b); anywhere else it is an explore helper.
     const lookup = !own && asked === 'lookup' && Boolean(this.hearthUse('lookup'));
     const kind = own ? own.kind : asked === 'general' ? 'general' : lookup ? 'lookup' : 'explore';
@@ -741,7 +782,7 @@ export class Agent extends EventEmitter {
     const ownUse = claudeOwn ? { model: claudeOwn } : (otherModel || awayHere) && endpointOf(this.url)?.ollama ? { model: otherModel ?? awayHere, numCtx: OWN_HELPER_CTX, keepAlive: '30m' } : undefined;
     // Its own mode (its Mode line), never more open than yours; its own copy of the repository (Isolation: worktree).
     const mode = helperMode(own, this.mode);
-    const wt = own?.isolation === 'worktree' ? openWorktree(this.cwd, kind) : null;
+    const wt = !kept && own?.isolation === 'worktree' ? openWorktree(this.cwd, kind) : null;
     if (wt?.error) { this.emit('tool', { id, name: 'Agent', ...shown, view: { kind: 'error', message: `no copy for the ${kind} helper: ${wt.error}` }, error: true }); return { text: `The ${kind} helper works only in its own copy of the repository (Isolation: worktree), and ${wt.error}. Do the work yourself, or use another kind.`, error: true }; }
     // On the smaller model (28 Oct 2026, the owner's picks after the Bonsai helpers check): the short instructions
     // (smallHelperPrompt). It thinks as the conversation does: tried without, 2B's reports answered one part of two
@@ -750,7 +791,8 @@ export class Agent extends EventEmitter {
     const small = Boolean(awayHere);
     const t0 = Date.now();
     const slot = this.slots ? { main: this.slots.side ?? this.slots.main } : undefined;
-    const helper = new Agent({
+    // Sent back: the same helper, its conversation as it left it.
+    const helper = kept?.helper ?? new Agent({
       // On a model of its own it has that model's room (OWN_HELPER_CTX), so it summarizes in time.
       url: this.url, model: this.model, cwd: wt?.cwd ?? this.cwd, system: small ? smallHelperPrompt(kind, { hearth: Boolean(endpointOf(this.url)?.hearth) }) : helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse && !claudeOwn ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
       mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: kind === 'lookup' ? LOOKUP_STEPS : HELPER_STEPS, slots: slot, bash: this.bash, home: this.home,
@@ -760,23 +802,27 @@ export class Agent extends EventEmitter {
     });
     // Its tools: the app's, and of the MCP tools those its file names (mcp__github__get_* names several).
     const toolFilter = own ? helperToolFilter(own.tools, [...this.tools().map((t) => t.function.name), ...this.mcpEntries().map((e) => e.name)]) : kind === 'explore' || kind === 'lookup' ? EXPLORE_TOOLS : null;
-    Object.assign(helper, { jobs: this.jobs, userHooks: this.userHooks, isHelper: true, router: ownUse ? null : this.router, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, attachedPaths: this.attachedPaths, setMode: () => {} });
+    // Sent back, it was set up already: only what it says this time is listened to.
+    if (kept) { helper.removeAllListeners('tool'); helper.removeAllListeners('assistant'); }
+    if (!kept) Object.assign(helper, { jobs: this.jobs, userHooks: this.userHooks, isHelper: true, router: ownUse ? null : this.router, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, attachedPaths: this.attachedPaths, setMode: () => {} });
     // The same MCP servers and this conversation's list of their tools (worked out for its own room), and what you allowed.
-    if (this.mcpFrozen) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
+    if (this.mcpFrozen && !kept) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
     // Its move to a project ("Work in …?") leaves your conversation's folder for /rewind as it is: edits are kept by full path.
     // In its own copy (wt) there is nothing of yours to put back.
-    if (this.rewind && !wt) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn), moved: () => {}, whenMoved: async () => {} };
+    if (this.rewind && !wt && !kept) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn), moved: () => {}, whenMoved: async () => {} };
     const steps = [];
     let report = '';
     // The helpers panel (app/helpers-panel.mjs, 28 Oct 2026): which model it runs on, its steps and its last one, as it goes.
     const panel = (more = {}) => this.emit('helper', { id, kind: own ? own.kind : kind === 'general' ? 'Agent' : kind === 'lookup' ? 'Lookup' : 'Explore', model: ownUse?.model ?? helper.modelName() ?? this.helpersAway?.model ?? this.modelName(), steps: steps.length, last: steps.at(-1)?.slice(2) ?? '', started: t0, ...more });
-    const say = (last) => { panel(); this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` }); };
+    // In the background its steps go to its job (Jobs shows them), not to a tool line of a reply that has gone on.
+    const say = (last) => { panel(); if (bg) { if (last) bg(steps.at(-1)); return; } this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` }); };
     // Its changes count as this message's, so "done" after them is not "nothing changed".
     const edited = new Set();
     helper.on('tool', (ev) => { if (!ev.error && ['Update', 'Write', 'Create'].includes(ev.label) && ev.arg) edited.add(String(ev.arg)); steps.push(`${ev.error ? '✗' : '⏺'} ${ev.label}(${String(ev.arg ?? '').slice(0, 80)})`); say(`${ev.label}(${String(ev.arg ?? '').slice(0, 50)})`); });
     helper.on('assistant', (ev) => { if (ev.final) report = String(ev.text ?? ''); });
     say('');
+    this.agentsKept.set(name, { helper, kind, own, running: true, closed: false });
     let reason;
     try { reason = await helper.send(args.prompt, { signal }); } catch (e) { reason = 'error'; report ||= `It stopped: ${e.message}`; }
     // Stopped at its step limit with nothing written (18 Nov 2026: five audit helpers in a row came back "(it ended
@@ -805,8 +851,10 @@ export class Agent extends EventEmitter {
     this.stats.requests += helper.stats.requests;
     // Its own copy: taken away when it changed nothing, else kept, with where and the diff under its report.
     const isolated = wt ? worktreeNote(closeWorktree(wt), (p) => (p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p)) : '';
+    // Kept to be sent back, unless its own copy went with its end.
+    this.agentsKept.set(name, { helper, kind, own, running: false, closed: Boolean(wt) });
     if (isolated) edited.clear();
-    if (edited.size && this.turn) {
+    if (edited.size && this.turn && !bg) {
       this.turn.changed = true;
       this.turn.changedHere = true;
       this.turn.testedAfterChange = false;
@@ -814,8 +862,11 @@ export class Agent extends EventEmitter {
     }
     const done = reason === 'done' || reason === 'answered';
     const proof = checked ? proofBlock(checked) : '';
-    const body = `${report.trim() || '(it ended without a report)'}${proof ? `\n\n${proof}` : ''}${isolated ? `\n\n${isolated}` : ''}`;
+    const again = wt ? '' : `\n\n(It is ${name}: send it back with the Agent tool's agent: "${name}" and a new prompt; it goes on from everything it already read and did.)`;
+    const body = `${report.trim() || '(it ended without a report)'}${proof ? `\n\n${proof}` : ''}${isolated ? `\n\n${isolated}` : ''}${again}`;
     const view = { kind: 'agent', steps: steps.length, secs, reason, content: `${steps.join('\n')}${steps.length ? '\n\n' : ''}${body}` };
+    // A background one ends on its own: it stops nothing but itself, and says so in its report.
+    if (bg) return { text: `${name}'s report (${kind}, ${steps.length} step${steps.length === 1 ? '' : 's'}, ${Math.round(secs)} s${signal?.aborted ? ', stopped' : done ? '' : `, it stopped: ${reason}`}):\n${body}`, error: !done && !report.trim() };
     if (signal?.aborted) { this.emit('tool', { id, name: 'Agent', ...shown, view: { ...view, reason: 'interrupted' }, error: true }); return { text: 'Interrupted.', stop: 'interrupted' }; }
     // You said no to one of its changes (with nothing more to say): the turn ends there, as it does for the conversation's own.
     if (reason === 'declined') { this.emit('tool', { id, name: 'Agent', ...shown, view: { ...view, reason: 'you said no' }, error: true }); return { text: 'The user said no to a change the helper wanted to make. Wait for their next message.', error: true, stop: 'declined' }; }

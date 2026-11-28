@@ -102,6 +102,25 @@ export class Jobs {
     return { job };
   }
 
+  // A helper agent in the background (the Agent tool's background: true, 28 Nov 2026, as Claude Code's agents run): a job like a
+  // command's, so Jobs lists it, shows its steps since the last look and stops it, and its end is news for the model with its report.
+  // run(signal, say) → { text, error? }: say(line) adds a step to what it printed. name: the agent's own (agent2), to send it back.
+  startAgent(run, { description = '', name = 'agent' } = {}) {
+    const busy = this.running();
+    if (busy.length >= MAX_RUNNING) return { error: `${busy.length} background jobs are running already, the most there may be: ${busy.map((j) => j.id).join(', ')}. Wait for one, stop one with Jobs (its id and "stop": true), or run this agent without background.` };
+    const n = ++this.n;
+    const controller = new AbortController();
+    const job = { n, id: `job${n}`, agent: name, command: `agent ${name}${description ? `: ${description}` : ''}`, description, started: Date.now(), ended: null, code: null, out: '', seen: 0, dropped: 0, stopped: null, controller, report: '' };
+    this.all.push(job);
+    const say = (line) => { job.out += `${String(line)}\n`; };
+    // Stopped before its run began (a stop right after the start): it ends at once, as stopped.
+    Promise.resolve()
+      .then(() => (controller.signal.aborted ? { text: 'It was stopped before it started.', error: true } : run(controller.signal, say)))
+      .then((r) => { job.report = String(r?.text ?? ''); job.code = r?.error ? 1 : 0; }, (e) => { job.report = `It stopped: ${e?.message ?? e}`; job.code = 1; })
+      .finally(() => { job.ended = Date.now(); this.onEnd?.(job); });
+    return { job };
+  }
+
   // What job printed since the last look (and marks it seen): { lines, dropped }.
   look(job, max = LOOK_LINES) {
     const fresh = job.out.slice(job.seen);
@@ -122,6 +141,7 @@ export class Jobs {
   stop(job, by = 'model') {
     if (job.ended) return false;
     job.stopped = by;
+    if (job.controller) { job.controller.abort(); return true; }
     signalCommand(job.child, job.mark, 'SIGTERM', job.marked);
     job.force = setTimeout(() => signalCommand(job.child, job.mark, 'SIGKILL', job.marked), 2000);
     job.force.unref?.();
@@ -131,6 +151,7 @@ export class Jobs {
   stopAll({ now = false, by = 'quit' } = {}) {
     for (const job of this.running()) {
       job.stopped = by;
+      if (job.controller) { job.controller.abort(); continue; }
       signalCommand(job.child, job.mark, now ? 'SIGKILL' : 'SIGTERM', job.marked);
       if (!now) { job.force = setTimeout(() => signalCommand(job.child, job.mark, 'SIGKILL', job.marked), 2000); job.force.unref?.(); }
     }

@@ -2452,3 +2452,25 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Tests**: `terminal/test/workbench-run.test.mjs` (the server sides and the one-file undo, a real bun run and a real
   node program at a breakpoint) and `terminal/test/window-workbench-parts.test.mjs` (every part in the real page in
   headless Chrome).
+
+## Agents in the background, and sent back by name (28 Nov 2026)
+
+- **What and why.** The owner, with a picture of a Claude Code session that sent fifteen agents out at once to audit
+  hearth, read their reports, then sent each back to fix what it had found: "fable deployed sub agents to help it, i
+  want hearth to do the same", then "ensure hearth is correct, so when agentic coder uses hearth, it works
+  correctly". hearth got the same (its Agents, hearth/agent-engine #1814, #1822, #1828); this is Agentic Coder's side.
+- **A name, kept** (agent.mjs `agentName`, `runHelper` → `runHelperNow`): every helper agent has one (agent1,
+  agent2 … for the conversation) and is kept when it ends (`agentsKept`: the same `Agent`, its conversation as it left
+  it). The Agent tool's `agent: <name>` sends it back: the same helper's `send`, so it goes on from everything it read
+  and did, in its kind and with its tools, the new prompt as its next message. Its report ends with its name and how
+  to send it back. One still working, one never made, and one that worked in its own copy of the repository
+  (Isolation: worktree, closed at its end) are refused with why.
+- **In the background** (`background: true`; tools/jobs.mjs `startAgent`): the agent runs as a background job (job3,
+  counted with the commands, `MAX_RUNNING` at most), so the reply goes on; Jobs lists it, shows its steps since the
+  last look and stops it (its signal: a stop before its run began ends it at once). Its steps go to the job, not to a
+  tool line of a reply that went on, and its edits don't count as the reply's. When it ends, its report is the job's
+  news (`takeJobNews`): with the next step, or the wake after the reply (`jobWake`, which tells the model to check
+  what it found before acting on it and how to send it back). A stopped one is only a line, as a command's is.
+- **Tests**: `terminal/test/agents-back.test.mjs` (the tool's fields, the job on its own, an agent sent back with its
+  conversation and an unknown name, a background agent through a reply and its wake). hearth's door side, three of
+  one key's agents at once: hearth's `dooragents-e2e.test.mjs`.

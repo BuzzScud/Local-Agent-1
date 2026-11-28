@@ -194,7 +194,15 @@ const webDefs = (web) => WEB_TOOL_DEFS.filter((d) => (d.name === 'WebSearch' ? w
 export const AGENT_TOOL_DEF = {
   name: 'Agent',
   description: 'Hand one self-contained piece of work to a helper that starts fresh and reports back. kind explore: it only reads (files, code search, the web) and reports what it found, with file:line; for a search that would take many reads, so only its findings come back to you. kind general: it may also edit files and run commands. It sees none of this conversation: put the whole task, and what to report, in prompt.',
-  parameters: { type: 'object', properties: { description: str('A few words on what it does'), prompt: str('The whole task, and what to report back'), kind: { type: 'string', enum: ['explore', 'general'], description: 'explore (read only, the default) or general' } }, required: ['prompt'] },
+  parameters: { type: 'object', properties: {
+    description: str('A few words on what it does'),
+    prompt: str('The whole task, and what to report back; for an agent sent back (agent), what it should do now'),
+    kind: { type: 'string', enum: ['explore', 'general'], description: 'explore (read only, the default) or general' },
+    // 28 Nov 2026 (the owner: "fable deployed sub agents to help it, i want hearth to do the same"): agents that keep working while
+    // you go on, and that can be sent back with what they know, as Claude Code's do.
+    background: { type: 'boolean', description: 'true: it works in the background while you go on, as a background job (Jobs lists it, shows its steps, stops it), and you are told when it ends, with its report. Send several at once for parts that do not depend on each other' },
+    agent: str('To send one of your agents back to work: its name from its report (agent2). It goes on from everything it already read and did, with prompt as its next words'),
+  }, required: ['prompt'] },
 };
 // The Agent tool with your own helpers (prompt-files.mjs readHelperAgents, in your folder's agents/):
 // each is a kind of its own, named with what its file says it is for.
