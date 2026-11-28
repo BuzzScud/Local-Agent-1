@@ -112,20 +112,24 @@ export function findEdit(text, oldText, newText, { replaceAll = false, line = nu
   // with spaces and indents forgiven (18 Nov 2026, the audit: a near miss whose new text happened to be elsewhere in
   // the file said "done" and changed nothing).
   // done: nothing failed, the file is already as asked (agent-step.mjs shows it as done, not as an error).
-  if (newText.trim() && text.includes(newText.trim())) return { ok: false, done: true, error: 'This change is already in the file: new_text is there and old_text is gone, so nothing needed changing. Do not repeat it; go on with the next step.' };
-  // Point at the closest line to help the model try again.
+  // Nor while a near copy of old_text (a typo, below) would still change the file (28 Nov 2026, the tools audit): new_text found
+  // elsewhere in the file, such as a line it shares with another function, said "done" for an edit still to make, and nothing
+  // changed. A near copy that is new_text already (the edit made, sent again) changes nothing, so that one is done.
   // Near-copies: the model mistyped a character or two. Accept only one
   // clear place where every line is at least 85% the same, and put back the
   // real text of the lines it meant to keep (they carry the same typo).
   const fuzzy = fuzzyFind(fileLines, want);
+  let fuzzyAfter = null;
   if (fuzzy) {
     const i = fuzzy.at;
     const real = fileLines.slice(i, i + want.length);
     const map = new Map(want.map((w, j) => [w, real[j]]));
     const repl = newText.replace(/\n$/, '').split('\n').map((l) => map.get(l) ?? l);
-    const after = [...fileLines.slice(0, i), ...repl, ...fileLines.slice(i + want.length)].join('\n');
-    return { ok: true, after, how: 'fuzzy', at: i + 1 };
+    fuzzyAfter = [...fileLines.slice(0, i), ...repl, ...fileLines.slice(i + want.length)].join('\n');
   }
+  if ((fuzzyAfter === null || fuzzyAfter === text) && newText.trim() && text.includes(newText.trim())) return { ok: false, done: true, error: 'This change is already in the file: new_text is there and old_text is gone, so nothing needed changing. Do not repeat it; go on with the next step.' };
+  if (fuzzy) return { ok: true, after: fuzzyAfter, how: 'fuzzy', at: fuzzy.at + 1 };
+  // Point at the closest line to help the model try again.
   // The line sharing the longest start with old_text's first line.
   const firstAt = Math.max(0, want.findIndex((l) => l.trim()));
   const first = (want[firstAt] ?? '').trim();

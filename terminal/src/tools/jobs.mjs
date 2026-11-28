@@ -78,6 +78,10 @@ export class Jobs {
         job.dropped += cut;
       }
     };
+    // As text, decoded across pieces (28 Nov 2026, the tools audit): a Buffer added to a string is read one piece at a time, so
+    // a letter of several bytes cut between two pieces came out as two marks.
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', take);
     child.stderr.on('data', take);
     const ended = new Promise((resolve) => {

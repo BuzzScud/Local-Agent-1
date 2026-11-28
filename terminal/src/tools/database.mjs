@@ -98,6 +98,53 @@ function sqlite(db, args) {
   return { text: rowsText(rows, { more, limit }) };
 }
 
+// One statement, and a read (28 Nov 2026, the tools audit). Bun.SQL's unsafe() with no parameters sends the text as one simple
+// query, which runs every statement in it: "commit; drop table t" ended the read-only transaction and dropped the table (tried on a
+// scratch PostgreSQL 16: the table was gone). A ; outside quotes, $$ strings and comments is refused, a trailing one aside, and the
+// first word must be a read. → { sql } (the text to run, its trailing ; gone) or { error }. A doubt is a refusal: a $ right after a
+// name's letter is not a $$ string (PostgreSQL reads it as part of the name), and an E'…\'' string is read as ending sooner than
+// PostgreSQL does, which can only find a ; that is not there.
+export const READ_FIRST = /^(?:select|with|explain|show|values|table)\b/i;
+export function oneStatement(sql) {
+  const s = String(sql ?? '');
+  let bare = '';
+  for (let i = 0; i < s.length;) {
+    const c = s[i];
+    if (s.startsWith('--', i)) { const nl = s.indexOf('\n', i); i = nl < 0 ? s.length : nl; bare += ' '; continue; }
+    if (s.startsWith('/*', i)) {
+      let depth = 1;
+      let j = i + 2;
+      while (j < s.length && depth) { if (s.startsWith('/*', j)) { depth++; j += 2; } else if (s.startsWith('*/', j)) { depth--; j += 2; } else j++; }
+      if (depth) return { error: 'The SQL has a /* comment with no end.' };
+      i = j; bare += ' '; continue;
+    }
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      for (;;) {
+        const k = s.indexOf(c, j);
+        if (k < 0) return { error: `The SQL has a ${c} with no end.` };
+        if (s[k + 1] === c) { j = k + 2; continue; }
+        j = k + 1;
+        break;
+      }
+      bare += `${c}${c}`; i = j; continue;
+    }
+    if (c === '$' && !/[\w$]/.test(s[i - 1] ?? '')) {
+      const tag = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(s.slice(i))?.[0];
+      if (tag) {
+        const k = s.indexOf(tag, i + tag.length);
+        if (k < 0) return { error: 'The SQL has a $$ string with no end.' };
+        bare += "''"; i = k + tag.length; continue;
+      }
+    }
+    bare += c; i++;
+  }
+  const body = bare.replace(/[\s;]+$/, '');
+  if (body.includes(';')) return { error: 'One statement at a time: the SQL has a ; between two of them. The Database tool only reads, one query a call.' };
+  if (!READ_FIRST.test(body.trim())) return { error: 'Only a read runs here: a SELECT (or WITH, EXPLAIN, SHOW, VALUES, TABLE). A change to the data goes through the project\'s own code or a command the user allows.' };
+  return { sql: s.replace(/[\s;]+$/, '') };
+}
+
 // ---- PostgreSQL ----
 async function postgres(url, args) {
   const sql = new Bun.SQL(url, { max: 1, idleTimeout: 5, connectionTimeout: 10 });
@@ -120,8 +167,10 @@ async function postgres(url, args) {
       const idx = await ro('SELECT indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = $2', [schema, name]);
       return { text: [`${table}:`, ...cols.map((c) => `  ${c.column_name} ${c.data_type}${c.is_nullable === 'NO' ? ' NOT NULL' : ''}${c.column_default ? ` DEFAULT ${c.column_default}` : ''}`), ...idx.map((i) => i.indexdef)].join('\n') };
     }
-    const q = String(args.sql ?? '').trim().replace(/;\s*$/, '');
-    if (!q) return { text: 'sql is needed: the query to run (read only).', error: true };
+    if (!String(args.sql ?? '').trim()) return { text: 'sql is needed: the query to run (read only).', error: true };
+    const one = oneStatement(String(args.sql).trim());
+    if (one.error) return { text: one.error, error: true };
+    const q = one.sql;
     const limit = limitOf(args.limit);
     // Cap in the database: a SELECT * of a big table must not come back whole, then be sliced here.
     const capped = /^(with|select)\b/i.test(q) ? `SELECT * FROM (\n${q}\n) AS _agentic_q LIMIT ${limit + 1}` : q;

@@ -128,6 +128,10 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [], net = fa
       '(deny file-read-data (subpath "/Volumes"))',
       tools.length ? `(allow file-read-data ${paths(tools)})` : '',
       `(allow file-read-data file-write* ${paths([...writable, ...caches])})`,
+      // After the tools' allow, which takes in ~/.npmrc (an npm login token) and a door.key under an AGENTIC_HOME outside home: the
+      // secrets Bypass keeps shut stay shut here too. Until 28 Nov 2026 (the tools audit) the stricter mode let a command cat
+      // ~/.npmrc while Bypass refused it. npm still runs without reading it (tried).
+      `(deny file-read-data ${keyFiles} ${secretFiles})`,
     ]),
     // Starting an app (open, osascript → Terminal) would run outside the fence.
     `(deny process-exec ${APP_LAUNCHERS.map((p) => `(literal ${q(p)})`).join(' ')})`,

@@ -1,5 +1,6 @@
 import { resolve, basename, join, relative } from 'node:path';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { isLocalAddress } from '../flows/layoutcheck.mjs';
 import { bareSite } from '../tools/browser.mjs';
@@ -356,6 +357,18 @@ const SCREEN_RULE = /^Screen\(([^()]{1,60})\)$/i;
 // "Database(host/name)" (never its password); a SQLite file is read as Read reads files.
 const BROWSER_RULE = /^Browser\(((?:www\.)?[a-z0-9.-]+\.[a-z0-9-]+)\)$/i;
 const DATABASE_RULE = /^Database\(([^()\s]{1,100})\)$/i;
+// Is abs in the project, once links are followed (a missing file: its nearest folder that is there)?
+const realOrNear = (p) => {
+  let at = p;
+  const rest = [];
+  while (!existsSync(at) && resolve(at, '..') !== at) { rest.unshift(basename(at)); at = resolve(at, '..'); }
+  try { return join(realpathSync(at), ...rest); } catch { return p; }
+};
+const insideReal = (cwd, abs) => {
+  if (relative(cwd, abs).startsWith('..')) return false;
+  const r = relative(realOrNear(cwd), realOrNear(abs));
+  return !r.startsWith('..') && !r.startsWith('/');
+};
 const browserNeeds = (args, cwd) => {
   if (String(args?.action ?? '').toLowerCase() !== 'open') return { page: true };
   const t = String(args?.url ?? '').trim();
@@ -366,9 +379,14 @@ const browserNeeds = (args, cwd) => {
     return site ? { rule: `Browser(${site})`, site } : { bad: true };
   }
   if (/^(?:about|data):/i.test(t)) return { local: true };
-  const p = t.replace(/^file:\/\//i, '');
+  // A file URL as the browser reads it (28 Nov 2026, the tools audit): file://localhost/etc/passwd is /etc/passwd, and %2e%2e is ..
+  // Cutting "file://" off and reading the rest as a path let both in as "a file in the project".
+  let p = t;
+  if (/^file:/i.test(t)) {
+    try { p = fileURLToPath(new URL(t)); } catch { return { bad: true }; }
+  }
   const abs = p.startsWith('~/') ? join(homedir(), p.slice(2)) : resolve(cwd ?? '.', p);
-  return { file: abs, inside: Boolean(cwd) && !relative(cwd, abs).startsWith('..') };
+  return { file: abs, inside: Boolean(cwd) && insideReal(cwd, abs) };
 };
 const databaseRule = (args) => {
   const t = String(args?.database ?? args?.path ?? args?.url ?? '').trim();
@@ -419,9 +437,11 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
   // The language server (tools/lsp.mjs): it reads the code, as Read does.
   // A database (tools/database.mjs): opened read only. A file is read as Read reads one; a server is asked about once.
   if (name === 'LSP' || (name === 'Database' && !databaseRule(args))) {
-    const p = String(args?.path ?? args?.database ?? '').trim();
+    // The file the tool opens: Database reads database before path (tools/database.mjs), so this does too. Until 28 Nov 2026 (the
+    // tools audit) this read path first: path "data/app.db" with database "~/Library/…/chat.db" was let in as a file in the project.
+    const p = String((name === 'Database' ? args?.database ?? args?.path ?? args?.url : args?.path) ?? '').trim();
     const abs = p.startsWith('~/') ? join(homedir(), p.slice(2)) : resolve(cwd ?? '.', p);
-    const there = !cwd || !relative(cwd, abs).startsWith('..');
+    const there = !cwd || insideReal(cwd, abs);
     if (there) return { decision: 'allow', why: name === 'LSP' ? 'it only reads the code' : 'it opens the database read only' };
     if (bypass && !secretBy([abs], { cwd })) return { decision: 'allow', why: 'Bypass permissions is on: any folder may be read' };
     return { decision: 'deny', reason: bypass ? 'that is a secret outside the project folder (a key, .ssh or .env), which even Bypass does not reach' : 'that is outside the project folder; only files inside it may be read' };
